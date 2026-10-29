@@ -5,7 +5,7 @@ modules:
   projects:
     wave: 1
     swiftDir: Sources/App/Projects
-    status: swift
+    status: parity
     prefixes: [/v1/projects]
     jobs: []
   achievements:
