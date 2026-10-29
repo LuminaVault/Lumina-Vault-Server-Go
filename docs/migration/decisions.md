@@ -133,6 +133,45 @@ goes through human-reviewed promotion. The Go workflow mirrors that, bumping
 production image tags and every `ingress.extraPaths` change are PRs a human
 merges. The repo needs the `INFRA_REPO_TOKEN` secret before the first release.
 
+## D0: route inventory is static, not a Swift test
+
+Hummingbird 2.26 keeps the router trie `internal` (`Router.trie`), so a test
+cannot list routes. The plan's fallback applies: `LuminaVaultServer/scripts/route-inventory.py`
+statically resolves group prefixes, controller wiring and `addRoutes`
+registrations. Result on main @ fdbed9b0: 468 routes; 0 unresolved; 38 were
+missing from the spec, and the spec listed the OAuth exchange route twice in
+concrete form. It flags every route-shaped call site it cannot reach, so silent
+misses show up as "unresolved". `docs/migration/routes.json` is copied here
+from the Swift repo.
+
+## D-tools: migration tooling lives in this repo
+
+`scripts/schema-snapshot.sh` (Task 0.5), `tools/golden` (Task 0.3),
+`scripts/parity-up.sh`, `docker-compose.parity.yml` and `scripts/gen-modules.py`
+live here, not in the Swift repo as the plan said. They drive the **Swift
+image** (the real binary) rather than a Swift test target, so no 20-minute
+Swift test build is needed and the fixtures come from production code paths.
+The Swift repo keeps only what must run in its own CI: `scripts/route-inventory.py`,
+`scripts/tag-spec.py` and `scripts/swift-freeze.sh`.
+
+## D-parity-ci: scenarios define scope; the Swift image is pinned
+
+The `parity` CI job runs every directory under `parity/scenarios` rather than
+filtering by status, because scenarios only exist for modules being migrated.
+The Swift image is pinned in `parity/SWIFT_IMAGE` and bumped deliberately, so
+it doesn't need read access to the private infra repo. The job needs the
+`luminavaultserver` GHCR package to grant this repo read access (a package
+setting).
+
+## D-shared-prefixes: Devices, Reminders and Apple flip together
+
+`scripts/gen-modules.py` finds three modules whose routes cannot be separated
+by path prefix. Apple registers `/v1/devices/command/{id}/result`,
+`/v1/devices/commands/pending` and `/v1/reminders/sync`, under the prefixes of
+Devices and Reminders. `modules.yaml` records them as `flipsWith` partners
+(all wave 2); `internal/manifest` tests that the partnership is mutual and in
+one wave.
+
 ## D-jobs: findings from the partial job inventory (Task 0.4, unfinished)
 
 Registered in `Sources/App/App+build.swift`. Claim mechanisms are not read yet.
