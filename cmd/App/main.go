@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"log/slog"
 	"lumina/internal/config"
+	"lumina/internal/db"
 	"lumina/internal/httpserver"
+	"lumina/internal/migrations"
 	"lumina/internal/telemetry"
 	"net"
 	"os"
@@ -54,9 +56,29 @@ func run(args []string) error {
 	switch cmd.Name {
 	case "serve":
 		return serve(ctx, cfg, cmd)
+	case "migrate":
+		return migrate(ctx, cfg, cmd)
 	default:
 		return fmt.Errorf("%s: not implemented", cmd.Name)
 	}
+}
+
+// migrate runs goose. Until Phase 12 the chart's migrate job still runs the
+// Swift image, so on a Fluent database this refuses unless --adopt-fluent.
+func migrate(ctx context.Context, cfg config.Config, cmd Command) error {
+	pool, err := db.Open(ctx, db.DSN(cfg))
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+	if cmd.Flags["adopt-fluent"] == "true" {
+		manifest, err := migrations.FluentManifest()
+		if err != nil {
+			return err
+		}
+		return migrations.AdoptFluent(ctx, pool, migrations.SQL(), manifest)
+	}
+	return migrations.Up(ctx, pool, migrations.SQL())
 }
 
 func serve(ctx context.Context, cfg config.Config, cmd Command) error {
