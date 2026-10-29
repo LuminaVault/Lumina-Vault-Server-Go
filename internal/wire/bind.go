@@ -13,8 +13,17 @@ import (
 	"github.com/labstack/echo/v5"
 )
 
-// ContentTypeJSON is what Hummingbird sends (golden: every JSON response).
-const ContentTypeJSON = "application/json; charset=utf-8"
+// Content types exactly as Hummingbird sends them (lowercase charset; Echo's
+// own helpers say UTF-8, which parity flags).
+const (
+	ContentTypeJSON = "application/json; charset=utf-8"
+	ContentTypeText = "text/plain; charset=utf-8"
+)
+
+// Text writes s as Hummingbird writes a String response.
+func Text(c *echo.Context, status int, s string) error {
+	return c.Blob(status, ContentTypeText, []byte(s))
+}
 
 // JSON writes v with the Swift server's exact Content-Type.
 func JSON(c *echo.Context, status int, v any) error {

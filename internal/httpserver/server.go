@@ -72,8 +72,8 @@ func New(cfg config.Config, deps Deps) *echo.Echo {
 	}))
 	e.Use(cors(cfg.CORSAllowedOrigins))
 
-	e.GET("/health", func(c *echo.Context) error { return c.String(http.StatusOK, "ok") })
-	e.GET("/", func(c *echo.Context) error { return c.String(http.StatusOK, "Hello!") })
+	e.GET("/health", func(c *echo.Context) error { return wire.Text(c, http.StatusOK, "ok") })
+	e.GET("/", func(c *echo.Context) error { return wire.Text(c, http.StatusOK, "Hello!") })
 	e.GET("/.well-known/apple-app-site-association", func(c *echo.Context) error {
 		return c.Blob(http.StatusOK, echo.MIMEApplicationJSON, []byte(AASA))
 	})

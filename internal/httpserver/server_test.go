@@ -59,6 +59,7 @@ func TestBaseRoutes(t *testing.T) {
 	rec := do(t, e, httptest.NewRequest(http.MethodGet, "/health", nil))
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Equal(t, "ok", rec.Body.String())
+	require.Equal(t, "text/plain; charset=utf-8", rec.Header().Get(echo.HeaderContentType))
 
 	rec = do(t, e, httptest.NewRequest(http.MethodGet, "/", nil))
 	require.Equal(t, "Hello!", rec.Body.String())

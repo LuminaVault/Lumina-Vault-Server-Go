@@ -11,6 +11,7 @@ import (
 	"lumina/parity/normalize"
 	"net/http"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -91,6 +92,7 @@ func Run(ctx context.Context, sc Scenario, t Target) (Transcript, error) {
 				if err != nil {
 					return tr, fmt.Errorf("%s/%s snapshot %s: %w", sc.File, st.Name, table, err)
 				}
+				stableOrder(rows)
 				vals := make([]any, len(rows))
 				for i, r := range rows {
 					if vals[i], err = norm.Body(r, nil); err != nil {
@@ -144,6 +146,33 @@ func buildRequest(ctx context.Context, t Target, st Step, vars map[string]string
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
 	return req, nil
+}
+
+// stableOrder sorts snapshot rows so both servers list them identically even
+// though their ids are random: by created_at (both ran the same requests in the
+// same order), then by the row with random values masked.
+func stableOrder(rows []json.RawMessage) {
+	type keyed struct {
+		created, masked string
+		row             json.RawMessage
+	}
+	ks := make([]keyed, len(rows))
+	for i, r := range rows {
+		var m map[string]any
+		_ = json.Unmarshal(r, &m)
+		created, _ := m["created_at"].(string)
+		masked, _ := json.Marshal(normalize.New().Value(m))
+		ks[i] = keyed{created, string(masked), r}
+	}
+	sort.SliceStable(ks, func(i, j int) bool {
+		if ks[i].created != ks[j].created {
+			return ks[i].created < ks[j].created
+		}
+		return ks[i].masked < ks[j].masked
+	})
+	for i := range ks {
+		rows[i] = ks[i].row
+	}
 }
 
 // substitute replaces {{var}}; an unknown var is left in place so the request
