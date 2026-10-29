@@ -1,0 +1,8 @@
+module: projects
+steps:
+  - {name: bob sees nothing, as: bob, request: {method: GET, path: /v1/projects}}
+  - {name: bob patches alice's project, as: bob, request: {method: PATCH, path: /v1/projects/5EED0000-0000-4000-8000-0000000000A1, json: {name: hijack}}}
+  - {name: bob deletes alice's project, as: bob, request: {method: DELETE, path: /v1/projects/5EED0000-0000-4000-8000-0000000000A1}, snapshot: [projects]}
+  - {name: bob creates his own, as: bob, request: {method: POST, path: /v1/projects, json: {name: Bobs}}, capture: {bobs: $.id}}
+  - {name: alice cannot see bob's, as: alice, request: {method: GET, path: /v1/projects}}
+  - {name: alice deletes bob's, as: alice, request: {method: DELETE, path: "/v1/projects/{{bobs}}"}, snapshot: [projects]}

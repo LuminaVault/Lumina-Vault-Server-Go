@@ -1,0 +1,16 @@
+{
+  "claims": {
+    "sub": "3258557D-D2F7-4DA7-A407-493628135976",
+    "exp": 1793279703.131176,
+    "iat": 1793276103.131176,
+    "jti": "B1EA1A26-BCBC-47EC-8809-87A0E5794D8F",
+    "hpid": "golden"
+  },
+  "header": {
+    "kid": "g1",
+    "alg": "HS256",
+    "typ": "JWT"
+  },
+  "hmacSecrets": "g1:golden-secret-golden-secret-0000",
+  "token": "eyJraWQiOiJnMSIsImFsZyI6IkhTMjU2IiwidHlwIjoiSldUIn0.eyJzdWIiOiIzMjU4NTU3RC1EMkY3LTREQTctQTQwNy00OTM2MjgxMzU5NzYiLCJleHAiOjE3OTMyNzk3MDMuMTMxMTc2LCJpYXQiOjE3OTMyNzYxMDMuMTMxMTc2LCJqdGkiOiJCMUVBMUEyNi1CQ0JDLTQ3RUMtODgwOS04N0EwRTU3OTREOEYiLCJocGlkIjoiZ29sZGVuIn0.92q8yI-ks3UB2oX5S1MBS7AwYJqLB3nLC-OTNqXuR40"
+}

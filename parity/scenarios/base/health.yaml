@@ -1,0 +1,11 @@
+module: base
+smoke: true
+steps:
+  - name: health
+    request: {method: GET, path: /health}
+  - name: root
+    request: {method: GET, path: /}
+  - name: apple-app-site-association
+    request: {method: GET, path: /.well-known/apple-app-site-association}
+  - name: unknown route
+    request: {method: GET, path: /v1/does-not-exist}

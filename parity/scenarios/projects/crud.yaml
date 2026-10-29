@@ -1,0 +1,59 @@
+module: projects
+smoke: true
+steps:
+  - name: list seeded
+    as: alice
+    request: {method: GET, path: /v1/projects}
+  - name: create trimmed with description
+    as: alice
+    request: {method: POST, path: /v1/projects, json: {name: "  Home  ", description: chores}}
+    capture: {home: $.id}
+    snapshot: [projects]
+  - name: create second
+    as: alice
+    request: {method: POST, path: /v1/projects, json: {name: Work}}
+    snapshot: [projects]
+  - name: list newest first
+    as: alice
+    request: {method: GET, path: /v1/projects}
+  - name: limit 1
+    as: alice
+    request: {method: GET, path: "/v1/projects?limit=1"}
+  - name: limit 0 clamps to 1
+    as: alice
+    request: {method: GET, path: "/v1/projects?limit=0"}
+  - name: limit 999 clamps to 200
+    as: alice
+    request: {method: GET, path: "/v1/projects?limit=999"}
+  - name: limit not a number
+    as: alice
+    request: {method: GET, path: "/v1/projects?limit=abc"}
+  - name: rename
+    as: alice
+    request: {method: PATCH, path: "/v1/projects/{{home}}", json: {name: " House "}}
+    snapshot: [projects]
+  - name: clear description
+    as: alice
+    request: {method: PATCH, path: "/v1/projects/{{home}}", json: {description: ""}}
+    snapshot: [projects]
+  - name: archive
+    as: alice
+    request: {method: PATCH, path: "/v1/projects/{{home}}", json: {archived: true}}
+    snapshot: [projects]
+  - name: null name leaves it unchanged
+    as: alice
+    request: {method: PATCH, path: "/v1/projects/{{home}}", json: {name: null}}
+  - name: patch seeded keeps todoCount
+    as: alice
+    request: {method: PATCH, path: /v1/projects/5EED0000-0000-4000-8000-0000000000A1, json: {description: updated}}
+    snapshot: [projects]
+  - name: lowercase id accepted
+    as: alice
+    request: {method: PATCH, path: /v1/projects/5eed0000-0000-4000-8000-0000000000a1, json: {archived: false}}
+  - name: delete
+    as: alice
+    request: {method: DELETE, path: "/v1/projects/{{home}}"}
+    snapshot: [projects]
+  - name: list after delete
+    as: alice
+    request: {method: GET, path: /v1/projects}

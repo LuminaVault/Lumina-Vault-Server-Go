@@ -1,0 +1,3278 @@
+[
+  {
+    "method": "GET",
+    "path": "/",
+    "module": "App",
+    "operationId": "getHello",
+    "source": "Sources/App/App+build.swift:398"
+  },
+  {
+    "method": "GET",
+    "path": "/.well-known/apple-app-site-association",
+    "module": "App",
+    "operationId": "getAppleAppSiteAssociation",
+    "source": "Sources/App/App+build.swift:382"
+  },
+  {
+    "method": "GET",
+    "path": "/admin/llm/health",
+    "module": "LLM",
+    "operationId": "adminLLMHealth",
+    "source": "Sources/App/LLM/Routing/LLMHealthController.swift:20"
+  },
+  {
+    "method": "GET",
+    "path": "/health",
+    "module": "App",
+    "operationId": "getRootHealth",
+    "source": "Sources/App/App+build.swift:370"
+  },
+  {
+    "method": "GET",
+    "path": "/health/deep",
+    "module": "App",
+    "operationId": "getDeepHealth",
+    "source": "Sources/App/App+build.swift:3244"
+  },
+  {
+    "method": "GET",
+    "path": "/internal/metrics",
+    "module": "Admin",
+    "operationId": "getInternalMetrics",
+    "source": "Sources/App/Admin/InternalMetricsController.swift:19"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/account",
+    "module": "Account",
+    "operationId": "accountDelete",
+    "source": "Sources/App/Account/AccountController.swift:18"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/achievements",
+    "module": "Achievements",
+    "operationId": "achievementsList",
+    "source": "Sources/App/Achievements/AchievementsController.swift:21"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/achievements/recent",
+    "module": "Achievements",
+    "operationId": "achievementsRecent",
+    "source": "Sources/App/Achievements/AchievementsController.swift:22"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/admin/community/daily/run",
+    "module": "Community",
+    "operationId": "adminCommunityDailyRun",
+    "source": "Sources/App/Community/CommunityController.swift:189"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/admin/health/correlate",
+    "module": "Admin",
+    "operationId": "adminHealthCorrelateAll",
+    "source": "Sources/App/Admin/HealthAdminController.swift:47"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/admin/health/correlate/{userID}",
+    "module": "Admin",
+    "operationId": "adminHealthCorrelateOne",
+    "source": "Sources/App/Admin/HealthAdminController.swift:48"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/admin/hermes-profiles/health",
+    "module": "Admin",
+    "operationId": "adminHermesProfilesHealth",
+    "source": "Sources/App/Admin/AdminController.swift:12"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/admin/hermes-profiles/reap-orphans",
+    "module": "Admin",
+    "operationId": "adminHermesProfilesReap",
+    "source": "Sources/App/Admin/AdminController.swift:14"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/admin/hermes-profiles/reconcile",
+    "module": "Admin",
+    "operationId": "adminHermesProfilesReconcile",
+    "source": "Sources/App/Admin/AdminController.swift:13"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/admin/memory/chunks/backfill/{userID}",
+    "module": "Admin",
+    "operationId": "adminMemoryChunkBackfill",
+    "source": "Sources/App/Admin/MemoryAdminController.swift:37"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/admin/memory/prune",
+    "module": "Admin",
+    "operationId": "adminMemoryPruneAll",
+    "source": "Sources/App/Admin/MemoryAdminController.swift:34"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/admin/memory/prune/{userID}",
+    "module": "Admin",
+    "operationId": "adminMemoryPruneOne",
+    "source": "Sources/App/Admin/MemoryAdminController.swift:35"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/admin/memory/recompute",
+    "module": "Admin",
+    "operationId": "adminMemoryRecomputeAll",
+    "source": "Sources/App/Admin/MemoryAdminController.swift:32"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/admin/memory/recompute/{userID}",
+    "module": "Admin",
+    "operationId": "adminMemoryRecomputeOne",
+    "source": "Sources/App/Admin/MemoryAdminController.swift:33"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/admin/usage-events/prune",
+    "module": "Admin",
+    "operationId": "adminUsageEventsPrune",
+    "source": "Sources/App/Admin/UsageEventsAdminController.swift:20"
+  },
+  {
+    "method": "PUT",
+    "path": "/v1/admin/users/{userID}/tier-override",
+    "module": "Admin",
+    "operationId": "adminTierOverride",
+    "source": "Sources/App/Admin/BillingAdminController.swift:22"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/agents/instances",
+    "module": "Agents",
+    "operationId": "agentsInstances",
+    "source": "Sources/App/Agents/AgentsController.swift:19"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/agents/instances/{instance}/sessions/{session}/messages",
+    "module": "Agents",
+    "operationId": "agentsSessionMessages",
+    "source": "Sources/App/Agents/AgentsController.swift:21"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/agents/room-candidates",
+    "module": "Agents",
+    "operationId": "agentsRoomCandidates",
+    "source": "Sources/App/Agents/AgentRoomsController.swift:24"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/agents/rooms",
+    "module": "Agents",
+    "operationId": "agentsRoomsList",
+    "source": "Sources/App/Agents/AgentRoomsController.swift:25"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/agents/rooms",
+    "module": "Agents",
+    "operationId": "agentsRoomsCreate",
+    "source": "Sources/App/Agents/AgentRoomsController.swift:26"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/agents/rooms/{room}",
+    "module": "Agents",
+    "operationId": "agentsRoomsDelete",
+    "source": "Sources/App/Agents/AgentRoomsController.swift:28"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/agents/rooms/{room}",
+    "module": "Agents",
+    "operationId": "agentsRoomsGet",
+    "source": "Sources/App/Agents/AgentRoomsController.swift:27"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/agents/rooms/{room}/messages",
+    "module": "Agents",
+    "operationId": "agentsRoomsPost",
+    "source": "Sources/App/Agents/AgentRoomsController.swift:29"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/agents/rooms/{room}/stop",
+    "module": "Agents",
+    "operationId": "agentsRoomsStop",
+    "source": "Sources/App/Agents/AgentRoomsController.swift:30"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/agents/sessions",
+    "module": "Agents",
+    "operationId": "agentsSessions",
+    "source": "Sources/App/Agents/AgentsController.swift:20"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/analytics/events",
+    "module": "Dashboard",
+    "operationId": "analyticsEventCreate",
+    "source": "Sources/App/Dashboard/AnalyticsController.swift:28"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/analytics/model-feedback",
+    "module": "Dashboard",
+    "operationId": "analyticsModelFeedbackCreate",
+    "source": "Sources/App/Dashboard/AnalyticsController.swift:29"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/analytics/models",
+    "module": "Dashboard",
+    "operationId": "analyticsModels",
+    "source": "Sources/App/Dashboard/AnalyticsController.swift:26"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/analytics/overview",
+    "module": "Dashboard",
+    "operationId": "analyticsOverview",
+    "source": "Sources/App/Dashboard/AnalyticsController.swift:25"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v1/analytics/recommendations",
+    "module": "Dashboard",
+    "operationId": "analyticsRecommendationUpdate",
+    "source": "Sources/App/Dashboard/AnalyticsController.swift:30"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/analytics/retrieval-health",
+    "module": "Dashboard",
+    "operationId": "analyticsRetrievalHealth",
+    "source": "Sources/App/Dashboard/AnalyticsController.swift:31"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/analytics/team",
+    "module": "Dashboard",
+    "operationId": "analyticsTeam",
+    "source": "Sources/App/Dashboard/AnalyticsController.swift:27"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/analytics/usage-summary",
+    "module": "Dashboard",
+    "operationId": "analyticsUsageSummary",
+    "source": "Sources/App/Dashboard/AnalyticsController.swift:24"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/apple/consent",
+    "module": "Apple",
+    "operationId": "appleConsentGet",
+    "source": "Sources/App/Apple/AppleConsentController.swift:22"
+  },
+  {
+    "method": "PUT",
+    "path": "/v1/apple/consent",
+    "module": "Apple",
+    "operationId": "appleConsentPut",
+    "source": "Sources/App/Apple/AppleConsentController.swift:23"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/audio/speech",
+    "module": "LLM",
+    "operationId": "openAIAudioSpeech",
+    "source": "Sources/App/LLM/OpenAIAudio/OpenAIAudioController.swift:68"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/audio/transcriptions",
+    "module": "LLM",
+    "operationId": "openAIAudioTranscriptions",
+    "source": "Sources/App/LLM/OpenAIAudio/OpenAIAudioController.swift:64"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/auth/email/confirm",
+    "module": "Auth",
+    "operationId": "authEmailConfirm",
+    "source": "Sources/App/Auth/AuthController.swift:31"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/auth/email/send-verify",
+    "module": "Auth",
+    "operationId": "authEmailSendVerify",
+    "source": "Sources/App/Auth/AuthController.swift:30"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/auth/email/start",
+    "module": "Auth",
+    "operationId": "authEmailStart",
+    "source": "Sources/App/Auth/EmailMagicLink/EmailMagicLinkController.swift:35"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/auth/email/verify",
+    "module": "Auth",
+    "operationId": "authEmailVerify",
+    "source": "Sources/App/Auth/EmailMagicLink/EmailMagicLinkController.swift:36"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/auth/forgot-password",
+    "module": "Auth",
+    "operationId": "authForgotPassword",
+    "source": "Sources/App/Auth/AuthController.swift:27"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/auth/login",
+    "module": "Auth",
+    "operationId": "authLogin",
+    "source": "Sources/App/Auth/AuthController.swift:23"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/auth/logout",
+    "module": "Auth",
+    "operationId": "authLogout",
+    "source": "Sources/App/Auth/AuthController.swift:43"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/auth/me",
+    "module": "App",
+    "operationId": "meGet",
+    "source": "Sources/App/App+build.swift:687"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/auth/me/billing",
+    "module": "App",
+    "operationId": "meBilling",
+    "source": "Sources/App/App+build.swift:689"
+  },
+  {
+    "method": "PUT",
+    "path": "/v1/auth/me/privacy",
+    "module": "App",
+    "operationId": "mePrivacyUpdate",
+    "source": "Sources/App/App+build.swift:688"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/auth/me/usage",
+    "module": "App",
+    "operationId": "meUsage",
+    "source": "Sources/App/App+build.swift:690"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/auth/mfa/resend",
+    "module": "Auth",
+    "operationId": "authMfaResend",
+    "source": "Sources/App/Auth/AuthController.swift:26"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/auth/mfa/verify",
+    "module": "Auth",
+    "operationId": "authMfaVerify",
+    "source": "Sources/App/Auth/AuthController.swift:25"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/auth/oauth/x/exchange",
+    "module": "Auth",
+    "operationId": "authOAuthXExchange",
+    "source": "Sources/App/Auth/OAuth/XOAuthController.swift:20"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/auth/oauth/{provider}/exchange",
+    "module": "Auth",
+    "operationId": "authOAuthExchange",
+    "source": "Sources/App/Auth/AuthController.swift:44"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/auth/pairing/start",
+    "module": "Auth",
+    "operationId": "authPairingStart",
+    "source": "Sources/App/Auth/Pairing/PairingController.swift:43"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/auth/pairing/{pairingId}",
+    "module": "Auth",
+    "operationId": "authPairingPoll",
+    "source": "Sources/App/Auth/Pairing/PairingController.swift:44"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/auth/pairing/{pairingId}/approve",
+    "module": "Auth",
+    "operationId": "authPairingApprove",
+    "source": "Sources/App/Auth/Pairing/PairingController.swift:45"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/auth/phone/start",
+    "module": "Auth",
+    "operationId": "authPhoneStart",
+    "source": "Sources/App/Auth/Phone/PhoneAuthController.swift:162"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/auth/phone/verify",
+    "module": "Auth",
+    "operationId": "authPhoneVerify",
+    "source": "Sources/App/Auth/Phone/PhoneAuthController.swift:163"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/auth/refresh",
+    "module": "Auth",
+    "operationId": "authRefresh",
+    "source": "Sources/App/Auth/AuthController.swift:24"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/auth/register",
+    "module": "Auth",
+    "operationId": "authRegister",
+    "source": "Sources/App/Auth/AuthController.swift:22"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/auth/resend-reset",
+    "module": "Auth",
+    "operationId": "authResendReset",
+    "source": "Sources/App/Auth/AuthController.swift:28"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/auth/reset-password",
+    "module": "Auth",
+    "operationId": "authResetPassword",
+    "source": "Sources/App/Auth/AuthController.swift:29"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/auth/webauthn/authenticate/begin",
+    "module": "Auth",
+    "operationId": "authWebAuthnAuthenticateBegin",
+    "source": "Sources/App/Auth/WebAuthnService.swift:260"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/auth/webauthn/authenticate/finish",
+    "module": "Auth",
+    "operationId": "authWebAuthnAuthenticateFinish",
+    "source": "Sources/App/Auth/WebAuthnService.swift:262"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/auth/webauthn/authenticate/options",
+    "module": "Auth",
+    "operationId": "authWebAuthnAuthenticateOptions",
+    "source": "Sources/App/Auth/WebAuthnService.swift:261"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/auth/webauthn/credentials",
+    "module": "Auth",
+    "operationId": "authWebAuthnListCredentials",
+    "source": "Sources/App/Auth/WebAuthnService.swift:278"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/auth/webauthn/credentials/{credentialId}",
+    "module": "Auth",
+    "operationId": "authWebAuthnDeleteCredential",
+    "source": "Sources/App/Auth/WebAuthnService.swift:279"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/auth/webauthn/register/begin",
+    "module": "Auth",
+    "operationId": "authWebAuthnRegisterBegin",
+    "source": "Sources/App/Auth/WebAuthnService.swift:275"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/auth/webauthn/register/finish",
+    "module": "Auth",
+    "operationId": "authWebAuthnRegisterFinish",
+    "source": "Sources/App/Auth/WebAuthnService.swift:277"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/auth/webauthn/register/options",
+    "module": "Auth",
+    "operationId": "authWebAuthnRegisterOptions",
+    "source": "Sources/App/Auth/WebAuthnService.swift:276"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/billing/revenuecat-webhook",
+    "module": "Billing",
+    "operationId": "billingRevenueCatWebhook",
+    "source": "Sources/App/Billing/RevenueCatWebhookController.swift:22"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/boards",
+    "module": "Kanban",
+    "operationId": "boardsList",
+    "source": "Sources/App/Kanban/KanbanController.swift:23"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/boards",
+    "module": "Kanban",
+    "operationId": "boardsCreate",
+    "source": "Sources/App/Kanban/KanbanController.swift:24"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/boards/{boardID}",
+    "module": "Kanban",
+    "operationId": "boardsDelete",
+    "source": "Sources/App/Kanban/KanbanController.swift:28"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/boards/{boardID}",
+    "module": "Kanban",
+    "operationId": "boardsGet",
+    "source": "Sources/App/Kanban/KanbanController.swift:25"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v1/boards/{boardID}",
+    "module": "Kanban",
+    "operationId": "boardsPatch",
+    "source": "Sources/App/Kanban/KanbanController.swift:27"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/boards/{boardID}/cards",
+    "module": "Kanban",
+    "operationId": "cardsCreate",
+    "source": "Sources/App/Kanban/KanbanController.swift:33"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/boards/{boardID}/columns",
+    "module": "Kanban",
+    "operationId": "columnsCreate",
+    "source": "Sources/App/Kanban/KanbanController.swift:29"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/boards/{boardID}/columns/reorder",
+    "module": "Kanban",
+    "operationId": "columnsReorder",
+    "source": "Sources/App/Kanban/KanbanController.swift:32"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/boards/{boardID}/columns/{columnID}",
+    "module": "Kanban",
+    "operationId": "columnsDelete",
+    "source": "Sources/App/Kanban/KanbanController.swift:31"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v1/boards/{boardID}/columns/{columnID}",
+    "module": "Kanban",
+    "operationId": "columnsPatch",
+    "source": "Sources/App/Kanban/KanbanController.swift:30"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/boards/{boardID}/version",
+    "module": "Kanban",
+    "operationId": "boardsVersion",
+    "source": "Sources/App/Kanban/KanbanController.swift:26"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/calendar/connect",
+    "module": "Calendar",
+    "operationId": "calendarConnect",
+    "source": "Sources/App/Calendar/CalendarController.swift:37"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/calendar/disconnect",
+    "module": "Calendar",
+    "operationId": "calendarDisconnect",
+    "source": "Sources/App/Calendar/CalendarController.swift:38"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/calendar/events",
+    "module": "Calendar",
+    "operationId": "calendarEvents",
+    "source": "Sources/App/Calendar/CalendarController.swift:39"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/calendar/events",
+    "module": "Calendar",
+    "operationId": "calendarCreateEvent",
+    "source": "Sources/App/Calendar/CalendarController.swift:40"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/calendar/events/{id}/brief",
+    "module": "Calendar",
+    "operationId": "calendarEventBrief",
+    "source": "Sources/App/Calendar/MeetingBriefController.swift:16"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/calendar/oauth/callback",
+    "module": "Calendar",
+    "operationId": "calendarOAuthCallback",
+    "source": "Sources/App/Calendar/CalendarController.swift:45"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/calendar/status",
+    "module": "Calendar",
+    "operationId": "calendarStatus",
+    "source": "Sources/App/Calendar/CalendarController.swift:36"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/calendar/sync",
+    "module": "Calendar",
+    "operationId": "appleCalendarSync",
+    "source": "Sources/App/Calendar/AppleCalendarController.swift:41"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/capture/safari",
+    "module": "Capture",
+    "operationId": "captureSafari",
+    "source": "Sources/App/Capture/CaptureController.swift:42"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/cards/{cardID}",
+    "module": "Kanban",
+    "operationId": "cardsDelete",
+    "source": "Sources/App/Kanban/KanbanController.swift:38"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v1/cards/{cardID}",
+    "module": "Kanban",
+    "operationId": "cardsPatch",
+    "source": "Sources/App/Kanban/KanbanController.swift:37"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/cards/{cardID}/move",
+    "module": "Kanban",
+    "operationId": "cardsMove",
+    "source": "Sources/App/Kanban/KanbanController.swift:39"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/cards/{cardID}/promote",
+    "module": "Kanban",
+    "operationId": "cardsPromote",
+    "source": "Sources/App/Kanban/KanbanController.swift:40"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/chat/inbox",
+    "module": "Chat",
+    "operationId": "chatInbox",
+    "source": "Sources/App/Chat/ChatExperienceController.swift:23"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/community/admin/posts/{postID}/decision",
+    "module": "Community",
+    "operationId": "communityAdminDecision",
+    "source": "Sources/App/Community/CommunityController.swift:37"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/community/admin/profiles/{profileID}/suspend",
+    "module": "Community",
+    "operationId": "communityAdminSuspend",
+    "source": "Sources/App/Community/CommunityController.swift:38"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/community/admin/queue",
+    "module": "Community",
+    "operationId": "communityAdminQueue",
+    "source": "Sources/App/Community/CommunityController.swift:26"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/community/blocks",
+    "module": "Community",
+    "operationId": "communityListBlocks",
+    "source": "Sources/App/Community/CommunityController.swift:25"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/community/blocks",
+    "module": "Community",
+    "operationId": "communityBlock",
+    "source": "Sources/App/Community/CommunityController.swift:35"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/community/blocks/{profileID}",
+    "module": "Community",
+    "operationId": "communityUnblock",
+    "source": "Sources/App/Community/CommunityController.swift:36"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/community/daily/today",
+    "module": "Community",
+    "operationId": "communityTodayDaily",
+    "source": "Sources/App/Community/CommunityController.swift:24"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/community/me",
+    "module": "Community",
+    "operationId": "communityMe",
+    "source": "Sources/App/Community/CommunityController.swift:20"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/community/posts",
+    "module": "Community",
+    "operationId": "communityListThreads",
+    "source": "Sources/App/Community/CommunityController.swift:21"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/community/posts",
+    "module": "Community",
+    "operationId": "communityCreateThread",
+    "source": "Sources/App/Community/CommunityController.swift:31"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/community/posts/{postID}",
+    "module": "Community",
+    "operationId": "communityDeletePost",
+    "source": "Sources/App/Community/CommunityController.swift:33"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/community/posts/{postID}",
+    "module": "Community",
+    "operationId": "communityGetPost",
+    "source": "Sources/App/Community/CommunityController.swift:22"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/community/posts/{postID}/replies",
+    "module": "Community",
+    "operationId": "communityListReplies",
+    "source": "Sources/App/Community/CommunityController.swift:23"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/community/posts/{postID}/replies",
+    "module": "Community",
+    "operationId": "communityCreateReply",
+    "source": "Sources/App/Community/CommunityController.swift:32"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/community/posts/{postID}/report",
+    "module": "Community",
+    "operationId": "communityReportPost",
+    "source": "Sources/App/Community/CommunityController.swift:34"
+  },
+  {
+    "method": "PUT",
+    "path": "/v1/community/profile",
+    "module": "Community",
+    "operationId": "communityUpsertProfile",
+    "source": "Sources/App/Community/CommunityController.swift:30"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/conversations",
+    "module": "Chat",
+    "operationId": "conversationList",
+    "source": "Sources/App/Chat/ConversationController.swift:120"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/conversations",
+    "module": "Chat",
+    "operationId": "conversationCreate",
+    "source": "Sources/App/Chat/ConversationController.swift:119"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/conversations/{id}",
+    "module": "Chat",
+    "operationId": "conversationDelete",
+    "source": "Sources/App/Chat/ConversationController.swift:123"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/conversations/{id}",
+    "module": "Chat",
+    "operationId": "conversationGet",
+    "source": "Sources/App/Chat/ConversationController.swift:121"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/conversations/{id}/local-executions/{executionID}",
+    "module": "Chat",
+    "operationId": "conversationCancelLocalReply",
+    "source": "Sources/App/Chat/ConversationController.swift:128"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/conversations/{id}/local-executions/{executionID}/tools",
+    "module": "Chat",
+    "operationId": "localExecutionToolInvoke",
+    "source": "Sources/App/Chat/ConversationController.swift:130"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/conversations/{id}/messages/commit",
+    "module": "Chat",
+    "operationId": "conversationCommitLocalReply",
+    "source": "Sources/App/Chat/ConversationController.swift:127"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/conversations/{id}/messages/prepare",
+    "module": "Chat",
+    "operationId": "conversationPrepareLocalReply",
+    "source": "Sources/App/Chat/ConversationController.swift:126"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/conversations/{id}/messages/stream",
+    "module": "Chat",
+    "operationId": "conversationStreamReply",
+    "source": "Sources/App/Chat/ConversationController.swift:124"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/conversations/{id}/traces",
+    "module": "Chat",
+    "operationId": "conversationTraces",
+    "source": "Sources/App/Chat/ConversationController.swift:122"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/dashboard/activity",
+    "module": "Dashboard",
+    "operationId": "dashboardActivity",
+    "source": "Sources/App/Dashboard/DashboardController.swift:46"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/dashboard/home",
+    "module": "Dashboard",
+    "operationId": "dashboardHome",
+    "source": "Sources/App/Dashboard/DashboardController.swift:45"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/dashboard/profile",
+    "module": "Dashboard",
+    "operationId": "dashboardProfile",
+    "source": "Sources/App/Dashboard/DashboardController.swift:44"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/dashboard/stats",
+    "module": "Dashboard",
+    "operationId": "dashboardStats",
+    "source": "Sources/App/Dashboard/DashboardController.swift:43"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/devices",
+    "module": "Devices",
+    "operationId": "deviceRegister",
+    "source": "Sources/App/Devices/DeviceController.swift:18"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/devices/command/{id}/result",
+    "module": "Apple",
+    "operationId": "deviceCommandResult",
+    "source": "Sources/App/Apple/DeviceCommandController.swift:15"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/devices/commands/pending",
+    "module": "Apple",
+    "operationId": "deviceCommandsPending",
+    "source": "Sources/App/Apple/DeviceCommandController.swift:16"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/devices/{token}",
+    "module": "Devices",
+    "operationId": "deviceUnregister",
+    "source": "Sources/App/Devices/DeviceController.swift:19"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/gateways/photon/inbound",
+    "module": "Me",
+    "operationId": "photonInboundWebhook",
+    "source": "Sources/App/App+build.swift:3473"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/grok/chat",
+    "module": "Grok",
+    "operationId": "grokChat",
+    "source": "Sources/App/Grok/GrokController.swift:34"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/grok/tts",
+    "module": "Grok",
+    "operationId": "grokTTS",
+    "source": "Sources/App/Grok/GrokController.swift:37"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/grok/vision",
+    "module": "Grok",
+    "operationId": "grokVision",
+    "source": "Sources/App/Grok/GrokController.swift:36"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/grok/x-search",
+    "module": "Grok",
+    "operationId": "grokXSearch",
+    "source": "Sources/App/Grok/GrokController.swift:35"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/health",
+    "module": "Health",
+    "operationId": "healthRead",
+    "source": "Sources/App/Health/HealthIngestController.swift:106"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/health",
+    "module": "Health",
+    "operationId": "healthIngest",
+    "source": "Sources/App/Health/HealthIngestController.swift:98"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/health/daily",
+    "module": "Health",
+    "operationId": "healthDaily",
+    "source": "Sources/App/Health/HealthIngestController.swift:107"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/hermes/artifacts",
+    "module": "Hermes",
+    "operationId": "hermesArtifactsList",
+    "source": "Sources/App/Hermes/Mirror/HermesMirrorController.swift:99"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/hermes/artifacts/{id}",
+    "module": "Hermes",
+    "operationId": "hermesArtifactsGet",
+    "source": "Sources/App/Hermes/Mirror/HermesMirrorController.swift:100"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/hermes/mirror/jobs",
+    "module": "Hermes",
+    "operationId": "hermesMirrorJobsList",
+    "source": "Sources/App/Hermes/Mirror/HermesMirrorController.swift:20"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/hermes/mirror/jobs",
+    "module": "Hermes",
+    "operationId": "hermesMirrorJobCreate",
+    "source": "Sources/App/Hermes/Mirror/HermesMirrorController.swift:21"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/hermes/mirror/jobs/install-compile",
+    "module": "Hermes",
+    "operationId": "hermesMirrorInstallCompileJob",
+    "source": "Sources/App/Hermes/Mirror/HermesMirrorController.swift:22"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/hermes/mirror/jobs/{id}",
+    "module": "Hermes",
+    "operationId": "hermesMirrorJobDelete",
+    "source": "Sources/App/Hermes/Mirror/HermesMirrorController.swift:28"
+  },
+  {
+    "method": "PUT",
+    "path": "/v1/hermes/mirror/jobs/{id}",
+    "module": "Hermes",
+    "operationId": "hermesMirrorJobUpdate",
+    "source": "Sources/App/Hermes/Mirror/HermesMirrorController.swift:24"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/hermes/mirror/jobs/{id}/collect",
+    "module": "Hermes",
+    "operationId": "hermesMirrorCollectJobRuns",
+    "source": "Sources/App/Hermes/Mirror/HermesMirrorController.swift:29"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/hermes/mirror/jobs/{id}/pause",
+    "module": "Hermes",
+    "operationId": "hermesMirrorJobPause",
+    "source": "Sources/App/Hermes/Mirror/HermesMirrorController.swift:25"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/hermes/mirror/jobs/{id}/resume",
+    "module": "Hermes",
+    "operationId": "hermesMirrorJobResume",
+    "source": "Sources/App/Hermes/Mirror/HermesMirrorController.swift:26"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/hermes/mirror/jobs/{id}/runs",
+    "module": "Hermes",
+    "operationId": "hermesMirrorJobRuns",
+    "source": "Sources/App/Hermes/Mirror/HermesMirrorController.swift:23"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/hermes/mirror/jobs/{id}/trigger",
+    "module": "Hermes",
+    "operationId": "hermesMirrorJobTrigger",
+    "source": "Sources/App/Hermes/Mirror/HermesMirrorController.swift:27"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/hermes/mirror/skills",
+    "module": "Hermes",
+    "operationId": "hermesMirrorSkillsList",
+    "source": "Sources/App/Hermes/Mirror/HermesMirrorController.swift:18"
+  },
+  {
+    "method": "PUT",
+    "path": "/v1/hermes/mirror/skills/{name}",
+    "module": "Hermes",
+    "operationId": "hermesMirrorSkillToggle",
+    "source": "Sources/App/Hermes/Mirror/HermesMirrorController.swift:19"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/hermes/mirror/status",
+    "module": "Hermes",
+    "operationId": "hermesMirrorStatus",
+    "source": "Sources/App/Hermes/Mirror/HermesMirrorController.swift:16"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/hermes/mirror/sync",
+    "module": "Hermes",
+    "operationId": "hermesMirrorSync",
+    "source": "Sources/App/Hermes/Mirror/HermesMirrorController.swift:17"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/hermes/mirror/vault/create",
+    "module": "Hermes",
+    "operationId": "hermesMirrorVaultCreate",
+    "source": "Sources/App/Hermes/Mirror/HermesMirrorController.swift:31"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/hermes/mirror/vault/import",
+    "module": "Hermes",
+    "operationId": "hermesMirrorVaultImport",
+    "source": "Sources/App/Hermes/Mirror/HermesMirrorController.swift:30"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/hermes/mirror/vault/import-sessions",
+    "module": "Hermes",
+    "operationId": "hermesMirrorImportSessions",
+    "source": "Sources/App/Hermes/Mirror/HermesMirrorController.swift:32"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/hermes/mirror/webhook",
+    "module": "Hermes",
+    "operationId": "hermesMirrorWebhookGet",
+    "source": "Sources/App/Hermes/Mirror/HermesMirrorWebhookController.swift:63"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/hermes/mirror/webhook",
+    "module": "Hermes",
+    "operationId": "hermesMirrorWebhookRotate",
+    "source": "Sources/App/Hermes/Mirror/HermesMirrorWebhookController.swift:64"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/hermes/mirror/webhook/{token}",
+    "module": "Hermes",
+    "operationId": "hermesMirrorWebhookPush",
+    "source": "Sources/App/Hermes/Mirror/HermesMirrorWebhookController.swift:71"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/hermes/runs",
+    "module": "Hermes",
+    "operationId": "hermesRunList",
+    "source": "Sources/App/Hermes/Runs/HermesRunsController.swift:35"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/hermes/runs",
+    "module": "Hermes",
+    "operationId": "hermesRunStart",
+    "source": "Sources/App/Hermes/Runs/HermesRunsController.swift:34"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/hermes/runs/{id}",
+    "module": "Hermes",
+    "operationId": "hermesRunGet",
+    "source": "Sources/App/Hermes/Runs/HermesRunsController.swift:36"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/hermes/runs/{id}/approval",
+    "module": "Hermes",
+    "operationId": "hermesRunApprove",
+    "source": "Sources/App/Hermes/Runs/HermesRunsController.swift:38"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/hermes/runs/{id}/events",
+    "module": "Hermes",
+    "operationId": "hermesRunEvents",
+    "source": "Sources/App/Hermes/Runs/HermesRunsController.swift:37"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/hermes/runs/{id}/stop",
+    "module": "Hermes",
+    "operationId": "hermesRunStop",
+    "source": "Sources/App/Hermes/Runs/HermesRunsController.swift:39"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/hermes/workspace/diff",
+    "module": "Hermes",
+    "operationId": "hermesWorkspaceDiff",
+    "source": "Sources/App/Hermes/Mirror/HermesMirrorController.swift:44"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/hermes/workspace/file",
+    "module": "Hermes",
+    "operationId": "hermesWorkspaceFile",
+    "source": "Sources/App/Hermes/Mirror/HermesMirrorController.swift:43"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/hermes/workspace/files",
+    "module": "Hermes",
+    "operationId": "hermesWorkspaceFiles",
+    "source": "Sources/App/Hermes/Mirror/HermesMirrorController.swift:42"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/hermes/workspace/status",
+    "module": "Hermes",
+    "operationId": "hermesWorkspaceStatus",
+    "source": "Sources/App/Hermes/Mirror/HermesMirrorController.swift:41"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/import",
+    "module": "Import",
+    "operationId": "importLinks",
+    "source": "Sources/App/Import/ImportController.swift:23"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/import/bookmarks",
+    "module": "Import",
+    "operationId": "importBookmarks",
+    "source": "Sources/App/Import/ImportController.swift:24"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/import/files",
+    "module": "Import",
+    "operationId": "importFiles",
+    "source": "Sources/App/Import/ImportController.swift:25"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/import/vault-bulk",
+    "module": "Import",
+    "operationId": "importVaultBulk",
+    "source": "Sources/App/Import/VaultImportController.swift:30"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/import/{id}",
+    "module": "Import",
+    "operationId": "importStatus",
+    "source": "Sources/App/Import/ImportController.swift:26"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/import/{id}/approve",
+    "module": "Import",
+    "operationId": "importApprove",
+    "source": "Sources/App/Import/ImportController.swift:28"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/import/{id}/categorize",
+    "module": "Import",
+    "operationId": "importCategorize",
+    "source": "Sources/App/Import/ImportController.swift:27"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/ingestion-sources/{token}",
+    "module": "Ingestion",
+    "operationId": "ingestionSourceDownload",
+    "source": "Sources/App/Ingestion/MultimodalIngestionController.swift:35"
+  },
+  {
+    "method": "HEAD",
+    "path": "/v1/ingestion-sources/{token}",
+    "module": "Ingestion",
+    "operationId": "ingestionSourceHead",
+    "source": "Sources/App/Ingestion/MultimodalIngestionController.swift:36"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/ingestions",
+    "module": "Ingestion",
+    "operationId": "ingestionList",
+    "source": "Sources/App/Ingestion/MultimodalIngestionController.swift:15"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/ingestions",
+    "module": "Ingestion",
+    "operationId": "ingestionCreate",
+    "source": "Sources/App/Ingestion/MultimodalIngestionController.swift:14"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/ingestions/{batchID}",
+    "module": "Ingestion",
+    "operationId": "ingestionDetail",
+    "source": "Sources/App/Ingestion/MultimodalIngestionController.swift:16"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/ingestions/{batchID}/events",
+    "module": "Ingestion",
+    "operationId": "ingestionEvents",
+    "source": "Sources/App/Ingestion/MultimodalIngestionController.swift:17"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/ingestions/{batchID}/items/{itemID}",
+    "module": "Ingestion",
+    "operationId": "ingestionCancelItem",
+    "source": "Sources/App/Ingestion/MultimodalIngestionController.swift:21"
+  },
+  {
+    "method": "PUT",
+    "path": "/v1/ingestions/{batchID}/items/{itemID}/chunks/{index}",
+    "module": "Ingestion",
+    "operationId": "ingestionUploadChunk",
+    "source": "Sources/App/Ingestion/MultimodalIngestionController.swift:18"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/ingestions/{batchID}/items/{itemID}/complete",
+    "module": "Ingestion",
+    "operationId": "ingestionCompleteUpload",
+    "source": "Sources/App/Ingestion/MultimodalIngestionController.swift:19"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/ingestions/{batchID}/items/{itemID}/retry",
+    "module": "Ingestion",
+    "operationId": "ingestionRetry",
+    "source": "Sources/App/Ingestion/MultimodalIngestionController.swift:20"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/insights",
+    "module": "Dashboard",
+    "operationId": "insightsList",
+    "source": "Sources/App/Dashboard/InsightsController.swift:33"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/insights/synthesis/latest",
+    "module": "Dashboard",
+    "operationId": "insightsLatestSynthesis",
+    "source": "Sources/App/Dashboard/InsightsController.swift:34"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/insights/{id}/dismiss",
+    "module": "Dashboard",
+    "operationId": "insightsDismiss",
+    "source": "Sources/App/Dashboard/InsightsController.swift:35"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/integrations/nous",
+    "module": "Integrations",
+    "operationId": "integrationsNousRevoke",
+    "source": "Sources/App/Integrations/NousOAuthController.swift:23"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/integrations/nous",
+    "module": "Integrations",
+    "operationId": "integrationsNousStatus",
+    "source": "Sources/App/Integrations/NousOAuthController.swift:20"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/integrations/nous/complete",
+    "module": "Integrations",
+    "operationId": "integrationsNousComplete",
+    "source": "Sources/App/Integrations/NousOAuthController.swift:22"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/integrations/nous/start",
+    "module": "Integrations",
+    "operationId": "integrationsNousStart",
+    "source": "Sources/App/Integrations/NousOAuthController.swift:21"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/integrations/xai",
+    "module": "Integrations",
+    "operationId": "integrationsXaiRevoke",
+    "source": "Sources/App/Integrations/XaiOAuthController.swift:15"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/integrations/xai",
+    "module": "Integrations",
+    "operationId": "integrationsXaiStatus",
+    "source": "Sources/App/Integrations/XaiOAuthController.swift:12"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/integrations/xai/complete",
+    "module": "Integrations",
+    "operationId": "integrationsXaiComplete",
+    "source": "Sources/App/Integrations/XaiOAuthController.swift:14"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/integrations/xai/start",
+    "module": "Integrations",
+    "operationId": "integrationsXaiStart",
+    "source": "Sources/App/Integrations/XaiOAuthController.swift:13"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/jobs",
+    "module": "Skills",
+    "operationId": "jobsCreate",
+    "source": "Sources/App/Skills/JobsController.swift:27"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/jobs/detect",
+    "module": "Skills",
+    "operationId": "jobsDetect",
+    "source": "Sources/App/Skills/JobsController.swift:26"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/kb-compile",
+    "module": "App",
+    "operationId": "kbCompileLegacy",
+    "source": "Sources/App/App+build.swift:2537"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/kb-compile/pending",
+    "module": "App",
+    "operationId": "kbCompilePendingLegacy",
+    "source": "Sources/App/App+build.swift:2544"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/knowledge/connections/explain",
+    "module": "Knowledge",
+    "operationId": "explainKnowledgeConnection",
+    "source": "Sources/App/Knowledge/KnowledgeGraphController.swift:18"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/knowledge/edges/{id}/confirm",
+    "module": "Knowledge",
+    "operationId": "confirmKnowledgeEdge",
+    "source": "Sources/App/Knowledge/KnowledgeGraphController.swift:19"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/knowledge/edges/{id}/dismiss",
+    "module": "Knowledge",
+    "operationId": "dismissKnowledgeEdge",
+    "source": "Sources/App/Knowledge/KnowledgeGraphController.swift:20"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/knowledge/graph",
+    "module": "Knowledge",
+    "operationId": "knowledgeGraph",
+    "source": "Sources/App/Knowledge/KnowledgeGraphController.swift:15"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/knowledge/reason",
+    "module": "Knowledge",
+    "operationId": "knowledgeReason",
+    "source": "Sources/App/Knowledge/KnowledgeGraphController.swift:16"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/knowledge/reason/stream",
+    "module": "Knowledge",
+    "operationId": "knowledgeReasonStream",
+    "source": "Sources/App/Knowledge/KnowledgeGraphController.swift:17"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/llm/chat",
+    "module": "LLM",
+    "operationId": "llmChat",
+    "source": "Sources/App/LLM/LLMController.swift:41"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/mail/gmail/connect",
+    "module": "Mail",
+    "operationId": "gmailConnect",
+    "source": "Sources/App/Mail/GmailController.swift:27"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/mail/gmail/disconnect",
+    "module": "Mail",
+    "operationId": "gmailDisconnect",
+    "source": "Sources/App/Mail/GmailController.swift:28"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/mail/gmail/status",
+    "module": "Mail",
+    "operationId": "gmailStatus",
+    "source": "Sources/App/Mail/GmailController.swift:26"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/marketplace/admin/publishers",
+    "module": "Marketplace",
+    "operationId": "marketplaceAdminPublishers",
+    "source": "Sources/App/Marketplace/MarketplaceController.swift:40"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/marketplace/admin/publishers/{publisherID}/decision",
+    "module": "Marketplace",
+    "operationId": "marketplaceAdminPublisherDecision",
+    "source": "Sources/App/Marketplace/MarketplaceController.swift:42"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/marketplace/admin/submissions",
+    "module": "Marketplace",
+    "operationId": "marketplaceAdminSubmissions",
+    "source": "Sources/App/Marketplace/MarketplaceController.swift:39"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/marketplace/admin/submissions/{submissionID}/decision",
+    "module": "Marketplace",
+    "operationId": "marketplaceAdminDecision",
+    "source": "Sources/App/Marketplace/MarketplaceController.swift:41"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/marketplace/admin/versions/{versionID}/revoke",
+    "module": "Marketplace",
+    "operationId": "marketplaceAdminRevokeVersion",
+    "source": "Sources/App/Marketplace/MarketplaceController.swift:43"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/marketplace/plugins",
+    "module": "Marketplace",
+    "operationId": "marketplaceList",
+    "source": "Sources/App/Marketplace/MarketplaceController.swift:23"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/marketplace/plugins/{slug}",
+    "module": "Marketplace",
+    "operationId": "marketplaceDetail",
+    "source": "Sources/App/Marketplace/MarketplaceController.swift:24"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/marketplace/plugins/{slug}/install",
+    "module": "Marketplace",
+    "operationId": "marketplaceInstall",
+    "source": "Sources/App/Marketplace/MarketplaceController.swift:27"
+  },
+  {
+    "method": "PUT",
+    "path": "/v1/marketplace/plugins/{slug}/rating",
+    "module": "Marketplace",
+    "operationId": "marketplaceRate",
+    "source": "Sources/App/Marketplace/MarketplaceController.swift:26"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/marketplace/plugins/{slug}/reviews",
+    "module": "Marketplace",
+    "operationId": "marketplaceReviews",
+    "source": "Sources/App/Marketplace/MarketplaceController.swift:25"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/marketplace/plugins/{slug}/tools/{toolName}/run",
+    "module": "Marketplace",
+    "operationId": "marketplaceRunTool",
+    "source": "Sources/App/Marketplace/MarketplaceController.swift:29"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/marketplace/plugins/{slug}/upgrade",
+    "module": "Marketplace",
+    "operationId": "marketplaceUpgrade",
+    "source": "Sources/App/Marketplace/MarketplaceController.swift:28"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/marketplace/publisher",
+    "module": "Marketplace",
+    "operationId": "marketplacePublisherGet",
+    "source": "Sources/App/Marketplace/MarketplaceController.swift:32"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/marketplace/publisher/apply",
+    "module": "Marketplace",
+    "operationId": "marketplacePublisherApply",
+    "source": "Sources/App/Marketplace/MarketplaceController.swift:31"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/marketplace/publisher/plugins",
+    "module": "Marketplace",
+    "operationId": "marketplacePublisherCreatePlugin",
+    "source": "Sources/App/Marketplace/MarketplaceController.swift:33"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/marketplace/publisher/plugins/{slug}/artifacts",
+    "module": "Marketplace",
+    "operationId": "marketplacePublisherUploadArtifact",
+    "source": "Sources/App/Marketplace/MarketplaceController.swift:35"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/marketplace/publisher/plugins/{slug}/versions",
+    "module": "Marketplace",
+    "operationId": "marketplacePublisherCreateVersion",
+    "source": "Sources/App/Marketplace/MarketplaceController.swift:34"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/marketplace/publisher/plugins/{slug}/versions/{versionID}/submit",
+    "module": "Marketplace",
+    "operationId": "marketplacePublisherSubmitVersion",
+    "source": "Sources/App/Marketplace/MarketplaceController.swift:36"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/marketplace/publisher/submissions",
+    "module": "Marketplace",
+    "operationId": "marketplacePublisherSubmissions",
+    "source": "Sources/App/Marketplace/MarketplaceController.swift:37"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/mcp",
+    "module": "MCP",
+    "operationId": "mcpJsonRpc",
+    "source": "Sources/App/MCP/MCPController.swift:24"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/me/agent-connections",
+    "module": "MCP",
+    "operationId": "agentConnectionsList",
+    "source": "Sources/App/MCP/AgentConnectionsController.swift:14"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/me/agent-connections",
+    "module": "MCP",
+    "operationId": "agentConnectionIssue",
+    "source": "Sources/App/MCP/AgentConnectionsController.swift:15"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/me/agent-connections/preview",
+    "module": "MCP",
+    "operationId": "agentConnectionPreview",
+    "source": "Sources/App/MCP/AgentConnectionsController.swift:16"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/me/agent-connections/{id}",
+    "module": "MCP",
+    "operationId": "agentConnectionRevoke",
+    "source": "Sources/App/MCP/AgentConnectionsController.swift:18"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v1/me/agent-connections/{id}",
+    "module": "MCP",
+    "operationId": "agentConnectionUpdate",
+    "source": "Sources/App/MCP/AgentConnectionsController.swift:17"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/me/apns-categories",
+    "module": "Me",
+    "operationId": "apnsPrefsGet",
+    "source": "Sources/App/Me/ApnsCategoryPrefsController.swift:19"
+  },
+  {
+    "method": "PUT",
+    "path": "/v1/me/apns-categories",
+    "module": "Me",
+    "operationId": "apnsPrefsPut",
+    "source": "Sources/App/Me/ApnsCategoryPrefsController.swift:20"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/me/brief",
+    "module": "Me",
+    "operationId": "meBrief",
+    "source": "Sources/App/Me/MeBriefController.swift:15"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/me/brief/{briefId}/cards/{cardId}/feedback",
+    "module": "Me",
+    "operationId": "meBriefCardFeedback",
+    "source": "Sources/App/Me/MeBriefController.swift:16"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/me/chat-preferences",
+    "module": "Chat",
+    "operationId": "chatPreferencesGet",
+    "source": "Sources/App/Chat/ChatExperienceController.swift:27"
+  },
+  {
+    "method": "PUT",
+    "path": "/v1/me/chat-preferences",
+    "module": "Chat",
+    "operationId": "chatPreferencesPut",
+    "source": "Sources/App/Chat/ChatExperienceController.swift:28"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/me/commitments",
+    "module": "Me",
+    "operationId": "meCommitmentsList",
+    "source": "Sources/App/Me/MeCommitmentsController.swift:16"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v1/me/commitments/{id}",
+    "module": "Me",
+    "operationId": "meCommitmentUpdate",
+    "source": "Sources/App/Me/MeCommitmentsController.swift:17"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/me/connections",
+    "module": "Me",
+    "operationId": "connectionsSummary",
+    "source": "Sources/App/Me/ConnectionsController.swift:23"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/me/connections/events",
+    "module": "Me",
+    "operationId": "connectionDiagnosticEvents",
+    "source": "Sources/App/Me/ConnectionsController.swift:25"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/me/connections/test-all",
+    "module": "Me",
+    "operationId": "connectionsTestAll",
+    "source": "Sources/App/Me/ConnectionsController.swift:24"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/me/hermes-gateways",
+    "module": "Me",
+    "operationId": "hermesGatewaysList",
+    "source": "Sources/App/Me/HermesGatewaysController.swift:68"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/me/hermes-gateways/apply",
+    "module": "Me",
+    "operationId": "hermesGatewaysApply",
+    "source": "Sources/App/Me/HermesGatewaysController.swift:86"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/me/hermes-gateways/apply/current",
+    "module": "Me",
+    "operationId": "hermesGatewaysApplyCurrent",
+    "source": "Sources/App/Me/HermesGatewaysController.swift:87"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/me/hermes-gateways/apply/{jobID}",
+    "module": "Me",
+    "operationId": "hermesGatewaysApplyStatus",
+    "source": "Sources/App/Me/HermesGatewaysController.swift:88"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/me/hermes-gateways/apply/{jobID}/stream",
+    "module": "Me",
+    "operationId": "hermesGatewaysApplyStream",
+    "source": "Sources/App/Me/HermesGatewaysController.swift:89"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/me/hermes-gateways/photon/setup",
+    "module": "Me",
+    "operationId": "hermesGatewaysPhotonSetupStart",
+    "source": "Sources/App/Me/HermesGatewaysController.swift:77"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/me/hermes-gateways/photon/setup/{sessionID}/phone",
+    "module": "Me",
+    "operationId": "hermesGatewaysPhotonSetupPhone",
+    "source": "Sources/App/Me/HermesGatewaysController.swift:78"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/me/hermes-gateways/photon/setup/{sessionID}/stream",
+    "module": "Me",
+    "operationId": "hermesGatewaysPhotonSetupStream",
+    "source": "Sources/App/Me/HermesGatewaysController.swift:79"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/me/hermes-gateways/whatsapp/pair",
+    "module": "Me",
+    "operationId": "hermesGatewaysWhatsAppPair",
+    "source": "Sources/App/Me/HermesGatewaysController.swift:70"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/me/hermes-gateways/whatsapp/pair/{sessionID}/stream",
+    "module": "Me",
+    "operationId": "hermesGatewaysWhatsAppPairStream",
+    "source": "Sources/App/Me/HermesGatewaysController.swift:71"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/me/hermes-gateways/whatsapp/session",
+    "module": "Me",
+    "operationId": "hermesGatewaysWhatsAppUnlink",
+    "source": "Sources/App/Me/HermesGatewaysController.swift:72"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/me/hermes-gateways/{id}",
+    "module": "Me",
+    "operationId": "hermesGatewayDelete",
+    "source": "Sources/App/Me/HermesGatewaysController.swift:83"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/me/hermes-gateways/{id}",
+    "module": "Me",
+    "operationId": "hermesGatewayGet",
+    "source": "Sources/App/Me/HermesGatewaysController.swift:81"
+  },
+  {
+    "method": "PUT",
+    "path": "/v1/me/hermes-gateways/{id}",
+    "module": "Me",
+    "operationId": "hermesGatewayPut",
+    "source": "Sources/App/Me/HermesGatewaysController.swift:82"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/me/hermes-gateways/{id}/test",
+    "module": "Me",
+    "operationId": "hermesGatewayTest",
+    "source": "Sources/App/Me/HermesGatewaysController.swift:84"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/me/hermes/capabilities",
+    "module": "Hermes",
+    "operationId": "hermesCapabilitiesGet",
+    "source": "Sources/App/Hermes/HermesCapabilitiesController.swift:14"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/me/hermes/cron",
+    "module": "Skills",
+    "operationId": "hermesCronList",
+    "source": "Sources/App/Skills/CronBridgeController.swift:18"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/me/hermes/cron",
+    "module": "Skills",
+    "operationId": "hermesCronCreate",
+    "source": "Sources/App/Skills/CronBridgeController.swift:19"
+  },
+  {
+    "method": "PUT",
+    "path": "/v1/me/hermes/cron/config",
+    "module": "Skills",
+    "operationId": "hermesCronConfigPut",
+    "source": "Sources/App/Skills/CronBridgeController.swift:21"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/me/hermes/cron/preview",
+    "module": "Skills",
+    "operationId": "hermesCronPreview",
+    "source": "Sources/App/Skills/CronBridgeController.swift:20"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/me/hermes/cron/{id}",
+    "module": "Skills",
+    "operationId": "hermesCronDelete",
+    "source": "Sources/App/Skills/CronBridgeController.swift:24"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/me/hermes/cron/{id}/pause",
+    "module": "Skills",
+    "operationId": "hermesCronPause",
+    "source": "Sources/App/Skills/CronBridgeController.swift:22"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/me/hermes/cron/{id}/resume",
+    "module": "Skills",
+    "operationId": "hermesCronResume",
+    "source": "Sources/App/Skills/CronBridgeController.swift:23"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/me/improvement",
+    "module": "SelfImprovement",
+    "operationId": "improvementStatusGet",
+    "source": "Sources/App/SelfImprovement/SelfImprovementController.swift:19"
+  },
+  {
+    "method": "PUT",
+    "path": "/v1/me/improvement",
+    "module": "SelfImprovement",
+    "operationId": "improvementSettingsPut",
+    "source": "Sources/App/SelfImprovement/SelfImprovementController.swift:20"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/me/improvement/changes",
+    "module": "SelfImprovement",
+    "operationId": "improvementChangesList",
+    "source": "Sources/App/SelfImprovement/SelfImprovementController.swift:28"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/me/improvement/changes/{id}/approve",
+    "module": "SelfImprovement",
+    "operationId": "improvementChangeApprove",
+    "source": "Sources/App/SelfImprovement/SelfImprovementController.swift:29"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/me/improvement/changes/{id}/reject",
+    "module": "SelfImprovement",
+    "operationId": "improvementChangeReject",
+    "source": "Sources/App/SelfImprovement/SelfImprovementController.swift:30"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/me/improvement/curator/runs",
+    "module": "SelfImprovement",
+    "operationId": "improvementCuratorRun",
+    "source": "Sources/App/SelfImprovement/SelfImprovementController.swift:21"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/me/improvement/resources",
+    "module": "SelfImprovement",
+    "operationId": "improvementResourcesList",
+    "source": "Sources/App/SelfImprovement/SelfImprovementController.swift:25"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v1/me/improvement/resources/{kind}/{name}",
+    "module": "SelfImprovement",
+    "operationId": "improvementResourcePin",
+    "source": "Sources/App/SelfImprovement/SelfImprovementController.swift:26"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/me/improvement/runs",
+    "module": "SelfImprovement",
+    "operationId": "improvementRunsList",
+    "source": "Sources/App/SelfImprovement/SelfImprovementController.swift:22"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/me/improvement/runs/{id}",
+    "module": "SelfImprovement",
+    "operationId": "improvementRunGet",
+    "source": "Sources/App/SelfImprovement/SelfImprovementController.swift:23"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/me/improvement/runs/{id}/rollback",
+    "module": "SelfImprovement",
+    "operationId": "improvementRunRollback",
+    "source": "Sources/App/SelfImprovement/SelfImprovementController.swift:24"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/me/improvement/soul/reviews",
+    "module": "SelfImprovement",
+    "operationId": "improvementSoulReview",
+    "source": "Sources/App/SelfImprovement/SelfImprovementController.swift:27"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/me/learned",
+    "module": "Me",
+    "operationId": "meLearned",
+    "source": "Sources/App/Me/MeLearnedController.swift:14"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/me/location",
+    "module": "Me",
+    "operationId": "meForgetLastKnownLocation",
+    "source": "Sources/App/Me/LastKnownLocationController.swift:20"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/me/location",
+    "module": "Me",
+    "operationId": "meLastKnownLocation",
+    "source": "Sources/App/Me/LastKnownLocationController.swift:19"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/me/preferences/hybrid-execution",
+    "module": "Chat",
+    "operationId": "hybridExecutionPreferencesGet",
+    "source": "Sources/App/Chat/ChatExperienceController.swift:32"
+  },
+  {
+    "method": "PUT",
+    "path": "/v1/me/preferences/hybrid-execution",
+    "module": "Chat",
+    "operationId": "hybridExecutionPreferencesPut",
+    "source": "Sources/App/Chat/ChatExperienceController.swift:33"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/me/preferences/llm",
+    "module": "Me",
+    "operationId": "llmPreferencesGet",
+    "source": "Sources/App/Me/LLMPreferencesController.swift:90"
+  },
+  {
+    "method": "PUT",
+    "path": "/v1/me/preferences/llm",
+    "module": "Me",
+    "operationId": "llmPreferencesPut",
+    "source": "Sources/App/Me/LLMPreferencesController.swift:91"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/me/providers",
+    "module": "Me",
+    "operationId": "providersList",
+    "source": "Sources/App/Me/ProvidersController.swift:59"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/me/providers/catalog",
+    "module": "Me",
+    "operationId": "providersCatalog",
+    "source": "Sources/App/Me/ProvidersController.swift:58"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/me/providers/{provider}",
+    "module": "Me",
+    "operationId": "providerCredentialDelete",
+    "source": "Sources/App/Me/ProvidersController.swift:61"
+  },
+  {
+    "method": "PUT",
+    "path": "/v1/me/providers/{provider}",
+    "module": "Me",
+    "operationId": "providerCredentialPut",
+    "source": "Sources/App/Me/ProvidersController.swift:60"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/me/providers/{provider}/models",
+    "module": "Me",
+    "operationId": "providerModelsList",
+    "source": "Sources/App/Me/ProvidersController.swift:63"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/me/providers/{provider}/pool",
+    "module": "Me",
+    "operationId": "providerPoolList",
+    "source": "Sources/App/Me/ProvidersController.swift:65"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/me/providers/{provider}/pool",
+    "module": "Me",
+    "operationId": "providerPoolAdd",
+    "source": "Sources/App/Me/ProvidersController.swift:66"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/me/providers/{provider}/pool/{keyID}",
+    "module": "Me",
+    "operationId": "providerPoolDelete",
+    "source": "Sources/App/Me/ProvidersController.swift:67"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/me/providers/{provider}/test",
+    "module": "Me",
+    "operationId": "providerCredentialTest",
+    "source": "Sources/App/Me/ProvidersController.swift:62"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/me/recap",
+    "module": "Me",
+    "operationId": "meRecap",
+    "source": "Sources/App/Me/MeRecapController.swift:14"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/me/recap/period",
+    "module": "Me",
+    "operationId": "mePeriodRecap",
+    "source": "Sources/App/Me/PeriodRecapController.swift:18"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/me/resurface",
+    "module": "Me",
+    "operationId": "meResurface",
+    "source": "Sources/App/Me/MeResurfaceController.swift:14"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/me/suggestions",
+    "module": "Memory",
+    "operationId": "meSuggestions",
+    "source": "Sources/App/Memory/SuggestionsController.swift:15"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/me/today",
+    "module": "Me",
+    "operationId": "meToday",
+    "source": "Sources/App/Me/MeTodayController.swift:22"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/memory",
+    "module": "Memory",
+    "operationId": "memoryList",
+    "source": "Sources/App/Memory/MemoryController.swift:171"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/memory-compile",
+    "module": "KB",
+    "operationId": "memoryCompile",
+    "source": "Sources/App/KB/MemoryCompileController.swift:23"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/memory-compile/pending",
+    "module": "KB",
+    "operationId": "memoryCompilePending",
+    "source": "Sources/App/KB/MemoryCompileController.swift:30"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/memory/facets",
+    "module": "Memory",
+    "operationId": "memoryFacets",
+    "source": "Sources/App/Memory/MemoryController.swift:175"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/memory/graph",
+    "module": "Memory",
+    "operationId": "memoryGraph",
+    "source": "Sources/App/Memory/MemoryController.swift:174"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/memory/local-sync",
+    "module": "Memory",
+    "operationId": "localMemorySync",
+    "source": "Sources/App/Memory/MemoryController.swift:177"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/memory/search",
+    "module": "Memory",
+    "operationId": "memorySearch",
+    "source": "Sources/App/Memory/MemoryController.swift:167"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/memory/upsert",
+    "module": "Memory",
+    "operationId": "memoryUpsert",
+    "source": "Sources/App/Memory/MemoryController.swift:163"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/memory/{id}",
+    "module": "Memory",
+    "operationId": "memoryDelete",
+    "source": "Sources/App/Memory/MemoryController.swift:184"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/memory/{id}",
+    "module": "Memory",
+    "operationId": "memoryGet",
+    "source": "Sources/App/Memory/MemoryController.swift:179"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v1/memory/{id}",
+    "module": "Memory",
+    "operationId": "memoryPatch",
+    "source": "Sources/App/Memory/MemoryController.swift:185"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/memory/{id}/lineage",
+    "module": "Memory",
+    "operationId": "memoryLineage",
+    "source": "Sources/App/Memory/MemoryController.swift:180"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/memory/{id}/provenance",
+    "module": "Memory",
+    "operationId": "memoryProvenance",
+    "source": "Sources/App/Memory/MemoryController.swift:182"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/memory/{id}/related",
+    "module": "Memory",
+    "operationId": "memoryRelated",
+    "source": "Sources/App/Memory/MemoryController.swift:181"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/memory/{id}/review",
+    "module": "Memory",
+    "operationId": "memoryReview",
+    "source": "Sources/App/Memory/MemoryController.swift:183"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/memos",
+    "module": "Memory",
+    "operationId": "memoList",
+    "source": "Sources/App/Memory/MemoController.swift:16"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/memos",
+    "module": "Memory",
+    "operationId": "memoGenerate",
+    "source": "Sources/App/Memory/MemoController.swift:15"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/news/ticker",
+    "module": "News",
+    "operationId": "newsTicker",
+    "source": "Sources/App/News/NewsTickerController.swift:16"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/onboarding",
+    "module": "Onboarding",
+    "operationId": "onboardingGet",
+    "source": "Sources/App/Onboarding/OnboardingController.swift:40"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v1/onboarding",
+    "module": "Onboarding",
+    "operationId": "onboardingPatch",
+    "source": "Sources/App/Onboarding/OnboardingController.swift:41"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/photos/index",
+    "module": "Apple",
+    "operationId": "photosIndex",
+    "source": "Sources/App/Apple/PhotoIndexController.swift:31"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/plugins/catalog",
+    "module": "Plugins",
+    "operationId": "pluginCatalog",
+    "source": "Sources/App/Plugins/PluginController.swift:27"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/plugins/hermes-skills",
+    "module": "Plugins",
+    "operationId": "pluginHermesSkills",
+    "source": "Sources/App/Plugins/PluginController.swift:28"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/plugins/hermes-skills/install",
+    "module": "Plugins",
+    "operationId": "pluginHermesSkillInstall",
+    "source": "Sources/App/Plugins/HermesHubSkillsController.swift:18"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/plugins/hermes-skills/{name}",
+    "module": "Plugins",
+    "operationId": "pluginHermesSkillUninstall",
+    "source": "Sources/App/Plugins/HermesHubSkillsController.swift:19"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/plugins/installs",
+    "module": "Plugins",
+    "operationId": "pluginInstalls",
+    "source": "Sources/App/Plugins/PluginController.swift:29"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/plugins/installs",
+    "module": "Plugins",
+    "operationId": "pluginInstall",
+    "source": "Sources/App/Plugins/PluginController.swift:30"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/plugins/installs/{id}",
+    "module": "Plugins",
+    "operationId": "pluginUninstall",
+    "source": "Sources/App/Plugins/PluginController.swift:32"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v1/plugins/installs/{id}",
+    "module": "Plugins",
+    "operationId": "pluginUpdateInstall",
+    "source": "Sources/App/Plugins/PluginController.swift:31"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/plugins/installs/{id}/sync",
+    "module": "Plugins",
+    "operationId": "pluginSync",
+    "source": "Sources/App/Plugins/PluginController.swift:33"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/profiles",
+    "module": "Profiles",
+    "operationId": "profilesList",
+    "source": "Sources/App/Profiles/ProfilesController.swift:39"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/profiles",
+    "module": "Profiles",
+    "operationId": "profilesCreate",
+    "source": "Sources/App/Profiles/ProfilesController.swift:40"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/profiles/{slug}",
+    "module": "Profiles",
+    "operationId": "profilesDelete",
+    "source": "Sources/App/Profiles/ProfilesController.swift:43"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/profiles/{slug}",
+    "module": "Profiles",
+    "operationId": "profilesGet",
+    "source": "Sources/App/Profiles/ProfilesController.swift:41"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v1/profiles/{slug}",
+    "module": "Profiles",
+    "operationId": "profilesPatch",
+    "source": "Sources/App/Profiles/ProfilesController.swift:42"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/profiles/{slug}/activate",
+    "module": "Profiles",
+    "operationId": "profilesActivate",
+    "source": "Sources/App/Profiles/ProfilesController.swift:44"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/projects",
+    "module": "Projects",
+    "operationId": "projectsList",
+    "source": "Sources/App/Projects/ProjectsController.swift:24"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/projects",
+    "module": "Projects",
+    "operationId": "projectsCreate",
+    "source": "Sources/App/Projects/ProjectsController.swift:25"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/projects/{id}",
+    "module": "Projects",
+    "operationId": "projectsDelete",
+    "source": "Sources/App/Projects/ProjectsController.swift:27"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v1/projects/{id}",
+    "module": "Projects",
+    "operationId": "projectsPatch",
+    "source": "Sources/App/Projects/ProjectsController.swift:26"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/query",
+    "module": "Memory",
+    "operationId": "query",
+    "source": "Sources/App/Memory/QueryController.swift:69"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/query/stream",
+    "module": "Memory",
+    "operationId": "queryStream",
+    "source": "Sources/App/Memory/QueryController.swift:70"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/reminders",
+    "module": "Reminders",
+    "operationId": "remindersList",
+    "source": "Sources/App/Reminders/RemindersController.swift:40"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/reminders",
+    "module": "Reminders",
+    "operationId": "remindersCreate",
+    "source": "Sources/App/Reminders/RemindersController.swift:41"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/reminders/detect",
+    "module": "Reminders",
+    "operationId": "remindersDetect",
+    "source": "Sources/App/Reminders/RemindersController.swift:42"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/reminders/sync",
+    "module": "Apple",
+    "operationId": "appleRemindersSync",
+    "source": "Sources/App/Apple/AppleRemindersController.swift:31"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/reminders/{id}",
+    "module": "Reminders",
+    "operationId": "remindersDelete",
+    "source": "Sources/App/Reminders/RemindersController.swift:44"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v1/reminders/{id}",
+    "module": "Reminders",
+    "operationId": "remindersPatch",
+    "source": "Sources/App/Reminders/RemindersController.swift:43"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/router",
+    "module": "LLM",
+    "operationId": "routerProfilesList",
+    "source": "Sources/App/LLM/Routing/RouterController.swift:26"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/router",
+    "module": "LLM",
+    "operationId": "routerProfilesCreate",
+    "source": "Sources/App/LLM/Routing/RouterController.swift:27"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/router/bindings",
+    "module": "LLM",
+    "operationId": "routerBindingsList",
+    "source": "Sources/App/LLM/Routing/RouterController.swift:29"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/router/bindings/{scope}/{scopeID}",
+    "module": "LLM",
+    "operationId": "routerBindingDelete",
+    "source": "Sources/App/LLM/Routing/RouterController.swift:31"
+  },
+  {
+    "method": "PUT",
+    "path": "/v1/router/bindings/{scope}/{scopeID}",
+    "module": "LLM",
+    "operationId": "routerBindingPut",
+    "source": "Sources/App/LLM/Routing/RouterController.swift:30"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/router/catalog",
+    "module": "LLM",
+    "operationId": "routerCatalog",
+    "source": "Sources/App/LLM/Routing/RouterController.swift:28"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/router/dashboard",
+    "module": "LLM",
+    "operationId": "routerDashboard",
+    "source": "Sources/App/LLM/Routing/RouterController.swift:32"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/router/parallel/executions",
+    "module": "LLM",
+    "operationId": "parallelExecutionsList",
+    "source": "Sources/App/LLM/Routing/ParallelController.swift:23"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/router/parallel/executions/stream",
+    "module": "LLM",
+    "operationId": "parallelExecutionStream",
+    "source": "Sources/App/LLM/Routing/ParallelController.swift:22"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/router/parallel/executions/{executionID}",
+    "module": "LLM",
+    "operationId": "parallelExecutionDelete",
+    "source": "Sources/App/LLM/Routing/ParallelController.swift:25"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/router/parallel/executions/{executionID}",
+    "module": "LLM",
+    "operationId": "parallelExecutionDetail",
+    "source": "Sources/App/LLM/Routing/ParallelController.swift:24"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/router/synthesis-presets",
+    "module": "LLM",
+    "operationId": "synthesisPresetsList",
+    "source": "Sources/App/LLM/Routing/ParallelController.swift:26"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/router/synthesis-presets",
+    "module": "LLM",
+    "operationId": "synthesisPresetCreate",
+    "source": "Sources/App/LLM/Routing/ParallelController.swift:27"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/router/synthesis-presets/{presetID}",
+    "module": "LLM",
+    "operationId": "synthesisPresetDelete",
+    "source": "Sources/App/LLM/Routing/ParallelController.swift:29"
+  },
+  {
+    "method": "PUT",
+    "path": "/v1/router/synthesis-presets/{presetID}",
+    "module": "LLM",
+    "operationId": "synthesisPresetUpdate",
+    "source": "Sources/App/LLM/Routing/ParallelController.swift:28"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/router/{id}",
+    "module": "LLM",
+    "operationId": "routerProfilesDelete",
+    "source": "Sources/App/LLM/Routing/RouterController.swift:34"
+  },
+  {
+    "method": "PUT",
+    "path": "/v1/router/{id}",
+    "module": "LLM",
+    "operationId": "routerProfilesUpdate",
+    "source": "Sources/App/LLM/Routing/RouterController.swift:33"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/sessions",
+    "module": "Sessions",
+    "operationId": "sessionsList",
+    "source": "Sources/App/Sessions/SessionsController.swift:25"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/settings/hermes",
+    "module": "Settings",
+    "operationId": "hermesConfigDelete",
+    "source": "Sources/App/Settings/HermesConfigController.swift:88"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/settings/hermes",
+    "module": "Settings",
+    "operationId": "hermesConfigGet",
+    "source": "Sources/App/Settings/HermesConfigController.swift:86"
+  },
+  {
+    "method": "PUT",
+    "path": "/v1/settings/hermes",
+    "module": "Settings",
+    "operationId": "hermesConfigPut",
+    "source": "Sources/App/Settings/HermesConfigController.swift:87"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/settings/hermes/test",
+    "module": "Settings",
+    "operationId": "hermesConfigTest",
+    "source": "Sources/App/Settings/HermesConfigController.swift:89"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/skills",
+    "module": "Skills",
+    "operationId": "skillsList",
+    "source": "Sources/App/Skills/SkillsController.swift:39"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/skills/outputs",
+    "module": "Skills",
+    "operationId": "skillOutputs",
+    "source": "Sources/App/Skills/SkillOutputsController.swift:39"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/skills/slash",
+    "module": "Skills",
+    "operationId": "skillsSlash",
+    "source": "Sources/App/Skills/SkillsController.swift:40"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v1/skills/{name}",
+    "module": "Skills",
+    "operationId": "skillPatch",
+    "source": "Sources/App/Skills/SkillsController.swift:41"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/skills/{name}/run",
+    "module": "Skills",
+    "operationId": "skillsRun",
+    "source": "Sources/App/Skills/SkillsController.swift:43"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/skills/{name}/runs",
+    "module": "Skills",
+    "operationId": "skillRuns",
+    "source": "Sources/App/Skills/SkillsController.swift:42"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/soul",
+    "module": "Auth",
+    "operationId": "soulDelete",
+    "source": "Sources/App/Auth/SoulController.swift:39"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/soul",
+    "module": "Auth",
+    "operationId": "soulGet",
+    "source": "Sources/App/Auth/SoulController.swift:36"
+  },
+  {
+    "method": "PUT",
+    "path": "/v1/soul",
+    "module": "Auth",
+    "operationId": "soulPut",
+    "source": "Sources/App/Auth/SoulController.swift:37"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/soul/compose",
+    "module": "Auth",
+    "operationId": "composeSoul",
+    "source": "Sources/App/Auth/SoulController.swift:38"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/spaces",
+    "module": "Spaces",
+    "operationId": "spacesList",
+    "source": "Sources/App/Spaces/SpacesController.swift:41"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/spaces",
+    "module": "Spaces",
+    "operationId": "spacesCreate",
+    "source": "Sources/App/Spaces/SpacesController.swift:42"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/spaces/{id}",
+    "module": "Spaces",
+    "operationId": "spacesDelete",
+    "source": "Sources/App/Spaces/SpacesController.swift:45"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/spaces/{id}",
+    "module": "Spaces",
+    "operationId": "spacesGet",
+    "source": "Sources/App/Spaces/SpacesController.swift:43"
+  },
+  {
+    "method": "PUT",
+    "path": "/v1/spaces/{id}",
+    "module": "Spaces",
+    "operationId": "spacesUpdate",
+    "source": "Sources/App/Spaces/SpacesController.swift:44"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/system/hermes/reprovision",
+    "module": "System",
+    "operationId": "systemHermesReprovision",
+    "source": "Sources/App/System/HermesUpdateController.swift:23"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/system/hermes/update",
+    "module": "System",
+    "operationId": "systemHermesUpdateStart",
+    "source": "Sources/App/System/HermesUpdateController.swift:18"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/system/hermes/update/current",
+    "module": "System",
+    "operationId": "systemHermesUpdateCurrent",
+    "source": "Sources/App/System/HermesUpdateController.swift:19"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/system/hermes/update/{jobID}",
+    "module": "System",
+    "operationId": "systemHermesUpdateStatus",
+    "source": "Sources/App/System/HermesUpdateController.swift:20"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/system/hermes/update/{jobID}/rollback",
+    "module": "System",
+    "operationId": "systemHermesUpdateRollback",
+    "source": "Sources/App/System/HermesUpdateController.swift:22"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/system/hermes/update/{jobID}/stream",
+    "module": "System",
+    "operationId": "systemHermesUpdateStream",
+    "source": "Sources/App/System/HermesUpdateController.swift:21"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/system/hermes/version",
+    "module": "System",
+    "operationId": "systemHermesVersion",
+    "source": "Sources/App/System/HermesUpdateController.swift:17"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/tasks",
+    "module": "Dashboard",
+    "operationId": "tasksList",
+    "source": "Sources/App/Dashboard/TasksController.swift:24"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/team-invitations/{token}/accept",
+    "module": "Teams",
+    "operationId": "teamInvitationsAccept",
+    "source": "Sources/App/Teams/TeamController.swift:92"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/teams",
+    "module": "Teams",
+    "operationId": "teamsList",
+    "source": "Sources/App/Teams/TeamController.swift:68"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/teams",
+    "module": "Teams",
+    "operationId": "teamsCreate",
+    "source": "Sources/App/Teams/TeamController.swift:69"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/teams/{teamID}/archive",
+    "module": "Teams",
+    "operationId": "teamsArchive",
+    "source": "Sources/App/Teams/TeamController.swift:77"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/teams/{teamID}/invitations",
+    "module": "Teams",
+    "operationId": "teamInvitationsList",
+    "source": "Sources/App/Teams/TeamController.swift:73"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/teams/{teamID}/invitations",
+    "module": "Teams",
+    "operationId": "teamInvitationsCreate",
+    "source": "Sources/App/Teams/TeamController.swift:72"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/teams/{teamID}/invitations/{invitationID}",
+    "module": "Teams",
+    "operationId": "teamInvitationsRevoke",
+    "source": "Sources/App/Teams/TeamController.swift:75"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/teams/{teamID}/invitations/{invitationID}/resend",
+    "module": "Teams",
+    "operationId": "teamInvitationsResend",
+    "source": "Sources/App/Teams/TeamController.swift:74"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/teams/{teamID}/leave",
+    "module": "Teams",
+    "operationId": "teamsLeave",
+    "source": "Sources/App/Teams/TeamController.swift:79"
+  },
+  {
+    "method": "PUT",
+    "path": "/v1/teams/{teamID}/owner",
+    "module": "Teams",
+    "operationId": "teamsTransferOwner",
+    "source": "Sources/App/Teams/TeamController.swift:76"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/teams/{teamID}/restore",
+    "module": "Teams",
+    "operationId": "teamsRestore",
+    "source": "Sources/App/Teams/TeamController.swift:78"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/teams/{teamID}/vaults",
+    "module": "Teams",
+    "operationId": "teamVaultsList",
+    "source": "Sources/App/Teams/TeamController.swift:70"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/teams/{teamID}/vaults",
+    "module": "Teams",
+    "operationId": "teamVaultsCreate",
+    "source": "Sources/App/Teams/TeamController.swift:71"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/todos",
+    "module": "Todos",
+    "operationId": "todosList",
+    "source": "Sources/App/Todos/TodosController.swift:35"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/todos",
+    "module": "Todos",
+    "operationId": "todosCreate",
+    "source": "Sources/App/Todos/TodosController.swift:36"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/todos/{id}",
+    "module": "Todos",
+    "operationId": "todosDelete",
+    "source": "Sources/App/Todos/TodosController.swift:38"
+  },
+  {
+    "method": "PATCH",
+    "path": "/v1/todos/{id}",
+    "module": "Todos",
+    "operationId": "todosPatch",
+    "source": "Sources/App/Todos/TodosController.swift:37"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/transcribe",
+    "module": "LLM",
+    "operationId": "llmTranscribe",
+    "source": "Sources/App/LLM/Transcribe/TranscribeController.swift:41"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/tts",
+    "module": "TTS",
+    "operationId": "llmTTS",
+    "source": "Sources/App/TTS/TTSController.swift:28"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/vault/context/{vaultFileID}",
+    "module": "Vault",
+    "operationId": "vaultContext",
+    "source": "Sources/App/Vault/VaultIndexController.swift:40"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/vault/create",
+    "module": "Vault",
+    "operationId": "vaultCreate",
+    "source": "Sources/App/Vault/VaultController.swift:143"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/vault/export",
+    "module": "Vault",
+    "operationId": "vaultExport",
+    "source": "Sources/App/Vault/VaultController.swift:137"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/vault/files",
+    "module": "Vault",
+    "operationId": "vaultList",
+    "source": "Sources/App/Vault/VaultController.swift:125"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/vault/files",
+    "module": "Vault",
+    "operationId": "vaultUpload",
+    "source": "Sources/App/Vault/VaultController.swift:124"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/vault/files/**",
+    "module": "Vault",
+    "operationId": "vaultDelete",
+    "source": "Sources/App/Vault/VaultController.swift:129"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/vault/files/**",
+    "module": "Vault",
+    "operationId": "vaultRead",
+    "source": "Sources/App/Vault/VaultController.swift:131"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/vault/files/move",
+    "module": "Vault",
+    "operationId": "vaultMove",
+    "source": "Sources/App/Vault/VaultController.swift:126"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/vault/index",
+    "module": "Vault",
+    "operationId": "vaultIndexStatus",
+    "source": "Sources/App/Vault/VaultIndexController.swift:39"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/vault/links/{vaultFileID}",
+    "module": "Vault",
+    "operationId": "vaultDocumentLinks",
+    "source": "Sources/App/Vault/VaultIndexController.swift:41"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/vault/lint",
+    "module": "Vault",
+    "operationId": "vaultLint",
+    "source": "Sources/App/Vault/VaultIndexController.swift:42"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/vault/status",
+    "module": "Vault",
+    "operationId": "vaultStatus",
+    "source": "Sources/App/Vault/VaultController.swift:144"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/vaults",
+    "module": "Teams",
+    "operationId": "vaultsList",
+    "source": "Sources/App/Teams/TeamController.swift:83"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/vaults/{vaultID}/activity",
+    "module": "Teams",
+    "operationId": "vaultActivityList",
+    "source": "Sources/App/Teams/TeamController.swift:87"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/vaults/{vaultID}/activity/stream",
+    "module": "Teams",
+    "operationId": "vaultActivityStream",
+    "source": "Sources/App/Teams/TeamController.swift:88"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/vaults/{vaultID}/members",
+    "module": "Teams",
+    "operationId": "vaultMembersList",
+    "source": "Sources/App/Teams/TeamController.swift:84"
+  },
+  {
+    "method": "DELETE",
+    "path": "/v1/vaults/{vaultID}/members/{userID}",
+    "module": "Teams",
+    "operationId": "vaultMembersRemove",
+    "source": "Sources/App/Teams/TeamController.swift:86"
+  },
+  {
+    "method": "PUT",
+    "path": "/v1/vaults/{vaultID}/members/{userID}",
+    "module": "Teams",
+    "operationId": "vaultMembersUpdate",
+    "source": "Sources/App/Teams/TeamController.swift:85"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/vision/embed",
+    "module": "Vision",
+    "operationId": "llmVisionEmbed",
+    "source": "Sources/App/Vision/VisionEmbedController.swift:32"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/vision/search",
+    "module": "Vision",
+    "operationId": "llmVisionSearch",
+    "source": "Sources/App/Vision/VisionEmbedController.swift:33"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/workflow-hooks/{hookID}",
+    "module": "Workflows",
+    "operationId": "workflowWebhookIngest",
+    "source": "Sources/App/Workflows/WorkflowWebhookController.swift:19"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/workflow-templates",
+    "module": "Workflows",
+    "operationId": "workflowTemplatesList",
+    "source": "Sources/App/Workflows/WorkflowController.swift:187"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/workflow-templates/{templateID}/instantiate",
+    "module": "Workflows",
+    "operationId": "workflowTemplateInstantiate",
+    "source": "Sources/App/Workflows/WorkflowController.swift:188"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/workflow-templates/{templateID}/runs",
+    "module": "Workflows",
+    "operationId": "workflowTemplateRun",
+    "source": "Sources/App/Workflows/WorkflowController.swift:189"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/workflows",
+    "module": "Workflows",
+    "operationId": "workflowsList",
+    "source": "Sources/App/Workflows/WorkflowController.swift:24"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/workflows",
+    "module": "Workflows",
+    "operationId": "workflowsCreate",
+    "source": "Sources/App/Workflows/WorkflowController.swift:24"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/workflows/approvals",
+    "module": "Workflows",
+    "operationId": "workflowApprovalsList",
+    "source": "Sources/App/Workflows/WorkflowController.swift:26"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/workflows/approvals/{approvalID}/decision",
+    "module": "Workflows",
+    "operationId": "workflowApprovalDecide",
+    "source": "Sources/App/Workflows/WorkflowController.swift:33"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/workflows/limits",
+    "module": "Workflows",
+    "operationId": "workflowLimits",
+    "source": "Sources/App/Workflows/WorkflowController.swift:25"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/workflows/runs",
+    "module": "Workflows",
+    "operationId": "workflowRunsAll",
+    "source": "Sources/App/Workflows/WorkflowController.swift:26"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/workflows/runs/{runID}",
+    "module": "Workflows",
+    "operationId": "workflowRunGet",
+    "source": "Sources/App/Workflows/WorkflowController.swift:27"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/workflows/runs/{runID}/cancel",
+    "module": "Workflows",
+    "operationId": "workflowRunCancel",
+    "source": "Sources/App/Workflows/WorkflowController.swift:30"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/workflows/runs/{runID}/events",
+    "module": "Workflows",
+    "operationId": "workflowRunEvents",
+    "source": "Sources/App/Workflows/WorkflowController.swift:28"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/workflows/runs/{runID}/events/stream",
+    "module": "Workflows",
+    "operationId": "workflowRunEventsStream",
+    "source": "Sources/App/Workflows/WorkflowController.swift:29"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/workflows/runs/{runID}/resume",
+    "module": "Workflows",
+    "operationId": "workflowRunResume",
+    "source": "Sources/App/Workflows/WorkflowController.swift:32"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/workflows/runs/{runID}/retry",
+    "module": "Workflows",
+    "operationId": "workflowRunRetry",
+    "source": "Sources/App/Workflows/WorkflowController.swift:31"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/workflows/validate",
+    "module": "Workflows",
+    "operationId": "workflowValidate",
+    "source": "Sources/App/Workflows/WorkflowController.swift:25"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/workflows/{id}",
+    "module": "Workflows",
+    "operationId": "workflowsGet",
+    "source": "Sources/App/Workflows/WorkflowController.swift:34"
+  },
+  {
+    "method": "PUT",
+    "path": "/v1/workflows/{id}/draft",
+    "module": "Workflows",
+    "operationId": "workflowsUpdateDraft",
+    "source": "Sources/App/Workflows/WorkflowController.swift:34"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/workflows/{id}/publish",
+    "module": "Workflows",
+    "operationId": "workflowsPublish",
+    "source": "Sources/App/Workflows/WorkflowController.swift:35"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/workflows/{id}/runs",
+    "module": "Workflows",
+    "operationId": "workflowRunsList",
+    "source": "Sources/App/Workflows/WorkflowController.swift:37"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/workflows/{id}/runs",
+    "module": "Workflows",
+    "operationId": "workflowRunCreate",
+    "source": "Sources/App/Workflows/WorkflowController.swift:35"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/workflows/{id}/versions",
+    "module": "Workflows",
+    "operationId": "workflowVersionsList",
+    "source": "Sources/App/Workflows/WorkflowController.swift:38"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/workflows/{id}/versions/{version}/restore",
+    "module": "Workflows",
+    "operationId": "workflowVersionRestore",
+    "source": "Sources/App/Workflows/WorkflowController.swift:39"
+  },
+  {
+    "method": "POST",
+    "path": "/v1/workflows/{id}/webhook/rotate",
+    "module": "Workflows",
+    "operationId": "workflowWebhookRotate",
+    "source": "Sources/App/Workflows/WorkflowController.swift:36"
+  },
+  {
+    "method": "GET",
+    "path": "/v1/ws",
+    "module": "App",
+    "operationId": "wsUpgrade",
+    "source": "Sources/App/App+build.swift:3837"
+  }
+]

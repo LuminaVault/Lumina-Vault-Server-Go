@@ -1,0 +1,95 @@
+[
+  {
+    "name": "list-empty",
+    "method": "GET",
+    "path": "/v1/todos",
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "body": "{\"todos\":[{\"title\":\"x\",\"done\":false,\"dueAt\":\"2026-11-01T09:00:00Z\",\"id\":\"5547263B-2DF5-46A6-8A30-A73C48C8DCE9\",\"createdAt\":\"2026-10-29T12:14:07Z\"},{\"title\":\"Call mum\",\"done\":false,\"createdAt\":\"2026-10-29T12:14:07Z\",\"id\":\"C7F69003-34E4-404A-84D9-4225657C53D8\"},{\"title\":\"Fix tap\",\"done\":false,\"createdAt\":\"2026-10-29T12:14:07Z\",\"id\":\"F8768E17-1E75-4DE6-A6A4-A6CB7F35FA26\",\"projectID\":\"5EA2FAFE-DAEE-4E65-B417-AE22F7BE704B\"}]}"
+  },
+  {
+    "name": "create",
+    "method": "POST",
+    "path": "/v1/todos",
+    "requestBody": {
+      "title": "Buy milk",
+      "dueAt": "2026-11-01T09:00:00Z"
+    },
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "body": "{\"title\":\"Buy milk\",\"id\":\"7B4EC2CF-A99A-43D1-9B82-8245EB32B078\",\"dueAt\":\"2026-11-01T09:00:00Z\",\"done\":false,\"createdAt\":\"2026-10-29T12:15:03Z\"}"
+  },
+  {
+    "name": "create-undated",
+    "method": "POST",
+    "path": "/v1/todos",
+    "requestBody": {
+      "title": "Call mum"
+    },
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "body": "{\"createdAt\":\"2026-10-29T12:15:03Z\",\"done\":false,\"title\":\"Call mum\",\"id\":\"C3FF21E1-C077-46A4-A434-7602ADF3A709\"}"
+  },
+  {
+    "name": "list",
+    "method": "GET",
+    "path": "/v1/todos",
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "body": "{\"todos\":[{\"id\":\"7B4EC2CF-A99A-43D1-9B82-8245EB32B078\",\"dueAt\":\"2026-11-01T09:00:00Z\",\"done\":false,\"createdAt\":\"2026-10-29T12:15:03Z\",\"title\":\"Buy milk\"},{\"id\":\"5547263B-2DF5-46A6-8A30-A73C48C8DCE9\",\"dueAt\":\"2026-11-01T09:00:00Z\",\"done\":false,\"createdAt\":\"2026-10-29T12:14:07Z\",\"title\":\"x\"},{\"id\":\"C7F69003-34E4-404A-84D9-4225657C53D8\",\"done\":false,\"createdAt\":\"2026-10-29T12:14:07Z\",\"title\":\"Call mum\"},{\"projectID\":\"5EA2FAFE-DAEE-4E65-B417-AE22F7BE704B\",\"id\":\"F8768E17-1E75-4DE6-A6A4-A6CB7F35FA26\",\"done\":false,\"createdAt\":\"2026-10-29T12:14:07Z\",\"title\":\"Fix tap\"},{\"id\":\"C3FF21E1-C077-46A4-A434-7602ADF3A709\",\"done\":false,\"createdAt\":\"2026-10-29T12:15:03Z\",\"title\":\"Call mum\"}]}"
+  },
+  {
+    "name": "patch-done",
+    "method": "PATCH",
+    "path": "/v1/todos/7B4EC2CF-A99A-43D1-9B82-8245EB32B078",
+    "requestBody": {
+      "done": true
+    },
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "body": "{\"id\":\"7B4EC2CF-A99A-43D1-9B82-8245EB32B078\",\"dueAt\":\"2026-11-01T09:00:00Z\",\"done\":true,\"title\":\"Buy milk\",\"createdAt\":\"2026-10-29T12:15:03Z\"}"
+  },
+  {
+    "name": "patch-title",
+    "method": "PATCH",
+    "path": "/v1/todos/7B4EC2CF-A99A-43D1-9B82-8245EB32B078",
+    "requestBody": {
+      "title": "Buy oat milk"
+    },
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "body": "{\"createdAt\":\"2026-10-29T12:15:03Z\",\"title\":\"Buy oat milk\",\"id\":\"7B4EC2CF-A99A-43D1-9B82-8245EB32B078\",\"dueAt\":\"2026-11-01T09:00:00Z\",\"done\":true}"
+  },
+  {
+    "name": "list-after-patch",
+    "method": "GET",
+    "path": "/v1/todos",
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "body": "{\"todos\":[{\"title\":\"x\",\"done\":false,\"dueAt\":\"2026-11-01T09:00:00Z\",\"id\":\"5547263B-2DF5-46A6-8A30-A73C48C8DCE9\",\"createdAt\":\"2026-10-29T12:14:07Z\"},{\"title\":\"Call mum\",\"done\":false,\"id\":\"C7F69003-34E4-404A-84D9-4225657C53D8\",\"createdAt\":\"2026-10-29T12:14:07Z\"},{\"projectID\":\"5EA2FAFE-DAEE-4E65-B417-AE22F7BE704B\",\"title\":\"Fix tap\",\"done\":false,\"id\":\"F8768E17-1E75-4DE6-A6A4-A6CB7F35FA26\",\"createdAt\":\"2026-10-29T12:14:07Z\"},{\"title\":\"Call mum\",\"done\":false,\"id\":\"C3FF21E1-C077-46A4-A434-7602ADF3A709\",\"createdAt\":\"2026-10-29T12:15:03Z\"},{\"title\":\"Buy oat milk\",\"done\":true,\"dueAt\":\"2026-11-01T09:00:00Z\",\"id\":\"7B4EC2CF-A99A-43D1-9B82-8245EB32B078\",\"createdAt\":\"2026-10-29T12:15:03Z\"}]}"
+  },
+  {
+    "name": "list-done-filter",
+    "method": "GET",
+    "path": "/v1/todos?done=true",
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "body": "{\"todos\":[{\"id\":\"7B4EC2CF-A99A-43D1-9B82-8245EB32B078\",\"dueAt\":\"2026-11-01T09:00:00Z\",\"done\":true,\"createdAt\":\"2026-10-29T12:15:03Z\",\"title\":\"Buy oat milk\"}]}"
+  },
+  {
+    "name": "delete",
+    "method": "DELETE",
+    "path": "/v1/todos/7B4EC2CF-A99A-43D1-9B82-8245EB32B078",
+    "status": 204,
+    "contentType": "",
+    "body": ""
+  },
+  {
+    "name": "list-after-delete",
+    "method": "GET",
+    "path": "/v1/todos",
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "body": "{\"todos\":[{\"title\":\"x\",\"done\":false,\"id\":\"5547263B-2DF5-46A6-8A30-A73C48C8DCE9\",\"createdAt\":\"2026-10-29T12:14:07Z\",\"dueAt\":\"2026-11-01T09:00:00Z\"},{\"title\":\"Call mum\",\"done\":false,\"id\":\"C7F69003-34E4-404A-84D9-4225657C53D8\",\"createdAt\":\"2026-10-29T12:14:07Z\"},{\"title\":\"Fix tap\",\"done\":false,\"id\":\"F8768E17-1E75-4DE6-A6A4-A6CB7F35FA26\",\"projectID\":\"5EA2FAFE-DAEE-4E65-B417-AE22F7BE704B\",\"createdAt\":\"2026-10-29T12:14:07Z\"},{\"title\":\"Call mum\",\"done\":false,\"id\":\"C3FF21E1-C077-46A4-A434-7602ADF3A709\",\"createdAt\":\"2026-10-29T12:15:03Z\"}]}"
+  }
+]
