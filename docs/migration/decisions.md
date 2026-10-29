@@ -82,6 +82,37 @@ so that setting is off. Renaming the module to
 `github.com/LuminaVault/Lumina-Vault-Server-Go` would restore normal import
 grouping and avoid a dotless path; that rename is the owner's call.
 
+## D2: codegen is models-only oapi-codegen, handlers hand-written on Echo v5
+
+Spike run 2026-10-29 with oapi-codegen v2.8.1 (pinned as a `go tool`):
+
+- It reads the **3.1** spec directly. No 3.1→3.0 down-convert step is needed, so `@apiture/openapi-down-convert` is not used.
+- With `type-mapping` (`string/uuid → wire.UUID`, `string/date-time → wire.Time`), all 11.5k generated lines compile, with zero `time.Time` and zero `openapi_types.UUID` fields left. Nullable `type: [x, 'null']` becomes a pointer with `omitempty`, matching Swift's omitted-nil encoding (still to be confirmed by the golden fixtures).
+- None of its server generators target Echo v5. It has Echo v4, chi, gin, gorilla, fiber, iris and std-http, so no `strict-server` for Echo v5, and `oapi-codegen/echo-middleware` is Echo v4 too.
+
+Decision: each module generates **models only** from its spec tag
+(`internal/modules/<m>/oapi-codegen.yaml`, `include-tags: [<m>]`). Echo v5
+handlers are hand-written, and each module test validates its responses
+against `api/openapi.yaml` with kin-openapi, which already comes with
+oapi-codegen. That keeps the spec as the enforced contract without the
+generated server.
+
+## D1: wire date format (provisional until Task 0.3)
+
+The iOS client decodes every API response with `JSONDecoder.dateDecodingStrategy = .iso8601`
+(`LuminaVaultClient/API/Core/Endpoint.swift:70`), which accepts only whole-second
+internet date-time. So Swift must emit `2026-10-29T10:30:15Z`. `wire.Time`
+marshals that way and rejects fractional seconds on input. `TestTimeMatchesGolden`
+turns this assumption into a checked fact once the golden fixtures exist.
+
+## D-todos: Todos are vault notes
+
+The spec describes `TodoDTO` as "Backed by a vault note (`metadata.isTodo`)".
+The pilot therefore reads and writes the notes/memories data, and possibly vault
+files on the PVC, not a dedicated `todos` table. Task 4.1 snapshots and the
+Task 4.2 queries must target those tables. Read `Sources/App/Todos/TodosController.swift`
+before Task 4.1.
+
 ## D-jobs: findings from the partial job inventory (Task 0.4, unfinished)
 
 Registered in `Sources/App/App+build.swift`. Claim mechanisms are not read yet.
