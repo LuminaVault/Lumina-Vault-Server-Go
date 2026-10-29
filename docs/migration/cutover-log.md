@@ -19,7 +19,7 @@ evidence, not intent: commands, counts, links, numbers.
   middleware on the group (`App+build.swift`, `projectsGroup`).
 - Swift tests: `Tests/AppTests/Skills/ProjectModelTests.swift` (2 tests).
 
-### G1 parity: met 2026-10-29 (local; CI evidence pending)
+### G1 parity: met 2026-10-29
 
 - Parity: `scripts/parity-up.sh` against `lv-swift:fdbed9b0`, then
   `parity compare` gives **4 scenarios, 0 differences** (base/health, projects
@@ -33,14 +33,15 @@ evidence, not intent: commands, counts, links, numbers.
   tenant scoping). `TestResponsesConformToSpec` validates the bodies against
   `api/openapi.yaml`.
 - `golangci-lint run`: 0 issues. `govulncheck`: no reachable vulnerabilities.
-- Pending: the same results from the `parity` CI job. It needs the
-  `luminavaultserver` GHCR package to grant Lumina-Vault-Server-Go read access
-  (decisions.md D-parity-ci).
+- CI: PR #1, run 40874765801. `parity` gives **4 scenarios, 0 differences**
+  against `ghcr.io/luminavault/luminavaultserver:fdbed9b0…`
+  (https://github.com/LuminaVault/Lumina-Vault-Server-Go/actions/runs/40874765801/job/123452432211).
+  `lint`, `test` and `vuln` pass.
 
 ### G2 staging deploy: not started
 
 Blocked on human steps:
-1. Merge LuminaVaultInfra #486 (chart) and #487 (netpol).
-2. Merge this repo's branch to `main`, which publishes the first image. `INFRA_REPO_TOKEN` must be set.
+1. ~~Merge LuminaVaultInfra #486 (chart) and #487 (netpol).~~ Merged 2026-10-29.
+2. Merge PR #1 to `main`, which publishes the first image. `INFRA_REPO_TOKEN` must be set.
 3. Put that SHA into #488 and merge it.
 4. Provide a staging session token for `make parity-smoke MODULE=projects`.
