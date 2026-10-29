@@ -27,12 +27,14 @@ OUT = ROOT / "modules.yaml"
 # Wave per Swift module dir: the roadmap's module table. Unlisted → 0, which
 # means "assign a wave" (gen fails until every module has one).
 WAVES = {
-    "Todos": 1,
-    "Projects": 2, "Reminders": 2, "Apple": 2, "Profiles": 2, "Sessions": 2, "Spaces": 2,
+    # Pilot (decisions.md D-pilot): Projects is pure CRUD. Todos writes vault
+    # files, memories and embeddings, so it moves with the vault in wave 4.
+    "Projects": 1,
+    "Reminders": 2, "Apple": 2, "Profiles": 2, "Sessions": 2, "Spaces": 2,
     "Devices": 2, "Settings": 2, "Weather": 2, "News": 2, "Kanban": 2, "Achievements": 2,
     "Dashboard": 3, "Health": 3, "Calendar": 3, "Mail": 3, "Community": 3, "Marketplace": 3,
     "Account": 3, "Me": 3, "Onboarding": 3, "Teams": 3,
-    "Vault": 4, "Memory": 4, "Knowledge": 4, "KB": 4, "Capture": 4, "Import": 4,
+    "Todos": 4, "Vault": 4, "Memory": 4, "Knowledge": 4, "KB": 4, "Capture": 4, "Import": 4,
     "Ingestion": 4, "Indexing": 4, "Vision": 4, "Repositories": 4,
     "LLM": 5, "Chat": 5, "Transcribe": 5, "TTS": 5, "SelfImprovement": 5, "Skills": 5,
     "Agents": 5, "MCP": 5, "Workflows": 5, "Grok": 5,

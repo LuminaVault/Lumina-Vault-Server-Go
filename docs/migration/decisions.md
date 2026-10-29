@@ -105,6 +105,19 @@ internet date-time. So Swift must emit `2026-10-29T10:30:15Z`. `wire.Time`
 marshals that way and rejects fractional seconds on input. `TestTimeMatchesGolden`
 turns this assumption into a checked fact once the golden fixtures exist.
 
+## D-pilot: the pilot is Projects, not Todos
+
+Reading `TodosController.swift` showed that Todos is not CRUD:
+- `create` writes `inbox/<UUID>.md` into the tenant vault on the PVC, inserts a `vault_files` row with JSON metadata, and creates an embedded memory through the embedding provider chain.
+- `delete` moves the file to a timestamped `_deleted_*` path and cascades the memory.
+
+Piloting it would mean porting vault paths, the memory repository and
+embeddings, which is wave-4 machinery. `ProjectsController.swift` is
+tenant-scoped CRUD on `projects`. Its only cross-module touch is reading
+`vault_files.metadata` JSON for `todoCount`, which usefully exercises decoding
+JSONB that Swift wrote. Projects is wave 1; Todos moves to wave 4
+(`scripts/gen-modules.py` WAVES; the roadmap and the phase plan are updated).
+
 ## D-todos: Todos are vault notes
 
 The spec describes `TodoDTO` as "Backed by a vault note (`metadata.isTodo`)".

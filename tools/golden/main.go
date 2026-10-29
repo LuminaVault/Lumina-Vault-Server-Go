@@ -204,6 +204,51 @@ func run(ctx context.Context, swift, dsn, email, password, secrets, masterKey, o
 		return err
 	}
 
+	// 4b. Projects round trip (the pilot module), including a todoCount > 0.
+	var projects []exchange
+	addP := func(ex exchange, err error) (exchange, error) {
+		if err == nil {
+			projects = append(projects, ex)
+		}
+		return ex, err
+	}
+	if _, err := addP(c.do(ctx, "list-empty", http.MethodGet, "/v1/projects", "", true)); err != nil {
+		return err
+	}
+	pc, err := addP(c.do(ctx, "create", http.MethodPost, "/v1/projects", `{"name":"  Home  ","description":"chores"}`, true))
+	if err != nil {
+		return err
+	}
+	var project struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal([]byte(pc.Body), &project); err != nil || project.ID == "" {
+		return fmt.Errorf("create project: %d %s", pc.Status, pc.Body)
+	}
+	for _, step := range []struct{ name, method, path, body string }{
+		{"create-todo-in-project", http.MethodPost, "/v1/todos", fmt.Sprintf(`{"title":"Fix tap","projectID":%q}`, project.ID)},
+		{"create-second", http.MethodPost, "/v1/projects", `{"name":"Work"}`},
+		{"list", http.MethodGet, "/v1/projects", ""},
+		{"list-limit", http.MethodGet, "/v1/projects?limit=1", ""},
+		{"patch-rename", http.MethodPatch, "/v1/projects/" + project.ID, `{"name":"House"}`},
+		{"patch-clear-description", http.MethodPatch, "/v1/projects/" + project.ID, `{"description":""}`},
+		{"patch-archive", http.MethodPatch, "/v1/projects/" + project.ID, `{"archived":true}`},
+		{"patch-empty-name", http.MethodPatch, "/v1/projects/" + project.ID, `{"name":"   "}`},
+		{"create-empty-name", http.MethodPost, "/v1/projects", `{"name":" "}`},
+		{"patch-missing", http.MethodPatch, "/v1/projects/00000000-0000-4000-8000-000000000000", `{"name":"x"}`},
+		{"patch-bad-id", http.MethodPatch, "/v1/projects/nope", `{"name":"x"}`},
+		{"delete", http.MethodDelete, "/v1/projects/" + project.ID, ""},
+		{"delete-again", http.MethodDelete, "/v1/projects/" + project.ID, ""},
+		{"list-after-delete", http.MethodGet, "/v1/projects", ""},
+	} {
+		if _, err := addP(c.do(ctx, step.name, step.method, step.path, step.body, true)); err != nil {
+			return err
+		}
+	}
+	if err := write(out, "projects-http.json", projects); err != nil {
+		return err
+	}
+
 	// 5. Error shapes.
 	var errs []exchange
 	for _, e := range []struct {

@@ -2,11 +2,11 @@
 # Edit only `status` (and `jobs`); re-run the script after the route inventory changes.
 # status: swift | parity | staging | production | done  (lifecycle: see the roadmap)
 modules:
-  todos:
+  projects:
     wave: 1
-    swiftDir: Sources/App/Todos
+    swiftDir: Sources/App/Projects
     status: swift
-    prefixes: [/v1/todos]
+    prefixes: [/v1/projects]
     jobs: []
   achievements:
     wave: 2
@@ -49,12 +49,6 @@ modules:
     swiftDir: Sources/App/Profiles
     status: swift
     prefixes: [/v1/profiles]
-    jobs: []
-  projects:
-    wave: 2
-    swiftDir: Sources/App/Projects
-    status: swift
-    prefixes: [/v1/projects]
     jobs: []
   reminders:
     wave: 2
@@ -178,6 +172,12 @@ modules:
     swiftDir: Sources/App/Memory
     status: swift
     prefixes: [/v1/me/suggestions, /v1/memory, /v1/memos, /v1/query]
+    jobs: []
+  todos:
+    wave: 4
+    swiftDir: Sources/App/Todos
+    status: swift
+    prefixes: [/v1/todos]
     jobs: []
   vault:
     wave: 4
