@@ -113,6 +113,26 @@ files on the PVC, not a dedicated `todos` table. Task 4.1 snapshots and the
 Task 4.2 queries must target those tables. Read `Sources/App/Todos/TodosController.swift`
 before Task 4.1.
 
+## D3: runtime UID/GID 999 (provisional)
+
+The Swift runtime stage runs `useradd --user-group --create-home --system ... hummingbird`
+on `ubuntu:noble` after installing `libjemalloc2 ca-certificates tzdata libcurl4`.
+Replaying exactly that sequence in a clean `ubuntu:noble` container gives
+`uid=999(hummingbird) gid=999(hummingbird)`, so the Go image (distroless/static)
+runs as `999:999`. Confirm it against the real image with
+`docker run --rm --entrypoint id ghcr.io/luminavault/luminavaultserver:<tag>`
+once the image can be pulled (needs `read:packages`). Until then 999 is derived, not observed.
+
+## D-release: staging bump is a direct commit, like Swift's
+
+The plan said `release.yml` would open an infra PR. The established
+convention (LuminaVaultServer `release.yml`) commits the staging tag straight
+to LuminaVaultInfra `main` with `INFRA_REPO_TOKEN`. Staging only; production
+goes through human-reviewed promotion. The Go workflow mirrors that, bumping
+`apps/api-go/values-staging.yaml`. Agents still never merge infra PRs:
+production image tags and every `ingress.extraPaths` change are PRs a human
+merges. The repo needs the `INFRA_REPO_TOKEN` secret before the first release.
+
 ## D-jobs: findings from the partial job inventory (Task 0.4, unfinished)
 
 Registered in `Sources/App/App+build.swift`. Claim mechanisms are not read yet.
