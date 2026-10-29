@@ -1,0 +1,22 @@
+module: projects
+steps:
+  - {name: list no token, request: {method: GET, path: /v1/projects}}
+  - {name: create no token, request: {method: POST, path: /v1/projects, json: {name: x}}}
+  - {name: patch no token, request: {method: PATCH, path: /v1/projects/5EED0000-0000-4000-8000-0000000000A1, json: {name: x}}}
+  - {name: delete no token, request: {method: DELETE, path: /v1/projects/5EED0000-0000-4000-8000-0000000000A1}}
+  - {name: bad token, request: {method: GET, path: /v1/projects, headers: {Authorization: "Bearer not.a.jwt"}}}
+  - {name: malformed json, as: alice, request: {method: POST, path: /v1/projects, raw: "{\"name\":"}}
+  - {name: empty body, as: alice, request: {method: POST, path: /v1/projects, raw: ""}}
+  - {name: array body, as: alice, request: {method: POST, path: /v1/projects, raw: "[]"}}
+  - {name: missing name, as: alice, request: {method: POST, path: /v1/projects, json: {}}}
+  - {name: null name, as: alice, request: {method: POST, path: /v1/projects, raw: "{\"name\":null}"}}
+  - {name: name wrong type, as: alice, request: {method: POST, path: /v1/projects, json: {name: 42}}}
+  - {name: description wrong type, as: alice, request: {method: POST, path: /v1/projects, json: {name: ok, description: 7}}, snapshot: [projects]}
+  - {name: whitespace name, as: alice, request: {method: POST, path: /v1/projects, json: {name: "   "}}}
+  - {name: patch empty name, as: alice, request: {method: PATCH, path: /v1/projects/5EED0000-0000-4000-8000-0000000000A1, json: {name: ""}}}
+  - {name: patch archived wrong type, as: alice, request: {method: PATCH, path: /v1/projects/5EED0000-0000-4000-8000-0000000000A1, json: {archived: "yes"}}}
+  - {name: patch random id, as: alice, request: {method: PATCH, path: /v1/projects/00000000-0000-4000-8000-000000000000, json: {name: x}}}
+  - {name: patch bad id, as: alice, request: {method: PATCH, path: /v1/projects/not-a-uuid, json: {name: x}}}
+  - {name: delete random id, as: alice, request: {method: DELETE, path: /v1/projects/00000000-0000-4000-8000-000000000000}}
+  - {name: delete bad id, as: alice, request: {method: DELETE, path: /v1/projects/not-a-uuid}}
+  - {name: unknown field ignored, as: alice, request: {method: POST, path: /v1/projects, json: {name: extra, bogus: 1}}, snapshot: [projects]}

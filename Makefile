@@ -41,3 +41,12 @@ parity-smoke: ## Gate G2 against api-go-staging (needs STAGING_JWT, MODULE)
 	  pf=$$!; sleep 3; \
 	  go run ./parity/cmd/parity smoke --target http://localhost:18090 --module "$(MODULE)"; rc=$$?; \
 	  kill $$pf; exit $$rc
+
+.PHONY: gen schema-parity
+
+gen: ## Regenerate module models (oapi-codegen) and queries (sqlc)
+	@for cfg in internal/modules/*/oapi-codegen.yaml; do go tool oapi-codegen -config $$cfg api/openapi.yaml || exit 1; done
+	sqlc generate
+
+schema-parity: ## goose builds exactly the Swift (Fluent) schema
+	scripts/schema-parity.sh

@@ -7,10 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"lumina/internal/auth"
 	"lumina/internal/config"
 	"lumina/internal/db"
 	"lumina/internal/httpserver"
 	"lumina/internal/migrations"
+	"lumina/internal/modules/projects"
 	"lumina/internal/telemetry"
 	"net"
 	"os"
@@ -82,7 +84,25 @@ func migrate(ctx context.Context, cfg config.Config, cmd Command) error {
 }
 
 func serve(ctx context.Context, cfg config.Config, cmd Command) error {
-	e := httpserver.New(cfg, httpserver.Deps{})
+	deps := httpserver.Deps{}
+	if cfg.FluentEnabled {
+		pool, err := db.Open(ctx, db.DSN(cfg))
+		if err != nil {
+			return err
+		}
+		defer pool.Close()
+		keys, err := auth.LoadKeys(cfg)
+		if err != nil {
+			return err
+		}
+		deps.Auth = auth.Middleware(keys, auth.PGUsers(pool))
+		// Migrated modules (modules.yaml status ≥ parity). Traffic only reaches
+		// them through the api ingress.extraPaths that name them.
+		deps.Modules = []httpserver.Module{
+			projects.New(pool),
+		}
+	}
+	e := httpserver.New(cfg, deps)
 	sc := echo.StartConfig{
 		Address:         net.JoinHostPort(cmd.HTTPHost, strconv.Itoa(cmd.HTTPPort)),
 		HideBanner:      true,
