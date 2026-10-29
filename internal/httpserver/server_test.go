@@ -40,7 +40,7 @@ func (testModule) Register(r Router, auth echo.MiddlewareFunc) {
 }
 
 func denyAll(echo.HandlerFunc) echo.HandlerFunc {
-	return func(*echo.Context) error { return echo.ErrUnauthorized }
+	return func(*echo.Context) error { return wire.ErrUnauthenticated }
 }
 
 func do(t *testing.T, e *echo.Echo, req *http.Request) *httptest.ResponseRecorder {
@@ -147,11 +147,12 @@ func TestErrorBodiesMatchGolden(t *testing.T) {
 	}
 	require.NoError(t, err)
 	var cases []struct {
-		Name   string `json:"name"`
-		Method string `json:"method"`
-		Path   string `json:"path"`
-		Status int    `json:"status"`
-		Body   string `json:"body"`
+		Name        string `json:"name"`
+		Method      string `json:"method"`
+		Path        string `json:"path"`
+		Status      int    `json:"status"`
+		ContentType string `json:"contentType"`
+		Body        string `json:"body"`
 	}
 	require.NoError(t, json.Unmarshal(raw, &cases))
 	e := New(prodCfg, Deps{Auth: denyAll})
@@ -162,6 +163,7 @@ func TestErrorBodiesMatchGolden(t *testing.T) {
 		}
 		rec := do(t, e, httptest.NewRequest(tc.Method, tc.Path, nil))
 		require.Equal(t, tc.Status, rec.Code, tc.Name)
+		require.Equal(t, tc.ContentType, rec.Header().Get("Content-Type"), tc.Name)
 		if tc.Body == "" {
 			require.Empty(t, rec.Body.String(), tc.Name)
 		} else {

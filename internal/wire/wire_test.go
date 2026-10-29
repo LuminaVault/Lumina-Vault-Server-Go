@@ -26,7 +26,8 @@ func TestTimeUnmarshal(t *testing.T) {
 	require.True(t, got.Equal(time.Date(2026, 10, 29, 10, 30, 15, 0, time.UTC)))
 	require.NoError(t, json.Unmarshal([]byte(`"2026-10-29T12:30:15+02:00"`), &got))
 	require.True(t, got.Equal(time.Date(2026, 10, 29, 10, 30, 15, 0, time.UTC)))
-	require.Error(t, json.Unmarshal([]byte(`"2026-10-29T10:30:15.123Z"`), &got))
+	require.NoError(t, json.Unmarshal([]byte(`"2026-10-29T10:30:15.123Z"`), &got), "Swift accepts fractions")
+	require.Equal(t, 123_000_000, got.Nanosecond())
 	require.Error(t, json.Unmarshal([]byte(`"2026-10-29"`), &got))
 }
 
@@ -49,20 +50,30 @@ func TestUUIDUppercase(t *testing.T) {
 	require.Equal(t, id, back.UUID)
 }
 
-// Confirms the assumed format against the bodies captured from Swift (Task 0.3).
-var isoRe = regexp.MustCompile(`"\d{4}-\d{2}-\d{2}T[^"]+"`)
-
+// Every createdAt/dueAt Swift emitted in todos-http.json must round-trip
+// byte-for-byte through wire.Time.
 func TestTimeMatchesGolden(t *testing.T) {
 	raw, err := os.ReadFile("../../testdata/golden/todos-http.json")
 	if errors.Is(err, os.ErrNotExist) {
 		t.Skip("golden fixture not captured yet (Phase 0 Task 0.3)")
 	}
 	require.NoError(t, err)
-	first := isoRe.Find(raw)
-	require.NotNil(t, first, "no timestamp in todos-http.json")
-	var ts wire.Time
-	require.NoError(t, json.Unmarshal(first, &ts))
-	back, err := json.Marshal(ts)
-	require.NoError(t, err)
-	require.Equal(t, string(first), string(back))
+	var exchanges []struct {
+		Body string `json:"body"`
+	}
+	require.NoError(t, json.Unmarshal(raw, &exchanges))
+	checked := 0
+	for _, ex := range exchanges {
+		for _, m := range isoRe.FindAllString(ex.Body, -1) {
+			var ts wire.Time
+			require.NoError(t, json.Unmarshal([]byte(m), &ts), m)
+			back, err := json.Marshal(ts)
+			require.NoError(t, err)
+			require.Equal(t, m, string(back))
+			checked++
+		}
+	}
+	require.Positive(t, checked)
 }
+
+var isoRe = regexp.MustCompile(`"\d{4}-\d{2}-\d{2}T[^"]+"`)

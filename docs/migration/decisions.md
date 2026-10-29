@@ -97,13 +97,16 @@ against `api/openapi.yaml` with kin-openapi, which already comes with
 oapi-codegen. That keeps the spec as the enforced contract without the
 generated server.
 
-## D1: wire date format (provisional until Task 0.3)
+## D1: wire date format (CONFIRMED by golden capture 2026-10-29)
 
 The iOS client decodes every API response with `JSONDecoder.dateDecodingStrategy = .iso8601`
 (`LuminaVaultClient/API/Core/Endpoint.swift:70`), which accepts only whole-second
 internet date-time. So Swift must emit `2026-10-29T10:30:15Z`. `wire.Time`
-marshals that way and rejects fractional seconds on input. `TestTimeMatchesGolden`
-turns this assumption into a checked fact once the golden fixtures exist.
+marshals that way. The capture corrected one assumption: on input the Swift
+server **accepts** fractional seconds and numeric offsets
+(`"2026-11-01T09:00:00.500Z"` and `"…11:00:00+02:00"` both give 200, and both
+are emitted as `"2026-11-01T09:00:00Z"`), so `wire.Time` accepts them too.
+`TestTimeMatchesGolden` round-trips every timestamp in the capture.
 
 ## D-pilot: the pilot is Projects, not Todos
 
@@ -126,7 +129,7 @@ files on the PVC, not a dedicated `todos` table. Task 4.1 snapshots and the
 Task 4.2 queries must target those tables. Read `Sources/App/Todos/TodosController.swift`
 before Task 4.1.
 
-## D3: runtime UID/GID 999 (provisional)
+## D3: runtime UID/GID 999 (CONFIRMED)
 
 The Swift runtime stage runs `useradd --user-group --create-home --system ... hummingbird`
 on `ubuntu:noble` after installing `libjemalloc2 ca-certificates tzdata libcurl4`.
@@ -134,7 +137,8 @@ Replaying exactly that sequence in a clean `ubuntu:noble` container gives
 `uid=999(hummingbird) gid=999(hummingbird)`, so the Go image (distroless/static)
 runs as `999:999`. Confirm it against the real image with
 `docker run --rm --entrypoint id ghcr.io/luminavault/luminavaultserver:<tag>`
-once the image can be pulled (needs `read:packages`). Until then 999 is derived, not observed.
+once the image can be pulled. Confirmed 2026-10-29 on an image built locally from
+main @ fdbed9b0: `uid=999(hummingbird) gid=999(hummingbird)`.
 
 ## D-release: staging bump is a direct commit, like Swift's
 
@@ -184,6 +188,30 @@ by path prefix. Apple registers `/v1/devices/command/{id}/result`,
 Devices and Reminders. `modules.yaml` records them as `flipsWith` partners
 (all wave 2); `internal/manifest` tests that the partnership is mutual and in
 one wave.
+
+## D-err: error and decode wording (CONFIRMED by golden capture)
+
+`testdata/golden/errors-http.json`, captured from the Swift binary:
+
+- Errors with a message: `{"error":{"message":"…"}}`, `Content-Type: application/json; charset=utf-8` (`wire.JSON`, `wire.HTTPErrorHandler`). The spec's `ErrorEnvelope` schema (`{error: string, message}`) is wrong and must be fixed in the spec.
+- Unknown route: 404 with an empty body and no Content-Type.
+- Missing, invalid or scoped token on a protected route: 401 `Authenticated identity is unavailable` (`wire.ErrUnauthenticated`).
+- `wire.Bind` reproduces Foundation's DecodingError wording verbatim:
+  - not JSON or an empty body: `The given data was not valid input: The given data was not valid JSON.`
+  - missing key: ``Coding key `name` not found.``
+  - null: ``Value not found for `name` key.``
+  - wrong type: ``Type mismatch for `archived` key, expected `Bool` type.`` (a top-level non-object gives key `` and `Dictionary<String, Any>`)
+  - bad UUID or date: `The given data was not valid input: Attempted to decode UUID from invalid UUID string.` / `…Expected date string to be ISO8601-formatted.`
+- Unknown fields are ignored.
+- Not captured yet: the key path format for nested fields. Capture it when the first module with nested request DTOs is ported.
+- Create endpoints that return a DTO answer **200**, not 201. Delete answers 204.
+
+## D-jwt-numeric-dates: Swift mints fractional iat/exp
+
+jwt-kit encodes `iat`/`exp` as JSON doubles (`1793276047.4986272`), and `hpid`
+is the username. golang-jwt verifies them fine. When Go starts minting (wave 8),
+it must emit the same claim set; whether integers are acceptable to every
+client must be checked then.
 
 ## D-jobs: findings from the partial job inventory (Task 0.4, unfinished)
 

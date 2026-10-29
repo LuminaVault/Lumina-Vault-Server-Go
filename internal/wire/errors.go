@@ -9,12 +9,8 @@ import (
 )
 
 // Error is an HTTP error with a client-visible message. It renders as
-// Hummingbird's HTTPError does: {"error":{"message":"..."}}.
-//
-// PROVISIONAL (decisions.md D-err): the body shape is Hummingbird 2's
-// documented HTTPError encoding and is verified by
-// httpserver.TestErrorBodiesMatchGolden once testdata/golden/errors-http.json
-// exists.
+// Hummingbird's HTTPError does: {"error":{"message":"..."}} with Content-Type
+// application/json; charset=utf-8 (golden: testdata/golden/errors-http.json).
 type Error struct {
 	Status  int
 	Message string
@@ -22,6 +18,10 @@ type Error struct {
 
 func (e *Error) Error() string   { return e.Message }
 func (e *Error) StatusCode() int { return e.Status }
+
+// ErrUnauthenticated is Hummingbird's requireIdentity() failure: every
+// rejected or missing session token on a protected route.
+var ErrUnauthenticated = NewError(http.StatusUnauthorized, "Authenticated identity is unavailable")
 
 // NewError returns an *Error for status with a client-visible message.
 func NewError(status int, message string) *Error {
@@ -35,10 +35,10 @@ type errorBody struct {
 }
 
 // HTTPErrorHandler is installed as echo.Echo.HTTPErrorHandler. An *Error
-// writes its message; any other error (echo sentinels such as
-// echo.ErrUnauthorized or echo.ErrNotFound, and plain errors) writes the status
-// with an empty body, which is what Hummingbird does for an HTTPError without
-// a message. Unknown errors are 500 and logged, never echoed to the client.
+// writes its message; any other error (echo sentinels such as echo.ErrNotFound,
+// and plain errors) writes the status with an empty body and no Content-Type,
+// which is what Hummingbird does for an unknown route. Unknown errors are 500
+// and logged, never echoed to the client.
 func HTTPErrorHandler(c *echo.Context, err error) {
 	if resp, unwrapErr := echo.UnwrapResponse(c.Response()); unwrapErr == nil && resp.Committed {
 		return
@@ -47,7 +47,7 @@ func HTTPErrorHandler(c *echo.Context, err error) {
 	if errors.As(err, &we) {
 		var body errorBody
 		body.Error.Message = we.Message
-		_ = c.JSON(we.Status, body)
+		_ = JSON(c, we.Status, body)
 		return
 	}
 	status := echo.StatusCode(err)

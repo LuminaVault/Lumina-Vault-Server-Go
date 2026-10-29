@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"lumina/internal/ids"
+	"lumina/internal/wire"
 	"strings"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -30,9 +31,8 @@ const (
 	ctxHPID   = "lv.auth.hpid"
 )
 
-// ErrUnauthorized is what protected routes return; the error handler renders it
-// in the Swift 401 shape.
-var ErrUnauthorized = echo.ErrUnauthorized
+// ErrUnauthorized is what protected routes return: Swift's exact 401 body.
+var ErrUnauthorized = wire.ErrUnauthenticated
 
 // Middleware authenticates "Authorization: Bearer <jwt>". Every failure
 // (missing or malformed header, bad signature, expired, scoped token, unknown

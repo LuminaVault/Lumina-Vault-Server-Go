@@ -7,18 +7,29 @@ package wire
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"lumina/internal/ids"
-	"strings"
+	"reflect"
 	"time"
 
 	"github.com/google/uuid"
 )
 
-// swiftISO8601 is Foundation's JSONEncoder .iso8601: whole seconds, UTC, "Z".
-// The iOS client decodes with .iso8601 too (LuminaVaultClient
-// API/Core/Endpoint.swift), which rejects fractional seconds.
+// swiftISO8601 is Foundation's JSONEncoder .iso8601 output: whole seconds,
+// UTC, "Z" (golden: testdata/golden/todos-http.json). The iOS client decodes
+// with .iso8601 too (LuminaVaultClient API/Core/Endpoint.swift).
 const swiftISO8601 = "2006-01-02T15:04:05Z07:00"
+
+// CorruptedError is Foundation's DecodingError.dataCorrupted: the value had
+// the right JSON type but could not be parsed. Bind renders it as
+// "The given data was not valid input: <Message>".
+type CorruptedError struct{ Message string }
+
+func (e *CorruptedError) Error() string { return e.Message }
+
+var (
+	errBadDate = &CorruptedError{"Expected date string to be ISO8601-formatted."}
+	errBadUUID = &CorruptedError{"Attempted to decode UUID from invalid UUID string."}
+)
 
 // Time is a time.Time that marshals like Swift's .iso8601 date strategy.
 type Time struct{ time.Time }
@@ -27,25 +38,20 @@ func (t Time) MarshalJSON() ([]byte, error) {
 	return json.Marshal(t.UTC().Truncate(time.Second).Format(swiftISO8601))
 }
 
-var errFractional = errors.New("wire: fractional seconds are not accepted (Swift .iso8601)")
-
-// UnmarshalJSON accepts what Swift's .iso8601 decoder accepts: internet date
-// time with "Z" or a numeric offset, and no fractional seconds. Go's parser
-// would silently allow a fraction, so it is rejected explicitly.
+// UnmarshalJSON accepts what the Swift server accepts (golden errors-http.json):
+// "Z" or a numeric offset, with or without fractional seconds. The fraction is
+// kept; it only disappears on output, as in Swift.
 func (t *Time) UnmarshalJSON(b []byte) error {
 	if bytes.Equal(b, []byte("null")) {
 		return nil
 	}
-	var s string
-	if err := json.Unmarshal(b, &s); err != nil {
-		return err
-	}
-	if i := strings.IndexByte(s, 'T'); i >= 0 && strings.Contains(s[i:], ".") {
-		return errFractional
-	}
-	parsed, err := time.Parse(swiftISO8601, s)
+	s, err := jsonString(b)
 	if err != nil {
 		return err
+	}
+	parsed, err := time.Parse(time.RFC3339Nano, s)
+	if err != nil {
+		return errBadDate
 	}
 	t.Time = parsed
 	return nil
@@ -59,16 +65,26 @@ func (u UUID) MarshalJSON() ([]byte, error) {
 }
 
 func (u *UUID) UnmarshalJSON(b []byte) error {
-	var s string
-	if err := json.Unmarshal(b, &s); err != nil {
-		return err
-	}
-	parsed, err := ids.Parse(s)
+	s, err := jsonString(b)
 	if err != nil {
 		return err
 	}
+	parsed, err := ids.Parse(s)
+	if err != nil || len(s) != 36 {
+		return errBadUUID
+	}
 	u.UUID = parsed
 	return nil
+}
+
+// jsonString decodes a JSON string; a non-string is a type mismatch against
+// String, which is what Swift reports for a Date or UUID given a number.
+func jsonString(b []byte) (string, error) {
+	var s string
+	if err := json.Unmarshal(b, &s); err != nil {
+		return "", &json.UnmarshalTypeError{Value: "non-string", Type: reflect.TypeFor[string]()}
+	}
+	return s, nil
 }
 
 // String returns the Swift form; used for path params and logs.

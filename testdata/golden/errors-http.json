@@ -1,0 +1,195 @@
+[
+  {
+    "name": "no-token",
+    "method": "GET",
+    "path": "/v1/todos",
+    "status": 401,
+    "contentType": "application/json; charset=utf-8",
+    "body": "{\"error\":{\"message\":\"Authenticated identity is unavailable\"}}"
+  },
+  {
+    "name": "bad-token",
+    "method": "GET",
+    "path": "/v1/todos",
+    "status": 401,
+    "contentType": "application/json; charset=utf-8",
+    "body": "{\"error\":{\"message\":\"Authenticated identity is unavailable\"}}"
+  },
+  {
+    "name": "unknown-route",
+    "method": "GET",
+    "path": "/v1/does-not-exist",
+    "status": 404,
+    "contentType": "",
+    "body": ""
+  },
+  {
+    "name": "malformed-json",
+    "method": "POST",
+    "path": "/v1/todos",
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": "{\"error\":{\"message\":\"The given data was not valid input: The given data was not valid JSON.\"}}"
+  },
+  {
+    "name": "wrong-type",
+    "method": "POST",
+    "path": "/v1/todos",
+    "requestBody": {
+      "title": 42
+    },
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": "{\"error\":{\"message\":\"Type mismatch for `title` key, expected `String` type.\"}}"
+  },
+  {
+    "name": "fractional-date",
+    "method": "POST",
+    "path": "/v1/todos",
+    "requestBody": {
+      "title": "x",
+      "dueAt": "2026-11-01T09:00:00.500Z"
+    },
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "body": "{\"title\":\"x\",\"id\":\"D5864CFD-4B36-450E-A06B-CA575DAA58C3\",\"dueAt\":\"2026-11-01T09:00:00Z\",\"done\":false,\"createdAt\":\"2026-10-29T12:15:03Z\"}"
+  },
+  {
+    "name": "patch-missing",
+    "method": "PATCH",
+    "path": "/v1/todos/00000000-0000-4000-8000-000000000000",
+    "requestBody": {
+      "done": true
+    },
+    "status": 404,
+    "contentType": "application/json; charset=utf-8",
+    "body": "{\"error\":{\"message\":\"todo not found\"}}"
+  },
+  {
+    "name": "patch-bad-id",
+    "method": "PATCH",
+    "path": "/v1/todos/not-a-uuid",
+    "requestBody": {
+      "done": true
+    },
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": "{\"error\":{\"message\":\"invalid todo id\"}}"
+  },
+  {
+    "name": "delete-missing",
+    "method": "DELETE",
+    "path": "/v1/todos/7B4EC2CF-A99A-43D1-9B82-8245EB32B078",
+    "status": 404,
+    "contentType": "application/json; charset=utf-8",
+    "body": "{\"error\":{\"message\":\"todo not found\"}}"
+  },
+  {
+    "name": "missing-key",
+    "method": "POST",
+    "path": "/v1/projects",
+    "requestBody": {},
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": "{\"error\":{\"message\":\"Coding key `name` not found.\"}}"
+  },
+  {
+    "name": "null-required",
+    "method": "POST",
+    "path": "/v1/projects",
+    "requestBody": {
+      "name": null
+    },
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": "{\"error\":{\"message\":\"Value not found for `name` key.\"}}"
+  },
+  {
+    "name": "empty-body",
+    "method": "POST",
+    "path": "/v1/projects",
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": "{\"error\":{\"message\":\"The given data was not valid input: The given data was not valid JSON.\"}}"
+  },
+  {
+    "name": "not-an-object",
+    "method": "POST",
+    "path": "/v1/projects",
+    "requestBody": [],
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": "{\"error\":{\"message\":\"Type mismatch for `` key, expected `Dictionary<String, Any>` type.\"}}"
+  },
+  {
+    "name": "wrong-type-bool",
+    "method": "PATCH",
+    "path": "/v1/projects/00000000-0000-4000-8000-000000000000",
+    "requestBody": {
+      "archived": "yes"
+    },
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": "{\"error\":{\"message\":\"Type mismatch for `archived` key, expected `Bool` type.\"}}"
+  },
+  {
+    "name": "wrong-type-string-number",
+    "method": "POST",
+    "path": "/v1/projects",
+    "requestBody": {
+      "name": "ok",
+      "description": 7
+    },
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": "{\"error\":{\"message\":\"Type mismatch for `description` key, expected `String` type.\"}}"
+  },
+  {
+    "name": "bad-uuid-field",
+    "method": "POST",
+    "path": "/v1/todos",
+    "requestBody": {
+      "title": "x",
+      "projectID": "nope"
+    },
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": "{\"error\":{\"message\":\"The given data was not valid input: Attempted to decode UUID from invalid UUID string.\"}}"
+  },
+  {
+    "name": "bad-date-field",
+    "method": "POST",
+    "path": "/v1/todos",
+    "requestBody": {
+      "title": "x",
+      "dueAt": "tomorrow"
+    },
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": "{\"error\":{\"message\":\"The given data was not valid input: Expected date string to be ISO8601-formatted.\"}}"
+  },
+  {
+    "name": "offset-date",
+    "method": "POST",
+    "path": "/v1/todos",
+    "requestBody": {
+      "title": "x",
+      "dueAt": "2026-11-01T11:00:00+02:00"
+    },
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "body": "{\"done\":false,\"dueAt\":\"2026-11-01T09:00:00Z\",\"title\":\"x\",\"createdAt\":\"2026-10-29T12:15:03Z\",\"id\":\"2E71C1B9-19D3-48E8-BE83-FA5AF5B15838\"}"
+  },
+  {
+    "name": "unknown-field-ignored",
+    "method": "POST",
+    "path": "/v1/projects",
+    "requestBody": {
+      "name": "extra",
+      "bogus": 1
+    },
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "body": "{\"createdAt\":\"2026-10-29T12:15:03Z\",\"id\":\"F0A2A783-BB2B-4AB1-91BD-6A1858B70D8E\",\"todoCount\":0,\"archived\":false,\"name\":\"extra\"}"
+  }
+]

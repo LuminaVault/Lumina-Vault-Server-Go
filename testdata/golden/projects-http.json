@@ -1,0 +1,162 @@
+[
+  {
+    "name": "list-empty",
+    "method": "GET",
+    "path": "/v1/projects",
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "body": "{\"projects\":[{\"name\":\"Work\",\"id\":\"E53CFC2C-C824-4F90-A097-0B9CDDFFD50F\",\"todoCount\":0,\"archived\":false,\"createdAt\":\"2026-10-29T12:14:07Z\"}]}"
+  },
+  {
+    "name": "create",
+    "method": "POST",
+    "path": "/v1/projects",
+    "requestBody": {
+      "name": "  Home  ",
+      "description": "chores"
+    },
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "body": "{\"description\":\"chores\",\"id\":\"7795ED43-F559-400D-AE2E-8FD36B7041BC\",\"name\":\"Home\",\"archived\":false,\"createdAt\":\"2026-10-29T12:15:03Z\",\"todoCount\":0}"
+  },
+  {
+    "name": "create-todo-in-project",
+    "method": "POST",
+    "path": "/v1/todos",
+    "requestBody": {
+      "title": "Fix tap",
+      "projectID": "7795ED43-F559-400D-AE2E-8FD36B7041BC"
+    },
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "body": "{\"projectID\":\"7795ED43-F559-400D-AE2E-8FD36B7041BC\",\"id\":\"B9F36D15-CB3A-4CBD-9FDE-814280306510\",\"done\":false,\"createdAt\":\"2026-10-29T12:15:03Z\",\"title\":\"Fix tap\"}"
+  },
+  {
+    "name": "create-second",
+    "method": "POST",
+    "path": "/v1/projects",
+    "requestBody": {
+      "name": "Work"
+    },
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "body": "{\"name\":\"Work\",\"id\":\"FF123975-592A-48C7-B464-4E0A17B15742\",\"todoCount\":0,\"archived\":false,\"createdAt\":\"2026-10-29T12:15:03Z\"}"
+  },
+  {
+    "name": "list",
+    "method": "GET",
+    "path": "/v1/projects",
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "body": "{\"projects\":[{\"name\":\"Work\",\"createdAt\":\"2026-10-29T12:15:03Z\",\"archived\":false,\"id\":\"FF123975-592A-48C7-B464-4E0A17B15742\",\"todoCount\":0},{\"name\":\"Home\",\"description\":\"chores\",\"archived\":false,\"id\":\"7795ED43-F559-400D-AE2E-8FD36B7041BC\",\"todoCount\":1,\"createdAt\":\"2026-10-29T12:15:03Z\"},{\"name\":\"Work\",\"createdAt\":\"2026-10-29T12:14:07Z\",\"archived\":false,\"id\":\"E53CFC2C-C824-4F90-A097-0B9CDDFFD50F\",\"todoCount\":0}]}"
+  },
+  {
+    "name": "list-limit",
+    "method": "GET",
+    "path": "/v1/projects?limit=1",
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "body": "{\"projects\":[{\"id\":\"FF123975-592A-48C7-B464-4E0A17B15742\",\"name\":\"Work\",\"archived\":false,\"createdAt\":\"2026-10-29T12:15:03Z\",\"todoCount\":0}]}"
+  },
+  {
+    "name": "patch-rename",
+    "method": "PATCH",
+    "path": "/v1/projects/7795ED43-F559-400D-AE2E-8FD36B7041BC",
+    "requestBody": {
+      "name": "House"
+    },
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "body": "{\"description\":\"chores\",\"id\":\"7795ED43-F559-400D-AE2E-8FD36B7041BC\",\"name\":\"House\",\"archived\":false,\"createdAt\":\"2026-10-29T12:15:03Z\",\"todoCount\":1}"
+  },
+  {
+    "name": "patch-clear-description",
+    "method": "PATCH",
+    "path": "/v1/projects/7795ED43-F559-400D-AE2E-8FD36B7041BC",
+    "requestBody": {
+      "description": ""
+    },
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "body": "{\"archived\":false,\"todoCount\":1,\"id\":\"7795ED43-F559-400D-AE2E-8FD36B7041BC\",\"name\":\"House\",\"createdAt\":\"2026-10-29T12:15:03Z\"}"
+  },
+  {
+    "name": "patch-archive",
+    "method": "PATCH",
+    "path": "/v1/projects/7795ED43-F559-400D-AE2E-8FD36B7041BC",
+    "requestBody": {
+      "archived": true
+    },
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "body": "{\"id\":\"7795ED43-F559-400D-AE2E-8FD36B7041BC\",\"name\":\"House\",\"archived\":true,\"createdAt\":\"2026-10-29T12:15:03Z\",\"todoCount\":1}"
+  },
+  {
+    "name": "patch-empty-name",
+    "method": "PATCH",
+    "path": "/v1/projects/7795ED43-F559-400D-AE2E-8FD36B7041BC",
+    "requestBody": {
+      "name": "   "
+    },
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": "{\"error\":{\"message\":\"project name cannot be empty\"}}"
+  },
+  {
+    "name": "create-empty-name",
+    "method": "POST",
+    "path": "/v1/projects",
+    "requestBody": {
+      "name": " "
+    },
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": "{\"error\":{\"message\":\"project name required\"}}"
+  },
+  {
+    "name": "patch-missing",
+    "method": "PATCH",
+    "path": "/v1/projects/00000000-0000-4000-8000-000000000000",
+    "requestBody": {
+      "name": "x"
+    },
+    "status": 404,
+    "contentType": "application/json; charset=utf-8",
+    "body": "{\"error\":{\"message\":\"project not found\"}}"
+  },
+  {
+    "name": "patch-bad-id",
+    "method": "PATCH",
+    "path": "/v1/projects/nope",
+    "requestBody": {
+      "name": "x"
+    },
+    "status": 400,
+    "contentType": "application/json; charset=utf-8",
+    "body": "{\"error\":{\"message\":\"invalid project id\"}}"
+  },
+  {
+    "name": "delete",
+    "method": "DELETE",
+    "path": "/v1/projects/7795ED43-F559-400D-AE2E-8FD36B7041BC",
+    "status": 204,
+    "contentType": "",
+    "body": ""
+  },
+  {
+    "name": "delete-again",
+    "method": "DELETE",
+    "path": "/v1/projects/7795ED43-F559-400D-AE2E-8FD36B7041BC",
+    "status": 404,
+    "contentType": "application/json; charset=utf-8",
+    "body": "{\"error\":{\"message\":\"project not found\"}}"
+  },
+  {
+    "name": "list-after-delete",
+    "method": "GET",
+    "path": "/v1/projects",
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "body": "{\"projects\":[{\"id\":\"FF123975-592A-48C7-B464-4E0A17B15742\",\"name\":\"Work\",\"archived\":false,\"createdAt\":\"2026-10-29T12:15:03Z\",\"todoCount\":0},{\"id\":\"E53CFC2C-C824-4F90-A097-0B9CDDFFD50F\",\"name\":\"Work\",\"archived\":false,\"createdAt\":\"2026-10-29T12:14:07Z\",\"todoCount\":0}]}"
+  }
+]

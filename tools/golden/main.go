@@ -142,7 +142,7 @@ func run(ctx context.Context, swift, dsn, email, password, secrets, masterKey, o
 
 	// 3. SecretBox: store a BYO key, then read back the columns Swift sealed.
 	const plaintext = "sk-golden"
-	put, err := c.do(ctx, "byo-key-put", http.MethodPut, "/v1/me/providers/openrouter",
+	put, err := c.do(ctx, "byo-key-put", http.MethodPut, "/v1/me/providers/openai",
 		fmt.Sprintf(`{"kind":"apiKey","apiKey":%q}`, plaintext), true)
 	if err != nil {
 		return err
@@ -264,6 +264,18 @@ func run(ctx context.Context, swift, dsn, email, password, secrets, masterKey, o
 		{"patch-missing", http.MethodPatch, "/v1/todos/00000000-0000-4000-8000-000000000000", `{"done":true}`, true},
 		{"patch-bad-id", http.MethodPatch, "/v1/todos/not-a-uuid", `{"done":true}`, true},
 		{"delete-missing", http.MethodDelete, "/v1/todos/" + todo.ID, "", true},
+		// Decode-error wording (Foundation DecodingError via Hummingbird); Go's
+		// binder reproduces these strings.
+		{"missing-key", http.MethodPost, "/v1/projects", `{}`, true},
+		{"null-required", http.MethodPost, "/v1/projects", `{"name":null}`, true},
+		{"empty-body", http.MethodPost, "/v1/projects", ``, true},
+		{"not-an-object", http.MethodPost, "/v1/projects", `[]`, true},
+		{"wrong-type-bool", http.MethodPatch, "/v1/projects/00000000-0000-4000-8000-000000000000", `{"archived":"yes"}`, true},
+		{"wrong-type-string-number", http.MethodPost, "/v1/projects", `{"name":"ok","description":7}`, true},
+		{"bad-uuid-field", http.MethodPost, "/v1/todos", `{"title":"x","projectID":"nope"}`, true},
+		{"bad-date-field", http.MethodPost, "/v1/todos", `{"title":"x","dueAt":"tomorrow"}`, true},
+		{"offset-date", http.MethodPost, "/v1/todos", `{"title":"x","dueAt":"2026-11-01T11:00:00+02:00"}`, true},
+		{"unknown-field-ignored", http.MethodPost, "/v1/projects", `{"name":"extra","bogus":1}`, true},
 	} {
 		ex, err := c.do(ctx, e.name, e.method, e.path, e.body, e.auth)
 		if err != nil {
