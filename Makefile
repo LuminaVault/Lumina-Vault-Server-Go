@@ -19,3 +19,25 @@ vuln: ## govulncheck against the Go vulnerability database
 	go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
 check: lint test vuln ## Everything CI runs
+
+.PHONY: parity-up parity parity-selftest parity-smoke
+
+parity-up: ## Start Swift + Go + Postgres for parity runs (PARITY_SWIFT_IMAGE overrides)
+	scripts/parity-up.sh
+
+parity: ## Compare Swift and Go on parity/scenarios (MODULE=<m> for one module)
+	go run ./parity/cmd/parity compare --module "$(MODULE)" \
+	  --swift http://localhost:18080 --swift-db postgres://lv:lv@localhost:15432/parity_swift \
+	  --go http://localhost:18081 --go-db postgres://lv:lv@localhost:15432/parity_go
+
+parity-selftest: ## Swift vs Swift: proves scenarios are deterministic (MODULE=<m>)
+	go run ./parity/cmd/parity compare --module "$(MODULE)" \
+	  --swift http://localhost:18080 --swift-db postgres://lv:lv@localhost:15432/parity_swift \
+	  --go http://localhost:18082 --go-db postgres://lv:lv@localhost:15432/parity_swift2
+
+parity-smoke: ## Gate G2 against api-go-staging (needs STAGING_JWT, MODULE)
+	gh run download --name swift-transcripts --dir swift-transcripts
+	KUBECONFIG=$(HOME)/.kube/maat.yaml kubectl -n horus port-forward deploy/api-go-staging 18090:8080 & \
+	  pf=$$!; sleep 3; \
+	  go run ./parity/cmd/parity smoke --target http://localhost:18090 --module "$(MODULE)"; rc=$$?; \
+	  kill $$pf; exit $$rc
