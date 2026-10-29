@@ -1,0 +1,67 @@
+# Parity environment (Phase 2 Task 2.3). Bring up with scripts/parity-up.sh, not
+# `docker compose up`, because the databases must exist first:
+#   parity_template  migrated by the Swift image's `migrate`, plus parity/seed/base.sql
+#   parity_swift / parity_go / parity_swift2  CREATE DATABASE ... TEMPLATE parity_template
+#
+# The Swift image defaults to the one apps/api/values-staging.yaml pins. A
+# locally built image works too: PARITY_SWIFT_IMAGE=lv-swift:<sha>.
+x-common-env: &common-env
+  POSTGRES_HOST: pg
+  POSTGRES_PORT: "5432"
+  POSTGRES_USER: lv
+  POSTGRES_PASSWORD: lv
+  JWT_HMAC_SECRETS: parity:parity-secret-parity-secret-0000
+  # base64 of 32 bytes of 0x01 (the golden-fixture key; never a real key)
+  LV_SECRET_MASTER_KEY: AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=
+  FLUENT_AUTOMIGRATE: "false"
+  OTEL_ENABLED: "false"
+  LOG_LEVEL: warning
+  # "test" keeps the schedulers and workers off so DB snapshots only change
+  # because of the request under test (Swift App+build.swift `lvEnvironment != "test"`).
+  LV_ENVIRONMENT: test
+  CORS_ALLOWED_ORIGINS: https://app.luminavault.fyi
+  HERMES_API_KEY: parity-hermes-key-not-real-0000000000
+  # Unroutable: no scenario may depend on an external service by accident.
+  HERMES_GATEWAY_URL: http://127.0.0.1:9
+  BOOTSTRAP_ADMIN_EMAIL: golden@example.test
+  BOOTSTRAP_ADMIN_PASSWORD: correct horse battery staple
+
+services:
+  pg:
+    image: pgvector/pgvector:pg18
+    environment:
+      POSTGRES_USER: lv
+      POSTGRES_PASSWORD: lv
+      POSTGRES_DB: postgres
+    ports: ["15432:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lv -d postgres"]
+      interval: 2s
+      retries: 30
+
+  swift:
+    image: ${PARITY_SWIFT_IMAGE:-lv-swift:fdbed9b0}
+    environment:
+      <<: *common-env
+      POSTGRES_DATABASE: ${SWIFT_DB:-parity_swift}
+    ports: ["18080:8080"]
+    depends_on: { pg: { condition: service_healthy } }
+    profiles: [servers]
+
+  swift2:
+    image: ${PARITY_SWIFT_IMAGE:-lv-swift:fdbed9b0}
+    environment:
+      <<: *common-env
+      POSTGRES_DATABASE: parity_swift2
+    ports: ["18082:8080"]
+    depends_on: { pg: { condition: service_healthy } }
+    profiles: [servers]
+
+  go:
+    build: .
+    environment:
+      <<: *common-env
+      POSTGRES_DATABASE: parity_go
+    ports: ["18081:8080"]
+    depends_on: { pg: { condition: service_healthy } }
+    profiles: [servers]
