@@ -1,11 +1,10 @@
 package normalize_test
 
 import (
+	"lumina/parity/normalize"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-
-	"lumina/parity/normalize"
 )
 
 func body(t *testing.T, raw string, ignore ...string) any {

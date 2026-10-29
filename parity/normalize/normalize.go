@@ -126,6 +126,33 @@ func letterCase(s string) string {
 	}
 }
 
+// Get returns the value at a concrete path ($.a.b, $.a[0].b; no wildcard).
+func Get(doc any, path string) (any, error) {
+	steps, err := parsePath(path)
+	if err != nil {
+		return nil, err
+	}
+	cur := doc
+	for _, s := range steps {
+		switch t := cur.(type) {
+		case map[string]any:
+			v, ok := t[s.key]
+			if s.isIdx || !ok {
+				return nil, fmt.Errorf("normalize: %s not found", path)
+			}
+			cur = v
+		case []any:
+			if !s.isIdx || s.index < 0 || s.index >= len(t) {
+				return nil, fmt.Errorf("normalize: %s not found", path)
+			}
+			cur = t[s.index]
+		default:
+			return nil, fmt.Errorf("normalize: %s not found", path)
+		}
+	}
+	return cur, nil
+}
+
 // step is one path element: a key, an index, or a wildcard (index -1).
 type step struct {
 	key   string

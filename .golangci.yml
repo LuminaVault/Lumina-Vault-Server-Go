@@ -17,6 +17,10 @@ linters:
     rules:
       - path: _test\.go
         linters: [gosec, noctx]
+      # The parity harness reads scenario/fixture paths the operator passes in.
+      - path: ^parity/
+        linters: [gosec]
+        text: G304
       # Generated code (oapi-codegen, sqlc).
       - path: \.gen\.go$
         linters: [revive, gosec]
