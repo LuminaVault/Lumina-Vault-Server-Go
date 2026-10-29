@@ -100,6 +100,7 @@ paths:
     get:
       tags: [Root]
       operationId: getHello
+      x-lv-module: app
       summary: Hello.
       security: []
       responses:
@@ -113,6 +114,7 @@ paths:
     get:
       tags: [Root]
       operationId: getRootHealth
+      x-lv-module: app
       summary: Readiness probe.
       security: []
       responses:
@@ -122,10 +124,56 @@ paths:
             text/plain:
               schema: { type: string }
 
+  /.well-known/apple-app-site-association:
+    get:
+      operationId: getAppleAppSiteAssociation
+      x-lv-module: app
+      summary: Apple App Site Association document (passkeys / associated domains).
+      description: >-
+        Static JSON backing the iOS app's `webcredentials` associated domain,
+        so passkeys bound to the WebAuthn relying-party domain work in the
+        app. The body is a constant for the single production app identity
+        and is served with `Content-Type: application/json`.
+      security: []
+      responses:
+        '200':
+          description: AASA document.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AppleAppSiteAssociation' }
+              example:
+                webcredentials:
+                  apps: [84X9WYBF36.com.lumina.fernando]
+
+  /health/deep:
+    get:
+      operationId: getDeepHealth
+      x-lv-module: app
+      summary: Deep health — round-trips the Hermes gateway.
+      description: >-
+        Probes Hermes `GET /v1/models` through the shared gateway probe.
+        Deliberately separate from `/health` (process liveness): a Hermes
+        outage degrades this endpoint to 503 without flipping the pod
+        NotReady. Unauthenticated and secret-free — reports only reachability
+        and latency.
+      security: []
+      responses:
+        '200':
+          description: Hermes reachable (`status` = `ok`).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeepHealthResponse' }
+        '503':
+          description: Hermes unreachable (`status` = `degraded`). Same body shape as 200.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeepHealthResponse' }
+
   /internal/metrics:
     get:
       tags: [Root]
       operationId: getInternalMetrics
+      x-lv-module: admin
       summary: Operator-only user count for the portfolio board (facorreia.com/apps).
       description: >-
         Guarded by the METRICS_SECRET shared secret presented as a Bearer token.
@@ -158,6 +206,7 @@ paths:
     post:
       tags: [Auth]
       operationId: authRegister
+      x-lv-module: auth
       summary: Email + password registration.
       security: []
       requestBody:
@@ -180,6 +229,7 @@ paths:
     post:
       tags: [Auth]
       operationId: authLogin
+      x-lv-module: auth
       summary: Email + password login.
       security: []
       requestBody:
@@ -202,6 +252,7 @@ paths:
     post:
       tags: [Auth]
       operationId: authRefresh
+      x-lv-module: auth
       summary: Exchange a refresh token for a new access token.
       security: []
       requestBody:
@@ -222,6 +273,7 @@ paths:
     post:
       tags: [Auth]
       operationId: authLogout
+      x-lv-module: auth
       summary: Revoke the active refresh token.
       responses:
         '204':
@@ -231,6 +283,7 @@ paths:
     post:
       tags: [Auth]
       operationId: authMfaVerify
+      x-lv-module: auth
       summary: Verify a TOTP / OTP second factor.
       security: []
       requestBody:
@@ -253,6 +306,7 @@ paths:
     post:
       tags: [Auth]
       operationId: authMfaResend
+      x-lv-module: auth
       summary: Re-send the MFA challenge.
       security: []
       requestBody:
@@ -270,6 +324,7 @@ paths:
     post:
       tags: [Auth]
       operationId: authForgotPassword
+      x-lv-module: auth
       summary: Start password-reset flow.
       security: []
       requestBody:
@@ -287,6 +342,7 @@ paths:
     post:
       tags: [Auth]
       operationId: authResendReset
+      x-lv-module: auth
       summary: Re-send the password-reset OTP.
       security: []
       requestBody:
@@ -304,6 +360,7 @@ paths:
     post:
       tags: [Auth]
       operationId: authResetPassword
+      x-lv-module: auth
       summary: Complete password reset with OTP.
       security: []
       requestBody:
@@ -321,6 +378,7 @@ paths:
     post:
       tags: [Auth]
       operationId: authEmailSendVerify
+      x-lv-module: auth
       summary: Send email-verification OTP to the authenticated user.
       responses:
         '204':
@@ -330,6 +388,7 @@ paths:
     post:
       tags: [Auth]
       operationId: authEmailConfirm
+      x-lv-module: auth
       summary: Confirm email with the verification OTP.
       requestBody:
         required: true
@@ -340,32 +399,31 @@ paths:
         '204':
           description: Email confirmed.
 
-  /v1/auth/oauth/apple/exchange:
+  /v1/auth/oauth/{provider}/exchange:
     post:
       tags: [Auth]
-      operationId: authOAuthAppleExchange
-      summary: Exchange Apple Sign-In ID token for a LuminaVault session.
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/OAuthIDTokenRequest' }
-      responses:
-        '200':
-          description: Session issued.
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/AuthResponse' }
-        '401':
-          $ref: '#/components/responses/Unauthorized'
+      operationId: authOAuthExchange
+      x-lv-module: auth
+      summary: Exchange an Apple Sign-In or Google ID token for a LuminaVault session.
+      description: |
+        One handler serves every ID-token provider (`POST
+        /v1/auth/oauth/:provider/exchange`). `apple` verifies an Apple Sign-In
+        ID token; `google` verifies a Google ID token. A provider is
+        registered only when its client-ID audience list is configured; an
+        unconfigured or unknown provider answers 404 `unsupported provider`.
 
-  /v1/auth/oauth/google/exchange:
-    post:
-      tags: [Auth]
-      operationId: authOAuthGoogleExchange
-      summary: Exchange Google ID token for a LuminaVault session.
+        X (Twitter) is not served here: it returns an access token rather than
+        an ID token and has its own concrete route,
+        `POST /v1/auth/oauth/x/exchange` (`authOAuthXExchange`), which takes
+        precedence over this template.
       security: []
+      parameters:
+        - in: path
+          name: provider
+          required: true
+          schema:
+            type: string
+            enum: [apple, google]
       requestBody:
         required: true
         content:
@@ -377,13 +435,24 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/AuthResponse' }
+        '400':
+          description: Body missing or not decodable as `OAuthIDTokenRequest`.
         '401':
-          $ref: '#/components/responses/Unauthorized'
+          description: '`invalid id_token` — signature, issuer, audience or expiry check failed.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '404':
+          description: '`unsupported provider` — provider unknown or not configured on this deployment.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
 
   /v1/auth/oauth/x/exchange:
     post:
       tags: [Auth]
       operationId: authOAuthXExchange
+      x-lv-module: auth
       summary: Exchange X (Twitter) access token for a LuminaVault session.
       security: []
       requestBody:
@@ -398,10 +467,103 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/AuthResponse' }
 
+  /v1/auth/pairing/start:
+    post:
+      operationId: authPairingStart
+      x-lv-module: auth
+      summary: Start a QR-from-mobile web sign-in pairing.
+      description: |
+        Unauthenticated. Mints a pending pairing the browser renders as a QR
+        (`pairingId` + `code`). The signed-in iOS app scans it and calls
+        `POST /v1/auth/pairing/{pairingId}/approve`; the browser polls
+        `GET /v1/auth/pairing/{pairingId}` until the token pair appears. The
+        pairing lives for 120 s. No request body is read. Rate-limited per IP
+        (same policy as registration).
+      security: []
+      responses:
+        '200':
+          description: Pending pairing created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PairingStartResponse' }
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /v1/auth/pairing/{pairingId}:
+    get:
+      operationId: authPairingPoll
+      x-lv-module: auth
+      summary: Poll a pairing — pending, or the minted token pair once approved.
+      description: |
+        Unauthenticated: the unguessable `pairingId` is the bearer secret.
+        Pending → `{ "approved": false }` (every other field omitted).
+        Approved → `approved: true` plus the session fields, which remain
+        readable until the record's 120 s TTL lapses.
+      security: []
+      parameters:
+        - in: path
+          name: pairingId
+          required: true
+          description: UUID string returned by `authPairingStart`. Not validated as a UUID; any unknown value is a 404.
+          schema: { type: string }
+      responses:
+        '200':
+          description: Pairing state.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PairingPollResponse' }
+        '404':
+          description: '`pairing expired or unknown`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  /v1/auth/pairing/{pairingId}/approve:
+    post:
+      operationId: authPairingApprove
+      x-lv-module: auth
+      summary: Approve a pairing from the signed-in app, minting a session for the browser.
+      description: |
+        JWT-authenticated. The app confirms the `code` shown beside the QR;
+        the server mints a token pair for the authenticated user and stores it
+        on the pairing for the browser's next poll.
+      parameters:
+        - in: path
+          name: pairingId
+          required: true
+          description: UUID string returned by `authPairingStart`.
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PairingApproveRequest' }
+      responses:
+        '204':
+          description: Approved; the browser's next poll receives the tokens.
+        '400':
+          description: Body missing or not decodable as `PairingApproveRequest`.
+        '401':
+          description: Not authenticated, or `pairing code mismatch`.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '404':
+          description: '`pairing expired or unknown`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '409':
+          description: '`pairing already approved`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
   /v1/auth/phone/start:
     post:
       tags: [Auth]
       operationId: authPhoneStart
+      x-lv-module: auth
       summary: Send SMS OTP to a phone number.
       security: []
       requestBody:
@@ -419,6 +581,7 @@ paths:
     post:
       tags: [Auth]
       operationId: authPhoneVerify
+      x-lv-module: auth
       summary: Verify phone OTP, issue session.
       security: []
       requestBody:
@@ -437,6 +600,7 @@ paths:
     post:
       tags: [Auth]
       operationId: authEmailStart
+      x-lv-module: auth
       summary: Send magic-link OTP to email.
       security: []
       requestBody:
@@ -454,6 +618,7 @@ paths:
     post:
       tags: [Auth]
       operationId: authEmailVerify
+      x-lv-module: auth
       summary: Verify magic-link OTP, issue session.
       security: []
       requestBody:
@@ -472,6 +637,7 @@ paths:
     post:
       tags: [Auth]
       operationId: authWebAuthnRegisterBegin
+      x-lv-module: auth
       summary: Begin WebAuthn passkey registration — returns PublicKeyCredentialCreationOptions.
       description: >-
         Authenticated. The credential is bound to the bearer token's user;
@@ -495,10 +661,39 @@ paths:
         '503':
           description: WebAuthn disabled (WEBAUTHN_ENABLED=false).
 
+  /v1/auth/webauthn/register/options:
+    post:
+      operationId: authWebAuthnRegisterOptions
+      x-lv-module: auth
+      deprecated: true
+      summary: Deprecated alias of `POST /v1/auth/webauthn/register/begin`.
+      description: >-
+        Same handler as `authWebAuthnRegisterBegin` (HER-216 renamed
+        `/options` to `/begin`; the alias stays until no client uses it).
+        Authenticated; the credential is bound to the bearer token's user.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WebAuthnBeginRegistrationRequest' }
+      responses:
+        '200':
+          description: PublicKeyCredentialCreationOptions JSON.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebAuthnOptions' }
+        '401':
+          description: Not authenticated.
+        '403':
+          description: Body `username` does not match the authenticated user.
+        '503':
+          description: WebAuthn disabled (WEBAUTHN_ENABLED=false).
+
   /v1/auth/webauthn/register/finish:
     post:
       tags: [Auth]
       operationId: authWebAuthnRegisterFinish
+      x-lv-module: auth
       summary: Finalise WebAuthn credential registration.
       description: >-
         Authenticated. See `authWebAuthnRegisterBegin` — the credential is
@@ -523,6 +718,7 @@ paths:
     post:
       tags: [Auth]
       operationId: authWebAuthnAuthenticateBegin
+      x-lv-module: auth
       summary: Begin WebAuthn passkey authentication — returns PublicKeyCredentialRequestOptions.
       security: []
       requestBody:
@@ -537,10 +733,36 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/WebAuthnOptions' }
 
+  /v1/auth/webauthn/authenticate/options:
+    post:
+      operationId: authWebAuthnAuthenticateOptions
+      x-lv-module: auth
+      deprecated: true
+      summary: Deprecated alias of `POST /v1/auth/webauthn/authenticate/begin`.
+      description: >-
+        Same handler as `authWebAuthnAuthenticateBegin` (HER-216 renamed
+        `/options` to `/begin`; the alias stays until no client uses it).
+        Unauthenticated; shares the per-IP passkey sign-in rate limit.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WebAuthnAuthOptionsRequest' }
+      responses:
+        '200':
+          description: PublicKeyCredentialRequestOptions JSON.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebAuthnOptions' }
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
   /v1/auth/webauthn/authenticate/finish:
     post:
       tags: [Auth]
       operationId: authWebAuthnAuthenticateFinish
+      x-lv-module: auth
       summary: Finalise WebAuthn authentication, issue session.
       security: []
       requestBody:
@@ -559,6 +781,7 @@ paths:
     get:
       tags: [Auth]
       operationId: authWebAuthnListCredentials
+      x-lv-module: auth
       summary: List enrolled WebAuthn passkeys for the authenticated user.
       responses:
         '200':
@@ -573,6 +796,7 @@ paths:
     delete:
       tags: [Auth]
       operationId: authWebAuthnDeleteCredential
+      x-lv-module: auth
       summary: Revoke a WebAuthn passkey for the authenticated user.
       parameters:
         - name: credentialId
@@ -592,6 +816,7 @@ paths:
     get:
       tags: [Me]
       operationId: meGet
+      x-lv-module: app
       summary: Get the authenticated user's profile.
       responses:
         '200':
@@ -604,6 +829,7 @@ paths:
     put:
       tags: [Me]
       operationId: mePrivacyUpdate
+      x-lv-module: app
       summary: Update privacy flags.
       requestBody:
         required: true
@@ -621,6 +847,7 @@ paths:
     get:
       tags: [Me]
       operationId: meBilling
+      x-lv-module: app
       summary: Tier + trial status + days remaining.
       responses:
         '200':
@@ -629,10 +856,28 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/MeBillingResponse' }
 
+  /v1/auth/me/usage:
+    get:
+      operationId: meUsage
+      x-lv-module: app
+      summary: Usage metering for the current UTC calendar month.
+      description: >-
+        Storage footprint plus token, TTS and memory-compile totals for the
+        UTC month containing the request time, with a per-day breakdown.
+      responses:
+        '200':
+          description: Usage snapshot.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MeUsageResponse' }
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
   /v1/me/today:
     get:
       tags: [Me]
       operationId: meToday
+      x-lv-module: me
       summary: Widget + daily-review digest (HER-206).
       responses:
         '200':
@@ -647,6 +892,7 @@ paths:
     get:
       tags: [Me]
       operationId: meRecap
+      x-lv-module: me
       summary: What the user did over their last 7 or 30 local days.
       description: |
         Days are the user's own calendar days in `users.timezone`, oldest
@@ -680,6 +926,7 @@ paths:
     get:
       tags: [Me]
       operationId: meResurface
+      x-lv-module: me
       summary: A few memories worth another look today.
       description: |
         Deterministic, no model call. Lanes are filled in priority order and
@@ -717,6 +964,7 @@ paths:
     get:
       tags: [Me]
       operationId: meLearned
+      x-lv-module: me
       summary: What Lumina learned about the user and is waiting for them to confirm.
       description: |
         Deterministic, no model call. `soulChanges` are proposed SOUL.md
@@ -758,6 +1006,7 @@ paths:
     get:
       tags: [Me]
       operationId: meCommitmentsList
+      x-lv-module: me
       summary: The user's commitments (open loops kb-compile found in their notes).
       description: |
         First-person promises ("I'll…", "I need to…", "I promised…") that
@@ -799,6 +1048,7 @@ paths:
     patch:
       tags: [Me]
       operationId: meCommitmentUpdate
+      x-lv-module: me
       summary: Mark a commitment done, dropped, or open again.
       description: |
         `done` and `dropped` stamp `doneAt`; `open` clears it. Done and
@@ -829,6 +1079,7 @@ paths:
     get:
       tags: [Me]
       operationId: meBrief
+      x-lv-module: me
       summary: The day's brief as cards, with a why on each and an end.
       description: |
         Written when the `daily-brief` skill runs (07:00 local by default).
@@ -877,6 +1128,7 @@ paths:
     post:
       tags: [Me]
       operationId: meBriefCardFeedback
+      x-lv-module: me
       summary: React to one card of a brief (up, down or dismiss).
       description: |
         One reaction per card per brief; a second one replaces the first.
@@ -905,6 +1157,7 @@ paths:
     get:
       tags: [Me]
       operationId: mePeriodRecap
+      x-lv-module: me
       summary: The user's year or month in review, as a deck of cards.
       description: |
         Counts follow `/v1/me/recap`: `captures` are memories the user put
@@ -959,6 +1212,7 @@ paths:
     get:
       tags: [Me]
       operationId: meLastKnownLocation
+      x-lv-module: me
       summary: The location fix kept for offline scheduled jobs.
       description: |
         Whenever a live device location read succeeds (the `location_recent`
@@ -975,6 +1229,7 @@ paths:
     delete:
       tags: [Me]
       operationId: meForgetLastKnownLocation
+      x-lv-module: me
       summary: Forget the kept location fix.
       responses:
         '204':
@@ -984,6 +1239,7 @@ paths:
     get:
       tags: [Me]
       operationId: meSuggestions
+      x-lv-module: memory
       summary: Context-aware natural-language query suggestions (HER-37).
       responses:
         '200':
@@ -1000,6 +1256,7 @@ paths:
     get:
       tags: [Skills]
       operationId: skillsList
+      x-lv-module: skills
       summary: List skills + per-tenant state for the Skills hub (HER-247).
       responses:
         '200':
@@ -1012,6 +1269,7 @@ paths:
     get:
       tags: [Apple]
       operationId: appleConsentGet
+      x-lv-module: apple
       summary: Per-domain Apple data-access consent snapshot.
       responses:
         '200':
@@ -1022,6 +1280,7 @@ paths:
     put:
       tags: [Apple]
       operationId: appleConsentPut
+      x-lv-module: apple
       summary: Set one domain's consent; disallow purges the synced server copy.
       requestBody:
         required: true
@@ -1039,6 +1298,7 @@ paths:
     post:
       tags: [Apple]
       operationId: photosIndex
+      x-lv-module: apple
       summary: Ingest derived photo text (OCR + scene tags + metadata) into the semantic index.
       description: >
         Apple Photos derived-text index. Privacy-critical: only OCR text,
@@ -1063,6 +1323,7 @@ paths:
     post:
       tags: [Apple]
       operationId: appleCalendarSync
+      x-lv-module: calendar
       summary: Batch-upsert Apple Calendar (EventKit) event deltas into the server cache.
       description: >-
         Promotes Calendar from on-demand device-RPC to a persisted server cache
@@ -1091,6 +1352,7 @@ paths:
     post:
       tags: [Skills]
       operationId: jobsDetect
+      x-lv-module: skills
       summary: Classify a chat message for recurring-job intent (Lumina Jobs P3).
       requestBody:
         required: true
@@ -1111,6 +1373,7 @@ paths:
     post:
       tags: [Skills]
       operationId: jobsCreate
+      x-lv-module: skills
       summary: Create a scheduled job (authored as a vault cron skill).
       requestBody:
         required: true
@@ -1128,6 +1391,7 @@ paths:
     get:
       tags: [Workflows]
       operationId: workflowsList
+      x-lv-module: workflows
       summary: List the tenant's visual workflows.
       responses:
         '200':
@@ -1136,6 +1400,7 @@ paths:
     post:
       tags: [Workflows]
       operationId: workflowsCreate
+      x-lv-module: workflows
       summary: Create a workflow draft.
       requestBody:
         required: true
@@ -1154,6 +1419,7 @@ paths:
     get:
       tags: [Workflows]
       operationId: workflowsGet
+      x-lv-module: workflows
       parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
       responses:
         '200': { description: Workflow draft., content: { application/json: { schema: { $ref: '#/components/schemas/WorkflowDetailDTO' } } } }
@@ -1162,6 +1428,7 @@ paths:
     put:
       tags: [Workflows]
       operationId: workflowsUpdateDraft
+      x-lv-module: workflows
       parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/WorkflowDraftUpdateRequest' } } } }
       responses:
@@ -1172,6 +1439,7 @@ paths:
     post:
       tags: [Workflows]
       operationId: workflowsPublish
+      x-lv-module: workflows
       parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
       responses:
         '200': { description: Published immutable version., content: { application/json: { schema: { $ref: '#/components/schemas/WorkflowDetailDTO' } } } }
@@ -1180,6 +1448,7 @@ paths:
     post:
       tags: [Workflows]
       operationId: workflowValidate
+      x-lv-module: workflows
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/WorkflowDefinitionDTO' } } } }
       responses:
         '200': { description: Validation result., content: { application/json: { schema: { $ref: '#/components/schemas/WorkflowValidationResponse' } } } }
@@ -1188,6 +1457,7 @@ paths:
     get:
       tags: [Workflows]
       operationId: workflowLimits
+      x-lv-module: workflows
       responses:
         '200': { description: Tier capacity and managed-inference allowance., content: { application/json: { schema: { $ref: '#/components/schemas/WorkflowLimitsDTO' } } } }
 
@@ -1195,6 +1465,7 @@ paths:
     post:
       tags: [Workflows]
       operationId: workflowWebhookRotate
+      x-lv-module: workflows
       parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
       responses:
         '200': { description: New write-only webhook credential., content: { application/json: { schema: { $ref: '#/components/schemas/WorkflowWebhookCredentialDTO' } } } }
@@ -1203,6 +1474,7 @@ paths:
     post:
       tags: [Workflows]
       operationId: workflowWebhookIngest
+      x-lv-module: workflows
       security: []
       parameters:
         - { in: path, name: hookID, required: true, schema: { type: string, format: uuid } }
@@ -1220,12 +1492,14 @@ paths:
     get:
       tags: [Workflows]
       operationId: workflowRunsList
+      x-lv-module: workflows
       parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
       responses:
         '200': { description: Workflow run history., content: { application/json: { schema: { $ref: '#/components/schemas/WorkflowRunsResponse' } } } }
     post:
       tags: [Workflows]
       operationId: workflowRunCreate
+      x-lv-module: workflows
       parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/WorkflowRunRequest' } } } }
       responses:
@@ -1235,6 +1509,7 @@ paths:
     get:
       tags: [Workflows]
       operationId: workflowRunsAll
+      x-lv-module: workflows
       responses:
         '200': { description: Tenant run history., content: { application/json: { schema: { $ref: '#/components/schemas/WorkflowRunsResponse' } } } }
 
@@ -1242,6 +1517,7 @@ paths:
     get:
       tags: [Workflows]
       operationId: workflowRunGet
+      x-lv-module: workflows
       parameters: [{ in: path, name: runID, required: true, schema: { type: string, format: uuid } }]
       responses:
         '200': { description: Run detail., content: { application/json: { schema: { $ref: '#/components/schemas/WorkflowRunDTO' } } } }
@@ -1250,6 +1526,7 @@ paths:
     get:
       tags: [Workflows]
       operationId: workflowRunEvents
+      x-lv-module: workflows
       parameters:
         - { in: path, name: runID, required: true, schema: { type: string, format: uuid } }
         - { in: query, name: after, required: false, schema: { type: integer, format: int64, default: 0 } }
@@ -1260,6 +1537,7 @@ paths:
     get:
       tags: [Workflows]
       operationId: workflowRunEventsStream
+      x-lv-module: workflows
       parameters:
         - { in: path, name: runID, required: true, schema: { type: string, format: uuid } }
         - { in: header, name: Last-Event-ID, required: false, schema: { type: integer, format: int64 } }
@@ -1271,6 +1549,7 @@ paths:
     post:
       tags: [Workflows]
       operationId: workflowRunCancel
+      x-lv-module: workflows
       parameters: [{ in: path, name: runID, required: true, schema: { type: string, format: uuid } }]
       responses:
         '204': { description: Run cancelled or already terminal. }
@@ -1280,6 +1559,7 @@ paths:
     post:
       tags: [Workflows]
       operationId: workflowRunRetry
+      x-lv-module: workflows
       parameters: [{ in: path, name: runID, required: true, schema: { type: string, format: uuid } }]
       responses:
         '200': { description: New queued run., content: { application/json: { schema: { $ref: '#/components/schemas/WorkflowRunDTO' } } } }
@@ -1288,6 +1568,7 @@ paths:
     post:
       tags: [Workflows]
       operationId: workflowRunResume
+      x-lv-module: workflows
       parameters: [{ in: path, name: runID, required: true, schema: { type: string, format: uuid } }]
       responses:
         '200': { description: Paused run re-queued., content: { application/json: { schema: { $ref: '#/components/schemas/WorkflowRunDTO' } } } }
@@ -1296,6 +1577,7 @@ paths:
     get:
       tags: [Workflows]
       operationId: workflowVersionsList
+      x-lv-module: workflows
       parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
       responses:
         '200': { description: Immutable published versions., content: { application/json: { schema: { $ref: '#/components/schemas/WorkflowVersionsResponse' } } } }
@@ -1304,6 +1586,7 @@ paths:
     post:
       tags: [Workflows]
       operationId: workflowVersionRestore
+      x-lv-module: workflows
       parameters:
         - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
         - { in: path, name: version, required: true, schema: { type: integer, minimum: 1 } }
@@ -1314,6 +1597,7 @@ paths:
     get:
       tags: [Workflows]
       operationId: workflowTemplatesList
+      x-lv-module: workflows
       responses:
         '200': { description: Curated first-party templates., content: { application/json: { schema: { $ref: '#/components/schemas/WorkflowTemplatesResponse' } } } }
 
@@ -1321,6 +1605,7 @@ paths:
     post:
       tags: [Workflows]
       operationId: workflowTemplateInstantiate
+      x-lv-module: workflows
       parameters: [{ in: path, name: templateID, required: true, schema: { type: string } }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/WorkflowTemplateInstantiateRequest' } } } }
       responses:
@@ -1330,6 +1615,7 @@ paths:
     post:
       tags: [Workflows]
       operationId: workflowTemplateRun
+      x-lv-module: workflows
       parameters: [{ in: path, name: templateID, required: true, schema: { type: string } }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/WorkflowRunRequest' } } } }
       responses:
@@ -1339,6 +1625,7 @@ paths:
     get:
       tags: [Workflows]
       operationId: workflowApprovalsList
+      x-lv-module: workflows
       responses:
         '200': { description: Pending approvals., content: { application/json: { schema: { $ref: '#/components/schemas/WorkflowApprovalsResponse' } } } }
 
@@ -1346,6 +1633,7 @@ paths:
     post:
       tags: [Workflows]
       operationId: workflowApprovalDecide
+      x-lv-module: workflows
       parameters: [{ in: path, name: approvalID, required: true, schema: { type: string, format: uuid } }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/WorkflowApprovalDecisionRequest' } } } }
       responses:
@@ -1355,6 +1643,7 @@ paths:
     patch:
       tags: [Skills]
       operationId: skillPatch
+      x-lv-module: skills
       summary: Toggle enable/disable, set schedule override, or pick APNS category (HER-247 / HER-178).
       parameters:
         - in: path
@@ -1381,6 +1670,7 @@ paths:
     get:
       tags: [Skills]
       operationId: skillRuns
+      x-lv-module: skills
       summary: Paginated run history + 14-day sparkline for the Skills hub detail view (HER-247).
       parameters:
         - in: path
@@ -1402,6 +1692,7 @@ paths:
     get:
       tags: [Skills]
       operationId: skillOutputs
+      x-lv-module: skills
       summary: Today-tab skill outputs feed (HER-177) — local skill runs and collected Hermes job runs, newest first.
       description: |
         Unions `skill_run_log` runs that produced markdown with the
@@ -1438,6 +1729,7 @@ paths:
     get:
       tags: [Me]
       operationId: apnsPrefsGet
+      x-lv-module: me
       summary: Per-tenant APNS category opt-out (HER-179).
       responses:
         '200':
@@ -1448,6 +1740,7 @@ paths:
     put:
       tags: [Me]
       operationId: apnsPrefsPut
+      x-lv-module: me
       summary: Update per-tenant APNS category opt-out (HER-179).
       requestBody:
         required: true
@@ -1465,6 +1758,7 @@ paths:
     get:
       tags: [Dashboard]
       operationId: sessionsList
+      x-lv-module: sessions
       summary: List chat-history sessions for the OS Shell Sessions tab (HER-245 / HER-259).
       parameters:
         - in: query
@@ -1487,6 +1781,7 @@ paths:
     get:
       tags: [Agents]
       operationId: agentsInstances
+      x-lv-module: agents
       summary: Where the caller's agents run — LuminaVault's own agent and their BYO Hermes.
       description: |
         `central` is always present. `byo` appears when the caller has linked
@@ -1503,6 +1798,7 @@ paths:
     get:
       tags: [Agents]
       operationId: agentsSessions
+      x-lv-module: agents
       summary: Sessions across every agent and profile, newest activity first.
       description: |
         `central` sessions are the caller's own conversations. `byo` sessions
@@ -1546,6 +1842,7 @@ paths:
     get:
       tags: [Agents]
       operationId: agentsSessionMessages
+      x-lv-module: agents
       summary: One session's log — messages, tool calls and tool results.
       parameters:
         - in: path
@@ -1578,6 +1875,7 @@ paths:
     get:
       tags: [Agents]
       operationId: agentsRoomCandidates
+      x-lv-module: agents
       summary: Agents the caller can seat in a room — each LuminaVault persona, and their own Hermes when linked.
       responses:
         '200':
@@ -1590,6 +1888,7 @@ paths:
     get:
       tags: [Agents]
       operationId: agentsRoomsList
+      x-lv-module: agents
       summary: The caller's agent rooms, most recently active first.
       responses:
         '200':
@@ -1600,6 +1899,7 @@ paths:
     post:
       tags: [Agents]
       operationId: agentsRoomsCreate
+      x-lv-module: agents
       summary: Create a room with 1–8 of the caller's agents.
       description: |
         Members must come from `/v1/agents/room-candidates`. Handles are
@@ -1623,6 +1923,7 @@ paths:
     get:
       tags: [Agents]
       operationId: agentsRoomsGet
+      x-lv-module: agents
       summary: A room and its latest 200 messages, oldest first.
       parameters:
         - { in: path, name: room, required: true, schema: { type: string, format: uuid } }
@@ -1637,6 +1938,7 @@ paths:
     delete:
       tags: [Agents]
       operationId: agentsRoomsDelete
+      x-lv-module: agents
       summary: Delete a room and its messages.
       parameters:
         - { in: path, name: room, required: true, schema: { type: string, format: uuid } }
@@ -1650,6 +1952,7 @@ paths:
     post:
       tags: [Agents]
       operationId: agentsRoomsPost
+      x-lv-module: agents
       summary: Post as the user and stream the agent turns it starts.
       description: |
         Server-sent events, `event: agent.room`, each an `AgentRoomStreamEvent`:
@@ -1684,6 +1987,7 @@ paths:
     post:
       tags: [Agents]
       operationId: agentsRoomsStop
+      x-lv-module: agents
       summary: Stop the running chain after the agent turn in flight.
       parameters:
         - { in: path, name: room, required: true, schema: { type: string, format: uuid } }
@@ -1697,6 +2001,7 @@ paths:
     get:
       tags: [Dashboard]
       operationId: dashboardStats
+      x-lv-module: dashboard
       summary: Aggregated counters for the Home/Dashboard surface (HER-244).
       description: |
         Returns the small set of numbers the iOS Home/Dashboard renders:
@@ -1713,6 +2018,7 @@ paths:
     get:
       tags: [Dashboard]
       operationId: dashboardProfile
+      x-lv-module: dashboard
       summary: Player-profile HUD counters for the Home dashboard.
       description: |
         Returns the "player profile" numbers the iOS Home dashboard renders:
@@ -1730,6 +2036,7 @@ paths:
     get:
       tags: [Dashboard]
       operationId: dashboardHome
+      x-lv-module: dashboard
       summary: Command Center one-shot payload for the Home dashboard.
       description: |
         Aggregates the Home Command Center in a single request: enabled skills
@@ -1754,6 +2061,7 @@ paths:
     get:
       tags: [Dashboard]
       operationId: dashboardActivity
+      x-lv-module: dashboard
       summary: Unified recent-activity feed for the Home dashboard.
       description: |
         Union of recent conversations, memories, achievement unlocks, and
@@ -1774,6 +2082,7 @@ paths:
     get:
       tags: [Analytics]
       operationId: analyticsRetrievalHealth
+      x-lv-module: dashboard
       summary: Recall-quality aggregate for the dashboard health tile.
       description: |
         7-day aggregate over retrieval telemetry events plus the latest weekly
@@ -1789,6 +2098,7 @@ paths:
     get:
       tags: [Analytics]
       operationId: analyticsUsageSummary
+      x-lv-module: dashboard
       summary: Month-to-date usage analytics for the caller.
       description: |
         LLM token totals (in/out) and embedding tokens for the current
@@ -1805,6 +2115,7 @@ paths:
     get:
       tags: [Analytics]
       operationId: analyticsOverview
+      x-lv-module: dashboard
       summary: Usage trends, memory health, and recommendations for a vault.
       parameters:
         - { in: query, name: range, schema: { $ref: '#/components/schemas/AnalyticsRange' } }
@@ -1820,6 +2131,7 @@ paths:
     get:
       tags: [Analytics]
       operationId: analyticsModels
+      x-lv-module: dashboard
       summary: Operational effectiveness grouped by provider and model.
       parameters:
         - { in: query, name: range, schema: { $ref: '#/components/schemas/AnalyticsRange' } }
@@ -1835,6 +2147,7 @@ paths:
     get:
       tags: [Analytics]
       operationId: analyticsTeam
+      x-lv-module: dashboard
       summary: Analytics for the selected shared vault.
       parameters:
         - { in: query, name: range, schema: { $ref: '#/components/schemas/AnalyticsRange' } }
@@ -1849,6 +2162,7 @@ paths:
     post:
       tags: [Analytics]
       operationId: analyticsEventCreate
+      x-lv-module: dashboard
       summary: Record an allowlisted, content-free client analytics event.
       requestBody:
         required: true
@@ -1866,6 +2180,7 @@ paths:
     post:
       tags: [Analytics]
       operationId: analyticsModelFeedbackCreate
+      x-lv-module: dashboard
       summary: Record content-free positive or negative feedback for a provider/model.
       requestBody:
         required: true
@@ -1883,6 +2198,7 @@ paths:
     patch:
       tags: [Analytics]
       operationId: analyticsRecommendationUpdate
+      x-lv-module: dashboard
       summary: Dismiss or snooze a recommendation for the current user and vault.
       requestBody:
         required: true
@@ -1900,6 +2216,7 @@ paths:
     get:
       tags: [Dashboard]
       operationId: tasksList
+      x-lv-module: dashboard
       summary: List active and recent Hermes tasks (HER-244 / HER-246).
       description: |
         Per-tenant list of long-running operations (kb-compile, deep
@@ -1927,6 +2244,7 @@ paths:
     get:
       tags: [Dashboard]
       operationId: insightsList
+      x-lv-module: dashboard
       summary: List proactive insights (HER-37 Slice D).
       description: |
         Per-tenant list of "what Lumina noticed" findings, newest
@@ -1956,6 +2274,7 @@ paths:
     get:
       tags: [Dashboard]
       operationId: insightsLatestSynthesis
+      x-lv-module: dashboard
       summary: Newest weekly/monthly synthesis row (HER-37 Slice D).
       description: |
         Returns the most recent `thisWeek` or `thisMonth` row for the
@@ -1979,6 +2298,7 @@ paths:
     post:
       tags: [Dashboard]
       operationId: insightsDismiss
+      x-lv-module: dashboard
       summary: Soft-dismiss an insight (HER-37 Slice D).
       description: |
         Sets `dismissed_at`. The row stays in the table for audit but
@@ -1995,6 +2315,7 @@ paths:
     get:
       tags: [Settings]
       operationId: hermesConfigGet
+      x-lv-module: settings
       summary: Get the per-user Hermes gateway override (HER-217).
       responses:
         '200':
@@ -2007,6 +2328,7 @@ paths:
     put:
       tags: [Settings]
       operationId: hermesConfigPut
+      x-lv-module: settings
       summary: Upsert the Hermes gateway override.
       requestBody:
         required: true
@@ -2024,6 +2346,7 @@ paths:
     delete:
       tags: [Settings]
       operationId: hermesConfigDelete
+      x-lv-module: settings
       summary: Drop the override; revert to managed default.
       responses:
         '204':
@@ -2033,6 +2356,7 @@ paths:
     post:
       tags: [Settings]
       operationId: hermesConfigTest
+      x-lv-module: settings
       summary: Probe the configured gateway and bump verified_at on success.
       responses:
         '200':
@@ -2055,6 +2379,7 @@ paths:
     get:
       tags: [Settings]
       operationId: hermesCapabilitiesGet
+      x-lv-module: hermes
       summary: What the tenant's connected Hermes exposes, per settings domain (P3).
       description: |
         Managed tenants report every domain as `managed`. BYO-Hermes tenants
@@ -2074,10 +2399,190 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/HermesCapabilitiesResponse' }
 
+  /v1/me/hermes/cron:
+    get:
+      operationId: hermesCronList
+      x-lv-module: skills
+      summary: List the tenant's Hermes cron jobs (managed container, else linked BYO dashboard).
+      responses:
+        '200':
+          description: Jobs and the source they came from.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HermesCronListResponse' }
+        '401':
+          description: No tenant identity on the request (missing or invalid JWT).
+        '404':
+          description: '`no_hermes_cron_source` — no managed container and no BYO dashboard linked.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '502':
+          description: |
+            BYO dashboard call failed. `message` is a stable code:
+            `byo_cron_http_<status>`, `byo_cron_http_401` (token rejected),
+            `hermes_dashboard_auth_mode_unsupported`, or a transport code
+            (`hermes_dashboard_unreachable`, `hermes_mirror_invalid_response`, …).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    post:
+      operationId: hermesCronCreate
+      x-lv-module: skills
+      summary: Create a Hermes cron job (managed container, else linked BYO dashboard).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CronCreateSpec' }
+      responses:
+        '200':
+          description: The job list after the create.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HermesCronListResponse' }
+        '400':
+          description: Body not decodable, or `schedule_required` (blank `schedule`).
+        '401':
+          description: No tenant identity on the request (missing or invalid JWT).
+        '404':
+          description: '`no_hermes_cron_source` — no managed container and no BYO dashboard linked.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '502':
+          description: |
+            `cron_create_failed` (managed CLI failed) or a BYO dashboard error
+            code (`byo_cron_create_<status>`, `byo_cron_create_401`,
+            `hermes_dashboard_auth_mode_unsupported`, transport codes).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  /v1/me/hermes/cron/preview:
+    post:
+      operationId: hermesCronPreview
+      x-lv-module: skills
+      summary: Turn natural language into a cron spec for the user to confirm (no write).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CronPreviewRequest' }
+      responses:
+        '200':
+          description: Proposed spec; nothing is created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CronCreateSpec' }
+        '400':
+          description: Body missing or not decodable as `CronPreviewRequest`.
+        '401':
+          description: No tenant identity on the request (missing or invalid JWT).
+        '422':
+          description: '`not_a_schedulable_job` — the text does not describe a recurring/scheduled job.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  /v1/me/hermes/cron/{id}/pause:
+    post:
+      operationId: hermesCronPause
+      x-lv-module: skills
+      summary: Pause a managed Hermes cron job.
+      description: >-
+        Managed containers only — there is no BYO path; the response `source`
+        is always `managed`.
+      parameters:
+        - $ref: '#/components/parameters/HermesCronJobID'
+      responses:
+        '200':
+          description: The job list after the change.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HermesCronListResponse' }
+        '400':
+          description: '`id_required`.'
+        '401':
+          description: No tenant identity on the request (missing or invalid JWT).
+        '404':
+          description: '`no_hermes_container` — the tenant has no managed container.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '502':
+          description: '`cron_pause_failed` — the Hermes CLI reported failure.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  /v1/me/hermes/cron/{id}/resume:
+    post:
+      operationId: hermesCronResume
+      x-lv-module: skills
+      summary: Resume a paused managed Hermes cron job.
+      description: >-
+        Managed containers only — there is no BYO path; the response `source`
+        is always `managed`.
+      parameters:
+        - $ref: '#/components/parameters/HermesCronJobID'
+      responses:
+        '200':
+          description: The job list after the change.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HermesCronListResponse' }
+        '400':
+          description: '`id_required`.'
+        '401':
+          description: No tenant identity on the request (missing or invalid JWT).
+        '404':
+          description: '`no_hermes_container` — the tenant has no managed container.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '502':
+          description: '`cron_resume_failed` — the Hermes CLI reported failure.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  /v1/me/hermes/cron/{id}:
+    delete:
+      operationId: hermesCronDelete
+      x-lv-module: skills
+      summary: Remove a managed Hermes cron job.
+      description: >-
+        Managed containers only — there is no BYO path. Returns 200 with the
+        remaining jobs (not 204); `source` is always `managed`.
+      parameters:
+        - $ref: '#/components/parameters/HermesCronJobID'
+      responses:
+        '200':
+          description: The job list after the removal.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HermesCronListResponse' }
+        '400':
+          description: '`id_required`.'
+        '401':
+          description: No tenant identity on the request (missing or invalid JWT).
+        '404':
+          description: '`no_hermes_container` — the tenant has no managed container.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '502':
+          description: '`cron_remove_failed` — the Hermes CLI reported failure.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
   /v1/me/hermes/cron/config:
     put:
       tags: [Settings]
       operationId: hermesCronConfigPut
+      x-lv-module: skills
       summary: Link the tenant's own Hermes dashboard (URL + token) for BYO cron.
       description: |
         Stores the BYO Hermes **dashboard** endpoint and its static bearer
@@ -2139,6 +2644,7 @@ paths:
     get:
       tags: [Hermes Workspace]
       operationId: hermesWorkspaceStatus
+      x-lv-module: hermes
       summary: The agent's checkout — branch, branches, worktrees and changed files.
       description: |
         A read-only view of the repository the tenant's Hermes is working in.
@@ -2173,6 +2679,7 @@ paths:
     get:
       tags: [Hermes Workspace]
       operationId: hermesWorkspaceFiles
+      x-lv-module: hermes
       summary: One directory of the agent's filesystem.
       parameters:
         - name: path
@@ -2197,6 +2704,7 @@ paths:
     get:
       tags: [Hermes Workspace]
       operationId: hermesWorkspaceFile
+      x-lv-module: hermes
       summary: One file's text from the agent's filesystem.
       parameters:
         - name: path
@@ -2217,6 +2725,7 @@ paths:
     get:
       tags: [Hermes Workspace]
       operationId: hermesWorkspaceDiff
+      x-lv-module: hermes
       summary: The unified diff for one changed file.
       parameters:
         - name: path
@@ -2245,6 +2754,7 @@ paths:
     get:
       tags: [Settings]
       operationId: hermesArtifactsList
+      x-lv-module: hermes
       summary: Images, files and links harvested from the tenant's Hermes sessions.
       parameters:
         - name: kind
@@ -2282,6 +2792,7 @@ paths:
     get:
       tags: [Settings]
       operationId: hermesArtifactsGet
+      x-lv-module: hermes
       parameters:
         - name: id
           in: path
@@ -2301,6 +2812,7 @@ paths:
     get:
       tags: [Settings]
       operationId: hermesMirrorStatus
+      x-lv-module: hermes
       summary: Mirror status for the tenant's Hermes (counts, last sync, vault state, dashboard probe).
       responses:
         '200':
@@ -2313,6 +2825,7 @@ paths:
     post:
       tags: [Settings]
       operationId: hermesMirrorSync
+      x-lv-module: hermes
       summary: Sync skills, cron jobs and vault detection from the tenant's Hermes.
       description: |
         Each scope runs independently; failures are recorded on the status
@@ -2334,6 +2847,7 @@ paths:
     get:
       tags: [Settings]
       operationId: hermesMirrorSkillsList
+      x-lv-module: hermes
       summary: Skills mirrored from the tenant's Hermes (last sync).
       responses:
         '200':
@@ -2346,6 +2860,7 @@ paths:
     put:
       tags: [Settings]
       operationId: hermesMirrorSkillToggle
+      x-lv-module: hermes
       summary: Enable or disable a skill on the tenant's Hermes (dashboard `/api/skills/toggle`).
       parameters:
         - name: name
@@ -2380,6 +2895,7 @@ paths:
     get:
       tags: [Settings]
       operationId: hermesMirrorJobsList
+      x-lv-module: hermes
       summary: Cron jobs on the tenant's Hermes — live when reachable, else the last snapshot.
       responses:
         '200':
@@ -2390,6 +2906,7 @@ paths:
     post:
       tags: [Settings]
       operationId: hermesMirrorJobCreate
+      x-lv-module: hermes
       summary: Create a cron job on the tenant's Hermes.
       description: |
         The full Hermes `CronJobCreate` body. `schedule` accepts a cron
@@ -2421,6 +2938,7 @@ paths:
     put:
       tags: [Settings]
       operationId: hermesMirrorJobUpdate
+      x-lv-module: hermes
       summary: Partially update a mirrored cron job on the tenant's Hermes.
       description: |
         Only the fields present in the body are sent to Hermes as `updates`;
@@ -2455,6 +2973,7 @@ paths:
     delete:
       tags: [Settings]
       operationId: hermesMirrorJobDelete
+      x-lv-module: hermes
       summary: Delete a cron job on the tenant's Hermes.
       description: |
         Deletes upstream first, then drops the mirrored row. Runs already
@@ -2483,6 +3002,7 @@ paths:
     post:
       tags: [Settings]
       operationId: hermesMirrorJobPause
+      x-lv-module: hermes
       summary: Pause a mirrored cron job on the tenant's Hermes.
       parameters:
         - name: id
@@ -2502,6 +3022,7 @@ paths:
     post:
       tags: [Settings]
       operationId: hermesMirrorJobResume
+      x-lv-module: hermes
       summary: Resume a paused cron job on the tenant's Hermes.
       parameters:
         - name: id
@@ -2521,6 +3042,7 @@ paths:
     post:
       tags: [Settings]
       operationId: hermesMirrorJobTrigger
+      x-lv-module: hermes
       summary: Run a mirrored cron job on Hermes' next scheduler tick.
       description: |
         Returns as soon as Hermes has scheduled the run; it does not wait for
@@ -2544,6 +3066,7 @@ paths:
     get:
       tags: [Settings]
       operationId: hermesMirrorJobRuns
+      x-lv-module: hermes
       summary: Runs LuminaVault has collected for this job, newest first.
       description: |
         Reads stored `hermes_job_runs` rows only, so it answers while the
@@ -2573,6 +3096,7 @@ paths:
     post:
       tags: [Settings]
       operationId: hermesMirrorInstallCompileJob
+      x-lv-module: hermes
       summary: Install the nightly `luminavault-nightly-compile` kb-compile job on the tenant's Hermes (idempotent by name).
       responses:
         '200':
@@ -2590,6 +3114,7 @@ paths:
     post:
       tags: [Settings]
       operationId: hermesMirrorCollectJobRuns
+      x-lv-module: hermes
       summary: Pull this job's finished runs from the tenant's Hermes now.
       description: |
         Idempotent — runs already stored (matched on Hermes' own run key) are
@@ -2628,6 +3153,7 @@ paths:
     post:
       tags: [Settings]
       operationId: hermesMirrorVaultImport
+      x-lv-module: hermes
       summary: Import the KB vault on the tenant's Hermes into LuminaVault (markdown only, resumable).
       description: |
         Detects the vault (`.kb/manifest.json`, or `raw/` + `wiki/`, under the
@@ -2657,6 +3183,7 @@ paths:
     post:
       tags: [Settings]
       operationId: hermesMirrorVaultCreate
+      x-lv-module: hermes
       summary: Create the KB skeleton (`raw/`, `wiki/`, `.kb/`) on the tenant's Hermes and install the kb-* skills.
       responses:
         '200':
@@ -2674,6 +3201,7 @@ paths:
     post:
       tags: [Settings]
       operationId: hermesMirrorImportSessions
+      x-lv-module: hermes
       summary: Import past Hermes sessions as markdown transcripts and compile them into memory.
       description: |
         Newest-first; empty sessions are skipped; each transcript lands under
@@ -2698,6 +3226,7 @@ paths:
     get:
       tags: [Settings]
       operationId: hermesMirrorWebhookGet
+      x-lv-module: hermes
       summary: The tenant's inbound push credential (without the secret).
       responses:
         '200':
@@ -2710,6 +3239,7 @@ paths:
     post:
       tags: [Settings]
       operationId: hermesMirrorWebhookRotate
+      x-lv-module: hermes
       summary: Mint (or replace) the inbound push credential for the tenant's Hermes.
       description: |
         Returns the signing `secret` exactly once — LuminaVault seals it and
@@ -2733,6 +3263,7 @@ paths:
     post:
       tags: [Settings]
       operationId: hermesMirrorWebhookPush
+      x-lv-module: hermes
       summary: Push endpoint for the tenant's Hermes — collect this job now.
       description: |
         Unauthenticated by construction: the sender is the user's own Hermes
@@ -2775,6 +3306,7 @@ paths:
     post:
       tags: [Hermes Runs]
       operationId: hermesRunStart
+      x-lv-module: hermes
       summary: Start an agent run on the tenant's Hermes.
       description: |
         Proxies `POST /v1/runs` on the tenant's Hermes gateway and persists
@@ -2808,6 +3340,7 @@ paths:
     get:
       tags: [Hermes Runs]
       operationId: hermesRunList
+      x-lv-module: hermes
       summary: List the tenant's Hermes runs, newest first.
       parameters:
         - name: limit
@@ -2842,6 +3375,7 @@ paths:
     get:
       tags: [Hermes Runs]
       operationId: hermesRunGet
+      x-lv-module: hermes
       summary: Read one run, including any pending approval.
       responses:
         '200':
@@ -2860,6 +3394,7 @@ paths:
     get:
       tags: [Hermes Runs]
       operationId: hermesRunEvents
+      x-lv-module: hermes
       summary: Server-sent events for one run — persisted replay, then live.
       description: |
         `text/event-stream`. Every record is `event: hermes.run.event` with a
@@ -2901,6 +3436,7 @@ paths:
     post:
       tags: [Hermes Runs]
       operationId: hermesRunApprove
+      x-lv-module: hermes
       summary: Answer the tool-call approval a run is waiting on.
       description: |
         Forwards the choice to `POST /v1/runs/{hermesRunID}/approval` and
@@ -2932,6 +3468,7 @@ paths:
     post:
       tags: [Hermes Runs]
       operationId: hermesRunStop
+      x-lv-module: hermes
       summary: Stop a running agent run.
       description: |
         Hermes answers `stopping`; the terminal `run.cancelled` arrives on the
@@ -2950,6 +3487,7 @@ paths:
     get:
       tags: [Self Improvement]
       operationId: improvementStatusGet
+      x-lv-module: self-improvement
       summary: Read curator and SOUL reviewer settings and status.
       responses:
         '200':
@@ -2960,6 +3498,7 @@ paths:
     put:
       tags: [Self Improvement]
       operationId: improvementSettingsPut
+      x-lv-module: self-improvement
       summary: Replace tenant self-improvement settings.
       requestBody:
         required: true
@@ -2977,6 +3516,7 @@ paths:
     post:
       tags: [Self Improvement]
       operationId: improvementCuratorRun
+      x-lv-module: self-improvement
       summary: Queue a live or dry-run curator pass.
       requestBody:
         required: true
@@ -2994,6 +3534,7 @@ paths:
     get:
       tags: [Self Improvement]
       operationId: improvementRunsList
+      x-lv-module: self-improvement
       summary: List curator and SOUL review reports.
       parameters:
         - name: limit
@@ -3010,6 +3551,7 @@ paths:
     get:
       tags: [Self Improvement]
       operationId: improvementRunGet
+      x-lv-module: self-improvement
       summary: Read one run and its report.
       parameters:
         - $ref: '#/components/parameters/MemoryId'
@@ -3025,6 +3567,7 @@ paths:
     post:
       tags: [Self Improvement]
       operationId: improvementRunRollback
+      x-lv-module: self-improvement
       summary: Restore the guarded backup for a completed curator run.
       parameters:
         - $ref: '#/components/parameters/MemoryId'
@@ -3040,6 +3583,7 @@ paths:
     get:
       tags: [Self Improvement]
       operationId: improvementResourcesList
+      x-lv-module: self-improvement
       summary: List curator-managed skills and jobs, including pinned state.
       responses:
         '200':
@@ -3052,6 +3596,7 @@ paths:
     patch:
       tags: [Self Improvement]
       operationId: improvementResourcePin
+      x-lv-module: self-improvement
       summary: Pin or unpin a skill or job. Pinning a job also protects its backing skill.
       parameters:
         - name: kind
@@ -3078,6 +3623,7 @@ paths:
     post:
       tags: [Self Improvement]
       operationId: improvementSoulReview
+      x-lv-module: self-improvement
       summary: Queue a conservative SOUL.md review. Changes always require approval.
       requestBody:
         required: false
@@ -3095,6 +3641,7 @@ paths:
     get:
       tags: [Self Improvement]
       operationId: improvementChangesList
+      x-lv-module: self-improvement
       summary: List pending and historical SOUL proposals.
       responses:
         '200':
@@ -3107,6 +3654,7 @@ paths:
     post:
       tags: [Self Improvement]
       operationId: improvementChangeApprove
+      x-lv-module: self-improvement
       summary: Apply a non-stale SOUL.md proposal.
       parameters:
         - $ref: '#/components/parameters/MemoryId'
@@ -3122,6 +3670,7 @@ paths:
     post:
       tags: [Self Improvement]
       operationId: improvementChangeReject
+      x-lv-module: self-improvement
       summary: Reject a pending SOUL.md proposal.
       parameters:
         - $ref: '#/components/parameters/MemoryId'
@@ -3138,6 +3687,7 @@ paths:
     get:
       tags: [Me]
       operationId: providersList
+      x-lv-module: me
       summary: List per-user external LLM provider credentials (HER-252).
       description: |
         Returns one row per supported provider. Plaintext credentials are
@@ -3154,6 +3704,7 @@ paths:
     get:
       tags: [Me]
       operationId: providersCatalog
+      x-lv-module: me
       summary: Static per-provider facts for rendering a BYO key form.
       description: |
         Display name, default base URL, whether a base URL or an API key is
@@ -3179,6 +3730,7 @@ paths:
     put:
       tags: [Me]
       operationId: providerCredentialPut
+      x-lv-module: me
       summary: Upsert credentials for a provider.
       requestBody:
         required: true
@@ -3196,6 +3748,7 @@ paths:
     delete:
       tags: [Me]
       operationId: providerCredentialDelete
+      x-lv-module: me
       summary: Drop credentials for a provider.
       responses:
         '204':
@@ -3210,6 +3763,7 @@ paths:
     post:
       tags: [Me]
       operationId: providerCredentialTest
+      x-lv-module: me
       summary: Probe the credential with a 1-token chat request.
       description: |
         Builds a one-off adapter using the stored credential and sends a
@@ -3248,6 +3802,7 @@ paths:
     get:
       tags: [Me]
       operationId: providerModelsList
+      x-lv-module: me
       summary: List models for a provider, fetched live when possible.
       description: |
         For OpenAI-compatible providers (xai, nvidia, openai, openRouter,
@@ -3269,12 +3824,96 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
 
+  /v1/me/providers/{provider}/pool:
+    parameters:
+      - in: path
+        name: provider
+        required: true
+        schema: { $ref: '#/components/schemas/ProviderID' }
+    get:
+      operationId: providerPoolList
+      x-lv-module: me
+      summary: List the round-robin credential-pool keys for a provider.
+      description: Key material is never returned — only id, label and creation time.
+      responses:
+        '200':
+          description: Pool keys.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProviderPoolListResponse' }
+        '401':
+          description: No tenant identity on the request (missing or invalid JWT).
+        '404':
+          description: '`unsupported_provider` — unknown path param.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '429':
+          $ref: '#/components/responses/RateLimited'
+    post:
+      operationId: providerPoolAdd
+      x-lv-module: me
+      summary: Add a key to a provider's round-robin credential pool.
+      description: The key is sealed at rest; the response carries only its id, label and creation time.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProviderPoolAddRequest' }
+      responses:
+        '200':
+          description: The stored pool key (no key material).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProviderPoolKeyDTO' }
+        '400':
+          description: Body not decodable, or `api_key_required` (empty `apiKey`).
+        '401':
+          description: No tenant identity on the request (missing or invalid JWT).
+        '404':
+          description: '`unsupported_provider` — unknown path param.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /v1/me/providers/{provider}/pool/{keyID}:
+    parameters:
+      - in: path
+        name: provider
+        required: true
+        schema: { $ref: '#/components/schemas/ProviderID' }
+      - in: path
+        name: keyID
+        required: true
+        schema: { type: string, format: uuid }
+    delete:
+      operationId: providerPoolDelete
+      x-lv-module: me
+      summary: Remove a key from a provider's credential pool.
+      responses:
+        '204':
+          description: Deleted (idempotent — 204 even if absent).
+        '400':
+          description: '`invalid_key_id` — `keyID` is not a UUID.'
+        '401':
+          description: No tenant identity on the request (missing or invalid JWT).
+        '404':
+          description: '`unsupported_provider` — unknown path param.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
   # ─────────────── Me — Hermes Messaging Gateways (HER-241) ────────────────
 
   /v1/me/hermes-gateways:
     get:
       tags: [Me]
       operationId: hermesGatewaysList
+      x-lv-module: me
       summary: List supported Hermes messaging gateways + per-user status (HER-241).
       description: |
         Returns one row per supported gateway (telegram, discord, slack,
@@ -3297,6 +3936,7 @@ paths:
     get:
       tags: [Me]
       operationId: hermesGatewayGet
+      x-lv-module: me
       summary: Get a single gateway's catalog entry + status.
       responses:
         '200':
@@ -3312,6 +3952,7 @@ paths:
     put:
       tags: [Me]
       operationId: hermesGatewayPut
+      x-lv-module: me
       summary: Upsert encrypted config for a gateway.
       description: |
         Validates every required field for the chosen gateway. On
@@ -3339,6 +3980,7 @@ paths:
     delete:
       tags: [Me]
       operationId: hermesGatewayDelete
+      x-lv-module: me
       summary: Drop a gateway's stored config.
       responses:
         '204':
@@ -3353,6 +3995,7 @@ paths:
     post:
       tags: [Me]
       operationId: hermesGatewayTest
+      x-lv-module: me
       summary: Probe the user's Hermes server's `/v1/health` for reachability.
       description: |
         Hermes today exposes no gateway-admin HTTP API; this endpoint
@@ -3379,6 +4022,7 @@ paths:
     post:
       tags: [Me]
       operationId: hermesGatewaysApply
+      x-lv-module: me
       summary: Apply all configured gateways to the running Hermes container.
       description: |
         Re-seeds the tenant's `/opt/data/.env` from the saved gateway rows
@@ -3406,6 +4050,7 @@ paths:
     get:
       tags: [Me]
       operationId: hermesGatewaysApplyCurrent
+      x-lv-module: me
       summary: Most recent in-flight (or last) apply job, for reconnect.
       responses:
         '200':
@@ -3419,6 +4064,7 @@ paths:
     get:
       tags: [Me]
       operationId: hermesGatewaysApplyStatus
+      x-lv-module: me
       summary: Full status snapshot for one apply job (poll fallback).
       parameters:
         - in: path
@@ -3437,6 +4083,7 @@ paths:
     get:
       tags: [Me]
       operationId: hermesGatewaysApplyStream
+      x-lv-module: me
       summary: SSE stream of HermesGatewayApplyEvent for one job.
       description: >
         `text/event-stream`; each `data:` line is one JSON-encoded
@@ -3459,6 +4106,7 @@ paths:
     post:
       tags: [Me]
       operationId: hermesGatewaysWhatsAppPair
+      x-lv-module: me
       summary: Start a WhatsApp QR pairing session.
       description: |
         WhatsApp has no enterable credential — it pairs via the interactive
@@ -3483,6 +4131,7 @@ paths:
     get:
       tags: [Me]
       operationId: hermesGatewaysWhatsAppPairStream
+      x-lv-module: me
       summary: SSE stream of HermesWhatsAppPairEvent for a pairing session.
       description: >
         `text/event-stream`; each `data:` line is one JSON-encoded
@@ -3510,6 +4159,7 @@ paths:
     delete:
       tags: [Me]
       operationId: hermesGatewaysWhatsAppUnlink
+      x-lv-module: me
       summary: Unlink WhatsApp (delete the persisted session) and restart.
       description: |
         Deletes the tenant's persisted WhatsApp session from the container
@@ -3527,12 +4177,159 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
 
+  /v1/me/hermes-gateways/photon/setup:
+    post:
+      operationId: hermesGatewaysPhotonSetupStart
+      x-lv-module: me
+      summary: Start a Photon iMessage setup session (device-code login + phone bind).
+      description: |
+        The free iMessage path. Starts a device-code login to the Photon
+        dashboard and returns a `sessionID`; the client opens the SSE stream
+        for the verification URI / user code and live status, then submits the
+        user's phone with `POST .../photon/setup/{sessionID}/phone`. No request
+        body is read.
+      responses:
+        '200':
+          description: Setup session started.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StartPhotonSetupResponse' }
+        '401':
+          description: No tenant identity on the request (missing or invalid JWT).
+        '404':
+          description: '`photon_provisioning_unavailable` — Photon provisioning is not configured.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /v1/me/hermes-gateways/photon/setup/{sessionID}/phone:
+    post:
+      operationId: hermesGatewaysPhotonSetupPhone
+      x-lv-module: me
+      summary: Submit (or replace) the E.164 phone number for a Photon setup session.
+      description: |
+        Stores the phone on the session. If the device-code approval has
+        already arrived this triggers the rest of provisioning (project,
+        Spectrum, user registration, line assignment), reported on the SSE
+        stream; otherwise provisioning starts when approval lands.
+      parameters:
+        - in: path
+          name: sessionID
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PhotonSetupPhoneRequest' }
+      responses:
+        '200':
+          description: Phone accepted. Empty body.
+        '400':
+          description: '`sessionID` is not a UUID, or body not decodable as `PhotonSetupPhoneRequest`.'
+        '401':
+          description: No tenant identity on the request (missing or invalid JWT).
+        '404':
+          description: '`photon_provisioning_unavailable` — Photon provisioning is not configured.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          description: |
+            Unknown or already-completed session, or a phone that is not E.164
+            after normalisation. The service's `PhotonProvisioningError` is not
+            translated to an HTTP status, so these surface as an untyped 500.
+
+  /v1/me/hermes-gateways/photon/setup/{sessionID}/stream:
+    get:
+      operationId: hermesGatewaysPhotonSetupStream
+      x-lv-module: me
+      summary: SSE stream of HermesPhotonSetupEvent for a Photon setup session.
+      description: >
+        `text/event-stream`; each `data:` line is one JSON-encoded
+        `HermesPhotonSetupEvent` (discriminated by `type`: `status` |
+        `deviceCode` | `assignedLine` | `error`), blank-line terminated. If
+        the underlying stream fails, a final `error` event carries the
+        failure text before the stream closes. An unknown session yields a
+        single `error` event rather than an HTTP error.
+      parameters:
+        - in: path
+          name: sessionID
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Event stream.
+          content:
+            text/event-stream:
+              schema: { type: string }
+        '400':
+          description: '`invalid_session_id`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '401':
+          description: No tenant identity on the request (missing or invalid JWT).
+        '404':
+          description: '`photon_provisioning_unavailable` — Photon provisioning is not configured.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /v1/gateways/photon/inbound:
+    post:
+      operationId: photonInboundWebhook
+      x-lv-module: me
+      summary: Inbound Photon (iMessage) event from the central sidecar.
+      description: |
+        Called by the Photon sidecar, not by users: gated by the shared sidecar
+        token (`photonSidecarToken`) presented as `X-Lumina-Sidecar-Token` or
+        `Authorization: Bearer <token>` (a bare `Authorization` value is also
+        accepted). When the token is unset the route answers 404
+        `sidecar webhook disabled`.
+
+        The event is delivered to the tenant's Hermes and the reply is sent
+        back through the sidecar before the response returns. Success and the
+        decode/delivery failure path both respond with an empty body.
+      security:
+        - photonSidecarToken: []
+        - photonSidecarBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PhotonInboundEvent' }
+      responses:
+        '200':
+          description: Delivered. Empty body.
+        '400':
+          description: Body not decodable as `PhotonInboundEvent`, or delivery threw. Empty body.
+        '401':
+          description: '`sidecar token invalid`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '404':
+          description: '`sidecar webhook disabled` — no sidecar token configured.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '503':
+          description: Photon delivery service not available. Empty body.
+
   # ─────────────── Me — LLM routing preferences (HER-252) ────────────────
 
   /v1/me/preferences/llm:
     get:
       tags: [Me]
       operationId: llmPreferencesGet
+      x-lv-module: me
       summary: Get per-user primary model + fallback chain (HER-252).
       description: |
         Always returns 200. If no row exists, returns a deployment-default
@@ -3546,6 +4343,7 @@ paths:
     put:
       tags: [Me]
       operationId: llmPreferencesPut
+      x-lv-module: me
       summary: Upsert the primary model + ordered fallback chain.
       requestBody:
         required: true
@@ -3574,6 +4372,7 @@ paths:
     get:
       tags: [LLM]
       operationId: routerProfilesList
+      x-lv-module: llm
       summary: List routing profiles and the active user default.
       responses:
         '200':
@@ -3584,6 +4383,7 @@ paths:
     post:
       tags: [LLM]
       operationId: routerProfilesCreate
+      x-lv-module: llm
       summary: Create a custom routing profile (Pro or Ultimate).
       requestBody:
         required: true
@@ -3613,6 +4413,7 @@ paths:
     put:
       tags: [LLM]
       operationId: routerProfilesUpdate
+      x-lv-module: llm
       summary: Replace a routing profile using optimistic revision checking.
       requestBody:
         required: true
@@ -3636,6 +4437,7 @@ paths:
     delete:
       tags: [LLM]
       operationId: routerProfilesDelete
+      x-lv-module: llm
       summary: Delete a non-default custom profile.
       responses:
         '204': { description: Deleted. }
@@ -3644,6 +4446,7 @@ paths:
     get:
       tags: [LLM]
       operationId: routerCatalog
+      x-lv-module: llm
       summary: Versioned model/task catalog and caller entitlements.
       responses:
         '200':
@@ -3656,6 +4459,7 @@ paths:
     get:
       tags: [LLM]
       operationId: routerBindingsList
+      x-lv-module: llm
       summary: List user, Space, and Job profile bindings.
       responses:
         '200':
@@ -3677,6 +4481,7 @@ paths:
     put:
       tags: [LLM]
       operationId: routerBindingPut
+      x-lv-module: llm
       summary: Assign a profile to a Space or Job.
       requestBody:
         required: true
@@ -3692,6 +4497,7 @@ paths:
     delete:
       tags: [LLM]
       operationId: routerBindingDelete
+      x-lv-module: llm
       summary: Remove a Space or Job profile override.
       responses:
         '204': { description: Removed. }
@@ -3700,6 +4506,7 @@ paths:
     get:
       tags: [LLM]
       operationId: routerDashboard
+      x-lv-module: llm
       summary: Month-to-date prompt-free routing, cost, and performance analytics.
       responses:
         '200':
@@ -3712,6 +4519,7 @@ paths:
     post:
       tags: [LLM]
       operationId: parallelExecutionStream
+      x-lv-module: llm
       summary: Run an Ultimate-tier multi-model execution and stream progress.
       requestBody:
         required: true
@@ -3729,6 +4537,7 @@ paths:
     get:
       tags: [LLM]
       operationId: parallelExecutionsList
+      x-lv-module: llm
       summary: List the caller's recent multi-model executions.
       responses:
         '200':
@@ -3746,6 +4555,7 @@ paths:
     get:
       tags: [LLM]
       operationId: parallelExecutionDetail
+      x-lv-module: llm
       summary: Fetch candidates, revisions, and synthesis for one execution.
       responses:
         '200':
@@ -3756,6 +4566,7 @@ paths:
     delete:
       tags: [LLM]
       operationId: parallelExecutionDelete
+      x-lv-module: llm
       summary: Delete an execution and all persisted outputs.
       responses:
         '204': { description: Deleted. }
@@ -3764,6 +4575,7 @@ paths:
     get:
       tags: [LLM]
       operationId: synthesisPresetsList
+      x-lv-module: llm
       responses:
         '200':
           description: Saved synthesis prompts.
@@ -3773,6 +4585,7 @@ paths:
     post:
       tags: [LLM]
       operationId: synthesisPresetCreate
+      x-lv-module: llm
       requestBody:
         required: true
         content:
@@ -3794,6 +4607,7 @@ paths:
     put:
       tags: [LLM]
       operationId: synthesisPresetUpdate
+      x-lv-module: llm
       requestBody:
         required: true
         content:
@@ -3808,6 +4622,7 @@ paths:
     delete:
       tags: [LLM]
       operationId: synthesisPresetDelete
+      x-lv-module: llm
       responses:
         '204': { description: Deleted. }
 
@@ -3817,6 +4632,7 @@ paths:
     get:
       tags: [Me]
       operationId: chatPreferencesGet
+      x-lv-module: chat
       summary: Get cross-device chat behavior preferences.
       responses:
         '200':
@@ -3829,6 +4645,7 @@ paths:
     put:
       tags: [Me]
       operationId: chatPreferencesPut
+      x-lv-module: chat
       summary: Upsert cross-device chat behavior preferences.
       requestBody:
         required: true
@@ -3848,6 +4665,7 @@ paths:
     get:
       tags: [Me]
       operationId: hybridExecutionPreferencesGet
+      x-lv-module: chat
       summary: Get the cross-device local/cloud routing profile.
       responses:
         '200':
@@ -3858,6 +4676,7 @@ paths:
     put:
       tags: [Me]
       operationId: hybridExecutionPreferencesPut
+      x-lv-module: chat
       summary: Replace the cross-device local/cloud routing profile.
       requestBody:
         required: true
@@ -3874,6 +4693,7 @@ paths:
     get:
       tags: [Me]
       operationId: agentConnectionsList
+      x-lv-module: mcp
       summary: List the caller's live agent keys for MCP.
       description: |
         Revoked keys are omitted. The plaintext token is never returned
@@ -3887,6 +4707,7 @@ paths:
     post:
       tags: [Me]
       operationId: agentConnectionIssue
+      x-lv-module: mcp
       summary: Issue a new agent key and its setup snippet.
       description: |
         The response is the only place the plaintext `token` ever appears.
@@ -3914,6 +4735,7 @@ paths:
     get:
       tags: [Me]
       operationId: agentConnectionPreview
+      x-lv-module: mcp
       summary: Setup snippet for a client kind, with a placeholder token.
       description: Issues nothing. Used to show the steps before a key exists.
       parameters:
@@ -3942,6 +4764,7 @@ paths:
     patch:
       tags: [Me]
       operationId: agentConnectionUpdate
+      x-lv-module: mcp
       summary: Change a key's personal-data grant, its access, or both.
       description: |
         Fields left out stay as they are. A body naming neither field is
@@ -3971,6 +4794,7 @@ paths:
     delete:
       tags: [Me]
       operationId: agentConnectionRevoke
+      x-lv-module: mcp
       summary: Revoke a key. It stops authenticating immediately.
       responses:
         '204':
@@ -3985,6 +4809,7 @@ paths:
     get:
       tags: [Me]
       operationId: connectionsSummary
+      x-lv-module: me
       summary: Unified Settings connections summary.
       responses:
         '200':
@@ -3999,6 +4824,7 @@ paths:
     post:
       tags: [Me]
       operationId: connectionsTestAll
+      x-lv-module: me
       summary: Run the unified connection status check and record diagnostic events.
       responses:
         '200':
@@ -4013,6 +4839,7 @@ paths:
     get:
       tags: [Me]
       operationId: connectionDiagnosticEvents
+      x-lv-module: me
       summary: Recent unified connection diagnostic events.
       parameters:
         - in: query
@@ -4033,6 +4860,7 @@ paths:
     get:
       tags: [Onboarding]
       operationId: onboardingGet
+      x-lv-module: onboarding
       summary: Server-tracked resumable onboarding state (HER-93).
       responses:
         '200':
@@ -4043,6 +4871,7 @@ paths:
     patch:
       tags: [Onboarding]
       operationId: onboardingPatch
+      x-lv-module: onboarding
       summary: Latch onboarding flags (one-way) or set the guided-start dismissal (two-way).
       description: |
         The seven completion flags are one-way latches: only `true` is
@@ -4077,6 +4906,7 @@ paths:
     post:
       tags: [Devices]
       operationId: deviceRegister
+      x-lv-module: devices
       summary: Register an APNS / FCM device token.
       requestBody:
         required: true
@@ -4094,6 +4924,7 @@ paths:
     post:
       tags: [Devices]
       operationId: deviceCommandResult
+      x-lv-module: apple
       summary: App posts a device-RPC command's result (Apple Integration P0b).
       parameters:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
@@ -4109,6 +4940,7 @@ paths:
     get:
       tags: [Devices]
       operationId: deviceCommandsPending
+      x-lv-module: apple
       summary: Phone writes queued while the app was closed, oldest first.
       description: |
         A `reminder_create` or `calendar_create` that could not reach the
@@ -4126,6 +4958,7 @@ paths:
     delete:
       tags: [Devices]
       operationId: deviceUnregister
+      x-lv-module: devices
       summary: Unregister a device token.
       parameters:
         - in: path
@@ -4142,6 +4975,7 @@ paths:
     delete:
       tags: [Account]
       operationId: accountDelete
+      x-lv-module: account
       summary: GDPR right-to-erasure (HER-92).
       requestBody:
         required: false
@@ -4160,6 +4994,7 @@ paths:
     post:
       tags: [Billing]
       operationId: billingRevenueCatWebhook
+      x-lv-module: billing
       summary: RevenueCat server-to-server webhook (HER-184).
       security:
         - revenueCatWebhookSecret: []
@@ -4182,6 +5017,7 @@ paths:
     post:
       tags: [LLM]
       operationId: llmChat
+      x-lv-module: llm
       summary: Chat completion. Routes via TableModelRouter; BYO Hermes-aware.
       requestBody:
         required: true
@@ -4283,6 +5119,7 @@ paths:
     post:
       tags: [LLM]
       operationId: llmTranscribe
+      x-lv-module: llm
       # The spec previously declared multipart/form-data here while the
       # implementation has always read a raw body. Corrected in favour of the
       # implementation: no client generated from this spec was calling it, and
@@ -4323,6 +5160,7 @@ paths:
     post:
       tags: [LLM]
       operationId: openAIAudioTranscriptions
+      x-lv-module: llm
       summary: >-
         Speech-to-text in OpenAI's wire format. Lets a tenant's Hermes
         container point its OpenAI speech client at LuminaVault instead of at
@@ -4372,6 +5210,7 @@ paths:
     post:
       tags: [LLM]
       operationId: openAIAudioSpeech
+      x-lv-module: llm
       summary: Text-to-speech in OpenAI's wire format. Not yet implemented.
       description: >-
         Mounted but returns 501. Tenant containers are configured to send
@@ -4395,6 +5234,7 @@ paths:
     post:
       tags: [LLM]
       operationId: llmTTS
+      x-lv-module: tts
       summary: Text-to-speech (HER-204). Returns audio/mpeg.
       requestBody:
         required: true
@@ -4414,6 +5254,7 @@ paths:
     post:
       tags: [LLM]
       operationId: llmVisionEmbed
+      x-lv-module: vision
       summary: Image embedding (HER-205). Returns a float vector.
       requestBody:
         required: true
@@ -4431,6 +5272,7 @@ paths:
     post:
       tags: [LLM]
       operationId: llmVisionSearch
+      x-lv-module: vision
       summary: Find the memories nearest an image (HER-205 follow-up).
       description: |
         Embeds the image and runs its vector against `memories.embedding`,
@@ -4466,12 +5308,299 @@ paths:
         '503':
           description: No vision embed provider configured.
 
+  /v1/integrations/xai:
+    get:
+      operationId: integrationsXaiStatus
+      x-lv-module: integrations
+      summary: Current state of the tenant's xAI Grok OAuth connection.
+      responses:
+        '200':
+          description: Connection status.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/XaiStatusResponse' }
+        '401':
+          description: No tenant identity on the request (missing or invalid JWT).
+    delete:
+      operationId: integrationsXaiRevoke
+      x-lv-module: integrations
+      summary: Disconnect xAI Grok OAuth for the tenant.
+      description: Returns the post-revoke status (200 with a body, not 204).
+      responses:
+        '200':
+          description: Status after revocation.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/XaiStatusResponse' }
+        '401':
+          description: No tenant identity on the request (missing or invalid JWT).
+
+  /v1/integrations/xai/start:
+    post:
+      operationId: integrationsXaiStart
+      x-lv-module: integrations
+      summary: Begin the xAI Grok OAuth flow — returns the authorize URL to open.
+      description: >-
+        The client opens `authorizeURL` in a web view and echoes `sessionID`
+        to `/complete` together with the captured callback URL. Server-side
+        session TTL is 10 minutes. No request body is read.
+      responses:
+        '200':
+          description: OAuth session started.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/XaiStartResponse' }
+        '401':
+          description: No tenant identity on the request (missing or invalid JWT).
+
+  /v1/integrations/xai/complete:
+    post:
+      operationId: integrationsXaiComplete
+      x-lv-module: integrations
+      summary: Finish the xAI Grok OAuth flow with the captured callback URL.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/XaiCompleteRequest' }
+      responses:
+        '200':
+          description: Connection status after completion.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/XaiStatusResponse' }
+        '400':
+          description: Body not decodable, or `sessionID required` / `callbackURL required` (empty string).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '404':
+          description: '`session not found or expired`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '501':
+          description: '`xai oauth backend not enabled`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '502':
+          description: '`xai oauth backend failed`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  /v1/integrations/nous:
+    get:
+      operationId: integrationsNousStatus
+      x-lv-module: integrations
+      summary: Current state of the tenant's Nous Portal OAuth connection.
+      responses:
+        '200':
+          description: Connection status.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NousStatusResponse' }
+        '401':
+          description: No tenant identity on the request (missing or invalid JWT).
+    delete:
+      operationId: integrationsNousRevoke
+      x-lv-module: integrations
+      summary: Disconnect Nous Portal OAuth for the tenant.
+      description: Returns the post-revoke status (200 with a body, not 204).
+      responses:
+        '200':
+          description: Status after revocation.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NousStatusResponse' }
+        '401':
+          description: No tenant identity on the request (missing or invalid JWT).
+
+  /v1/integrations/nous/start:
+    post:
+      operationId: integrationsNousStart
+      x-lv-module: integrations
+      summary: Begin the Nous Portal OAuth device-code flow.
+      description: >-
+        Returns the verification URL (and user code when the backend prints
+        one) for the user to approve; then call `/complete` with `sessionID`.
+        No request body is read.
+      responses:
+        '200':
+          description: Device-code session started.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NousStartResponse' }
+        '401':
+          description: No tenant identity on the request (missing or invalid JWT).
+        '501':
+          description: '`nous oauth backend not enabled`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '502':
+          description: '`nous oauth backend did not return a verification URL`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  /v1/integrations/nous/complete:
+    post:
+      operationId: integrationsNousComplete
+      x-lv-module: integrations
+      summary: Finish the Nous Portal OAuth device-code flow.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NousCompleteRequest' }
+      responses:
+        '200':
+          description: Connection status after completion.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NousStatusResponse' }
+        '400':
+          description: Body not decodable, or `sessionID required` (empty string).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '404':
+          description: '`session not found or expired`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '502':
+          description: '`nous oauth backend failed`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  /v1/grok/chat:
+    post:
+      operationId: grokChat
+      x-lv-module: grok
+      summary: Chat with Grok through the tenant's Hermes container.
+      description: >-
+        Premium-gated (pro / ultimate, or a tier override) and requires a
+        completed xAI OAuth connection. Always answers with one JSON body —
+        `stream` is forwarded upstream but this route does not stream.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GrokChatRequest' }
+      responses:
+        '200':
+          description: Synthesised reply.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GrokChatResponse' }
+        '400':
+          description: Body missing or not decodable as `GrokChatRequest`.
+        '401':
+          description: Not authenticated.
+        '402':
+          $ref: '#/components/responses/PremiumRequired'
+        '409':
+          $ref: '#/components/responses/XaiNotConnected'
+        '502':
+          $ref: '#/components/responses/GrokUpstreamError'
+
+  /v1/grok/x-search:
+    post:
+      operationId: grokXSearch
+      x-lv-module: grok
+      summary: Grok `x_search` — answer a query from X posts, with citations.
+      description: >-
+        Premium-gated (pro / ultimate, or a tier override) and requires a
+        completed xAI OAuth connection.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GrokXSearchRequest' }
+      responses:
+        '200':
+          description: Answer and citations.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GrokXSearchResponse' }
+        '400':
+          description: Body not decodable, or `query required` (empty `query`).
+        '401':
+          description: Not authenticated.
+        '402':
+          $ref: '#/components/responses/PremiumRequired'
+        '409':
+          $ref: '#/components/responses/XaiNotConnected'
+        '502':
+          $ref: '#/components/responses/GrokUpstreamError'
+
+  /v1/grok/vision:
+    post:
+      operationId: grokVision
+      x-lv-module: grok
+      summary: Grok multimodal — answer a prompt about one or more images.
+      description: >-
+        Premium-gated (pro / ultimate, or a tier override) and requires a
+        completed xAI OAuth connection. `imageURLs` takes public HTTPS image
+        URLs; base64 data URIs are not supported.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GrokVisionRequest' }
+      responses:
+        '200':
+          description: Answer.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GrokVisionResponse' }
+        '400':
+          description: Body not decodable, or `imageURLs required` (empty array).
+        '401':
+          description: Not authenticated.
+        '402':
+          $ref: '#/components/responses/PremiumRequired'
+        '409':
+          $ref: '#/components/responses/XaiNotConnected'
+        '502':
+          $ref: '#/components/responses/GrokUpstreamError'
+
+  /v1/grok/tts:
+    post:
+      operationId: grokTTS
+      x-lv-module: grok
+      summary: Grok text-to-speech — not implemented yet; always 501.
+      description: >-
+        Reserved route. After the premium guard it always answers 501
+        `tts_coming_soon`; the body is not read. `GrokTTSRequest` is the shape
+        clients are expected to send once an upstream TTS provider is wired.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GrokTTSRequest' }
+      responses:
+        '401':
+          description: Not authenticated.
+        '402':
+          $ref: '#/components/responses/PremiumRequired'
+        '501':
+          description: '`tts_coming_soon`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
   # ────────────────────────────── Memory ────────────────────────────────
 
   /v1/memory:
     get:
       tags: [Memory]
       operationId: memoryList
+      x-lv-module: memory
       summary: List memories for the authenticated user.
       parameters:
         - in: query
@@ -4516,6 +5645,7 @@ paths:
     post:
       tags: [Memory]
       operationId: memoryUpsert
+      x-lv-module: memory
       summary: Capture a memory (creates or updates by content hash).
       requestBody:
         required: true
@@ -4533,6 +5663,7 @@ paths:
     post:
       tags: [Memory]
       operationId: memorySearch
+      x-lv-module: memory
       summary: Semantic + lexical memory search.
       requestBody:
         required: true
@@ -4552,6 +5683,7 @@ paths:
     get:
       tags: [Memory]
       operationId: memoryGet
+      x-lv-module: memory
       summary: Fetch a single memory.
       responses:
         '200':
@@ -4564,6 +5696,7 @@ paths:
     patch:
       tags: [Memory]
       operationId: memoryPatch
+      x-lv-module: memory
       summary: Partial update.
       requestBody:
         required: true
@@ -4579,6 +5712,7 @@ paths:
     delete:
       tags: [Memory]
       operationId: memoryDelete
+      x-lv-module: memory
       summary: Hard delete (does not archive).
       responses:
         '204':
@@ -4590,6 +5724,7 @@ paths:
     get:
       tags: [Memory]
       operationId: memoryLineage
+      x-lv-module: memory
       summary: Trace a memory's source vault file + enrichment chain.
       responses:
         '200':
@@ -4604,6 +5739,7 @@ paths:
     get:
       tags: [Memory]
       operationId: memoryRelated
+      x-lv-module: memory
       summary: Memories close to this one in meaning ("connects to N").
       description: |
         Nearest first, by the embedding already stored on the memory. Leaves
@@ -4631,6 +5767,7 @@ paths:
     get:
       tags: [Memory]
       operationId: memoryProvenance
+      x-lv-module: memory
       summary: Append-only creator and updater history for a memory.
       responses:
         '200':
@@ -4645,6 +5782,7 @@ paths:
     post:
       tags: [Memory]
       operationId: memoryReview
+      x-lv-module: memory
       summary: Mark a memory as explicitly reviewed now.
       description: |
         Always sets `reviewedAt`, bumps `reviewCount` and records a
@@ -4673,6 +5811,7 @@ paths:
     get:
       tags: [Memory]
       operationId: memoryFacets
+      x-lv-module: memory
       summary: Provider, model, source, and date filter options.
       responses:
         '200':
@@ -4685,6 +5824,7 @@ paths:
     get:
       tags: [Memory]
       operationId: memoryGraph
+      x-lv-module: memory
       summary: Derived second-brain graph for the current tenant (HER-235).
       description: |
         Nodes are memories and (optionally) wiki pages — one per text-like
@@ -4735,6 +5875,7 @@ paths:
     get:
       tags: [Memory]
       operationId: knowledgeGraph
+      x-lv-module: knowledge
       summary: Evidence-backed claim, entity, and event graph.
       parameters:
         - { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 2000, default: 800 } }
@@ -4753,6 +5894,7 @@ paths:
     post:
       tags: [Memory]
       operationId: knowledgeReason
+      x-lv-module: knowledge
       summary: Run an evidence-backed reasoning query.
       requestBody:
         required: true
@@ -4770,6 +5912,7 @@ paths:
     post:
       tags: [Memory]
       operationId: knowledgeReasonStream
+      x-lv-module: knowledge
       summary: Stream an evidence-backed reasoning query over SSE.
       requestBody:
         required: true
@@ -4787,6 +5930,7 @@ paths:
     post:
       tags: [Memory]
       operationId: explainKnowledgeConnection
+      x-lv-module: knowledge
       summary: Explain the strongest bounded paths between two knowledge nodes.
       requestBody:
         required: true
@@ -4804,6 +5948,7 @@ paths:
     post:
       tags: [Memory]
       operationId: confirmKnowledgeEdge
+      x-lv-module: knowledge
       summary: Confirm a suggested connection.
       parameters:
         - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
@@ -4823,6 +5968,7 @@ paths:
     post:
       tags: [Memory]
       operationId: dismissKnowledgeEdge
+      x-lv-module: knowledge
       summary: Dismiss a suggested connection without deleting its audit record.
       parameters:
         - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
@@ -4844,6 +5990,7 @@ paths:
     post:
       tags: [Capture]
       operationId: captureSafari
+      x-lv-module: capture
       summary: Capture a URL with async OG / YouTube / X enrichment (HER-149).
       requestBody:
         required: true
@@ -4864,6 +6011,7 @@ paths:
     post:
       tags: [Query]
       operationId: query
+      x-lv-module: memory
       summary: Natural-language semantic search across memories + vault.
       requestBody:
         required: true
@@ -4881,6 +6029,7 @@ paths:
     post:
       tags: [Query]
       operationId: queryStream
+      x-lv-module: memory
       summary: Streaming natural-language semantic query (SSE).
       description: |
         Returns `text/event-stream` — each event is a JSON-encoded
@@ -4915,6 +6064,7 @@ paths:
     get:
       tags: [Conversations]
       operationId: chatInbox
+      x-lv-module: chat
       summary: Primary Chats inbox summary list.
       parameters:
         - in: query
@@ -4936,6 +6086,7 @@ paths:
     post:
       tags: [Conversations]
       operationId: conversationCreate
+      x-lv-module: chat
       summary: Create a new chat conversation (HER-37).
       requestBody:
         required: true
@@ -4951,6 +6102,7 @@ paths:
     get:
       tags: [Conversations]
       operationId: conversationList
+      x-lv-module: chat
       summary: List the caller's conversations, newest first (HER-37).
       responses:
         '200':
@@ -4968,6 +6120,7 @@ paths:
     get:
       tags: [Conversations]
       operationId: conversationGet
+      x-lv-module: chat
       summary: Conversation detail with full message transcript (HER-37).
       responses:
         '200':
@@ -4980,6 +6133,7 @@ paths:
     delete:
       tags: [Conversations]
       operationId: conversationDelete
+      x-lv-module: chat
       summary: Delete a conversation and its messages (HER-37).
       responses:
         '204':
@@ -4996,6 +6150,7 @@ paths:
     get:
       tags: [Conversations]
       operationId: conversationTraces
+      x-lv-module: chat
       summary: What each turn in this thread actually did.
       description: |
         The expansion behind the summary on `ConversationMessageDTO`: which
@@ -5024,6 +6179,7 @@ paths:
     post:
       tags: [Conversations]
       operationId: conversationStreamReply
+      x-lv-module: chat
       summary: Stream an assistant turn over SSE (HER-37).
       description: |
         Persists the user's message immediately, then streams the
@@ -5062,6 +6218,7 @@ paths:
     post:
       tags: [Conversations]
       operationId: conversationPrepareLocalReply
+      x-lv-module: chat
       summary: Persist a user turn and prepare grounded context for local inference.
       requestBody:
         required: true
@@ -5084,6 +6241,7 @@ paths:
     post:
       tags: [Conversations]
       operationId: conversationCommitLocalReply
+      x-lv-module: chat
       summary: Idempotently commit a locally generated assistant turn.
       requestBody:
         required: true
@@ -5110,6 +6268,7 @@ paths:
     delete:
       tags: [Conversations]
       operationId: conversationCancelLocalReply
+      x-lv-module: chat
       summary: Cancel an uncommitted prepared local execution.
       responses:
         '204': { description: Cancelled. }
@@ -5128,6 +6287,7 @@ paths:
     post:
       tags: [Conversations]
       operationId: localExecutionToolInvoke
+      x-lv-module: chat
       summary: Invoke an allow-listed read-only tool for an active local execution.
       requestBody:
         required: true
@@ -5148,6 +6308,7 @@ paths:
     get:
       tags: [Memory]
       operationId: localMemorySync
+      x-lv-module: memory
       summary: Incrementally synchronize memories for an encrypted client cache.
       parameters:
         - in: query
@@ -5170,6 +6331,7 @@ paths:
     post:
       tags: [Memos]
       operationId: memoGenerate
+      x-lv-module: memory
       summary: Generate a memo (agent loop → markdown synthesis → vault save).
       requestBody:
         required: true
@@ -5185,6 +6347,7 @@ paths:
     get:
       tags: [Memos]
       operationId: memoList
+      x-lv-module: memory
       summary: List memos saved under memos/<date>/<slug>.md for the caller (HER-37).
       responses:
         '200':
@@ -5199,6 +6362,7 @@ paths:
     post:
       tags: [Vault]
       operationId: vaultUpload
+      x-lv-module: vault
       summary: Upload a vault file (markdown / image / arbitrary blob).
       description: |
         Raw-body upload. The relative path under `<rawRoot>/` is supplied via
@@ -5241,6 +6405,7 @@ paths:
     get:
       tags: [Vault]
       operationId: vaultList
+      x-lv-module: vault
       summary: List vault files.
       parameters:
         - in: query
@@ -5282,6 +6447,7 @@ paths:
     post:
       tags: [Vault]
       operationId: vaultMove
+      x-lv-module: vault
       summary: Rename / move a vault file.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -5301,11 +6467,17 @@ paths:
     get:
       tags: [Vault]
       operationId: vaultRead
+      x-lv-module: vault
       summary: Stream raw bytes for a single tenant-owned vault file (HER-105).
       parameters:
         - in: path
           name: path
           required: true
+          description: >-
+            Tenant-relative vault path. Served by a Hummingbird `**` wildcard,
+            so it spans multiple `/`-separated segments (e.g.
+            `notes/2026/today.md`), unlike an ordinary single-segment path
+            parameter.
           schema: { type: string }
       responses:
         '200':
@@ -5318,11 +6490,17 @@ paths:
     delete:
       tags: [Vault]
       operationId: vaultDelete
+      x-lv-module: vault
       summary: Delete a vault file by tenant-relative path.
       parameters:
         - in: path
           name: path
           required: true
+          description: >-
+            Tenant-relative vault path. Served by a Hummingbird `**` wildcard,
+            so it spans multiple `/`-separated segments (e.g.
+            `notes/2026/today.md`), unlike an ordinary single-segment path
+            parameter.
           schema: { type: string }
         - $ref: '#/components/parameters/IdempotencyKey'
       responses:
@@ -5335,6 +6513,7 @@ paths:
     get:
       tags: [Vault]
       operationId: vaultExport
+      x-lv-module: vault
       summary: Stream the full per-tenant vault as a ZIP (HER-91).
       parameters:
         - in: query
@@ -5354,6 +6533,7 @@ paths:
     post:
       tags: [Vault]
       operationId: vaultCreate
+      x-lv-module: vault
       summary: HER-35 — initialize the tenant vault (folders, SOUL.md, default Spaces). Idempotent.
       requestBody:
         required: false
@@ -5371,6 +6551,7 @@ paths:
     get:
       tags: [Vault]
       operationId: vaultIndexStatus
+      x-lv-module: vault
       summary: Is the retrievable index up to date with the vault?
       description: |
         Reports how much of the vault is actually searchable with citations.
@@ -5397,6 +6578,7 @@ paths:
     post:
       tags: [Vault]
       operationId: mcpJsonRpc
+      x-lv-module: mcp
       summary: Model Context Protocol endpoint (JSON-RPC 2.0)
       description: |
         Lets an MCP client — Claude Code, Cursor, or any other — ground on this
@@ -5467,6 +6649,7 @@ paths:
     get:
       tags: [Vault]
       operationId: vaultLint
+      x-lv-module: vault
       summary: Health checks over the vault and its index
       description: |
         Turns "my notes feel messy" into a specific list: broken and ambiguous
@@ -5498,6 +6681,7 @@ paths:
     get:
       tags: [Vault]
       operationId: vaultContext
+      x-lv-module: vault
       summary: Deterministic evidence packet for one document
       description: |
         What should be understood alongside this document: its heading
@@ -5537,6 +6721,7 @@ paths:
     get:
       tags: [Vault]
       operationId: vaultDocumentLinks
+      x-lv-module: vault
       summary: Outgoing wiki links and backlinks for one document
       description: |
         `outgoing` is every `[[wikilink]]` written in this document, with its
@@ -5570,6 +6755,7 @@ paths:
     get:
       tags: [Vault]
       operationId: vaultStatus
+      x-lv-module: vault
       summary: HER-35 — report whether the tenant vault has been initialized.
       responses:
         '200':
@@ -5584,6 +6770,7 @@ paths:
     post:
       tags: [KB]
       operationId: memoryCompile
+      x-lv-module: kb
       summary: Compile vault rows through the Hermes learning loop ("Sync & Learn").
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -5623,6 +6810,7 @@ paths:
     get:
       tags: [KB]
       operationId: memoryCompilePending
+      x-lv-module: kb
       summary: Cheap count of vault rows with `processed_at` IS NULL (HER-293).
       description: |
         Drives the disabled state and microcopy of the iOS "Sync & Learn"
@@ -5647,6 +6835,7 @@ paths:
     post:
       tags: [Import]
       operationId: importLinks
+      x-lv-module: import
       summary: Stage a batch of URLs into the import inbox ("Feed Your Brain").
       description: |
         Stages each http(s) URL as a vault file in the reserved `imported`
@@ -5668,6 +6857,7 @@ paths:
     post:
       tags: [Import]
       operationId: importBookmarks
+      x-lv-module: import
       summary: Stage links from a Netscape bookmarks HTML export.
       description: |
         Raw bookmarks HTML body (Safari / Chrome "Export Bookmarks"). Parses
@@ -5689,6 +6879,7 @@ paths:
     post:
       tags: [Import]
       operationId: importFiles
+      x-lv-module: import
       summary: Open an import session over already-uploaded vault files.
       description: |
         For photos / documents / EventKit-rendered notes: the client first
@@ -5706,10 +6897,46 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ImportCreateResponse' }
 
+  /v1/import/vault-bulk:
+    post:
+      operationId: importVaultBulk
+      x-lv-module: import
+      summary: Bulk-ingest external markdown (a Hermes/Obsidian vault) into one Space.
+      description: |
+        Each file becomes a vault file + memory + embedding in the named Space
+        (created if missing), deduplicated. At most 2000 files per request and
+        a 96 MB body; large vaults import in batches. Also drivable directly,
+        e.g. by a VPS push-sync script.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VaultBulkImportRequest' }
+      responses:
+        '200':
+          description: Per-batch counts.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VaultBulkImportResponse' }
+        '400':
+          description: |
+            Stable code in `message`: `invalid_body` (not decodable),
+            `space_required` (blank `space`), `no_files` (empty `files`),
+            `too_many_files_max_2000`.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '401':
+          description: No tenant identity on the request (missing or invalid JWT).
+        '413':
+          description: Body larger than 96 MB.
+        '507': { $ref: '#/components/responses/InsufficientStorage' }
+
   /v1/import/{id}:
     get:
       tags: [Import]
       operationId: importStatus
+      x-lv-module: import
       summary: Import session status + items (with proposed Spaces).
       parameters:
         - name: id
@@ -5727,6 +6954,7 @@ paths:
     post:
       tags: [Import]
       operationId: importCategorize
+      x-lv-module: import
       summary: Run Smart Import LLM categorization; returns the proposal.
       parameters:
         - name: id
@@ -5744,6 +6972,7 @@ paths:
     post:
       tags: [Import]
       operationId: importApprove
+      x-lv-module: import
       summary: Apply the Space mapping — file items, enrich links, scoped compile.
       parameters:
         - name: id
@@ -5766,6 +6995,7 @@ paths:
     post:
       tags: [Ingestion]
       operationId: ingestionCreate
+      x-lv-module: ingestion
       summary: Create a multimodal ingestion batch.
       requestBody:
         required: true
@@ -5782,6 +7012,7 @@ paths:
     get:
       tags: [Ingestion]
       operationId: ingestionList
+      x-lv-module: ingestion
       summary: List recent multimodal ingestion batches.
       responses:
         '200':
@@ -5796,6 +7027,7 @@ paths:
     get:
       tags: [Ingestion]
       operationId: ingestionSourceDownload
+      x-lv-module: ingestion
       summary: Stream a short-lived BYO Hermes source with optional byte ranges.
       security: []
       parameters:
@@ -5814,6 +7046,7 @@ paths:
     head:
       tags: [Ingestion]
       operationId: ingestionSourceHead
+      x-lv-module: ingestion
       summary: Inspect short-lived BYO Hermes source metadata.
       security: []
       responses:
@@ -5824,6 +7057,7 @@ paths:
     get:
       tags: [Ingestion]
       operationId: ingestionDetail
+      x-lv-module: ingestion
       summary: Get one ingestion batch and item progress.
       parameters:
         - { name: batchID, in: path, required: true, schema: { type: string, format: uuid } }
@@ -5838,6 +7072,7 @@ paths:
     get:
       tags: [Ingestion]
       operationId: ingestionEvents
+      x-lv-module: ingestion
       summary: Stream durable ingestion progress and terminal events.
       parameters:
         - { name: batchID, in: path, required: true, schema: { type: string, format: uuid } }
@@ -5854,6 +7089,7 @@ paths:
     put:
       tags: [Ingestion]
       operationId: ingestionUploadChunk
+      x-lv-module: ingestion
       summary: Upload one idempotent chunk (maximum 8 MiB).
       parameters:
         - { name: batchID, in: path, required: true, schema: { type: string, format: uuid } }
@@ -5872,6 +7108,7 @@ paths:
     post:
       tags: [Ingestion]
       operationId: ingestionCompleteUpload
+      x-lv-module: ingestion
       summary: Assemble, validate, vault, and process a completed upload.
       parameters:
         - { name: batchID, in: path, required: true, schema: { type: string, format: uuid } }
@@ -5888,6 +7125,7 @@ paths:
     post:
       tags: [Ingestion]
       operationId: ingestionRetry
+      x-lv-module: ingestion
       summary: Retry a failed or capability-blocked item.
       parameters:
         - { name: batchID, in: path, required: true, schema: { type: string, format: uuid } }
@@ -5903,6 +7141,7 @@ paths:
     delete:
       tags: [Ingestion]
       operationId: ingestionCancelItem
+      x-lv-module: ingestion
       summary: Cancel an unfinished ingestion item and discard temporary chunks.
       parameters:
         - { name: batchID, in: path, required: true, schema: { type: string, format: uuid } }
@@ -5918,6 +7157,7 @@ paths:
     get:
       tags: [Plugins]
       operationId: newsTicker
+      x-lv-module: news
       summary: Breaking-news headlines for the installed news-ticker plugin.
       description: >-
         Curated general-news feeds plus the tenant's own (the plugin's
@@ -5945,6 +7185,7 @@ paths:
     get:
       tags: [Plugins]
       operationId: pluginCatalog
+      x-lv-module: plugins
       summary: List first-party plugins available to install.
       parameters:
         - name: category
@@ -5974,6 +7215,7 @@ paths:
     get:
       tags: [Plugins]
       operationId: pluginHermesSkills
+      x-lv-module: plugins
       summary: Read-only list of skills installed in the tenant's Hermes agent.
       description: |
         Proxies the tenant's Hermes `GET /v1/skills`. Returns catalog entries
@@ -5989,6 +7231,7 @@ paths:
     post:
       tags: [Plugins]
       operationId: pluginHermesSkillInstall
+      x-lv-module: plugins
       summary: Install a Hermes Hub skill into the tenant's Hermes container.
       description: |
         Runs `hermes skills install <id>` inside the caller's per-tenant Hermes
@@ -6011,6 +7254,7 @@ paths:
     delete:
       tags: [Plugins]
       operationId: pluginHermesSkillUninstall
+      x-lv-module: plugins
       summary: Uninstall a skill from the tenant's Hermes container.
       description: |
         Runs `hermes skills uninstall <name>` inside the caller's container.
@@ -6031,6 +7275,7 @@ paths:
     get:
       tags: [Plugins]
       operationId: pluginInstalls
+      x-lv-module: plugins
       summary: List this tenant's plugin installs.
       responses:
         '200':
@@ -6041,6 +7286,7 @@ paths:
     post:
       tags: [Plugins]
       operationId: pluginInstall
+      x-lv-module: plugins
       summary: Install a plugin with its config (re-installing replaces config).
       description: |
         Validates `config` against the catalog entry's fields; secret values are
@@ -6067,6 +7313,7 @@ paths:
     patch:
       tags: [Plugins]
       operationId: pluginUpdateInstall
+      x-lv-module: plugins
       summary: Update an install's config and/or enable-disable it.
       parameters:
         - name: id
@@ -6087,6 +7334,7 @@ paths:
     delete:
       tags: [Plugins]
       operationId: pluginUninstall
+      x-lv-module: plugins
       summary: Uninstall a plugin.
       parameters:
         - name: id
@@ -6101,6 +7349,7 @@ paths:
     post:
       tags: [Plugins]
       operationId: pluginSync
+      x-lv-module: plugins
       summary: Run a connector install now — stages its items into the import inbox.
       description: |
         Connector capability only. Returns a standard import session id; follow
@@ -6121,6 +7370,7 @@ paths:
     get:
       tags: [Marketplace]
       operationId: marketplaceList
+      x-lv-module: marketplace
       summary: Browse published marketplace plugins.
       parameters:
         - { name: query, in: query, schema: { type: string } }
@@ -6135,6 +7385,7 @@ paths:
     get:
       tags: [Marketplace]
       operationId: marketplaceDetail
+      x-lv-module: marketplace
       summary: Get a published marketplace listing.
       parameters:
         - { name: slug, in: path, required: true, schema: { type: string } }
@@ -6146,6 +7397,7 @@ paths:
     get:
       tags: [Marketplace]
       operationId: marketplaceReviews
+      x-lv-module: marketplace
       parameters:
         - { name: slug, in: path, required: true, schema: { type: string } }
       responses:
@@ -6155,6 +7407,7 @@ paths:
     put:
       tags: [Marketplace]
       operationId: marketplaceRate
+      x-lv-module: marketplace
       summary: Create or replace the caller's verified-install rating.
       parameters:
         - { name: slug, in: path, required: true, schema: { type: string } }
@@ -6169,6 +7422,7 @@ paths:
     post:
       tags: [Marketplace]
       operationId: marketplaceInstall
+      x-lv-module: marketplace
       summary: Install an approved immutable version with explicit permission grants.
       parameters:
         - { name: slug, in: path, required: true, schema: { type: string } }
@@ -6182,6 +7436,7 @@ paths:
     post:
       tags: [Marketplace]
       operationId: marketplaceUpgrade
+      x-lv-module: marketplace
       summary: Upgrade an installed plugin with an optimistic version lock and renewed permission consent.
       parameters:
         - { name: slug, in: path, required: true, schema: { type: string } }
@@ -6196,6 +7451,7 @@ paths:
     post:
       tags: [Marketplace]
       operationId: marketplaceRunTool
+      x-lv-module: marketplace
       summary: Execute an installed approved WASM tool in the isolated runner.
       parameters:
         - { name: slug, in: path, required: true, schema: { type: string } }
@@ -6210,6 +7466,7 @@ paths:
     post:
       tags: [Marketplace]
       operationId: marketplacePublisherApply
+      x-lv-module: marketplace
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/PublisherApplicationRequest' } } }
@@ -6220,6 +7477,7 @@ paths:
     get:
       tags: [Marketplace]
       operationId: marketplacePublisherGet
+      x-lv-module: marketplace
       responses:
         '200': { description: Caller publisher profile., content: { application/json: { schema: { $ref: '#/components/schemas/MarketplacePublisherDTO' } } } }
 
@@ -6227,6 +7485,7 @@ paths:
     post:
       tags: [Marketplace]
       operationId: marketplacePublisherCreatePlugin
+      x-lv-module: marketplace
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/MarketplaceListingCreateRequest' } } }
@@ -6237,6 +7496,7 @@ paths:
     post:
       tags: [Marketplace]
       operationId: marketplacePublisherCreateVersion
+      x-lv-module: marketplace
       parameters:
         - { name: slug, in: path, required: true, schema: { type: string } }
       requestBody:
@@ -6249,6 +7509,7 @@ paths:
     post:
       tags: [Marketplace]
       operationId: marketplacePublisherUploadArtifact
+      x-lv-module: marketplace
       summary: Upload a WASM module into the immutable content-addressed artifact store.
       parameters:
         - { name: slug, in: path, required: true, schema: { type: string } }
@@ -6262,6 +7523,7 @@ paths:
     post:
       tags: [Marketplace]
       operationId: marketplacePublisherSubmitVersion
+      x-lv-module: marketplace
       parameters:
         - { name: slug, in: path, required: true, schema: { type: string } }
         - { name: versionID, in: path, required: true, schema: { type: string, format: uuid } }
@@ -6272,6 +7534,7 @@ paths:
     get:
       tags: [Marketplace]
       operationId: marketplacePublisherSubmissions
+      x-lv-module: marketplace
       responses:
         '200': { description: Caller submissions., content: { application/json: { schema: { $ref: '#/components/schemas/MarketplaceSubmissionsResponse' } } } }
 
@@ -6279,6 +7542,7 @@ paths:
     get:
       tags: [Marketplace]
       operationId: marketplaceAdminSubmissions
+      x-lv-module: marketplace
       responses:
         '200': { description: Moderation queue., content: { application/json: { schema: { $ref: '#/components/schemas/MarketplaceSubmissionsResponse' } } } }
         '403': { description: Admin required. }
@@ -6287,6 +7551,7 @@ paths:
     get:
       tags: [Marketplace]
       operationId: marketplaceAdminPublishers
+      x-lv-module: marketplace
       responses:
         '200': { description: Pending publisher applications., content: { application/json: { schema: { $ref: '#/components/schemas/MarketplacePublishersResponse' } } } }
         '403': { description: Admin required. }
@@ -6295,6 +7560,7 @@ paths:
     post:
       tags: [Marketplace]
       operationId: marketplaceAdminDecision
+      x-lv-module: marketplace
       parameters:
         - { name: submissionID, in: path, required: true, schema: { type: string, format: uuid } }
       requestBody:
@@ -6307,6 +7573,7 @@ paths:
     post:
       tags: [Marketplace]
       operationId: marketplaceAdminPublisherDecision
+      x-lv-module: marketplace
       parameters:
         - { name: publisherID, in: path, required: true, schema: { type: string, format: uuid } }
       requestBody:
@@ -6319,6 +7586,7 @@ paths:
     post:
       tags: [Marketplace]
       operationId: marketplaceAdminRevokeVersion
+      x-lv-module: marketplace
       parameters:
         - { name: versionID, in: path, required: true, schema: { type: string, format: uuid } }
       requestBody:
@@ -6331,6 +7599,7 @@ paths:
     post:
       tags: [KB]
       operationId: kbCompileLegacy
+      x-lv-module: app
       deprecated: true
       summary: Deprecated. Use POST /v1/memory-compile.
       description: |
@@ -6349,6 +7618,7 @@ paths:
     get:
       tags: [KB]
       operationId: kbCompilePendingLegacy
+      x-lv-module: app
       deprecated: true
       summary: Deprecated. Use GET /v1/memory-compile/pending.
       description: |
@@ -6368,6 +7638,7 @@ paths:
     get:
       tags: [Spaces]
       operationId: spacesList
+      x-lv-module: spaces
       summary: List spaces (user-defined organising folders).
       responses:
         '200':
@@ -6378,6 +7649,7 @@ paths:
     post:
       tags: [Spaces]
       operationId: spacesCreate
+      x-lv-module: spaces
       summary: Create a space.
       requestBody:
         required: true
@@ -6400,6 +7672,7 @@ paths:
     get:
       tags: [Spaces]
       operationId: spacesGet
+      x-lv-module: spaces
       summary: Get one space.
       responses:
         '200':
@@ -6410,6 +7683,7 @@ paths:
     put:
       tags: [Spaces]
       operationId: spacesUpdate
+      x-lv-module: spaces
       summary: Update a space.
       requestBody:
         required: true
@@ -6425,6 +7699,7 @@ paths:
     delete:
       tags: [Spaces]
       operationId: spacesDelete
+      x-lv-module: spaces
       summary: Delete a space.
       responses:
         '204':
@@ -6436,6 +7711,7 @@ paths:
     get:
       tags: [Soul]
       operationId: soulGet
+      x-lv-module: auth
       summary: Read SOUL.md (HER-85).
       responses:
         '200':
@@ -6446,6 +7722,7 @@ paths:
     put:
       tags: [Soul]
       operationId: soulPut
+      x-lv-module: auth
       summary: Write SOUL.md (full document replace).
       requestBody:
         required: true
@@ -6461,6 +7738,7 @@ paths:
     delete:
       tags: [Soul]
       operationId: soulDelete
+      x-lv-module: auth
       summary: Reset SOUL.md to the bootstrap template.
       responses:
         '204':
@@ -6470,6 +7748,7 @@ paths:
     post:
       tags: [Soul]
       operationId: composeSoul
+      x-lv-module: auth
       summary: Compose a SOUL.md from structured agent traits.
       description: >-
         Renders the onboarding quiz answers into the canonical template
@@ -6496,6 +7775,7 @@ paths:
     get:
       tags: [Achievements]
       operationId: achievementsList
+      x-lv-module: achievements
       summary: Full achievements catalog joined to per-tenant progress.
       responses:
         '200':
@@ -6508,6 +7788,7 @@ paths:
     get:
       tags: [Achievements]
       operationId: achievementsRecent
+      x-lv-module: achievements
       summary: Recently unlocked achievements.
       responses:
         '200':
@@ -6522,6 +7803,7 @@ paths:
     post:
       tags: [Health]
       operationId: healthIngest
+      x-lv-module: health
       summary: Ingest health events (Apple Health / Withings / manual).
       requestBody:
         required: true
@@ -6537,6 +7819,7 @@ paths:
     get:
       tags: [Health]
       operationId: healthRead
+      x-lv-module: health
       summary: Read ingested health events (HER-202).
       parameters:
         - in: query
@@ -6565,6 +7848,7 @@ paths:
     get:
       tags: [Health]
       operationId: healthDaily
+      x-lv-module: health
       summary: Per-day aggregation window for a single event type (HER-118 sparkline source).
       description: |
         Returns a fixed-length chronological window of daily aggregates for the
@@ -6595,6 +7879,7 @@ paths:
     post:
       tags: [Skills]
       operationId: skillsSlash
+      x-lv-module: skills
       summary: Dispatch a chat slash command to a skill or built-in service.
       requestBody:
         required: true
@@ -6621,6 +7906,7 @@ paths:
     post:
       tags: [Skills]
       operationId: skillsRun
+      x-lv-module: skills
       summary: Manually trigger a skill run.
       parameters:
         - in: path
@@ -6652,6 +7938,7 @@ paths:
     get:
       tags: [WebSocket]
       operationId: wsUpgrade
+      x-lv-module: app
       summary: Per-tenant WebSocket upgrade (broadcast channel).
       parameters:
         - in: header
@@ -6670,6 +7957,7 @@ paths:
     get:
       tags: [Admin]
       operationId: adminHermesProfilesHealth
+      x-lv-module: admin
       summary: Hermes-profile reconciliation health snapshot.
       security:
         - adminToken: []
@@ -6684,6 +7972,7 @@ paths:
     post:
       tags: [Admin]
       operationId: adminHermesProfilesReconcile
+      x-lv-module: admin
       summary: Force-run the reconciler pass.
       security:
         - adminToken: []
@@ -6698,6 +7987,7 @@ paths:
     post:
       tags: [Admin]
       operationId: adminHermesProfilesReap
+      x-lv-module: admin
       summary: Delete profile.json files with no matching user row.
       security:
         - adminToken: []
@@ -6712,6 +8002,7 @@ paths:
     get:
       tags: [Admin]
       operationId: adminLLMHealth
+      x-lv-module: llm
       summary: Provider-registry health (per-provider 2xx/last-error).
       security:
         - adminToken: []
@@ -6726,6 +8017,7 @@ paths:
     post:
       tags: [Admin]
       operationId: adminHealthCorrelateAll
+      x-lv-module: admin
       summary: Run the health-correlation engine across all tenants.
       security:
         - adminToken: []
@@ -6740,6 +8032,7 @@ paths:
     post:
       tags: [Admin]
       operationId: adminHealthCorrelateOne
+      x-lv-module: admin
       summary: Run health correlation for a single tenant.
       security:
         - adminToken: []
@@ -6759,6 +8052,7 @@ paths:
     post:
       tags: [Admin]
       operationId: adminMemoryRecomputeAll
+      x-lv-module: admin
       summary: Recompute memory scores for all tenants.
       security:
         - adminToken: []
@@ -6773,6 +8067,7 @@ paths:
     post:
       tags: [Admin]
       operationId: adminMemoryRecomputeOne
+      x-lv-module: admin
       summary: Recompute memory scores for one tenant.
       security:
         - adminToken: []
@@ -6792,6 +8087,7 @@ paths:
     post:
       tags: [Admin]
       operationId: adminMemoryPruneAll
+      x-lv-module: admin
       summary: Run memory pruning across all tenants.
       security:
         - adminToken: []
@@ -6806,6 +8102,7 @@ paths:
     post:
       tags: [Admin]
       operationId: adminMemoryPruneOne
+      x-lv-module: admin
       summary: Prune memories for one tenant.
       security:
         - adminToken: []
@@ -6821,10 +8118,96 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/AdminMemoryPruneResponse' }
 
+  /v1/admin/memory/chunks/backfill/{userID}:
+    post:
+      operationId: adminMemoryChunkBackfill
+      x-lv-module: admin
+      summary: Index one batch of a tenant's un-chunked memories.
+      description: |
+        Batch-at-a-time, not run-to-completion: each memory costs several
+        embedding calls, so an operator draining a large vault can watch
+        progress and stop. Call repeatedly until `scanned` comes back 0.
+
+        Admin token is read from the `X-Admin-Token` header
+        (`AdminTokenMiddleware`); an unset `admin.token` answers 404
+        `admin disabled`.
+      security:
+        - adminTokenHeader: []
+      parameters:
+        - in: path
+          name: userID
+          required: true
+          schema: { type: string, format: uuid }
+        - in: query
+          name: batchSize
+          required: false
+          description: >-
+            Memories per call; default 50, clamped to 1–500. A non-integer
+            value is ignored (the default applies), not rejected.
+          schema: { type: integer, default: 50 }
+      responses:
+        '200':
+          description: Batch result.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChunkBackfillResult' }
+        '400':
+          description: '`invalid userID`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '401':
+          description: '`admin token invalid`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '404':
+          description: '`admin disabled` — no admin token configured.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '500':
+          description: '`SQL driver required for chunk backfill`.'
+
+  /v1/admin/usage-events/prune:
+    post:
+      operationId: adminUsageEventsPrune
+      x-lv-module: admin
+      summary: Retention sweep — delete `usage_events` rows past the retention window.
+      description: |
+        Batched and idempotent; driven by host cron. Returns the policy with
+        the result, so a sweep reporting `enabled: false` signals a
+        configuration problem (`usageEvents.retentionDays` ≤ 0 disables
+        retention) instead of silently doing nothing. When `moreRemaining` is
+        true, run it again.
+
+        Admin token is read from the `X-Admin-Token` header
+        (`AdminTokenMiddleware`); an unset `admin.token` answers 404
+        `admin disabled`.
+      security:
+        - adminTokenHeader: []
+      responses:
+        '200':
+          description: Sweep summary.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UsageEventsRetentionSummary' }
+        '401':
+          description: '`admin token invalid`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '404':
+          description: '`admin disabled` — no admin token configured.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
   /v1/admin/users/{userID}/tier-override:
     put:
       tags: [Admin]
       operationId: adminTierOverride
+      x-lv-module: admin
       summary: Override a user's billing tier (support / TestFlight).
       security:
         - adminToken: []
@@ -6851,6 +8234,7 @@ paths:
     get:
       tags: [Reminders]
       operationId: remindersList
+      x-lv-module: reminders
       summary: List the caller's reminders.
       description: |
         Returns pending and fired reminders for the authed tenant, newest
@@ -6870,6 +8254,7 @@ paths:
     post:
       tags: [Reminders]
       operationId: remindersCreate
+      x-lv-module: reminders
       summary: Create a reminder.
       description: |
         `fireAt` is the first delivery time. Set `recurrenceCron` (a 5-field
@@ -6895,6 +8280,7 @@ paths:
     post:
       tags: [Reminders]
       operationId: remindersDetect
+      x-lv-module: reminders
       summary: Classify a chat message for reminder intent (HER-55).
       requestBody:
         required: true
@@ -6915,6 +8301,7 @@ paths:
     post:
       tags: [Reminders]
       operationId: appleRemindersSync
+      x-lv-module: apple
       summary: Ingest Apple Reminders (EventKit) selective-sync deltas.
       description: |
         Batch-upserts the iOS client's EventKit reminder deltas into the
@@ -6955,6 +8342,7 @@ paths:
     patch:
       tags: [Reminders]
       operationId: remindersPatch
+      x-lv-module: reminders
       summary: Update a reminder.
       description: |
         Any unset field is left unchanged. Editing `fireAt` re-arms a
@@ -6983,6 +8371,7 @@ paths:
     delete:
       tags: [Reminders]
       operationId: remindersDelete
+      x-lv-module: reminders
       summary: Delete a reminder.
       responses:
         '204':
@@ -6997,6 +8386,7 @@ paths:
     get:
       tags: [Calendar]
       operationId: calendarStatus
+      x-lv-module: calendar
       summary: Google Calendar connection state.
       description: |
         Reports whether the authed tenant has a connected Google Calendar,
@@ -7014,6 +8404,7 @@ paths:
     post:
       tags: [Calendar]
       operationId: calendarConnect
+      x-lv-module: calendar
       summary: Begin the Google Calendar OAuth flow.
       description: |
         Returns the Google consent URL. The client opens it in an in-app
@@ -7048,6 +8439,7 @@ paths:
     post:
       tags: [Calendar]
       operationId: calendarDisconnect
+      x-lv-module: calendar
       summary: Disconnect Google Calendar.
       description: |
         Revokes the grant at Google (best-effort), deletes the stored tokens,
@@ -7062,6 +8454,7 @@ paths:
     get:
       tags: [Calendar]
       operationId: gmailStatus
+      x-lv-module: mail
       summary: Gmail read access state.
       description: |
         Gmail is an incremental `gmail.readonly` scope on the Google Calendar
@@ -7077,6 +8470,7 @@ paths:
     post:
       tags: [Calendar]
       operationId: gmailConnect
+      x-lv-module: mail
       summary: Begin "Connect Gmail" (read-only metadata).
       description: |
         Returns Google's consent URL asking for `gmail.readonly` with
@@ -7112,6 +8506,7 @@ paths:
     post:
       tags: [Calendar]
       operationId: gmailDisconnect
+      x-lv-module: mail
       summary: Stop reading Gmail.
       description: |
         When the Google grant also serves Calendar, the Gmail scope is
@@ -7127,6 +8522,7 @@ paths:
     get:
       tags: [Calendar]
       operationId: calendarEvents
+      x-lv-module: calendar
       summary: Upcoming cached calendar events.
       description: |
         Returns the tenant's non-cancelled events ending at or after now,
@@ -7145,6 +8541,7 @@ paths:
     post:
       tags: [Calendar]
       operationId: calendarCreateEvent
+      x-lv-module: calendar
       summary: Create a calendar event.
       description: |
         Creates an event on the user's Google calendar (the app's explicit
@@ -7181,6 +8578,7 @@ paths:
     get:
       tags: [Calendar]
       operationId: calendarEventBrief
+      x-lv-module: calendar
       summary: The notes that bear on one upcoming meeting (pre-meeting brief).
       description: |
         The event, the caller's notes that match it, and one line on why.
@@ -7213,6 +8611,7 @@ paths:
     get:
       tags: [Calendar]
       operationId: calendarOAuthCallback
+      x-lv-module: calendar
       summary: Google OAuth redirect target (public).
       description: |
         Hit by the user's browser when Google redirects after consent. The
@@ -7244,6 +8643,7 @@ paths:
     get:
       tags: [Projects]
       operationId: projectsList
+      x-lv-module: projects
       summary: List the caller's projects.
       description: Projects group note-todos. Each carries a live `todoCount`.
       parameters:
@@ -7260,6 +8660,7 @@ paths:
     post:
       tags: [Projects]
       operationId: projectsCreate
+      x-lv-module: projects
       summary: Create a project.
       requestBody:
         required: true
@@ -7287,6 +8688,7 @@ paths:
     patch:
       tags: [Projects]
       operationId: projectsPatch
+      x-lv-module: projects
       summary: Update a project (name / description / archived).
       requestBody:
         required: true
@@ -7307,6 +8709,7 @@ paths:
     delete:
       tags: [Projects]
       operationId: projectsDelete
+      x-lv-module: projects
       summary: Delete a project. Note-todos that referenced it become unfiled.
       responses:
         '204': { description: Row deleted. }
@@ -7320,6 +8723,7 @@ paths:
     get:
       tags: [Todos]
       operationId: todosList
+      x-lv-module: todos
       summary: List the caller's todos (open first, then by soonest due).
       description: |
         A todo is a vault note whose `metadata.isTodo` is true; this API and
@@ -7333,6 +8737,7 @@ paths:
     post:
       tags: [Todos]
       operationId: todosCreate
+      x-lv-module: todos
       summary: Create a standalone todo (stored as a markdown todo-note).
       requestBody:
         required: true
@@ -7361,6 +8766,7 @@ paths:
     patch:
       tags: [Todos]
       operationId: todosPatch
+      x-lv-module: todos
       summary: Toggle done / edit title, due date, or project.
       requestBody:
         required: true
@@ -7381,6 +8787,7 @@ paths:
     delete:
       tags: [Todos]
       operationId: todosDelete
+      x-lv-module: todos
       summary: Delete a todo (soft-deletes the note, cascades its recall memory).
       responses:
         '204': { description: Row deleted. }
@@ -7394,6 +8801,7 @@ paths:
     get:
       tags: [Profiles]
       operationId: profilesList
+      x-lv-module: profiles
       summary: List the caller's Hermes personas.
       description: |
         Returns every persona owned by the authed tenant plus the slug
@@ -7409,6 +8817,7 @@ paths:
     post:
       tags: [Profiles]
       operationId: profilesCreate
+      x-lv-module: profiles
       summary: Create a new Hermes persona.
       description: |
         Slug must match `^[a-z0-9][a-z0-9-]{0,31}$`. `systemPrompt` is
@@ -7451,6 +8860,7 @@ paths:
     get:
       tags: [Profiles]
       operationId: profilesGet
+      x-lv-module: profiles
       summary: Get a single persona by slug.
       responses:
         '200':
@@ -7466,6 +8876,7 @@ paths:
     patch:
       tags: [Profiles]
       operationId: profilesPatch
+      x-lv-module: profiles
       summary: Update a persona's label / system prompt / enabled skills.
       description: |
         Slug and default flag are immutable here; use
@@ -7497,6 +8908,7 @@ paths:
     delete:
       tags: [Profiles]
       operationId: profilesDelete
+      x-lv-module: profiles
       summary: Delete a non-default persona.
       responses:
         '204':
@@ -7521,6 +8933,7 @@ paths:
     post:
       tags: [Profiles]
       operationId: profilesActivate
+      x-lv-module: profiles
       summary: Set this persona as the tenant's default.
       description: |
         Atomically clears the prior default and flags this slug.
@@ -7548,6 +8961,7 @@ paths:
     get:
       tags: [System]
       operationId: systemHermesVersion
+      x-lv-module: system
       summary: Current central Hermes image + available-update info.
       security:
         - bearerJWT: []
@@ -7568,6 +8982,7 @@ paths:
     post:
       tags: [System]
       operationId: systemHermesUpdateStart
+      x-lv-module: system
       summary: Start a Hermes self-update (detached, blue-green).
       security:
         - bearerJWT: []
@@ -7594,6 +9009,7 @@ paths:
     get:
       tags: [System]
       operationId: systemHermesUpdateCurrent
+      x-lv-module: system
       summary: Most recent in-flight (or last) update job, for reconnect.
       security:
         - bearerJWT: []
@@ -7614,6 +9030,7 @@ paths:
     get:
       tags: [System]
       operationId: systemHermesUpdateStatus
+      x-lv-module: system
       summary: Full status snapshot for one update job (poll fallback).
       security:
         - bearerJWT: []
@@ -7639,6 +9056,7 @@ paths:
     get:
       tags: [System]
       operationId: systemHermesUpdateStream
+      x-lv-module: system
       summary: SSE stream of HermesUpdateEvent for one job.
       description: >
         `text/event-stream`; each `data:` line is one JSON-encoded
@@ -7663,6 +9081,7 @@ paths:
     post:
       tags: [System]
       operationId: systemHermesUpdateRollback
+      x-lv-module: system
       summary: Manually roll a failed update back to its previous version.
       security:
         - bearerJWT: []
@@ -7693,6 +9112,7 @@ paths:
     post:
       tags: [System]
       operationId: systemHermesReprovision
+      x-lv-module: system
       summary: Bulk-reprovision all per-tenant Hermes containers onto the current image.
       description: >
         Force-removes then re-creates every per-tenant Hermes container,
@@ -7727,6 +9147,7 @@ paths:
     get:
       tags: [Community]
       operationId: communityMe
+      x-lv-module: community
       summary: Whether the board is on, and the caller's community profile.
       description: >-
         Always 200. `enabled: false` means the server has the board switched
@@ -7744,6 +9165,7 @@ paths:
     put:
       tags: [Community]
       operationId: communityUpsertProfile
+      x-lv-module: community
       summary: Create or update the caller's public community profile.
       description: >-
         The handle (`^[a-z0-9_]{3,20}$`, not reserved, not the account
@@ -7767,6 +9189,7 @@ paths:
     get:
       tags: [Community]
       operationId: communityListThreads
+      x-lv-module: community
       summary: Threads on the board, most recently active first.
       description: >-
         Keyset-paged. Visible threads plus the caller's own `pending` ones;
@@ -7785,6 +9208,7 @@ paths:
     post:
       tags: [Community]
       operationId: communityCreateThread
+      x-lv-module: community
       summary: Start a thread.
       description: >-
         Moderated before anyone else sees it. 201 with `status: visible`, or
@@ -7812,6 +9236,7 @@ paths:
     get:
       tags: [Community]
       operationId: communityGetPost
+      x-lv-module: community
       summary: One thread or reply.
       responses:
         '200':
@@ -7823,6 +9248,7 @@ paths:
     delete:
       tags: [Community]
       operationId: communityDeletePost
+      x-lv-module: community
       summary: Delete your own post.
       responses:
         '204': { description: Deleted. }
@@ -7833,6 +9259,7 @@ paths:
     get:
       tags: [Community]
       operationId: communityListReplies
+      x-lv-module: community
       summary: Replies to a thread, oldest first.
       parameters:
         - { name: cursor, in: query, required: false, schema: { type: string } }
@@ -7847,6 +9274,7 @@ paths:
     post:
       tags: [Community]
       operationId: communityCreateReply
+      x-lv-module: community
       summary: Reply to a thread (one level deep).
       description: Same moderation, statuses and errors as creating a thread; 60 replies a day per member.
       requestBody:
@@ -7868,6 +9296,7 @@ paths:
     post:
       tags: [Community]
       operationId: communityReportPost
+      x-lv-module: community
       summary: Report a post.
       description: >-
         One report per member per post; a repeat is a no-op. The third
@@ -7885,6 +9314,7 @@ paths:
     get:
       tags: [Community]
       operationId: communityTodayDaily
+      x-lv-module: community
       summary: Today's (UTC) AI Daily Post.
       responses:
         '200':
@@ -7897,6 +9327,7 @@ paths:
     get:
       tags: [Community]
       operationId: communityListBlocks
+      x-lv-module: community
       summary: Members the caller has blocked.
       responses:
         '200':
@@ -7907,6 +9338,7 @@ paths:
     post:
       tags: [Community]
       operationId: communityBlock
+      x-lv-module: community
       summary: Block a member; their posts disappear for the caller.
       requestBody:
         required: true
@@ -7921,6 +9353,7 @@ paths:
     delete:
       tags: [Community]
       operationId: communityUnblock
+      x-lv-module: community
       summary: Unblock a member.
       parameters:
         - { name: profileID, in: path, required: true, schema: { type: string, format: uuid } }
@@ -7930,6 +9363,7 @@ paths:
     get:
       tags: [Community]
       operationId: communityAdminQueue
+      x-lv-module: community
       summary: Moderator queue (`isAdmin` only).
       parameters:
         - name: status
@@ -7947,6 +9381,7 @@ paths:
     post:
       tags: [Community]
       operationId: communityAdminDecision
+      x-lv-module: community
       summary: Hide, restore or remove a post (`isAdmin` only).
       parameters:
         - { name: postID, in: path, required: true, schema: { type: string, format: uuid } }
@@ -7963,6 +9398,7 @@ paths:
     post:
       tags: [Community]
       operationId: communityAdminSuspend
+      x-lv-module: community
       summary: Suspend (or with `until` null, reinstate) a member's posting (`isAdmin` only).
       parameters:
         - { name: profileID, in: path, required: true, schema: { type: string, format: uuid } }
@@ -7978,6 +9414,7 @@ paths:
     post:
       tags: [Admin]
       operationId: adminCommunityDailyRun
+      x-lv-module: community
       summary: Publish today's AI Daily Post now (same path as the worker).
       description: A second call the same UTC day reports the day's row without publishing again.
       security:
@@ -7992,6 +9429,7 @@ paths:
     get:
       tags: [Kanban]
       operationId: boardsList
+      x-lv-module: kanban
       summary: List all boards for the authenticated tenant.
       responses:
         '200':
@@ -8005,6 +9443,7 @@ paths:
     post:
       tags: [Kanban]
       operationId: boardsCreate
+      x-lv-module: kanban
       summary: Create a new board.
       requestBody:
         required: true
@@ -8023,6 +9462,7 @@ paths:
     get:
       tags: [Kanban]
       operationId: boardsGet
+      x-lv-module: kanban
       summary: Fetch a single board with all its columns and cards.
       parameters:
         - in: path
@@ -8040,6 +9480,7 @@ paths:
     patch:
       tags: [Kanban]
       operationId: boardsPatch
+      x-lv-module: kanban
       summary: Update board title and/or archived flag.
       parameters:
         - in: path
@@ -8062,6 +9503,7 @@ paths:
     delete:
       tags: [Kanban]
       operationId: boardsDelete
+      x-lv-module: kanban
       summary: Delete a board and all its columns and cards.
       parameters:
         - in: path
@@ -8078,6 +9520,7 @@ paths:
     get:
       tags: [Kanban]
       operationId: boardsVersion
+      x-lv-module: kanban
       summary: Fetch only the current version counter for a board (cheap poll / ETag alternative).
       parameters:
         - in: path
@@ -8097,6 +9540,7 @@ paths:
     post:
       tags: [Kanban]
       operationId: columnsCreate
+      x-lv-module: kanban
       summary: Append a new column to the board.
       parameters:
         - in: path
@@ -8121,6 +9565,7 @@ paths:
     patch:
       tags: [Kanban]
       operationId: columnsPatch
+      x-lv-module: kanban
       summary: Rename a column.
       parameters:
         - in: path
@@ -8147,6 +9592,7 @@ paths:
     delete:
       tags: [Kanban]
       operationId: columnsDelete
+      x-lv-module: kanban
       summary: Delete a column and all its cards.
       parameters:
         - in: path
@@ -8170,6 +9616,7 @@ paths:
     post:
       tags: [Kanban]
       operationId: columnsReorder
+      x-lv-module: kanban
       summary: Reorder a column relative to its siblings using fractional-index ranks.
       parameters:
         - in: path
@@ -8194,6 +9641,7 @@ paths:
     post:
       tags: [Kanban]
       operationId: cardsCreate
+      x-lv-module: kanban
       summary: Create a card in the specified column.
       parameters:
         - in: path
@@ -8218,6 +9666,7 @@ paths:
     patch:
       tags: [Kanban]
       operationId: cardsPatch
+      x-lv-module: kanban
       summary: Update card fields (title, body, priority, dueAt).
       parameters:
         - in: path
@@ -8240,6 +9689,7 @@ paths:
     delete:
       tags: [Kanban]
       operationId: cardsDelete
+      x-lv-module: kanban
       summary: Delete a card.
       parameters:
         - in: path
@@ -8256,6 +9706,7 @@ paths:
     post:
       tags: [Kanban]
       operationId: cardsMove
+      x-lv-module: kanban
       summary: Move a card to a different column and/or position using fractional-index ranks.
       parameters:
         - in: path
@@ -8276,12 +9727,72 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /v1/cards/{cardID}/promote:
+    post:
+      operationId: cardsPromote
+      x-lv-module: kanban
+      summary: Promote a card to a scheduled job (skill).
+      description: |
+        Requires vault AI access plus write permission. The body is optional:
+        when present and decodable, its fields are written onto the card before
+        the job is authored (single-call promote); when absent — or not
+        decodable, which is treated the same as absent — the card's existing
+        job config is used. The job needs a `cron` or `runAt`, and a `prompt`
+        or a card body.
+
+        On a shared (non-personal) vault the request must carry
+        `X-Board-Version` (the expected board version); a missing or stale
+        version is a 409.
+      parameters:
+        - in: path
+          name: cardID
+          required: true
+          schema: { type: string, format: uuid }
+        - in: header
+          name: X-Board-Version
+          required: false
+          description: Expected board version. Required on shared vaults; ignored on the personal vault.
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CardPromoteRequest' }
+      responses:
+        '200':
+          description: The authored job, as a skill.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SkillDTO' }
+        '400':
+          description: |
+            `invalid_cardID`, `card_job_requires_cron_or_run_at`, or
+            `card_job_requires_prompt_or_body`.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: '`vault write permission required`, or no AI access to the vault.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Shared-vault board version missing (`shared board mutation requires X-Board-Version`) or stale.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '500':
+          description: '`job_authoring_unavailable`.'
+
   # ──────────────────────────────── Teams / shared vaults ────────────────────────────────
 
   /v1/teams:
     get:
       tags: [Teams]
       operationId: teamsList
+      x-lv-module: teams
       responses:
         '200':
           description: Teams visible to the current user.
@@ -8289,6 +9800,7 @@ paths:
     post:
       tags: [Teams]
       operationId: teamsCreate
+      x-lv-module: teams
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/TeamCreateRequest' } } }
@@ -8300,11 +9812,13 @@ paths:
     get:
       tags: [Teams]
       operationId: teamVaultsList
+      x-lv-module: teams
       responses:
         '200': { description: Team vaults, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/VaultSummary' } } } } }
     post:
       tags: [Teams]
       operationId: teamVaultsCreate
+      x-lv-module: teams
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/SharedVaultCreateRequest' } } }
@@ -8316,11 +9830,13 @@ paths:
     get:
       tags: [Teams]
       operationId: teamInvitationsList
+      x-lv-module: teams
       responses:
         '200': { description: Pending invitations, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/TeamInvitation' } } } } }
     post:
       tags: [Teams]
       operationId: teamInvitationsCreate
+      x-lv-module: teams
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/TeamInviteRequest' } } }
@@ -8335,6 +9851,7 @@ paths:
     delete:
       tags: [Teams]
       operationId: teamInvitationsRevoke
+      x-lv-module: teams
       responses: { '204': { description: Invitation revoked. } }
 
   /v1/teams/{teamID}/invitations/{invitationID}/resend:
@@ -8344,6 +9861,7 @@ paths:
     post:
       tags: [Teams]
       operationId: teamInvitationsResend
+      x-lv-module: teams
       responses:
         '200': { description: Invitation token rotated and resent, content: { application/json: { schema: { $ref: '#/components/schemas/TeamInvitation' } } } }
 
@@ -8352,6 +9870,7 @@ paths:
     put:
       tags: [Teams]
       operationId: teamsTransferOwner
+      x-lv-module: teams
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/OwnershipTransferRequest' } } }
@@ -8363,6 +9882,7 @@ paths:
     post:
       tags: [Teams]
       operationId: teamsArchive
+      x-lv-module: teams
       responses: { '200': { description: Team archived, content: { application/json: { schema: { $ref: '#/components/schemas/TeamSummary' } } } } }
 
   /v1/teams/{teamID}/restore:
@@ -8370,6 +9890,7 @@ paths:
     post:
       tags: [Teams]
       operationId: teamsRestore
+      x-lv-module: teams
       responses: { '200': { description: Team restored, content: { application/json: { schema: { $ref: '#/components/schemas/TeamSummary' } } } } }
 
   /v1/teams/{teamID}/leave:
@@ -8377,12 +9898,14 @@ paths:
     post:
       tags: [Teams]
       operationId: teamsLeave
+      x-lv-module: teams
       responses: { '204': { description: Current user left the team. } }
 
   /v1/vaults:
     get:
       tags: [Teams]
       operationId: vaultsList
+      x-lv-module: teams
       responses:
         '200': { description: Personal and shared vaults, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/VaultSummary' } } } } }
 
@@ -8391,6 +9914,7 @@ paths:
     get:
       tags: [Teams]
       operationId: vaultMembersList
+      x-lv-module: teams
       responses:
         '200': { description: Vault members, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/VaultMember' } } } } }
 
@@ -8401,6 +9925,7 @@ paths:
     put:
       tags: [Teams]
       operationId: vaultMembersUpdate
+      x-lv-module: teams
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: '#/components/schemas/VaultMembershipUpdateRequest' } } }
@@ -8409,6 +9934,7 @@ paths:
     delete:
       tags: [Teams]
       operationId: vaultMembersRemove
+      x-lv-module: teams
       responses: { '204': { description: Member removed. } }
 
   /v1/vaults/{vaultID}/activity:
@@ -8416,6 +9942,7 @@ paths:
     get:
       tags: [Teams]
       operationId: vaultActivityList
+      x-lv-module: teams
       responses:
         '200': { description: Recent vault activity, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/VaultActivity' } } } } }
 
@@ -8424,6 +9951,7 @@ paths:
     get:
       tags: [Teams]
       operationId: vaultActivityStream
+      x-lv-module: teams
       responses:
         '200': { description: Server-sent vault activity events, content: { text/event-stream: { schema: { type: string } } } }
 
@@ -8431,6 +9959,7 @@ paths:
     post:
       tags: [Teams]
       operationId: teamInvitationsAccept
+      x-lv-module: teams
       parameters:
         - { in: path, name: token, required: true, schema: { type: string } }
       responses:
@@ -8460,6 +9989,19 @@ components:
       type: http
       scheme: bearer
       description: RevenueCat webhook shared secret (`revenuecat.webhookSecret`).
+
+    photonSidecarToken:
+      type: apiKey
+      in: header
+      name: X-Lumina-Sidecar-Token
+      description: Photon sidecar shared token (`photonSidecarToken`), preferred header form.
+    photonSidecarBearer:
+      type: http
+      scheme: bearer
+      description: >-
+        The same Photon sidecar shared token presented as
+        `Authorization: Bearer <token>` (fallback when
+        `X-Lumina-Sidecar-Token` is absent).
 
   parameters:
     LuminaChannelHeader:
@@ -8511,6 +10053,12 @@ components:
         returns 409. Tenant-scoped: the same key value across different tenants
         does not collide.
       schema: { type: string, format: uuid }
+    HermesCronJobID:
+      in: path
+      name: id
+      required: true
+      description: Hermes cron job id (opaque string from `HermesCronJob.id`).
+      schema: { type: string }
 
   responses:
     Unauthorized:
@@ -8552,8 +10100,442 @@ components:
                 error:
                   code: insufficient_storage
                   message: LuminaVault is short on storage space right now, so this wasn't saved. Please try again later.
+    PremiumRequired:
+      description: >-
+        `PremiumGuardMiddleware` — the effective tier (tier override, else
+        tier) is not `pro` or `ultimate`.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/PremiumRequiredError' }
+    XaiNotConnected:
+      description: '`xai_not_connected` — no Hermes container yet, or xAI OAuth not completed.'
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    GrokUpstreamError:
+      description: |
+        The tenant container's Grok call failed. Stable code in `message`:
+        `grok_upstream_<status>`, `grok_upstream_decode_failed`, or
+        `grok_upstream_missing_answer`.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
 
   schemas:
+
+    # ── Root: AASA + deep health ──
+    AppleAppSiteAssociation:
+      type: object
+      required: [webcredentials]
+      properties:
+        webcredentials:
+          type: object
+          required: [apps]
+          properties:
+            apps:
+              type: array
+              items: { type: string, description: '`TEAMID.bundleID`.' }
+
+    DeepHealthResponse:
+      type: object
+      required: [status, hermes]
+      properties:
+        status: { type: string, enum: [ok, degraded] }
+        hermes:
+          type: object
+          required: [reachable, latencyMs]
+          properties:
+            reachable: { type: boolean }
+            latencyMs:
+              type: [integer, 'null']
+              description: Probe round-trip in milliseconds. Always present; `null` when no latency was measured.
+
+    # ── Auth: QR pairing (server-local DTOs in PairingController.swift) ──
+    PairingStartResponse:
+      type: object
+      required: [pairingId, code, expiresAt]
+      properties:
+        pairingId: { type: string, description: 'UUID string; the bearer secret for polling.' }
+        code: { type: string, description: One-time code the app confirms on approve. }
+        expiresAt:
+          type: integer
+          format: int64
+          description: Expiry as epoch **milliseconds** (not ISO-8601) — the web client renders a countdown.
+
+    PairingApproveRequest:
+      type: object
+      required: [code]
+      properties:
+        code: { type: string }
+
+    PairingPollResponse:
+      type: object
+      required: [approved]
+      description: >-
+        `approved: false` carries no other field. `approved: true` carries the
+        session fields (same meaning as `AuthResponse`); `email` may still be
+        omitted when the account has none.
+      properties:
+        approved: { type: boolean }
+        userId: { type: string, format: uuid }
+        email: { type: string }
+        accessToken: { type: string }
+        refreshToken: { type: string }
+        expiresIn: { type: integer }
+        vaultInitialized: { type: boolean }
+
+    # ── Me: usage (LuminaVaultShared MeUsageResponse) ──
+    MeUsageResponse:
+      type: object
+      required: [tier, periodStart, periodEnd, generatedAt, storageBytes, tokensIn, tokensOut, tokensTotal, ttsCharacters, compileRuns, compileFiles, daily]
+      properties:
+        tier: { type: string, enum: [free, trial, pro, ultimate, lapsed, archived] }
+        periodStart: { type: string, format: date-time, description: Start of the current UTC calendar month. }
+        periodEnd: { type: string, format: date-time }
+        generatedAt: { type: string, format: date-time }
+        storageBytes: { type: integer, format: int64 }
+        tokensIn: { type: integer, format: int64 }
+        tokensOut: { type: integer, format: int64 }
+        tokensTotal: { type: integer, format: int64, description: '`tokensIn + tokensOut`.' }
+        ttsCharacters: { type: integer, format: int64 }
+        compileRuns: { type: integer, format: int64 }
+        compileFiles: { type: integer, format: int64 }
+        daily:
+          type: array
+          items: { $ref: '#/components/schemas/UsageDailyPointDTO' }
+
+    UsageDailyPointDTO:
+      type: object
+      required: [day, tokensIn, tokensOut, ttsCharacters, compileRuns, compileFiles]
+      properties:
+        day: { type: string, format: date-time }
+        tokensIn: { type: integer, format: int64 }
+        tokensOut: { type: integer, format: int64 }
+        ttsCharacters: { type: integer, format: int64 }
+        compileRuns: { type: integer, format: int64 }
+        compileFiles: { type: integer, format: int64 }
+
+    # ── Settings: Hermes cron bridge (server-local, CronBridgeService.swift) ──
+    CronCreateSpec:
+      type: object
+      required: [schedule]
+      properties:
+        schedule: { type: string, description: Cron expression or Hermes schedule string; must not be blank on create. }
+        prompt: { type: string }
+        name: { type: string }
+        deliver: { type: string }
+        skills:
+          type: array
+          items: { type: string }
+
+    CronPreviewRequest:
+      type: object
+      required: [text]
+      properties:
+        text: { type: string, description: Natural-language description of the job. }
+
+    # ── Me: provider credential pool (LuminaVaultShared) ──
+    ProviderPoolKeyDTO:
+      type: object
+      required: [id]
+      properties:
+        id: { type: string, format: uuid }
+        label: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    ProviderPoolListResponse:
+      type: object
+      required: [provider, keys]
+      properties:
+        provider: { $ref: '#/components/schemas/ProviderID' }
+        keys:
+          type: array
+          items: { $ref: '#/components/schemas/ProviderPoolKeyDTO' }
+
+    ProviderPoolAddRequest:
+      type: object
+      required: [apiKey]
+      properties:
+        apiKey: { type: string, description: Write-only; sealed at rest and never returned. }
+        label: { type: string }
+
+    # ── Me: Photon iMessage setup (LuminaVaultShared) ──
+    StartPhotonSetupResponse:
+      type: object
+      required: [sessionID]
+      properties:
+        sessionID: { type: string, format: uuid }
+
+    PhotonSetupPhoneRequest:
+      type: object
+      required: [phone]
+      description: Server-local `PhoneBody` in `HermesGatewaysController.photonSubmitPhone`.
+      properties:
+        phone: { type: string, description: 'Phone number; normalised server-side and required to be E.164 (e.g. `+15551234567`).' }
+
+    HermesPhotonSetupStatus:
+      type: string
+      enum: [starting, awaitingApproval, approved, provisioning, done, failed]
+
+    HermesPhotonDeviceCode:
+      type: object
+      required: [verificationUri, userCode, expiresIn]
+      properties:
+        verificationUri: { type: string }
+        userCode: { type: string }
+        expiresIn: { type: integer, description: Seconds until the device code expires. }
+
+    HermesPhotonSetupEvent:
+      type: object
+      description: >
+        Discriminated-union SSE frame. `type` selects the case; `payload`
+        carries the case value and is always present.
+      required: [type, payload]
+      properties:
+        type:
+          type: string
+          enum: [status, deviceCode, assignedLine, error]
+        payload:
+          description: >
+            `status` → HermesPhotonSetupStatus; `deviceCode` →
+            HermesPhotonDeviceCode; `assignedLine` → the iMessage number
+            contacts text to reach the agent; `error` → message string.
+          anyOf:
+            - { $ref: '#/components/schemas/HermesPhotonSetupStatus' }
+            - { $ref: '#/components/schemas/HermesPhotonDeviceCode' }
+            - type: string
+
+    PhotonInboundEvent:
+      type: object
+      required: [projectId, tenantId, spaceId, text]
+      description: Server-local `PhotonInboundEvent` in `PhotonDeliveryService.swift`.
+      properties:
+        projectId: { type: string }
+        tenantId: { type: string, format: uuid }
+        spaceId: { type: string }
+        spaceName: { type: string }
+        messageId: { type: string }
+        sender:
+          type: object
+          additionalProperties: { type: string }
+        text: { type: string }
+        content:
+          type: object
+          additionalProperties: { type: string }
+        timestamp: { type: integer }
+
+    # ── Integrations: xAI OAuth (server-local, XaiOAuthDTOs.swift) ──
+    XaiStatusResponse:
+      type: object
+      required: [connected, tier]
+      properties:
+        connected: { type: boolean }
+        tier: { type: string, description: Mirrors the user row's `tier` column. }
+        xaiConnectedAt: { type: string, format: date-time }
+
+    XaiStartResponse:
+      type: object
+      required: [sessionID, authorizeURL]
+      properties:
+        sessionID: { type: string, description: Opaque session id; echo it to `/complete`. }
+        authorizeURL: { type: string }
+
+    XaiCompleteRequest:
+      type: object
+      required: [sessionID, callbackURL]
+      properties:
+        sessionID: { type: string }
+        callbackURL:
+          type: string
+          description: Full callback URL captured from the web view (`http://127.0.0.1:56121/callback?code=…&state=…`).
+
+    # ── Integrations: Nous OAuth (LuminaVaultShared) ──
+    NousStatusResponse:
+      type: object
+      required: [connected]
+      properties:
+        connected: { type: boolean }
+        nousConnectedAt: { type: string, format: date-time }
+        plan: { type: string }
+
+    NousStartResponse:
+      type: object
+      required: [sessionID, verifyURL]
+      properties:
+        sessionID: { type: string }
+        verifyURL: { type: string }
+        userCode: { type: string }
+
+    NousCompleteRequest:
+      type: object
+      required: [sessionID]
+      properties:
+        sessionID: { type: string }
+
+    # ── Grok runtime (server-local, GrokDTOs.swift) ──
+    PremiumRequiredError:
+      type: object
+      required: [error, tier, requiresXaiConnect]
+      description: >-
+        Literal body written by `PremiumGuardMiddleware` — note `error` is a
+        string code here, not the `{ "error": { "message" } }` HTTPError shape.
+      properties:
+        error: { type: string, enum: [premium_required] }
+        tier: { type: string, description: The effective tier that was rejected. }
+        requiresXaiConnect: { type: boolean, enum: [true] }
+
+    GrokChatMessage:
+      type: object
+      required: [role, content]
+      properties:
+        role: { type: string }
+        content: { type: string }
+
+    GrokChatRequest:
+      type: object
+      required: [messages]
+      properties:
+        messages:
+          type: array
+          items: { $ref: '#/components/schemas/GrokChatMessage' }
+        model: { type: string }
+        stream: { type: boolean, description: Forwarded upstream; the route still returns a single JSON body. }
+        maxTokens: { type: integer }
+
+    GrokUsage:
+      type: object
+      required: [promptTokens, completionTokens]
+      properties:
+        promptTokens: { type: integer }
+        completionTokens: { type: integer }
+
+    GrokChatResponse:
+      type: object
+      required: [answer, model]
+      properties:
+        answer: { type: string }
+        model: { type: string }
+        usage: { $ref: '#/components/schemas/GrokUsage' }
+
+    GrokXSearchRequest:
+      type: object
+      required: [query]
+      properties:
+        query: { type: string, minLength: 1 }
+        allowedXHandles:
+          type: array
+          items: { type: string }
+        excludedXHandles:
+          type: array
+          items: { type: string }
+        fromDate: { type: string }
+        toDate: { type: string }
+        enableImageUnderstanding: { type: boolean }
+        enableVideoUnderstanding: { type: boolean }
+
+    GrokXSearchCitation:
+      type: object
+      required: [url]
+      properties:
+        url: { type: string }
+        title: { type: string }
+        publishedAt: { type: string, format: date-time }
+
+    GrokXSearchResponse:
+      type: object
+      required: [answer, citations, model]
+      properties:
+        answer: { type: string }
+        citations:
+          type: array
+          items: { $ref: '#/components/schemas/GrokXSearchCitation' }
+        model: { type: string }
+
+    GrokVisionRequest:
+      type: object
+      required: [prompt, imageURLs]
+      properties:
+        prompt: { type: string }
+        imageURLs:
+          type: array
+          minItems: 1
+          items: { type: string }
+
+    GrokVisionResponse:
+      type: object
+      required: [answer, model]
+      properties:
+        answer: { type: string }
+        model: { type: string }
+
+    GrokTTSRequest:
+      type: object
+      required: [text]
+      properties:
+        text: { type: string }
+        voice: { type: string }
+
+    # ── Import: vault bulk (server-local, VaultImportController.swift) ──
+    VaultBulkImportFile:
+      type: object
+      required: [path, content]
+      properties:
+        path: { type: string, description: Path of the file inside the source vault. }
+        content: { type: string, description: Markdown file contents. }
+
+    VaultBulkImportRequest:
+      type: object
+      required: [space, files]
+      properties:
+        space: { type: string, description: Target Space name (created if missing); must not be blank. }
+        files:
+          type: array
+          minItems: 1
+          maxItems: 2000
+          items: { $ref: '#/components/schemas/VaultBulkImportFile' }
+
+    VaultBulkImportResponse:
+      type: object
+      required: [spaceID, spaceSlug, imported, skipped, failed]
+      properties:
+        spaceID: { type: string, format: uuid }
+        spaceSlug: { type: string }
+        imported: { type: integer }
+        skipped: { type: integer }
+        failed: { type: integer }
+
+    # ── Kanban: promote (LuminaVaultShared CardPromoteRequest) ──
+    CardPromoteRequest:
+      type: object
+      properties:
+        cron: { type: string }
+        runAt: { type: string, format: date-time }
+        domain: { type: string }
+        prompt: { type: string }
+        spaceID: { type: string, format: uuid }
+
+    # ── Admin (server-local) ──
+    ChunkBackfillResult:
+      type: object
+      required: [tenantID, scanned, indexed, chunks, alreadyIndexed, failed]
+      properties:
+        tenantID: { type: string, format: uuid }
+        scanned: { type: integer, description: Memories examined in this pass; 0 means the backfill is done. }
+        indexed: { type: integer, description: Memories that gained chunk rows. }
+        chunks: { type: integer, description: Chunk rows written across all indexed memories. }
+        alreadyIndexed: { type: integer, description: Memories skipped because they already had chunks. }
+        failed: { type: integer, description: Memories that could not be chunked; retried on the next run. }
+
+    UsageEventsRetentionSummary:
+      type: object
+      required: [enabled, retentionDays, deleted, moreRemaining]
+      description: '`UsageEventsRetentionService.Summary`.'
+      properties:
+        enabled: { type: boolean }
+        retentionDays: { type: integer }
+        cutoff: { type: string, format: date-time, description: Omitted when retention is disabled. }
+        deleted: { type: integer }
+        moreRemaining: { type: boolean, description: The sweep hit its batch cap with rows still past the cutoff — run again. }
 
     TeamSummary:
       type: object

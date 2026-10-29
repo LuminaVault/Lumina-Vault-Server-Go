@@ -10,7 +10,7 @@
     "method": "GET",
     "path": "/.well-known/apple-app-site-association",
     "module": "App",
-    "operationId": null,
+    "operationId": "getAppleAppSiteAssociation",
     "source": "Sources/App/App+build.swift:382"
   },
   {
@@ -31,7 +31,7 @@
     "method": "GET",
     "path": "/health/deep",
     "module": "App",
-    "operationId": null,
+    "operationId": "getDeepHealth",
     "source": "Sources/App/App+build.swift:3244"
   },
   {
@@ -108,7 +108,7 @@
     "method": "POST",
     "path": "/v1/admin/memory/chunks/backfill/{userID}",
     "module": "Admin",
-    "operationId": null,
+    "operationId": "adminMemoryChunkBackfill",
     "source": "Sources/App/Admin/MemoryAdminController.swift:37"
   },
   {
@@ -143,7 +143,7 @@
     "method": "POST",
     "path": "/v1/admin/usage-events/prune",
     "module": "Admin",
-    "operationId": null,
+    "operationId": "adminUsageEventsPrune",
     "source": "Sources/App/Admin/UsageEventsAdminController.swift:20"
   },
   {
@@ -381,7 +381,7 @@
     "method": "GET",
     "path": "/v1/auth/me/usage",
     "module": "App",
-    "operationId": null,
+    "operationId": "meUsage",
     "source": "Sources/App/App+build.swift:690"
   },
   {
@@ -409,28 +409,28 @@
     "method": "POST",
     "path": "/v1/auth/oauth/{provider}/exchange",
     "module": "Auth",
-    "operationId": null,
+    "operationId": "authOAuthExchange",
     "source": "Sources/App/Auth/AuthController.swift:44"
   },
   {
     "method": "POST",
     "path": "/v1/auth/pairing/start",
     "module": "Auth",
-    "operationId": null,
+    "operationId": "authPairingStart",
     "source": "Sources/App/Auth/Pairing/PairingController.swift:43"
   },
   {
     "method": "GET",
     "path": "/v1/auth/pairing/{pairingId}",
     "module": "Auth",
-    "operationId": null,
+    "operationId": "authPairingPoll",
     "source": "Sources/App/Auth/Pairing/PairingController.swift:44"
   },
   {
     "method": "POST",
     "path": "/v1/auth/pairing/{pairingId}/approve",
     "module": "Auth",
-    "operationId": null,
+    "operationId": "authPairingApprove",
     "source": "Sources/App/Auth/Pairing/PairingController.swift:45"
   },
   {
@@ -493,7 +493,7 @@
     "method": "POST",
     "path": "/v1/auth/webauthn/authenticate/options",
     "module": "Auth",
-    "operationId": null,
+    "operationId": "authWebAuthnAuthenticateOptions",
     "source": "Sources/App/Auth/WebAuthnService.swift:261"
   },
   {
@@ -528,7 +528,7 @@
     "method": "POST",
     "path": "/v1/auth/webauthn/register/options",
     "module": "Auth",
-    "operationId": null,
+    "operationId": "authWebAuthnRegisterOptions",
     "source": "Sources/App/Auth/WebAuthnService.swift:276"
   },
   {
@@ -703,7 +703,7 @@
     "method": "POST",
     "path": "/v1/cards/{cardID}/promote",
     "module": "Kanban",
-    "operationId": null,
+    "operationId": "cardsPromote",
     "source": "Sources/App/Kanban/KanbanController.swift:40"
   },
   {
@@ -955,35 +955,35 @@
     "method": "POST",
     "path": "/v1/gateways/photon/inbound",
     "module": "Me",
-    "operationId": null,
+    "operationId": "photonInboundWebhook",
     "source": "Sources/App/App+build.swift:3473"
   },
   {
     "method": "POST",
     "path": "/v1/grok/chat",
     "module": "Grok",
-    "operationId": null,
+    "operationId": "grokChat",
     "source": "Sources/App/Grok/GrokController.swift:34"
   },
   {
     "method": "POST",
     "path": "/v1/grok/tts",
     "module": "Grok",
-    "operationId": null,
+    "operationId": "grokTTS",
     "source": "Sources/App/Grok/GrokController.swift:37"
   },
   {
     "method": "POST",
     "path": "/v1/grok/vision",
     "module": "Grok",
-    "operationId": null,
+    "operationId": "grokVision",
     "source": "Sources/App/Grok/GrokController.swift:36"
   },
   {
     "method": "POST",
     "path": "/v1/grok/x-search",
     "module": "Grok",
-    "operationId": null,
+    "operationId": "grokXSearch",
     "source": "Sources/App/Grok/GrokController.swift:35"
   },
   {
@@ -1256,7 +1256,7 @@
     "method": "POST",
     "path": "/v1/import/vault-bulk",
     "module": "Import",
-    "operationId": null,
+    "operationId": "importVaultBulk",
     "source": "Sources/App/Import/VaultImportController.swift:30"
   },
   {
@@ -1375,56 +1375,56 @@
     "method": "DELETE",
     "path": "/v1/integrations/nous",
     "module": "Integrations",
-    "operationId": null,
+    "operationId": "integrationsNousRevoke",
     "source": "Sources/App/Integrations/NousOAuthController.swift:23"
   },
   {
     "method": "GET",
     "path": "/v1/integrations/nous",
     "module": "Integrations",
-    "operationId": null,
+    "operationId": "integrationsNousStatus",
     "source": "Sources/App/Integrations/NousOAuthController.swift:20"
   },
   {
     "method": "POST",
     "path": "/v1/integrations/nous/complete",
     "module": "Integrations",
-    "operationId": null,
+    "operationId": "integrationsNousComplete",
     "source": "Sources/App/Integrations/NousOAuthController.swift:22"
   },
   {
     "method": "POST",
     "path": "/v1/integrations/nous/start",
     "module": "Integrations",
-    "operationId": null,
+    "operationId": "integrationsNousStart",
     "source": "Sources/App/Integrations/NousOAuthController.swift:21"
   },
   {
     "method": "DELETE",
     "path": "/v1/integrations/xai",
     "module": "Integrations",
-    "operationId": null,
+    "operationId": "integrationsXaiRevoke",
     "source": "Sources/App/Integrations/XaiOAuthController.swift:15"
   },
   {
     "method": "GET",
     "path": "/v1/integrations/xai",
     "module": "Integrations",
-    "operationId": null,
+    "operationId": "integrationsXaiStatus",
     "source": "Sources/App/Integrations/XaiOAuthController.swift:12"
   },
   {
     "method": "POST",
     "path": "/v1/integrations/xai/complete",
     "module": "Integrations",
-    "operationId": null,
+    "operationId": "integrationsXaiComplete",
     "source": "Sources/App/Integrations/XaiOAuthController.swift:14"
   },
   {
     "method": "POST",
     "path": "/v1/integrations/xai/start",
     "module": "Integrations",
-    "operationId": null,
+    "operationId": "integrationsXaiStart",
     "source": "Sources/App/Integrations/XaiOAuthController.swift:13"
   },
   {
@@ -1816,21 +1816,21 @@
     "method": "POST",
     "path": "/v1/me/hermes-gateways/photon/setup",
     "module": "Me",
-    "operationId": null,
+    "operationId": "hermesGatewaysPhotonSetupStart",
     "source": "Sources/App/Me/HermesGatewaysController.swift:77"
   },
   {
     "method": "POST",
     "path": "/v1/me/hermes-gateways/photon/setup/{sessionID}/phone",
     "module": "Me",
-    "operationId": null,
+    "operationId": "hermesGatewaysPhotonSetupPhone",
     "source": "Sources/App/Me/HermesGatewaysController.swift:78"
   },
   {
     "method": "GET",
     "path": "/v1/me/hermes-gateways/photon/setup/{sessionID}/stream",
     "module": "Me",
-    "operationId": null,
+    "operationId": "hermesGatewaysPhotonSetupStream",
     "source": "Sources/App/Me/HermesGatewaysController.swift:79"
   },
   {
@@ -1893,14 +1893,14 @@
     "method": "GET",
     "path": "/v1/me/hermes/cron",
     "module": "Skills",
-    "operationId": null,
+    "operationId": "hermesCronList",
     "source": "Sources/App/Skills/CronBridgeController.swift:18"
   },
   {
     "method": "POST",
     "path": "/v1/me/hermes/cron",
     "module": "Skills",
-    "operationId": null,
+    "operationId": "hermesCronCreate",
     "source": "Sources/App/Skills/CronBridgeController.swift:19"
   },
   {
@@ -1914,28 +1914,28 @@
     "method": "POST",
     "path": "/v1/me/hermes/cron/preview",
     "module": "Skills",
-    "operationId": null,
+    "operationId": "hermesCronPreview",
     "source": "Sources/App/Skills/CronBridgeController.swift:20"
   },
   {
     "method": "DELETE",
     "path": "/v1/me/hermes/cron/{id}",
     "module": "Skills",
-    "operationId": null,
+    "operationId": "hermesCronDelete",
     "source": "Sources/App/Skills/CronBridgeController.swift:24"
   },
   {
     "method": "POST",
     "path": "/v1/me/hermes/cron/{id}/pause",
     "module": "Skills",
-    "operationId": null,
+    "operationId": "hermesCronPause",
     "source": "Sources/App/Skills/CronBridgeController.swift:22"
   },
   {
     "method": "POST",
     "path": "/v1/me/hermes/cron/{id}/resume",
     "module": "Skills",
-    "operationId": null,
+    "operationId": "hermesCronResume",
     "source": "Sources/App/Skills/CronBridgeController.swift:23"
   },
   {
@@ -2110,21 +2110,21 @@
     "method": "GET",
     "path": "/v1/me/providers/{provider}/pool",
     "module": "Me",
-    "operationId": null,
+    "operationId": "providerPoolList",
     "source": "Sources/App/Me/ProvidersController.swift:65"
   },
   {
     "method": "POST",
     "path": "/v1/me/providers/{provider}/pool",
     "module": "Me",
-    "operationId": null,
+    "operationId": "providerPoolAdd",
     "source": "Sources/App/Me/ProvidersController.swift:66"
   },
   {
     "method": "DELETE",
     "path": "/v1/me/providers/{provider}/pool/{keyID}",
     "module": "Me",
-    "operationId": null,
+    "operationId": "providerPoolDelete",
     "source": "Sources/App/Me/ProvidersController.swift:67"
   },
   {
