@@ -4,8 +4,12 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"lumina/internal/config"
+	"lumina/internal/httpserver"
+	"lumina/internal/telemetry"
 	"net"
 	"os"
 	"os/signal"
@@ -28,20 +32,35 @@ func run(args []string) error {
 	if err != nil {
 		return err
 	}
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	shutdown, err := telemetry.Setup(ctx, cfg)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		flushCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := shutdown(flushCtx); err != nil {
+			slog.Warn("telemetry shutdown", "error", err)
+		}
+	}()
+
 	switch cmd.Name {
 	case "serve":
-		return serve(ctx, cmd)
+		return serve(ctx, cfg, cmd)
 	default:
 		return fmt.Errorf("%s: not implemented", cmd.Name)
 	}
 }
 
-func serve(ctx context.Context, cmd Command) error {
-	e := echo.New()
-	e.GET("/health", func(c *echo.Context) error { return c.String(200, "ok") })
+func serve(ctx context.Context, cfg config.Config, cmd Command) error {
+	e := httpserver.New(cfg, httpserver.Deps{})
 	sc := echo.StartConfig{
 		Address:         net.JoinHostPort(cmd.HTTPHost, strconv.Itoa(cmd.HTTPPort)),
 		HideBanner:      true,
@@ -49,5 +68,8 @@ func serve(ctx context.Context, cmd Command) error {
 		GracefulTimeout: 10 * time.Second,
 	}
 	slog.Info("listening", "address", sc.Address)
-	return sc.Start(ctx, e)
+	if err := sc.Start(ctx, httpserver.Handler(cfg, e)); err != nil && !errors.Is(err, context.Canceled) {
+		return err
+	}
+	return nil
 }
