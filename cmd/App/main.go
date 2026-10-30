@@ -18,6 +18,9 @@ import (
 	"lumina/internal/modules/projects"
 	"lumina/internal/ratelimit"
 	"lumina/internal/modules/spaces"
+	"lumina/internal/modules/profiles"
+	"lumina/internal/modules/projects"
+	"lumina/internal/modules/sessions"
 	"lumina/internal/telemetry"
 	"lumina/internal/vaultpaths"
 	"net"
@@ -115,6 +118,8 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 			deps.Modules = append(deps.Modules, m)
 			kanban.New(pool, auth.Identify(keys, auth.PGUsers(pool)), limits, vaultpaths.Paths{Root: cfg.VaultRootPath}),
 			spaces.New(pool, vaultpaths.Paths{Root: cfg.VaultRootPath}, auth.Identify(keys, auth.PGUsers(pool))),
+			profiles.New(pool),
+			sessions.New(pool),
 		}
 	}
 	e := httpserver.New(cfg, deps)
