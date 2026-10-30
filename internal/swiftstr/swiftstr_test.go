@@ -48,6 +48,6 @@ func TestPrefix(t *testing.T) {
 
 func TestTrim(t *testing.T) {
 	require.Equal(t, "a b", TrimWhitespacesAndNewlines(" \t\n\r\v\f\u0085\u00a0\u2028\u2029\u3000a b\u2003 "))
-	require.Equal(t, "\u200ba", TrimWhitespacesAndNewlines("\u200ba "), "U+200B is not whitespace in Foundation")
+	require.Equal(t, "a", TrimWhitespacesAndNewlines("\u200ba "), "CoreFoundation counts U+200B as whitespace")
 	require.Equal(t, "\ufeff", TrimWhitespacesAndNewlines("\ufeff"))
 }

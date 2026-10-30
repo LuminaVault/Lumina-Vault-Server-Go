@@ -268,7 +268,7 @@ func TestLabelCountsGraphemesAfterTrimming(t *testing.T) {
 		{strings.Repeat("e\u0301", 80), true},
 		{strings.Repeat("\U0001F1F5\U0001F1F9", 80), true},
 		{strings.Repeat("l", 80), true},
-		{"\u200b", true},
+		{"\u200b", false}, // CoreFoundation trims U+200B (parity run 41120834322)
 		{strings.Repeat("l", 81), false},
 		{strings.Repeat("e\u0301", 81), false},
 		{"", false},
