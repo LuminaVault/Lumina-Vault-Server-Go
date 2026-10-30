@@ -21,6 +21,10 @@ import (
 	"lumina/internal/modules/profiles"
 	"lumina/internal/modules/projects"
 	"lumina/internal/modules/sessions"
+	"lumina/internal/modules/apple"
+	"lumina/internal/modules/devices"
+	"lumina/internal/modules/projects"
+	"lumina/internal/modules/reminders"
 	"lumina/internal/telemetry"
 	"lumina/internal/vaultpaths"
 	"net"
@@ -120,6 +124,10 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 			spaces.New(pool, vaultpaths.Paths{Root: cfg.VaultRootPath}, auth.Identify(keys, auth.PGUsers(pool))),
 			profiles.New(pool),
 			sessions.New(pool),
+			// apple, devices and reminders flip together (D-shared-prefixes).
+			apple.New(pool, apple.Options{EmbeddingProvider: cfg.EmbeddingProvider, EmbeddingMonthlyCap: cfg.EmbeddingMonthlyTokenCapDefault}),
+			devices.New(pool, cfg.APNSBundleID),
+			reminders.New(pool, nil, cfg.HermesDefaultModel),
 		}
 	}
 	e := httpserver.New(cfg, deps)
