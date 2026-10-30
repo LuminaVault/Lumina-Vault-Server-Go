@@ -1,0 +1,69 @@
+module: sessions
+smoke: true
+steps:
+  - name: list all newest first
+    as: alice
+    request: {method: GET, path: /v1/sessions}
+  - name: limit 2
+    as: alice
+    request: {method: GET, path: "/v1/sessions?limit=2"}
+  - name: limit 0 clamps to 1
+    as: alice
+    request: {method: GET, path: "/v1/sessions?limit=0"}
+  - name: limit negative clamps to 1
+    as: alice
+    request: {method: GET, path: "/v1/sessions?limit=-4"}
+  - name: limit 999 clamps to 100
+    as: alice
+    request: {method: GET, path: "/v1/sessions?limit=999"}
+  - name: limit not a number
+    as: alice
+    request: {method: GET, path: "/v1/sessions?limit=abc"}
+  - name: limit decimal
+    as: alice
+    request: {method: GET, path: "/v1/sessions?limit=2.0"}
+  - name: limit plus sign
+    as: alice
+    request: {method: GET, path: "/v1/sessions?limit=%2B3"}
+  - name: limit overflow
+    as: alice
+    request: {method: GET, path: "/v1/sessions?limit=99999999999999999999"}
+  - name: limit empty
+    as: alice
+    request: {method: GET, path: "/v1/sessions?limit="}
+  - name: workspace uppercase
+    as: alice
+    request: {method: GET, path: "/v1/sessions?workspace=5ACE0000-0000-4000-8000-0000000000B1"}
+  - name: workspace lowercase
+    as: alice
+    request: {method: GET, path: "/v1/sessions?workspace=5ace0000-0000-4000-8000-0000000000b1"}
+  - name: workspace with limit
+    as: alice
+    request: {method: GET, path: "/v1/sessions?workspace=5ACE0000-0000-4000-8000-0000000000B1&limit=1"}
+  - name: workspace unknown uuid is empty
+    as: alice
+    request: {method: GET, path: "/v1/sessions?workspace=00000000-0000-4000-8000-000000000000"}
+  - name: workspace not a uuid means all
+    as: alice
+    request: {method: GET, path: "/v1/sessions?workspace=nope"}
+  - name: workspace without dashes means all
+    as: alice
+    request: {method: GET, path: "/v1/sessions?workspace=5ACE00000000400080000000000000B1"}
+  - name: workspace braces means all
+    as: alice
+    request: {method: GET, path: "/v1/sessions?workspace=%7B5ACE0000-0000-4000-8000-0000000000B1%7D"}
+  - name: workspace empty means all
+    as: alice
+    request: {method: GET, path: "/v1/sessions?workspace="}
+  - name: bob sees only his own
+    as: bob
+    request: {method: GET, path: /v1/sessions}
+  - name: bob cannot list alice workspace
+    as: bob
+    request: {method: GET, path: "/v1/sessions?workspace=5ACE0000-0000-4000-8000-0000000000B1"}
+  - name: no token
+    request: {method: GET, path: /v1/sessions}
+  - name: bad token
+    request: {method: GET, path: /v1/sessions, headers: {Authorization: "Bearer not.a.jwt"}}
+  - name: basic scheme
+    request: {method: GET, path: /v1/sessions, headers: {Authorization: "Basic YWxpY2U6eA=="}}
