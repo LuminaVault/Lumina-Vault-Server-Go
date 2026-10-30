@@ -1,0 +1,41 @@
+module: reminders
+steps:
+  - {name: list no token, request: {method: GET, path: /v1/reminders}}
+  - {name: create no token, request: {method: POST, path: /v1/reminders, json: {title: x, body: "", fireAt: "2026-11-01T09:00:00Z"}}}
+  - {name: patch no token, request: {method: PATCH, path: /v1/reminders/E0000000-0000-4000-8000-000000000002, json: {title: x}}}
+  - {name: delete no token, request: {method: DELETE, path: /v1/reminders/E0000000-0000-4000-8000-000000000002}}
+  - {name: detect no token, request: {method: POST, path: /v1/reminders/detect, json: {text: remind me}}}
+  - {name: bad token, request: {method: GET, path: /v1/reminders, headers: {Authorization: "Bearer not.a.jwt"}}}
+  - {name: malformed json, as: alice, request: {method: POST, path: /v1/reminders, raw: "{\"title\":"}}
+  - {name: empty body, as: alice, request: {method: POST, path: /v1/reminders, raw: ""}}
+  - {name: array body, as: alice, request: {method: POST, path: /v1/reminders, raw: "[]"}}
+  - {name: missing title, as: alice, request: {method: POST, path: /v1/reminders, json: {body: "", fireAt: "2026-11-01T09:00:00Z"}}}
+  - {name: missing body, as: alice, request: {method: POST, path: /v1/reminders, json: {title: x, fireAt: "2026-11-01T09:00:00Z"}}}
+  - {name: missing fireAt, as: alice, request: {method: POST, path: /v1/reminders, json: {title: x, body: ""}}}
+  - {name: null title, as: alice, request: {method: POST, path: /v1/reminders, raw: "{\"title\":null,\"body\":\"\",\"fireAt\":\"2026-11-01T09:00:00Z\"}"}}
+  - {name: title wrong type, as: alice, request: {method: POST, path: /v1/reminders, json: {title: 1, body: "", fireAt: "2026-11-01T09:00:00Z"}}}
+  - {name: fireAt not a date, as: alice, request: {method: POST, path: /v1/reminders, json: {title: x, body: "", fireAt: tomorrow}}}
+  - {name: fireAt a number, as: alice, request: {method: POST, path: /v1/reminders, json: {title: x, body: "", fireAt: 1762000000}}}
+  - {name: cron wrong type, as: alice, request: {method: POST, path: /v1/reminders, json: {title: x, body: "", fireAt: "2026-11-01T09:00:00Z", recurrenceCron: 5}}}
+  - {name: whitespace title, as: alice, request: {method: POST, path: /v1/reminders, json: {title: "   ", body: "", fireAt: "2026-11-01T09:00:00Z", recurrenceCron: bad}}}
+  - {name: cron out of range, as: alice, request: {method: POST, path: /v1/reminders, json: {title: x, body: "", fireAt: "2026-11-01T09:00:00Z", recurrenceCron: "61 * * * *"}}}
+  - {name: cron three fields, as: alice, request: {method: POST, path: /v1/reminders, json: {title: x, body: "", fireAt: "2026-11-01T09:00:00Z", recurrenceCron: "* * *"}}}
+  - {name: cron words, as: alice, request: {method: POST, path: /v1/reminders, json: {title: x, body: "", fireAt: "2026-11-01T09:00:00Z", recurrenceCron: "a b c d e"}}}
+  - {name: cron reversed range, as: alice, request: {method: POST, path: /v1/reminders, json: {title: x, body: "", fireAt: "2026-11-01T09:00:00Z", recurrenceCron: "5-1 * * * *"}}}
+  - {name: cron zero step, as: alice, request: {method: POST, path: /v1/reminders, json: {title: x, body: "", fireAt: "2026-11-01T09:00:00Z", recurrenceCron: "*/0 * * * *"}}}
+  - {name: cron day of week 7, as: alice, request: {method: POST, path: /v1/reminders, json: {title: x, body: "", fireAt: "2026-11-01T09:00:00Z", recurrenceCron: "0 9 * * 7"}}}
+  - {name: cron double step, as: alice, request: {method: POST, path: /v1/reminders, json: {title: x, body: "", fireAt: "2026-11-01T09:00:00Z", recurrenceCron: "*/2/3 * * * *"}}, snapshot: [reminders]}
+  - {name: patch bad id beats a bad body, as: alice, request: {method: PATCH, path: /v1/reminders/not-a-uuid, raw: "nope"}}
+  - {name: patch random id with a bad body is a decode error, as: alice, request: {method: PATCH, path: /v1/reminders/00000000-0000-4000-8000-000000000000, raw: "nope"}}
+  - {name: patch random id, as: alice, request: {method: PATCH, path: /v1/reminders/00000000-0000-4000-8000-000000000000, json: {title: x}}}
+  - {name: patch empty title, as: alice, request: {method: PATCH, path: /v1/reminders/E0000000-0000-4000-8000-000000000002, json: {title: "  "}}}
+  - {name: patch bad cron, as: alice, request: {method: PATCH, path: /v1/reminders/E0000000-0000-4000-8000-000000000002, json: {recurrenceCron: "* * * * * *"}}}
+  - {name: patch bad fireAt, as: alice, request: {method: PATCH, path: /v1/reminders/E0000000-0000-4000-8000-000000000002, json: {fireAt: soon}}}
+  - {name: patch body wrong type, as: alice, request: {method: PATCH, path: /v1/reminders/E0000000-0000-4000-8000-000000000002, json: {body: 1}}}
+  - name: patch title validated before cron; nothing saved
+    as: alice
+    request: {method: PATCH, path: /v1/reminders/E0000000-0000-4000-8000-000000000002, json: {title: ok, recurrenceCron: bad}}
+    snapshot: [reminders]
+  - {name: delete bad id, as: alice, request: {method: DELETE, path: /v1/reminders/not-a-uuid}}
+  - {name: delete random id, as: alice, request: {method: DELETE, path: /v1/reminders/00000000-0000-4000-8000-000000000000}}
+  - {name: unknown field ignored, as: alice, request: {method: POST, path: /v1/reminders, json: {title: Extra, body: "", fireAt: "2026-11-09T09:00:00Z", bogus: 1}}, snapshot: [reminders]}

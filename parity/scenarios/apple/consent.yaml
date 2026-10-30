@@ -1,0 +1,49 @@
+module: apple
+smoke: true
+steps:
+  - {name: get no token, request: {method: GET, path: /v1/apple/consent}}
+  - {name: put no token, request: {method: PUT, path: /v1/apple/consent, json: {domain: health, allowed: true}}}
+  - {name: bad token, request: {method: GET, path: /v1/apple/consent, headers: {Authorization: "Bearer not.a.jwt"}}}
+  - {name: "alice snapshot: seeded calendar; unknown domain ignored", as: alice, request: {method: GET, path: /v1/apple/consent}}
+  - {name: bob snapshot all off, as: bob, request: {method: GET, path: /v1/apple/consent}}
+  - name: allow reminders with writes
+    as: alice
+    request: {method: PUT, path: /v1/apple/consent, json: {domain: reminders, allowed: true, allowWrites: true}}
+    snapshot: [apple_consent]
+  - name: omitted allowWrites resets writes to false
+    as: alice
+    request: {method: PUT, path: /v1/apple/consent, json: {domain: reminders, allowed: true}}
+    snapshot: [apple_consent]
+  - name: allow health with null allowWrites
+    as: alice
+    request: {method: PUT, path: /v1/apple/consent, raw: "{\"domain\":\"health\",\"allowed\":true,\"allowWrites\":null}"}
+  - name: allow location
+    as: alice
+    request: {method: PUT, path: /v1/apple/consent, json: {domain: location, allowed: true}}
+    snapshot: [users]
+  - name: revoke location clears the last known location
+    as: alice
+    request: {method: PUT, path: /v1/apple/consent, json: {domain: location, allowed: false, allowWrites: true}}
+    snapshot: [apple_consent, users]
+  - name: revoke files is a no-op purge
+    as: alice
+    request: {method: PUT, path: /v1/apple/consent, json: {domain: files, allowed: false}}
+    snapshot: [apple_consent]
+  - name: revoke calendar keeps its sync stamp
+    as: alice
+    request: {method: PUT, path: /v1/apple/consent, json: {domain: calendar, allowed: false}}
+  - {name: bob still all off, as: bob, request: {method: GET, path: /v1/apple/consent}}
+  - {name: unknown domain, as: alice, request: {method: PUT, path: /v1/apple/consent, json: {domain: bogus, allowed: true}}}
+  - {name: domain wrong type, as: alice, request: {method: PUT, path: /v1/apple/consent, json: {domain: 5, allowed: true}}}
+  - {name: missing domain, as: alice, request: {method: PUT, path: /v1/apple/consent, json: {allowed: true}}}
+  - {name: missing allowed, as: alice, request: {method: PUT, path: /v1/apple/consent, json: {domain: health}}}
+  - {name: null allowed, as: alice, request: {method: PUT, path: /v1/apple/consent, raw: "{\"domain\":\"health\",\"allowed\":null}"}}
+  - {name: allowed wrong type, as: alice, request: {method: PUT, path: /v1/apple/consent, json: {domain: health, allowed: "yes"}}}
+  - {name: allowWrites wrong type, as: alice, request: {method: PUT, path: /v1/apple/consent, json: {domain: health, allowed: true, allowWrites: 1}}}
+  - {name: malformed json, as: alice, request: {method: PUT, path: /v1/apple/consent, raw: "{\"domain\":"}}
+  - {name: empty body, as: alice, request: {method: PUT, path: /v1/apple/consent, raw: ""}}
+  - {name: array body, as: alice, request: {method: PUT, path: /v1/apple/consent, raw: "[]"}}
+  - name: unknown field ignored
+    as: bob
+    request: {method: PUT, path: /v1/apple/consent, json: {domain: files, allowed: true, extra: 1}}
+    snapshot: [apple_consent]

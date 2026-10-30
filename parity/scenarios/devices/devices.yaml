@@ -1,0 +1,54 @@
+module: devices
+smoke: true
+steps:
+  - {name: register no token, request: {method: POST, path: /v1/devices, json: {token: t, platform: ios}}}
+  - {name: unregister no token, request: {method: DELETE, path: /v1/devices/tok-bob}}
+  - {name: bad token, request: {method: POST, path: /v1/devices, json: {token: t, platform: ios}, headers: {Authorization: "Bearer not.a.jwt"}}}
+  - name: register
+    as: alice
+    request: {method: POST, path: /v1/devices, json: {token: tok-alice-1, platform: ios}}
+    snapshot: [device_tokens]
+  - name: re-register updates platform and keeps the id
+    as: alice
+    request: {method: POST, path: /v1/devices, json: {token: tok-alice-1, platform: android}}
+    snapshot: [device_tokens]
+  - name: a bundle id the server may not push to is dropped
+    as: alice
+    request: {method: POST, path: /v1/devices, json: {token: tok-alice-2, platform: ios, bundleId: com.lumina.fernando.beta}}
+    snapshot: [device_tokens]
+  - {name: blank bundle id, as: alice, request: {method: POST, path: /v1/devices, json: {token: tok-alice-3, platform: ios, bundleId: "  "}}}
+  - {name: token is not trimmed, as: alice, request: {method: POST, path: /v1/devices, json: {token: " ", platform: ios}}}
+  - {name: token with a space, as: alice, request: {method: POST, path: /v1/devices, json: {token: tok with space, platform: ios}}}
+  - name: a token another account holds is a server error
+    as: alice
+    request: {method: POST, path: /v1/devices, json: {token: tok-bob, platform: ios}}
+    snapshot: [device_tokens]
+  - {name: empty token, as: alice, request: {method: POST, path: /v1/devices, json: {token: "", platform: ios}}}
+  - {name: unknown platform, as: alice, request: {method: POST, path: /v1/devices, json: {token: x, platform: windows}}}
+  - {name: empty token checked after platform, as: alice, request: {method: POST, path: /v1/devices, json: {token: "", platform: web}}}
+  - {name: missing token, as: alice, request: {method: POST, path: /v1/devices, json: {platform: ios}}}
+  - {name: missing platform, as: alice, request: {method: POST, path: /v1/devices, json: {token: x}}}
+  - {name: token wrong type, as: alice, request: {method: POST, path: /v1/devices, json: {token: 1, platform: ios}}}
+  - {name: platform wrong type, as: alice, request: {method: POST, path: /v1/devices, json: {token: x, platform: true}}}
+  - {name: bundleId wrong type, as: alice, request: {method: POST, path: /v1/devices, json: {token: x, platform: ios, bundleId: 1}}}
+  - {name: null token, as: alice, request: {method: POST, path: /v1/devices, raw: "{\"token\":null,\"platform\":\"ios\"}"}}
+  - {name: malformed json, as: alice, request: {method: POST, path: /v1/devices, raw: "{\"token\":"}}
+  - {name: empty body, as: alice, request: {method: POST, path: /v1/devices, raw: ""}}
+  - {name: array body, as: alice, request: {method: POST, path: /v1/devices, raw: "[]"}}
+  - name: bob unregistering alice's token changes nothing
+    as: bob
+    request: {method: DELETE, path: /v1/devices/tok-alice-1}
+    snapshot: [device_tokens]
+  - name: a percent-escaped path is not decoded
+    as: alice
+    request: {method: DELETE, path: /v1/devices/tok%20with%20space}
+    snapshot: [device_tokens]
+  - name: unregister
+    as: alice
+    request: {method: DELETE, path: /v1/devices/tok-alice-1}
+    snapshot: [device_tokens]
+  - {name: unregister again is still 204, as: alice, request: {method: DELETE, path: /v1/devices/tok-alice-1}}
+  - name: bob re-registers his own token
+    as: bob
+    request: {method: POST, path: /v1/devices, json: {token: tok-bob, platform: android}}
+    snapshot: [device_tokens]
