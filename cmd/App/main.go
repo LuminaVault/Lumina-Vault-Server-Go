@@ -13,7 +13,9 @@ import (
 	"lumina/internal/httpserver"
 	"lumina/internal/migrations"
 	"lumina/internal/modules/projects"
+	"lumina/internal/modules/spaces"
 	"lumina/internal/telemetry"
+	"lumina/internal/vaultpaths"
 	"net"
 	"os"
 	"os/signal"
@@ -100,6 +102,7 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		// them through the api ingress.extraPaths that name them.
 		deps.Modules = []httpserver.Module{
 			projects.New(pool),
+			spaces.New(pool, vaultpaths.Paths{Root: cfg.VaultRootPath}, auth.Identify(keys, auth.PGUsers(pool))),
 		}
 	}
 	e := httpserver.New(cfg, deps)

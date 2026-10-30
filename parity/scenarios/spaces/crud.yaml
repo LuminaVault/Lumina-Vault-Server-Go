@@ -1,0 +1,73 @@
+module: spaces
+smoke: true
+steps:
+  - name: list seeded with live note counts
+    as: alice
+    request: {method: GET, path: /v1/spaces}
+  - name: get seeded
+    as: alice
+    request: {method: GET, path: /v1/spaces/5BACE000-0000-4000-8000-0000000000A1}
+  - name: get lowercase id
+    as: alice
+    request: {method: GET, path: /v1/spaces/5bace000-0000-4000-8000-0000000000a1}
+  - name: create with every field
+    as: alice
+    request: {method: POST, path: /v1/spaces, json: {name: "  Crypto ", slug: " Crypto ", description: coins, color: "#00ff00", icon: bitcoinsign.circle, category: stocks}}
+    capture: {crypto: $.id}
+    snapshot: [spaces, vault_activity_events]
+  - name: create name only derives slug
+    as: alice
+    request: {method: POST, path: /v1/spaces, json: {name: "Reading List"}}
+    capture: {reading: $.id}
+    snapshot: [spaces]
+  - name: create blank slug derives
+    as: alice
+    request: {method: POST, path: /v1/spaces, json: {name: "!!!Ideas!!!", slug: "  "}}
+    snapshot: [spaces]
+  - name: create reserved-looking name is nudged
+    as: alice
+    request: {method: POST, path: /v1/spaces, json: {name: Trash}}
+    snapshot: [spaces]
+  - name: create empty category stored as null
+    as: alice
+    request: {method: POST, path: /v1/spaces, json: {name: Plain, slug: plain, category: ""}}
+    snapshot: [spaces]
+  - name: list after creates
+    as: alice
+    request: {method: GET, path: /v1/spaces}
+  - name: update category
+    as: alice
+    request: {method: PUT, path: "/v1/spaces/{{crypto}}", json: {category: work}}
+    snapshot: [spaces, vault_activity_events]
+  - name: update clears fields with empty strings
+    as: alice
+    request: {method: PUT, path: "/v1/spaces/{{crypto}}", json: {category: "", description: "", color: "", icon: ""}}
+    snapshot: [spaces]
+  - name: update rename trims
+    as: alice
+    request: {method: PUT, path: "/v1/spaces/{{reading}}", json: {name: "  Books  "}}
+    snapshot: [spaces]
+  - name: update nulls leave fields
+    as: alice
+    request: {method: PUT, path: "/v1/spaces/{{reading}}", raw: "{\"name\":null,\"icon\":null}"}
+  - name: update empty body changes nothing but persists live count
+    as: alice
+    request: {method: PUT, path: /v1/spaces/5BACE000-0000-4000-8000-0000000000A1, json: {}}
+    snapshot: [spaces]
+  - name: delete created
+    as: alice
+    request: {method: DELETE, path: "/v1/spaces/{{crypto}}"}
+    snapshot: [spaces, vault_activity_events]
+  - name: delete seeded without folder
+    as: alice
+    request: {method: DELETE, path: /v1/spaces/5BACE000-0000-4000-8000-0000000000A2}
+    snapshot: [spaces]
+  - name: get deleted
+    as: alice
+    request: {method: GET, path: "/v1/spaces/{{crypto}}"}
+  - name: delete again
+    as: alice
+    request: {method: DELETE, path: "/v1/spaces/{{crypto}}"}
+  - name: list after deletes
+    as: alice
+    request: {method: GET, path: /v1/spaces}
