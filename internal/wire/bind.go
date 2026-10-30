@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/http"
 	"reflect"
+	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/labstack/echo/v5"
@@ -71,11 +73,23 @@ func decode(raw []byte, dst any) error {
 		}
 		return nil
 	}
-	var obj map[string]json.RawMessage
-	if trimmed[0] != '{' {
-		return mismatch("", "Dictionary<String, Any>")
+	return decodeStruct(nil, trimmed, rv)
+}
+
+// decodeStruct decodes a JSON object into rv field by field, in declaration
+// order (Foundation's synthesized init(from:) order, so the first failing key
+// is the one Swift reports). path is the coding path of the object itself.
+//
+// Hummingbird formats nested failures as Request.decode does: a missing key
+// names only the key ("Coding key `completed` not found."), while null and
+// type mismatches name the whole dotted path with array indices
+// ("Type mismatch for `reminders.0.title` key, ...").
+func decodeStruct(path []string, raw []byte, rv reflect.Value) error {
+	if len(raw) == 0 || raw[0] != '{' {
+		return mismatch(strings.Join(path, "."), "Dictionary<String, Any>")
 	}
-	if err := json.Unmarshal(trimmed, &obj); err != nil {
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &obj); err != nil {
 		return notJSON
 	}
 	rt := rv.Type()
@@ -86,19 +100,104 @@ func decode(raw []byte, dst any) error {
 			continue
 		}
 		val, present := obj[name]
-		isNull := present && bytes.Equal(bytes.TrimSpace(val), []byte("null"))
+		val = bytes.TrimSpace(val)
+		isNull := present && bytes.Equal(val, []byte("null"))
 		required := !optional && f.Type.Kind() != reflect.Pointer
+		keyPath := append(append([]string{}, path...), name)
 		switch {
 		case !present && required:
 			return NewError(http.StatusBadRequest, fmt.Sprintf("Coding key `%s` not found.", name))
 		case isNull && required:
-			return NewError(http.StatusBadRequest, fmt.Sprintf("Value not found for `%s` key.", name))
+			return NewError(http.StatusBadRequest, fmt.Sprintf("Value not found for `%s` key.", strings.Join(keyPath, ".")))
 		case !present || isNull:
 			continue
 		}
-		if err := json.Unmarshal(val, rv.Field(i).Addr().Interface()); err != nil {
-			return mapErr(name, err)
+		if err := decodeValue(keyPath, val, rv.Field(i)); err != nil {
+			return err
 		}
+	}
+	return nil
+}
+
+var unmarshalerType = reflect.TypeFor[json.Unmarshaler]()
+
+// decodeValue decodes raw (not null unless fv is a pointer) into fv, recursing
+// into structs, slices and string-keyed maps so errors carry the full path.
+func decodeValue(path []string, raw []byte, fv reflect.Value) error {
+	t := fv.Type()
+	if t.Kind() == reflect.Pointer {
+		if bytes.Equal(raw, []byte("null")) {
+			return nil
+		}
+		elem := reflect.New(t.Elem())
+		if err := decodeValue(path, raw, elem.Elem()); err != nil {
+			return err
+		}
+		fv.Set(elem)
+		return nil
+	}
+	key := strings.Join(path, ".")
+	if reflect.PointerTo(t).Implements(unmarshalerType) {
+		if err := json.Unmarshal(raw, fv.Addr().Interface()); err != nil {
+			return mapErr(key, err)
+		}
+		return nil
+	}
+	switch {
+	case t.Kind() == reflect.Struct:
+		return decodeStruct(path, raw, fv)
+	case t.Kind() == reflect.Slice && t.Elem().Kind() != reflect.Uint8:
+		if len(raw) == 0 || raw[0] != '[' {
+			return mismatch(key, "Array<Any>")
+		}
+		var elems []json.RawMessage
+		if err := json.Unmarshal(raw, &elems); err != nil {
+			return notJSON
+		}
+		out := reflect.MakeSlice(t, len(elems), len(elems))
+		for i, e := range elems {
+			e = bytes.TrimSpace(e)
+			elemPath := append(append([]string{}, path...), strconv.Itoa(i))
+			if bytes.Equal(e, []byte("null")) && t.Elem().Kind() != reflect.Pointer {
+				return NewError(http.StatusBadRequest, fmt.Sprintf("Value not found for `%s` key.", strings.Join(elemPath, ".")))
+			}
+			if err := decodeValue(elemPath, e, out.Index(i)); err != nil {
+				return err
+			}
+		}
+		fv.Set(out)
+		return nil
+	case t.Kind() == reflect.Map && t.Key().Kind() == reflect.String:
+		if len(raw) == 0 || raw[0] != '{' {
+			return mismatch(key, "Dictionary<String, Any>")
+		}
+		var entries map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &entries); err != nil {
+			return notJSON
+		}
+		keys := make([]string, 0, len(entries))
+		for k := range entries {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		out := reflect.MakeMapWithSize(t, len(entries))
+		for _, k := range keys {
+			e := bytes.TrimSpace(entries[k])
+			elemPath := append(append([]string{}, path...), k)
+			if bytes.Equal(e, []byte("null")) && t.Elem().Kind() != reflect.Pointer {
+				return NewError(http.StatusBadRequest, fmt.Sprintf("Value not found for `%s` key.", strings.Join(elemPath, ".")))
+			}
+			v := reflect.New(t.Elem()).Elem()
+			if err := decodeValue(elemPath, e, v); err != nil {
+				return err
+			}
+			out.SetMapIndex(reflect.ValueOf(k).Convert(t.Key()), v)
+		}
+		fv.Set(out)
+		return nil
+	}
+	if err := json.Unmarshal(raw, fv.Addr().Interface()); err != nil {
+		return mapErr(key, err)
 	}
 	return nil
 }
