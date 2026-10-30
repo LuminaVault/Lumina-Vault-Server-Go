@@ -31,7 +31,7 @@ WAVES = {
     # files, memories and embeddings, so it moves with the vault in wave 4.
     "Projects": 1,
     "Reminders": 2, "Apple": 2, "Profiles": 2, "Sessions": 2, "Spaces": 2,
-    "Devices": 2, "Settings": 2, "Weather": 2, "News": 2, "Kanban": 2, "Achievements": 2,
+    "Devices": 2, "Settings": 6, "Weather": 2, "News": 2, "Kanban": 2, "Achievements": 2,
     "Dashboard": 3, "Health": 3, "Calendar": 3, "Mail": 3, "Community": 3, "Marketplace": 3,
     "Account": 3, "Me": 3, "Onboarding": 3, "Teams": 3,
     "Todos": 4, "Vault": 4, "Memory": 4, "Knowledge": 4, "KB": 4, "Capture": 4, "Import": 4,

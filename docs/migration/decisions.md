@@ -253,3 +253,17 @@ that resolve vault access sit behind `auth.Identify` and get identity from
 `auth.Identity`. `internal/vaultaccess` (Teams/VaultAccessService.swift) and
 `internal/vaultactivity` (the DB half of VaultActivityRecorder) are shared by
 Spaces, Kanban and the later vault modules.
+
+## D-settings-wave6: Settings moves to wave 6, with Hermes
+
+`HermesConfigController` (`/v1/settings/hermes`) is not leaf CRUD. Every `PUT`
+and every successful `POST /test` calls
+`HermesRemoteCapabilitiesService.capabilities(force: true)`. That service
+resolves the tenant's endpoint through `HermesEndpointResolver`, probes the
+remote `/v1/capabilities` and the dashboard through `HermesDashboardCredentialStore`,
+and writes `user_hermes_config.capabilities`/`capabilities_checked_at`. PUT also
+nudges the Hermes mirror worker (coupling.md, HermesMirrorNudging). All of that
+is Hermes (wave 6). Porting Settings in wave 2 would mean porting those pieces
+early, or diverging on the DB columns the probe writes. So Settings is wave 6
+(`scripts/gen-modules.py` WAVES). Its SSRF guard and no-redirect probe port
+with it.
