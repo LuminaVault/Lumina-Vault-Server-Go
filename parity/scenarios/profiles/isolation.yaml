@@ -1,0 +1,14 @@
+module: profiles
+steps:
+  - {name: "bob list empty", as: bob, request: {method: GET, path: "/v1/profiles"}}
+  - {name: "bob get alice persona", as: bob, request: {method: GET, path: "/v1/profiles/assistant"}}
+  - {name: "bob patch alice persona", as: bob, request: {method: PATCH, path: "/v1/profiles/assistant", json: {"label": "Mine"}}}
+  - {name: "bob delete alice persona", as: bob, request: {method: DELETE, path: "/v1/profiles/assistant"}}
+  - {name: "bob activate alice persona", as: bob, request: {method: POST, path: "/v1/profiles/assistant/activate"}, snapshot: [user_hermes_profiles]}
+  - {name: "bob first profile becomes default", as: bob, request: {method: POST, path: "/v1/profiles", json: {"slug": "assistant", "label": "Bob"}}, snapshot: [user_hermes_profiles]}
+  - {name: "bob second is not default", as: bob, request: {method: POST, path: "/v1/profiles", json: {"slug": "second", "label": "Second"}}, snapshot: [user_hermes_profiles]}
+  - {name: "bob activate second", as: bob, request: {method: POST, path: "/v1/profiles/second/activate"}, snapshot: [user_hermes_profiles]}
+  - {name: "bob delete first now non-default", as: bob, request: {method: DELETE, path: "/v1/profiles/assistant"}, snapshot: [user_hermes_profiles]}
+  - {name: "bob list", as: bob, request: {method: GET, path: "/v1/profiles"}}
+  - {name: "alice unchanged", as: alice, request: {method: GET, path: "/v1/profiles"}}
+  - {name: "alice get keeps her assistant", as: alice, request: {method: GET, path: "/v1/profiles/assistant"}}
