@@ -1,0 +1,28 @@
+# Models only (decisions.md D2); handlers are hand-written on Echo v5.
+# include-operation-ids = this module's routes in docs/migration/routes.json.
+package: kanban
+output: internal/modules/kanban/models.gen.go
+generate:
+  models: true
+output-options:
+  include-operation-ids:
+    - boardsList
+    - boardsCreate
+    - boardsGet
+    - boardsPatch
+    - boardsDelete
+    - boardsVersion
+    - columnsCreate
+    - columnsPatch
+    - columnsDelete
+    - columnsReorder
+    - cardsCreate
+    - cardsPatch
+    - cardsDelete
+    - cardsMove
+    - cardsPromote
+  type-mapping:
+    string:
+      formats:
+        uuid: { type: wire.UUID, import: lumina/internal/wire }
+        date-time: { type: wire.Time, import: lumina/internal/wire }
