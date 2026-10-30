@@ -117,3 +117,49 @@ func TestJSONContentType(t *testing.T) {
 	require.NoError(t, wire.JSON(c, http.StatusOK, map[string]int{"a": 1}))
 	require.Equal(t, "application/json; charset=utf-8", rec.Header().Get("Content-Type"))
 }
+
+type nestedItem struct {
+	ID       string             `json:"id"`
+	Done     bool               `json:"done"`
+	Priority *int64             `json:"priority,omitempty"`
+	Tags     *[]string          `json:"tags,omitempty"`
+	Args     *map[string]string `json:"args,omitempty"`
+	When     *wire.Time         `json:"when,omitempty"`
+}
+
+type nestedBatch struct {
+	Items []nestedItem `json:"items"`
+}
+
+// Hummingbird's Request.decode: a missing key names only the key, while null
+// and type mismatches name the dotted coding path with array indices
+// (hummingbird Sources/Hummingbird/Server/Request.swift, pathKeyValue).
+func TestBindNestedPaths(t *testing.T) {
+	cases := []struct{ body, message string }{
+		{`{"items":[{"id":"a"}]}`, "Coding key `done` not found."},
+		{`{"items":[{"id":"a","done":true},{"id":"b","done":"no"}]}`, "Type mismatch for `items.1.done` key, expected `Bool` type."},
+		{`{"items":[{"id":null,"done":true}]}`, "Value not found for `items.0.id` key."},
+		{`{"items":[1]}`, "Type mismatch for `items.0` key, expected `Dictionary<String, Any>` type."},
+		{`{"items":[null]}`, "Value not found for `items.0` key."},
+		{`{"items":{}}`, "Type mismatch for `items` key, expected `Array<Any>` type."},
+		{`{"items":[{"id":"a","done":true,"priority":"x"}]}`, "Type mismatch for `items.0.priority` key, expected `Int` type."},
+		{`{"items":[{"id":"a","done":true,"tags":"x"}]}`, "Type mismatch for `items.0.tags` key, expected `Array<Any>` type."},
+		{`{"items":[{"id":"a","done":true,"tags":["ok",2]}]}`, "Type mismatch for `items.0.tags.1` key, expected `String` type."},
+		{`{"items":[{"id":"a","done":true,"args":[]}]}`, "Type mismatch for `items.0.args` key, expected `Dictionary<String, Any>` type."},
+		{`{"items":[{"id":"a","done":true,"args":{"n":1}}]}`, "Type mismatch for `items.0.args.n` key, expected `String` type."},
+		{`{"items":[{"id":"a","done":true,"when":"soon"}]}`, "The given data was not valid input: Expected date string to be ISO8601-formatted."},
+	}
+	for _, tc := range cases {
+		_, err := bind[nestedBatch](t, tc.body)
+		var we *wire.Error
+		require.ErrorAs(t, err, &we, tc.body)
+		require.Equal(t, http.StatusBadRequest, we.Status, tc.body)
+		require.Equal(t, tc.message, we.Message, tc.body)
+	}
+	got, err := bind[nestedBatch](t, `{"items":[{"id":"a","done":true,"priority":3,"tags":["x"],"args":{"k":"v"},"when":"2026-01-01T00:00:00Z","extra":1}]}`)
+	require.NoError(t, err)
+	require.Equal(t, int64(3), *got.Items[0].Priority)
+	require.Equal(t, []string{"x"}, *got.Items[0].Tags)
+	require.Equal(t, map[string]string{"k": "v"}, *got.Items[0].Args)
+	require.Equal(t, 2026, got.Items[0].When.Year())
+}
