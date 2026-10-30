@@ -35,6 +35,11 @@ type Config struct {
 
 	RedisURL string `env:"REDIS_URL"`
 
+	// Shared feed aggregator for the news ticker (news module). Raw strings:
+	// the module splits FEEDS_DEFAULT_FEEDS exactly as Swift does.
+	FeedsBaseURL      string `env:"FEEDS_BASE_URL"`
+	FeedsDefaultFeeds string `env:"FEEDS_DEFAULT_FEEDS"`
+
 	// LVGoJobs lists the background jobs this Go process runs. It is set only
 	// on api-go-* (extraEnv), so a Swift job flag inherited from api-* never
 	// starts a Go job by accident. See the roadmap's background job rule.

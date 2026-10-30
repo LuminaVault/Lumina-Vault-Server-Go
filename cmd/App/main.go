@@ -12,6 +12,8 @@ import (
 	"lumina/internal/db"
 	"lumina/internal/httpserver"
 	"lumina/internal/migrations"
+	"lumina/internal/modules/achievements"
+	"lumina/internal/modules/news"
 	"lumina/internal/modules/projects"
 	"lumina/internal/telemetry"
 	"net"
@@ -100,6 +102,10 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		// them through the api ingress.extraPaths that name them.
 		deps.Modules = []httpserver.Module{
 			projects.New(pool),
+			achievements.New(pool),
+		}
+		if m := news.New(pool, cfg); m != nil { // nil without LV_SECRET_MASTER_KEY, as in Swift
+			deps.Modules = append(deps.Modules, m)
 		}
 	}
 	e := httpserver.New(cfg, deps)

@@ -12,6 +12,59 @@ import (
 	"github.com/google/uuid"
 )
 
+const getProgress = `-- name: GetProgress :one
+
+SELECT id, progress_count, unlocked_at
+FROM achievement_progress
+WHERE tenant_id = $1 AND achievement_key = $2
+`
+
+type GetProgressParams struct {
+	TenantID       uuid.UUID
+	AchievementKey string
+}
+
+type GetProgressRow struct {
+	ID            uuid.UUID
+	ProgressCount int64
+	UnlockedAt    *time.Time
+}
+
+// Write path of AchievementsService.record(tenantID:event:). Not reached by
+// any Go route: Swift's AchievementsWorker owns writes until its producers move.
+func (q *Queries) GetProgress(ctx context.Context, arg GetProgressParams) (GetProgressRow, error) {
+	row := q.db.QueryRow(ctx, getProgress, arg.TenantID, arg.AchievementKey)
+	var i GetProgressRow
+	err := row.Scan(&i.ID, &i.ProgressCount, &i.UnlockedAt)
+	return i, err
+}
+
+const insertProgress = `-- name: InsertProgress :exec
+INSERT INTO achievement_progress (id, tenant_id, achievement_key, progress_count, unlocked_at, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, $6, $6)
+`
+
+type InsertProgressParams struct {
+	ID             uuid.UUID
+	TenantID       uuid.UUID
+	AchievementKey string
+	ProgressCount  int64
+	UnlockedAt     *time.Time
+	CreatedAt      time.Time
+}
+
+func (q *Queries) InsertProgress(ctx context.Context, arg InsertProgressParams) error {
+	_, err := q.db.Exec(ctx, insertProgress,
+		arg.ID,
+		arg.TenantID,
+		arg.AchievementKey,
+		arg.ProgressCount,
+		arg.UnlockedAt,
+		arg.CreatedAt,
+	)
+	return err
+}
+
 const recentUnlocks = `-- name: RecentUnlocks :many
 SELECT achievement_key, unlocked_at
 FROM achievement_progress
@@ -85,4 +138,27 @@ func (q *Queries) TenantProgress(ctx context.Context, tenantID uuid.UUID) ([]Ten
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateProgress = `-- name: UpdateProgress :exec
+UPDATE achievement_progress
+SET progress_count = $2, unlocked_at = $3, updated_at = $4
+WHERE id = $1
+`
+
+type UpdateProgressParams struct {
+	ID            uuid.UUID
+	ProgressCount int64
+	UnlockedAt    *time.Time
+	UpdatedAt     time.Time
+}
+
+func (q *Queries) UpdateProgress(ctx context.Context, arg UpdateProgressParams) error {
+	_, err := q.db.Exec(ctx, updateProgress,
+		arg.ID,
+		arg.ProgressCount,
+		arg.UnlockedAt,
+		arg.UpdatedAt,
+	)
+	return err
 }
