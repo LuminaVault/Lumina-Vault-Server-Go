@@ -1,0 +1,46 @@
+# Auth and body errors. Anonymous requests share Swift's "ip:anon" bucket.
+module: kanban
+steps:
+  - {name: list no token, request: {method: GET, path: /v1/boards}}
+  - {name: create board no token, request: {method: POST, path: /v1/boards, json: {title: x}}}
+  - {name: get board no token, request: {method: GET, path: /v1/boards/CA4BB000-0000-4000-8000-0000000000A1}}
+  - {name: patch board no token, request: {method: PATCH, path: /v1/boards/CA4BB000-0000-4000-8000-0000000000A1, json: {title: x}}}
+  - {name: delete board no token, request: {method: DELETE, path: /v1/boards/CA4BB000-0000-4000-8000-0000000000A1}}
+  - {name: create card no token, request: {method: POST, path: /v1/boards/CA4BB000-0000-4000-8000-0000000000A1/cards, json: {columnID: CA4BC000-0000-4000-8000-0000000000A1, title: x}}}
+  - {name: create column no token, request: {method: POST, path: /v1/boards/CA4BB000-0000-4000-8000-0000000000A1/columns, json: {title: x}}}
+  - {name: reorder no token, request: {method: POST, path: /v1/boards/CA4BB000-0000-4000-8000-0000000000A1/columns/reorder, json: {columnID: CA4BC000-0000-4000-8000-0000000000A1}}}
+  - {name: patch column no token, request: {method: PATCH, path: /v1/boards/CA4BB000-0000-4000-8000-0000000000A1/columns/CA4BC000-0000-4000-8000-0000000000A1, json: {title: x}}}
+  - {name: delete column no token, request: {method: DELETE, path: /v1/boards/CA4BB000-0000-4000-8000-0000000000A1/columns/CA4BC000-0000-4000-8000-0000000000A1}}
+  - {name: version no token, request: {method: GET, path: /v1/boards/CA4BB000-0000-4000-8000-0000000000A1/version}}
+  - {name: patch card no token, request: {method: PATCH, path: /v1/cards/CA4BD000-0000-4000-8000-0000000000A1, json: {title: x}}}
+  - {name: delete card no token, request: {method: DELETE, path: /v1/cards/CA4BD000-0000-4000-8000-0000000000A1}}
+  - {name: move card no token, request: {method: POST, path: /v1/cards/CA4BD000-0000-4000-8000-0000000000A1/move, json: {toColumnID: CA4BC000-0000-4000-8000-0000000000A2}}}
+  - {name: promote no token, request: {method: POST, path: /v1/cards/CA4BD000-0000-4000-8000-0000000000A1/promote}}
+  - {name: bad token, request: {method: GET, path: /v1/boards, headers: {Authorization: "Bearer not.a.jwt"}}}
+  - {name: malformed X-Vault-ID beats the missing token, request: {method: GET, path: /v1/boards, headers: {X-Vault-ID: nope}}}
+  - {name: valid X-Vault-ID without token, request: {method: GET, path: /v1/boards, headers: {X-Vault-ID: CA4BF000-0000-4000-8000-000000000001}}}
+  - {name: malformed json, as: bob, request: {method: POST, path: /v1/boards, raw: "{\"title\":"}}
+  - {name: empty body, as: bob, request: {method: POST, path: /v1/boards, raw: ""}}
+  - {name: array body, as: bob, request: {method: POST, path: /v1/boards, raw: "[]"}}
+  - {name: missing title, as: bob, request: {method: POST, path: /v1/boards, json: {}}}
+  - {name: null title, as: bob, request: {method: POST, path: /v1/boards, raw: "{\"title\":null}"}}
+  - {name: title wrong type, as: bob, request: {method: POST, path: /v1/boards, json: {title: 42}}}
+  - {name: archived wrong type, as: bob, request: {method: PATCH, path: /v1/boards/CA4BB000-0000-4000-8000-0000000000B1, json: {archived: "yes"}}}
+  - {name: patch bad board id, as: bob, request: {method: PATCH, path: /v1/boards/not-a-uuid, json: {title: x}}}
+  - {name: get random board, as: bob, request: {method: GET, path: /v1/boards/00000000-0000-4000-8000-000000000000}}
+  - {name: get bad board id, as: bob, request: {method: GET, path: /v1/boards/not-a-uuid}}
+  - {name: card bad columnID, as: bob, request: {method: POST, path: /v1/boards/CA4BB000-0000-4000-8000-0000000000B1/cards, json: {columnID: nope, title: x}}}
+  - {name: card unknown priority, as: bob, request: {method: POST, path: /v1/boards/CA4BB000-0000-4000-8000-0000000000B1/cards, json: {columnID: CA4BC000-0000-4000-8000-0000000000B1, title: x, priority: asap}}}
+  - {name: card priority wrong type, as: bob, request: {method: POST, path: /v1/boards/CA4BB000-0000-4000-8000-0000000000B1/cards, json: {columnID: CA4BC000-0000-4000-8000-0000000000B1, title: x, priority: 3}}}
+  - {name: card bad dueAt, as: bob, request: {method: POST, path: /v1/boards/CA4BB000-0000-4000-8000-0000000000B1/cards, json: {columnID: CA4BC000-0000-4000-8000-0000000000B1, title: x, dueAt: tomorrow}}}
+  - {name: card missing columnID, as: bob, request: {method: POST, path: /v1/boards/CA4BB000-0000-4000-8000-0000000000B1/cards, json: {title: x}}}
+  - {name: card into a foreign column, as: bob, request: {method: POST, path: /v1/boards/CA4BB000-0000-4000-8000-0000000000B1/cards, json: {columnID: CA4BC000-0000-4000-8000-0000000000A1, title: x}}, snapshot: [kanban_boards, kanban_cards]}
+  - {name: reorder unknown neighbour, as: bob, request: {method: POST, path: /v1/boards/CA4BB000-0000-4000-8000-0000000000B1/columns/reorder, json: {columnID: CA4BC000-0000-4000-8000-0000000000B1, beforeID: 00000000-0000-4000-8000-000000000000}}}
+  - {name: move unknown neighbour, as: bob, request: {method: POST, path: /v1/cards/CA4BD000-0000-4000-8000-0000000000B1/move, json: {toColumnID: CA4BC000-0000-4000-8000-0000000000B1, afterID: 00000000-0000-4000-8000-000000000000}}}
+  - {name: column id is parsed before board id, as: bob, request: {method: PATCH, path: /v1/boards/nope/columns/nope, json: {title: x}}}
+  - {name: delete random column, as: bob, request: {method: DELETE, path: /v1/boards/CA4BB000-0000-4000-8000-0000000000B1/columns/00000000-0000-4000-8000-000000000000}}
+  - {name: move missing toColumnID, as: bob, request: {method: POST, path: /v1/cards/CA4BD000-0000-4000-8000-0000000000B1/move, json: {}}}
+  - {name: patch random card, as: bob, request: {method: PATCH, path: /v1/cards/00000000-0000-4000-8000-000000000000, json: {title: x}}}
+  - {name: delete bad card id, as: bob, request: {method: DELETE, path: /v1/cards/not-a-uuid}}
+  - {name: unknown field ignored, as: bob, request: {method: POST, path: /v1/boards/CA4BB000-0000-4000-8000-0000000000B1/columns, json: {title: Extra, bogus: 1}}, snapshot: [kanban_columns]}
+  - {name: failed writes did not bump the version, as: bob, request: {method: GET, path: /v1/boards/CA4BB000-0000-4000-8000-0000000000B1/version}}
