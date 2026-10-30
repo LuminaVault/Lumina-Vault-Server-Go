@@ -42,6 +42,11 @@ type Config struct {
 
 	// VaultRootPath holds tenants/<UUID>/{raw,wiki,memories} on the shared PVC.
 	VaultRootPath string `env:"VAULT_ROOT_PATH" envDefault:"/tmp/luminavault"`
+	// Wave 2 apple/devices/reminders.
+	APNSBundleID                    string `env:"APNS_BUNDLE_ID"`
+	EmbeddingProvider               string `env:"EMBEDDING_PROVIDER" envDefault:"deterministic"`
+	EmbeddingMonthlyTokenCapDefault int64  `env:"EMBEDDING_MONTHLY_TOKEN_CAP_DEFAULT" envDefault:"2000000"`
+	HermesDefaultModel              string `env:"HERMES_DEFAULT_MODEL" envDefault:"hermes-3"`
 
 	// LVGoJobs lists the background jobs this Go process runs. It is set only
 	// on api-go-* (extraEnv), so a Swift job flag inherited from api-* never
