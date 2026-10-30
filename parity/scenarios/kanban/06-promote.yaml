@@ -1,0 +1,49 @@
+# Card → Job promotion on kanban_ann's personal vault (default board from
+# 02-default.yaml). Writes SKILL.md under the vault root and a skills_state
+# row. Runs last: promotedAt in kanban_cards.extra is the wall clock, so no
+# later step may snapshot kanban_cards.
+module: kanban
+steps:
+  - name: list boards
+    as: kanban_ann
+    request: {method: GET, path: /v1/boards}
+    capture: {board: "$[0].id"}
+  - name: get board
+    as: kanban_ann
+    request: {method: GET, path: "/v1/boards/{{board}}"}
+    capture: {todo: "$.columns[0].id"}
+  - name: create card
+    as: kanban_ann
+    request: {method: POST, path: "/v1/boards/{{board}}/cards", json: {columnID: "{{todo}}", title: Weekly Digest, body: Summarize the week}}
+    capture: {digest: $.id}
+  - {name: no config, as: kanban_ann, request: {method: POST, path: "/v1/cards/{{digest}}/promote"}}
+  - {name: malformed body counts as no body, as: kanban_ann, request: {method: POST, path: "/v1/cards/{{digest}}/promote", raw: "{"}}
+  - {name: invalid cron, as: kanban_ann, request: {method: POST, path: "/v1/cards/{{digest}}/promote", json: {cron: not a cron}}}
+  - {name: cron out of range, as: kanban_ann, request: {method: POST, path: "/v1/cards/{{digest}}/promote", json: {cron: "60 * * * *"}}}
+  - {name: both cron and runAt, as: kanban_ann, request: {method: POST, path: "/v1/cards/{{digest}}/promote", json: {cron: "0 9 * * 1", runAt: "2033-05-18T03:33:20Z"}}}
+  - {name: promote with padded cron, as: kanban_ann, request: {method: POST, path: "/v1/cards/{{digest}}/promote", json: {cron: "  0 9 * * 1 ", domain: life}}, snapshot: [skills_state]}
+  - {name: re-promote returns the job with request fields, as: kanban_ann, request: {method: POST, path: "/v1/cards/{{digest}}/promote", json: {cron: "*/5 * * * *", prompt: other}}, snapshot: [skills_state]}
+  - {name: wrong-type body is ignored, as: kanban_ann, request: {method: POST, path: "/v1/cards/{{digest}}/promote", json: {cron: 5}}}
+  - {name: board shows the job config, as: kanban_ann, request: {method: GET, path: "/v1/boards/{{board}}"}}
+  - name: create one-shot card
+    as: kanban_ann
+    request: {method: POST, path: "/v1/boards/{{board}}/cards", json: {columnID: "{{todo}}", title: One Shot!}}
+    capture: {once: $.id}
+  - {name: promote one-shot, as: kanban_ann, request: {method: POST, path: "/v1/cards/{{once}}/promote", json: {runAt: "2033-05-18T03:33:20.250Z", prompt: Run me once, spaceID: 5eed0000-0000-4000-8000-0000000000a1}}, snapshot: [skills_state]}
+  - name: create empty card
+    as: kanban_ann
+    request: {method: POST, path: "/v1/boards/{{board}}/cards", json: {columnID: "{{todo}}", title: "  A very long card title that keeps going, and going — and going on  "}}
+    capture: {empty: $.id}
+  - {name: no prompt and no body, as: kanban_ann, request: {method: POST, path: "/v1/cards/{{empty}}/promote", json: {cron: "0 8 * * *"}}}
+  - {name: blank prompt, as: kanban_ann, request: {method: POST, path: "/v1/cards/{{empty}}/promote", json: {cron: "0 8 * * *", prompt: "  \n "}}}
+  - name: long prompt and a complex cron
+    as: kanban_ann
+    request:
+      method: POST
+      path: "/v1/cards/{{empty}}/promote"
+      json:
+        cron: "0,30 9-17/2 1-31 */3 1-5"
+        prompt: "Résumé of the week: collect every note tagged café, then summarise the decisions, the open questions, the owners and the deadlines; finish with a short list of risks and what changed since last week."
+    snapshot: [skills_state]
+  - {name: bad card id, as: kanban_ann, request: {method: POST, path: /v1/cards/not-a-uuid/promote}}
+  - {name: random card, as: kanban_ann, request: {method: POST, path: /v1/cards/00000000-0000-4000-8000-000000000000/promote}}
