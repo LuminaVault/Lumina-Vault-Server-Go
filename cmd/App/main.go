@@ -12,7 +12,9 @@ import (
 	"lumina/internal/db"
 	"lumina/internal/httpserver"
 	"lumina/internal/migrations"
+	"lumina/internal/modules/profiles"
 	"lumina/internal/modules/projects"
+	"lumina/internal/modules/sessions"
 	"lumina/internal/telemetry"
 	"net"
 	"os"
@@ -100,6 +102,8 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		// them through the api ingress.extraPaths that name them.
 		deps.Modules = []httpserver.Module{
 			projects.New(pool),
+			profiles.New(pool),
+			sessions.New(pool),
 		}
 	}
 	e := httpserver.New(cfg, deps)
