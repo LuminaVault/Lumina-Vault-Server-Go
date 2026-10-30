@@ -83,12 +83,15 @@ func TestGoldenTokenVerifies(t *testing.T) {
 	require.NoError(t, json.Unmarshal(raw, &g))
 	keys, err := LoadKeys(config.Config{JWTHMACSecrets: g.HMACSecrets})
 	require.NoError(t, err)
-	claims, err := Verify(keys, "Bearer "+g.Token)
-	require.NoError(t, err)
 	var want struct {
-		Sub string `json:"sub"`
+		Sub string  `json:"sub"`
+		Iat float64 `json:"iat"`
 	}
 	require.NoError(t, json.Unmarshal(g.Claims, &want))
+	// The captured token expires an hour after capture; verify it at capture time.
+	capturedAt := time.Unix(int64(want.Iat), 0)
+	claims, err := Verify(keys, "Bearer "+g.Token, jwt.WithTimeFunc(func() time.Time { return capturedAt }))
+	require.NoError(t, err)
 	require.Equal(t, want.Sub, claims.Subject)
 }
 

@@ -67,8 +67,8 @@ var errNoBearer = errors.New("auth: no bearer token")
 
 // Verify checks the header value and returns the claims of a general session
 // token. Scoped tokens (scp set) are machine credentials for one route group
-// and never pass here.
-func Verify(keys Keyset, header string) (*Claims, error) {
+// and never pass here. opts are extra parser options (tests pin the clock).
+func Verify(keys Keyset, header string, opts ...jwt.ParserOption) (*Claims, error) {
 	token, ok := strings.CutPrefix(header, "Bearer ")
 	if !ok || token == "" {
 		return nil, errNoBearer
@@ -81,7 +81,7 @@ func Verify(keys Keyset, header string) (*Claims, error) {
 			return nil, errors.New("auth: unknown kid")
 		}
 		return key.Secret, nil
-	}, jwt.WithValidMethods([]string{"HS256"}), jwt.WithExpirationRequired())
+	}, append([]jwt.ParserOption{jwt.WithValidMethods([]string{"HS256"}), jwt.WithExpirationRequired()}, opts...)...)
 	if err != nil {
 		return nil, err
 	}
