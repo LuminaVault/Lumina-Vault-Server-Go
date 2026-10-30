@@ -1,0 +1,14 @@
+module: achievements
+smoke: true
+steps:
+  - {name: list alice, as: alice, request: {method: GET, path: /v1/achievements}}
+  - {name: recent alice default limit, as: alice, request: {method: GET, path: /v1/achievements/recent}}
+  - {name: recent limit 1, as: alice, request: {method: GET, path: "/v1/achievements/recent?limit=1"}}
+  - {name: recent limit 2, as: alice, request: {method: GET, path: "/v1/achievements/recent?limit=2"}}
+  - {name: recent limit 0 clamps to 1, as: alice, request: {method: GET, path: "/v1/achievements/recent?limit=0"}}
+  - {name: recent negative limit clamps to 1, as: alice, request: {method: GET, path: "/v1/achievements/recent?limit=-3"}}
+  - {name: recent limit 999 clamps to 50, as: alice, request: {method: GET, path: "/v1/achievements/recent?limit=999"}}
+  - {name: recent limit not a number, as: alice, request: {method: GET, path: "/v1/achievements/recent?limit=abc"}}
+  - {name: recent limit empty, as: alice, request: {method: GET, path: "/v1/achievements/recent?limit="}}
+  - {name: recent limit overflows Int, as: alice, request: {method: GET, path: "/v1/achievements/recent?limit=99999999999999999999"}}
+  - {name: list ignores unknown query, as: alice, request: {method: GET, path: "/v1/achievements?limit=1"}, snapshot: [achievement_progress]}

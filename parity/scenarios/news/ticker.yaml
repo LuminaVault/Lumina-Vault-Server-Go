@@ -1,0 +1,14 @@
+# The parity env sets LV_SECRET_MASTER_KEY (so /v1/news is mounted) and no
+# FEEDS_BASE_URL, so every authenticated request is 503
+# news_ticker_not_configured, checked before the install lookup. The live
+# aggregator path (install state, feed fetch, cache) is covered by Go tests
+# against a stub aggregator only.
+module: news
+steps:
+  - {name: ticker no token, request: {method: GET, path: /v1/news/ticker}}
+  - {name: ticker bad token, request: {method: GET, path: /v1/news/ticker, headers: {Authorization: "Bearer not.a.jwt"}}}
+  - {name: ticker no token with limit, request: {method: GET, path: "/v1/news/ticker?limit=5"}}
+  - {name: alice enabled install unconfigured, as: alice, request: {method: GET, path: /v1/news/ticker}}
+  - {name: bob disabled install unconfigured, as: bob, request: {method: GET, path: /v1/news/ticker}}
+  - {name: limit 0, as: alice, request: {method: GET, path: "/v1/news/ticker?limit=0"}}
+  - {name: limit not a number, as: alice, request: {method: GET, path: "/v1/news/ticker?limit=abc"}, snapshot: [plugin_installs]}
