@@ -1,0 +1,37 @@
+module: spaces
+steps:
+  - {name: list no token, request: {method: GET, path: /v1/spaces}}
+  - {name: create no token, request: {method: POST, path: /v1/spaces, json: {name: x}}}
+  - {name: get no token bad id, request: {method: GET, path: /v1/spaces/nope}}
+  - {name: update no token, request: {method: PUT, path: /v1/spaces/5BACE000-0000-4000-8000-0000000000A1, json: {name: x}}}
+  - {name: delete no token, request: {method: DELETE, path: /v1/spaces/5BACE000-0000-4000-8000-0000000000A1}}
+  - {name: bad vault header before identity, request: {method: GET, path: /v1/spaces, headers: {X-Vault-ID: nope}}}
+  - {name: bad token, request: {method: GET, path: /v1/spaces, headers: {Authorization: "Bearer not.a.jwt"}}}
+  - {name: bad vault header, as: alice, request: {method: GET, path: /v1/spaces, headers: {X-Vault-ID: "1234"}}}
+  - {name: empty vault header, as: alice, request: {method: GET, path: /v1/spaces, headers: {X-Vault-ID: ""}}}
+  - {name: unknown vault, as: alice, request: {method: GET, path: /v1/spaces, headers: {X-Vault-ID: 00000000-0000-4000-8000-000000000000}}}
+  - {name: bad id, as: alice, request: {method: GET, path: /v1/spaces/not-a-uuid}}
+  - {name: bad id put, as: alice, request: {method: PUT, path: /v1/spaces/not-a-uuid, json: {name: x}}}
+  - {name: bad id delete, as: alice, request: {method: DELETE, path: /v1/spaces/not-a-uuid}}
+  - {name: random id, as: alice, request: {method: GET, path: /v1/spaces/00000000-0000-4000-8000-000000000000}}
+  - {name: random id put, as: alice, request: {method: PUT, path: /v1/spaces/00000000-0000-4000-8000-000000000000, json: {name: ""}}}
+  - {name: random id delete, as: alice, request: {method: DELETE, path: /v1/spaces/00000000-0000-4000-8000-000000000000}}
+  - {name: malformed json, as: alice, request: {method: POST, path: /v1/spaces, raw: "{\"name\":"}}
+  - {name: empty body, as: alice, request: {method: POST, path: /v1/spaces, raw: ""}}
+  - {name: array body, as: alice, request: {method: POST, path: /v1/spaces, raw: "[]"}}
+  - {name: missing name, as: alice, request: {method: POST, path: /v1/spaces, json: {}}}
+  - {name: null name, as: alice, request: {method: POST, path: /v1/spaces, raw: "{\"name\":null}"}}
+  - {name: name wrong type, as: alice, request: {method: POST, path: /v1/spaces, json: {name: 42}}}
+  - {name: slug wrong type, as: alice, request: {method: POST, path: /v1/spaces, json: {name: ok, slug: 7}}}
+  - {name: blank name, as: alice, request: {method: POST, path: /v1/spaces, json: {name: "  ", slug: ok}}}
+  - {name: blank name and bad slug, as: alice, request: {method: POST, path: /v1/spaces, json: {name: "  ", slug: "-x"}}}
+  - {name: bad slug leading dash, as: alice, request: {method: POST, path: /v1/spaces, json: {name: x, slug: "-x"}}}
+  - {name: bad slug too short, as: alice, request: {method: POST, path: /v1/spaces, json: {name: x, slug: a}}}
+  - {name: bad slug too long, as: alice, request: {method: POST, path: /v1/spaces, json: {name: x, slug: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}}}
+  - {name: bad slug reserved, as: alice, request: {method: POST, path: /v1/spaces, json: {name: x, slug: raw}}}
+  - {name: bad slug underscore, as: alice, request: {method: POST, path: /v1/spaces, json: {name: x, slug: _deleted}}}
+  - {name: slug taken case-insensitively, as: alice, request: {method: POST, path: /v1/spaces, json: {name: x, slug: ALPHA}}, snapshot: [spaces]}
+  - {name: update blank name, as: alice, request: {method: PUT, path: /v1/spaces/5BACE000-0000-4000-8000-0000000000A1, json: {name: "   "}}}
+  - {name: update name wrong type, as: alice, request: {method: PUT, path: /v1/spaces/5BACE000-0000-4000-8000-0000000000A1, json: {name: 1}}}
+  - {name: update malformed, as: alice, request: {method: PUT, path: /v1/spaces/5BACE000-0000-4000-8000-0000000000A1, raw: "{"}}
+  - {name: unknown field ignored, as: alice, request: {method: POST, path: /v1/spaces, json: {name: Extra, slug: extra, bogus: 1}}, snapshot: [spaces]}
