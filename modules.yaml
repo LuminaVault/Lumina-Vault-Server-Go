@@ -11,7 +11,7 @@ modules:
   achievements:
     wave: 2
     swiftDir: Sources/App/Achievements
-    status: swift
+    status: parity
     prefixes: [/v1/achievements]
     jobs: []
   apple:
