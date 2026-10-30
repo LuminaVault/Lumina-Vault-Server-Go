@@ -60,6 +60,13 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Bring up Swift, Go and Postgres
         run: PARITY_SWIFT_IMAGE="$(cat parity/SWIFT_IMAGE)" scripts/parity-up.sh
+      - name: Self-test (Swift vs Swift, proves scenarios are deterministic)
+        run: |
+          go run ./parity/cmd/parity compare \
+            --swift http://localhost:18080 --swift-db postgres://lv:lv@localhost:15432/parity_swift \
+            --go http://localhost:18082 --go-db postgres://lv:lv@localhost:15432/parity_swift2
+      - name: Reset databases for the Go comparison
+        run: PARITY_SWIFT_IMAGE="$(cat parity/SWIFT_IMAGE)" scripts/parity-up.sh
       - name: Compare
         run: |
           go run ./parity/cmd/parity compare \

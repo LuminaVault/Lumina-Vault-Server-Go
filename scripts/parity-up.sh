@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Bring up the parity environment (docker-compose.parity.yml):
 #   1. Postgres
-#   2. parity_template = Swift `migrate` + parity/seed/base.sql
+#   2. parity_template = Swift `migrate` + parity/seed/base.sql, then every
+#      other parity/seed/*.sql in name order (one file per module)
 #   3. parity_swift / parity_go / parity_swift2 cloned from the template
 #   4. the three servers
 # Re-running drops and recreates every parity_* database.
@@ -25,9 +26,11 @@ psql_pg -q -c "CREATE DATABASE parity_template"
 echo "==> Swift migrate into parity_template ($PARITY_SWIFT_IMAGE)"
 "${COMPOSE[@]}" run --rm --no-deps -e POSTGRES_DATABASE=parity_template swift migrate
 
-if [ -s parity/seed/base.sql ]; then
-  "${COMPOSE[@]}" exec -T pg psql -v ON_ERROR_STOP=1 -q -U lv -d parity_template < parity/seed/base.sql
-fi
+for seed in parity/seed/base.sql $(ls parity/seed/*.sql | grep -v '/base\.sql$' | sort); do
+  [ -s "$seed" ] || continue
+  echo "    seed $seed"
+  "${COMPOSE[@]}" exec -T pg psql -v ON_ERROR_STOP=1 -q -U lv -d parity_template < "$seed"
+done
 
 for db in parity_swift parity_go parity_swift2; do
   psql_pg -q -c "CREATE DATABASE $db TEMPLATE parity_template"

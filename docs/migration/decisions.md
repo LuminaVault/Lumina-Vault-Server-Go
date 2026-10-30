@@ -222,3 +222,22 @@ Registered in `Sources/App/App+build.swift`. Claim mechanisms are not read yet.
 - The in-process `EventBus` (built at L483) has subscribers `MeTodayCache` (L1851)
   and `skillRunner.startEventSubscriptions()` (unmanaged `Task`, L3612). It needs
   a row in `coupling.md`.
+
+## D-wave2-early: wave 2 is ported while the pilot is still in G2/G3
+
+The phase-0-4 plan (Task 4.5 step 5) starts wave 2 only after the pilot's
+retro. The owner chose on 2026-10-30 to port wave 2 to `parity` in parallel,
+because the pilot's G2/G3 steps are waiting on human merges and a 7-day watch.
+What stays gated: no wave-2 module goes past `parity` (no staging status, no
+`extraPaths`) until `projects` is `done` and `pilot-retro.md` exists. Anything
+the retro changes in the recipe is applied to the wave-2 modules before they
+flip.
+
+## D-seed-files: one seed file per module
+
+`parity/seed/base.sql` holds the shared users, vaults and pilot rows.
+`scripts/parity-up.sh` now loads it first and then every other
+`parity/seed/*.sql` in name order, so each module adds `parity/seed/<module>.sql`
+instead of editing `base.sql`. That keeps the parallel wave-2 branches from
+conflicting. CI runs the Swift-vs-Swift self-test before the Go comparison, so
+every PR proves its scenarios are deterministic.
