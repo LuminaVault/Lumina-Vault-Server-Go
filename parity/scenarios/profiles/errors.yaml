@@ -42,6 +42,7 @@ steps:
   - {name: "tab newline label", as: alice, request: {method: POST, path: "/v1/profiles", json: {"slug": "lbl", "label": "\t\n\r"}}}
   - {name: "nbsp label", as: alice, request: {method: POST, path: "/v1/profiles", json: {"slug": "lbl", "label": "\u00a0"}}}
   - {name: "ideographic space label", as: alice, request: {method: POST, path: "/v1/profiles", json: {"slug": "lbl", "label": "\u3000"}}}
+  - {name: "zero width space label", as: alice, request: {method: POST, path: "/v1/profiles", json: {"slug": "lbl", "label": "\u200b"}}}
   - {name: "line separator label", as: alice, request: {method: POST, path: "/v1/profiles", json: {"slug": "lbl", "label": "\u2028"}}}
   - {name: "81 char label", as: alice, request: {method: POST, path: "/v1/profiles", json: {"slug": "lbl", "label": "lllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllllll"}}}
   - {name: "81 combining graphemes", as: alice, request: {method: POST, path: "/v1/profiles", json: {"slug": "lbl", "label": "e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301"}}}

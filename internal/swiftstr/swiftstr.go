@@ -18,11 +18,14 @@ import (
 )
 
 // IsWhitespaceOrNewline reports membership in Foundation's
-// CharacterSet.whitespacesAndNewlines: General Category Zs, U+0009, U+000A to
-// U+000D, U+0085, U+2028 and U+2029.
+// CharacterSet.whitespacesAndNewlines as CoreFoundation implements it on
+// Linux: General Category Zs, U+0009, U+000A to U+000D, U+0085, U+2028,
+// U+2029, and also U+200B ZERO WIDTH SPACE (CF's whitespace range is
+// U+2000...U+200B; confirmed by parity: a label of only U+200B is
+// invalid_label in Swift).
 func IsWhitespaceOrNewline(r rune) bool {
 	switch {
-	case r == '\t', r >= '\n' && r <= '\r', r == 0x85, r == 0x2028, r == 0x2029:
+	case r == '\t', r >= '\n' && r <= '\r', r == 0x85, r == 0x200B, r == 0x2028, r == 0x2029:
 		return true
 	default:
 		return unicode.Is(unicode.Zs, r)
