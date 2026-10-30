@@ -529,12 +529,18 @@ func TestErrorOrderAndMessages(t *testing.T) {
 		{uuid.Nil, http.MethodGet, "/v1/boards", "", nil, 401, "Authenticated identity is unavailable"},
 		{bob, http.MethodPatch, "/v1/boards/nope/columns/nope", `{"title":"x"}`, nil, 400, "invalid_columnID"},
 		{bob, http.MethodPatch, "/v1/boards/nope", `[]`, nil, 400, "Type mismatch for `` key, expected `Dictionary<String, Any>` type."},
-		{bob, http.MethodPost, "/v1/boards/CA4BB000-0000-4000-8000-0000000000B1/cards", `{"body":5,"columnID":"nope"}`, nil, 400,
-			"The given data was not valid input: Attempted to decode UUID from invalid UUID string."},
-		{bob, http.MethodPost, "/v1/boards/CA4BB000-0000-4000-8000-0000000000B1/cards", `{"columnID":"CA4BC000-0000-4000-8000-0000000000B1","title":"x","priority":"asap"}`, nil, 400,
-			"The given data was not valid input: Cannot initialize CardPriority from invalid String value asap"},
-		{bob, http.MethodPost, "/v1/boards/CA4BB000-0000-4000-8000-0000000000B1/cards", `{"columnID":"CA4BC000-0000-4000-8000-0000000000B1","title":"x","priority":3}`, nil, 400,
-			"Type mismatch for `priority` key, expected `String` type."},
+		{
+			bob, http.MethodPost, "/v1/boards/CA4BB000-0000-4000-8000-0000000000B1/cards", `{"body":5,"columnID":"nope"}`, nil, 400,
+			"The given data was not valid input: Attempted to decode UUID from invalid UUID string.",
+		},
+		{
+			bob, http.MethodPost, "/v1/boards/CA4BB000-0000-4000-8000-0000000000B1/cards", `{"columnID":"CA4BC000-0000-4000-8000-0000000000B1","title":"x","priority":"asap"}`, nil, 400,
+			"The given data was not valid input: Cannot initialize CardPriority from invalid String value asap",
+		},
+		{
+			bob, http.MethodPost, "/v1/boards/CA4BB000-0000-4000-8000-0000000000B1/cards", `{"columnID":"CA4BC000-0000-4000-8000-0000000000B1","title":"x","priority":3}`, nil, 400,
+			"Type mismatch for `priority` key, expected `String` type.",
+		},
 		{bob, http.MethodPost, "/v1/boards/CA4BB000-0000-4000-8000-0000000000B1/cards", `{"columnID":"CA4BC000-0000-4000-8000-0000000000A1","title":"x"}`, nil, 404, "column_not_found"},
 		{bob, http.MethodPost, "/v1/boards/CA4BB000-0000-4000-8000-0000000000B1/columns/reorder", `{"columnID":"CA4BC000-0000-4000-8000-0000000000B1","beforeID":"00000000-0000-4000-8000-000000000000"}`, nil, 422, "column_neighbor_not_found"},
 		{bob, http.MethodPost, "/v1/cards/CA4BD000-0000-4000-8000-0000000000B1/move", `{"toColumnID":"CA4BC000-0000-4000-8000-0000000000B1","afterID":"00000000-0000-4000-8000-000000000000"}`, nil, 422, "card_neighbor_not_found"},
@@ -544,8 +550,12 @@ func TestErrorOrderAndMessages(t *testing.T) {
 		{bob, http.MethodGet, "/v1/boards", "", []string{"X-Vault-ID", "A11CE000-0000-4000-8000-000000000001"}, 403, "vault access denied"},
 		{bob, http.MethodPatch, "/v1/boards/" + teamBoard, `{"title":"x"}`, []string{"X-Vault-ID", teamVault, "X-Board-Version", "7"}, 403, "vault write permission required"},
 		{bob, http.MethodPost, "/v1/cards/CA4BD000-0000-4000-8000-0000000000F2/promote", "", []string{"X-Vault-ID", teamVault}, 403, "vault AI access required"},
-		{alice, http.MethodPost, "/v1/cards/CA4BD000-0000-4000-8000-0000000000F2/promote", "", []string{"X-Vault-ID", "CA4BF000-0000-4000-8000-000000000002"}, 402,
-			"team owner subscription does not include AI access"},
+		{
+			alice, http.MethodPost, "/v1/cards/CA4BD000-0000-4000-8000-0000000000F2/promote", "",
+			[]string{"X-Vault-ID", "CA4BF000-0000-4000-8000-000000000002"},
+			402,
+			"team owner subscription does not include AI access",
+		},
 		{alice, http.MethodGet, "/v1/boards", "", []string{"X-Vault-ID", "CA4BF000-0000-4000-8000-000000000003"}, 404, "vault not found"},
 	}
 	for _, c := range cases {
