@@ -1,0 +1,9 @@
+module: reminders
+steps:
+  - {name: bob sees nothing, as: bob, request: {method: GET, path: /v1/reminders}}
+  - {name: bob patches alice's reminder, as: bob, request: {method: PATCH, path: /v1/reminders/E0000000-0000-4000-8000-000000000002, json: {title: hijack}}}
+  - {name: bob deletes alice's reminder, as: bob, request: {method: DELETE, path: /v1/reminders/E0000000-0000-4000-8000-000000000002}, snapshot: [reminders]}
+  - {name: bob creates his own, as: bob, request: {method: POST, path: /v1/reminders, json: {title: Bobs, body: "", fireAt: "2026-11-01T09:00:00Z"}}, capture: {bobs: $.id}}
+  - {name: alice cannot see bob's, as: alice, request: {method: GET, path: "/v1/reminders?limit=200"}}
+  - {name: alice cannot patch bob's, as: alice, request: {method: PATCH, path: "/v1/reminders/{{bobs}}", json: {title: x}}}
+  - {name: alice deletes bob's, as: alice, request: {method: DELETE, path: "/v1/reminders/{{bobs}}"}, snapshot: [reminders]}

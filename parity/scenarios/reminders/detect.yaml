@@ -1,0 +1,12 @@
+# The parity environment has no reachable LLM provider (HERMES_GATEWAY_URL is
+# unroutable and no provider key is set), so Swift's classifier fails closed.
+# Go's cmd/App wires reminders.UnavailableTransport, which does the same.
+module: reminders
+steps:
+  - {name: detect fails closed without an LLM, as: alice, request: {method: POST, path: /v1/reminders/detect, json: {text: remind me to call mom at 5pm}}}
+  - {name: detect empty text, as: alice, request: {method: POST, path: /v1/reminders/detect, json: {text: ""}}}
+  - {name: detect missing text, as: alice, request: {method: POST, path: /v1/reminders/detect, json: {}}}
+  - {name: detect text wrong type, as: alice, request: {method: POST, path: /v1/reminders/detect, json: {text: 1}}}
+  - {name: detect null text, as: alice, request: {method: POST, path: /v1/reminders/detect, raw: "{\"text\":null}"}}
+  - {name: detect malformed, as: alice, request: {method: POST, path: /v1/reminders/detect, raw: "{"}}
+  - {name: detect empty body, as: alice, request: {method: POST, path: /v1/reminders/detect, raw: ""}}
