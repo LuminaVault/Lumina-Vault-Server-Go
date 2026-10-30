@@ -32,12 +32,23 @@ sql:
       go:
         package: db
         out: internal/modules/spaces/db
+    queries: internal/modules/profiles/queries.sql
+    gen:
+      go:
+        package: db
+        out: internal/modules/profiles/db
         sql_package: pgx/v5
         emit_pointers_for_null_types: true
         omit_unused_structs: true
         overrides:
           - db_type: uuid
             go_type: github.com/google/uuid.UUID
+          - db_type: uuid
+            nullable: true
+            go_type:
+              import: github.com/google/uuid
+              type: UUID
+              pointer: true
           - db_type: pg_catalog.timestamptz
             go_type: time.Time
           - db_type: pg_catalog.timestamptz
@@ -57,6 +68,11 @@ sql:
       go:
         package: db
         out: internal/modules/kanban/db
+    queries: internal/modules/sessions/queries.sql
+    gen:
+      go:
+        package: db
+        out: internal/modules/sessions/db
         sql_package: pgx/v5
         emit_pointers_for_null_types: true
         omit_unused_structs: true
