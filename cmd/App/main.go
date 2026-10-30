@@ -17,6 +17,7 @@ import (
 	"lumina/internal/modules/kanban"
 	"lumina/internal/modules/projects"
 	"lumina/internal/ratelimit"
+	"lumina/internal/modules/spaces"
 	"lumina/internal/telemetry"
 	"lumina/internal/vaultpaths"
 	"net"
@@ -113,6 +114,7 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		if m := news.New(pool, cfg, auth.Identify(keys, auth.PGUsers(pool)), limits); m != nil { // nil without LV_SECRET_MASTER_KEY, as in Swift
 			deps.Modules = append(deps.Modules, m)
 			kanban.New(pool, auth.Identify(keys, auth.PGUsers(pool)), limits, vaultpaths.Paths{Root: cfg.VaultRootPath}),
+			spaces.New(pool, vaultpaths.Paths{Root: cfg.VaultRootPath}, auth.Identify(keys, auth.PGUsers(pool))),
 		}
 	}
 	e := httpserver.New(cfg, deps)
