@@ -1,0 +1,39 @@
+# Shared (team) vault via X-Vault-ID. Mutations need X-Board-Version and are
+# recorded in vault_activity_events. Team Board starts at version 7.
+# Roles (parity/seed/kanban.sql): alice admin+AI, kanban_ben editor, bob viewer.
+module: kanban
+steps:
+  - {name: list team boards, as: alice, request: {method: GET, path: /v1/boards, headers: {X-Vault-ID: CA4BF000-0000-4000-8000-000000000001}}}
+  - {name: get team board, as: alice, request: {method: GET, path: /v1/boards/CA4BB000-0000-4000-8000-0000000000F1, headers: {X-Vault-ID: CA4BF000-0000-4000-8000-000000000001}}}
+  - {name: mutation without version header, as: alice, request: {method: PATCH, path: /v1/boards/CA4BB000-0000-4000-8000-0000000000F1, headers: {X-Vault-ID: CA4BF000-0000-4000-8000-000000000001}, json: {title: x}}}
+  - {name: non-numeric version header, as: alice, request: {method: PATCH, path: /v1/boards/CA4BB000-0000-4000-8000-0000000000F1, headers: {X-Vault-ID: CA4BF000-0000-4000-8000-000000000001, X-Board-Version: abc}, json: {title: x}}}
+  - {name: stale version, as: alice, request: {method: PATCH, path: /v1/boards/CA4BB000-0000-4000-8000-0000000000F1, headers: {X-Vault-ID: CA4BF000-0000-4000-8000-000000000001, X-Board-Version: "3"}, json: {title: x}}, snapshot: [kanban_boards, vault_activity_events]}
+  - {name: current version, as: alice, request: {method: PATCH, path: /v1/boards/CA4BB000-0000-4000-8000-0000000000F1, headers: {X-Vault-ID: CA4BF000-0000-4000-8000-000000000001, X-Board-Version: "7"}, json: {title: Team Board v2}}, snapshot: [vault_activity_events]}
+  - name: create column
+    as: alice
+    request: {method: POST, path: /v1/boards/CA4BB000-0000-4000-8000-0000000000F1/columns, headers: {X-Vault-ID: CA4BF000-0000-4000-8000-000000000001, X-Board-Version: "8"}, json: {title: Review}}
+    capture: {review: "$.columns[2].id"}
+  - name: create board needs no version
+    as: alice
+    request: {method: POST, path: /v1/boards, headers: {X-Vault-ID: CA4BF000-0000-4000-8000-000000000001}, json: {title: Team Two}}
+    capture: {two: $.id}
+    snapshot: [vault_activity_events]
+  - {name: promoted card ignores a stale version, as: alice, request: {method: POST, path: /v1/cards/CA4BD000-0000-4000-8000-0000000000F2/promote, headers: {X-Vault-ID: CA4BF000-0000-4000-8000-000000000001, X-Board-Version: "1"}}, snapshot: [vault_activity_events, skills_state]}
+  - {name: promote on a team vault fails on skills_state, as: alice, request: {method: POST, path: /v1/cards/CA4BD000-0000-4000-8000-0000000000F1/promote, headers: {X-Vault-ID: CA4BF000-0000-4000-8000-000000000001, X-Board-Version: "9"}, json: {cron: "0 9 * * *"}}, snapshot: [kanban_boards, skills_state]}
+  - {name: move card, as: alice, request: {method: POST, path: /v1/cards/CA4BD000-0000-4000-8000-0000000000F1/move, headers: {X-Vault-ID: CA4BF000-0000-4000-8000-000000000001, X-Board-Version: "9"}, json: {toColumnID: CA4BC000-0000-4000-8000-0000000000F2}}}
+  - {name: delete card, as: alice, request: {method: DELETE, path: /v1/cards/CA4BD000-0000-4000-8000-0000000000F1, headers: {X-Vault-ID: CA4BF000-0000-4000-8000-000000000001, X-Board-Version: "10"}}}
+  - {name: rename column, as: alice, request: {method: PATCH, path: /v1/boards/CA4BB000-0000-4000-8000-0000000000F1/columns/CA4BC000-0000-4000-8000-0000000000F2, headers: {X-Vault-ID: CA4BF000-0000-4000-8000-000000000001, X-Board-Version: "11"}, json: {title: Done}}}
+  - {name: reorder column, as: alice, request: {method: POST, path: /v1/boards/CA4BB000-0000-4000-8000-0000000000F1/columns/reorder, headers: {X-Vault-ID: CA4BF000-0000-4000-8000-000000000001, X-Board-Version: "12"}, json: {columnID: CA4BC000-0000-4000-8000-0000000000F2, afterID: CA4BC000-0000-4000-8000-0000000000F1}}}
+  - {name: delete column, as: alice, request: {method: DELETE, path: "/v1/boards/CA4BB000-0000-4000-8000-0000000000F1/columns/{{review}}", headers: {X-Vault-ID: CA4BF000-0000-4000-8000-000000000001, X-Board-Version: "13"}}}
+  - {name: version, as: alice, request: {method: GET, path: /v1/boards/CA4BB000-0000-4000-8000-0000000000F1/version, headers: {X-Vault-ID: ca4bf000-0000-4000-8000-000000000001}}}
+  - {name: delete the second board, as: alice, request: {method: DELETE, path: "/v1/boards/{{two}}", headers: {X-Vault-ID: CA4BF000-0000-4000-8000-000000000001, X-Board-Version: "0"}}, snapshot: [kanban_boards, kanban_columns, kanban_cards, vault_activity_events]}
+  - {name: unknown vault, as: alice, request: {method: GET, path: /v1/boards, headers: {X-Vault-ID: 00000000-0000-4000-8000-000000000000}}}
+  - {name: someone else's personal vault, as: alice, request: {method: GET, path: /v1/boards, headers: {X-Vault-ID: B0B00000-0000-4000-8000-000000000002}}}
+  - {name: archived vault, as: alice, request: {method: GET, path: /v1/boards, headers: {X-Vault-ID: CA4BF000-0000-4000-8000-000000000003}}}
+  - {name: sponsor without AI gives 402, as: alice, request: {method: POST, path: /v1/cards/CA4BD000-0000-4000-8000-0000000000F2/promote, headers: {X-Vault-ID: CA4BF000-0000-4000-8000-000000000002}}}
+  - {name: read on that vault creates its default board, as: alice, request: {method: GET, path: /v1/boards, headers: {X-Vault-ID: CA4BF000-0000-4000-8000-000000000002}}, snapshot: [kanban_boards]}
+  - {name: editor creates a card, as: kanban_ben, request: {method: POST, path: /v1/boards/CA4BB000-0000-4000-8000-0000000000F1/cards, headers: {X-Vault-ID: CA4BF000-0000-4000-8000-000000000001, X-Board-Version: "14"}, json: {columnID: CA4BC000-0000-4000-8000-0000000000F1, title: Ben card}}, snapshot: [vault_activity_events]}
+  - {name: editor without AI cannot promote, as: kanban_ben, request: {method: POST, path: /v1/cards/CA4BD000-0000-4000-8000-0000000000F2/promote, headers: {X-Vault-ID: CA4BF000-0000-4000-8000-000000000001, X-Board-Version: "15"}}}
+  - {name: viewer reads, as: bob, request: {method: GET, path: /v1/boards/CA4BB000-0000-4000-8000-0000000000F1, headers: {X-Vault-ID: CA4BF000-0000-4000-8000-000000000001}}}
+  - {name: viewer cannot write, as: bob, request: {method: PATCH, path: /v1/boards/CA4BB000-0000-4000-8000-0000000000F1, headers: {X-Vault-ID: CA4BF000-0000-4000-8000-000000000001, X-Board-Version: "15"}, json: {title: x}}}
+  - {name: viewer cannot promote, as: bob, request: {method: POST, path: /v1/cards/CA4BD000-0000-4000-8000-0000000000F2/promote, headers: {X-Vault-ID: CA4BF000-0000-4000-8000-000000000001}}}

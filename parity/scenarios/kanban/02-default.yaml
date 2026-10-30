@@ -1,0 +1,11 @@
+# First GET /v1/boards creates "My Board" with Todo / Doing / Done.
+module: kanban
+steps:
+  - name: first list creates the default board
+    as: kanban_ann
+    request: {method: GET, path: /v1/boards}
+    snapshot: [kanban_boards, kanban_columns]
+  - name: second list reuses it
+    as: kanban_ann
+    request: {method: GET, path: /v1/boards}
+    snapshot: [kanban_boards]

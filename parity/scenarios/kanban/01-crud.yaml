@@ -1,0 +1,96 @@
+# Personal-vault board lifecycle (kanban_ben owns no board at the start).
+# Ranks: Backlog "i", Doing "r", Done "v"; reorders give Done "9", Doing "d".
+module: kanban
+smoke: true
+steps:
+  - name: create board
+    as: kanban_ben
+    request: {method: POST, path: /v1/boards, json: {title: Sprint}}
+    capture: {board: $.id}
+    snapshot: [kanban_boards]
+  - name: create column Backlog
+    as: kanban_ben
+    request: {method: POST, path: "/v1/boards/{{board}}/columns", json: {title: Backlog}}
+    capture: {backlog: "$.columns[0].id"}
+  - name: create column Doing
+    as: kanban_ben
+    request: {method: POST, path: "/v1/boards/{{board}}/columns", json: {title: Doing}}
+    capture: {doing: "$.columns[1].id"}
+  - name: create column Done
+    as: kanban_ben
+    request: {method: POST, path: "/v1/boards/{{board}}/columns", json: {title: Done}}
+    capture: {done: "$.columns[2].id"}
+    snapshot: [kanban_columns]
+  - name: reorder Done to the front
+    as: kanban_ben
+    request: {method: POST, path: "/v1/boards/{{board}}/columns/reorder", json: {columnID: "{{done}}", afterID: "{{backlog}}"}}
+  - name: reorder Doing between Done and Backlog
+    as: kanban_ben
+    request: {method: POST, path: "/v1/boards/{{board}}/columns/reorder", json: {columnID: "{{doing}}", beforeID: "{{done}}", afterID: "{{backlog}}"}}
+    snapshot: [kanban_columns]
+  - name: rename column
+    as: kanban_ben
+    request: {method: PATCH, path: "/v1/boards/{{board}}/columns/{{backlog}}", json: {title: Later}}
+  - name: create full card
+    as: kanban_ben
+    request: {method: POST, path: "/v1/boards/{{board}}/cards", json: {columnID: "{{backlog}}", title: Write spec, body: Draft, priority: high, dueAt: "2026-11-01T09:00:00.500Z"}}
+    capture: {card1: $.id}
+  - name: create minimal card
+    as: kanban_ben
+    request: {method: POST, path: "/v1/boards/{{board}}/cards", json: {columnID: "{{backlog}}", title: Review}}
+    capture: {card2: $.id}
+    snapshot: [kanban_cards]
+  - name: patch every card field
+    as: kanban_ben
+    request: {method: PATCH, path: "/v1/cards/{{card1}}", json: {title: Write the spec, body: Draft 2, priority: low, dueAt: "2026-11-02T10:00:00+02:00"}}
+  - name: empty patch changes nothing but the version
+    as: kanban_ben
+    request: {method: PATCH, path: "/v1/cards/{{card2}}", json: {}}
+    snapshot: [kanban_cards, kanban_boards]
+  - name: move card2 to Doing
+    as: kanban_ben
+    request: {method: POST, path: "/v1/cards/{{card2}}/move", json: {toColumnID: "{{doing}}"}}
+  - name: move card1 after card2
+    as: kanban_ben
+    request: {method: POST, path: "/v1/cards/{{card1}}/move", json: {toColumnID: "{{doing}}", beforeID: "{{card2}}"}}
+  - name: move card1 before card2
+    as: kanban_ben
+    request: {method: POST, path: "/v1/cards/{{card1}}/move", json: {toColumnID: "{{doing}}", afterID: "{{card2}}"}}
+  - name: get board
+    as: kanban_ben
+    request: {method: GET, path: "/v1/boards/{{board}}"}
+    snapshot: [kanban_cards, kanban_columns, kanban_boards]
+  - name: get version
+    as: kanban_ben
+    request: {method: GET, path: "/v1/boards/{{board}}/version"}
+  - name: delete card2
+    as: kanban_ben
+    request: {method: DELETE, path: "/v1/cards/{{card2}}"}
+  - name: delete column Doing cascades its cards
+    as: kanban_ben
+    request: {method: DELETE, path: "/v1/boards/{{board}}/columns/{{doing}}"}
+    snapshot: [kanban_cards, kanban_columns]
+  - name: rename board
+    as: kanban_ben
+    request: {method: PATCH, path: "/v1/boards/{{board}}", json: {title: Sprint 2, archived: false}}
+  - name: list boards
+    as: kanban_ben
+    request: {method: GET, path: /v1/boards}
+  - name: archive board
+    as: kanban_ben
+    request: {method: PATCH, path: "/v1/boards/{{board}}", json: {archived: true}}
+    snapshot: [kanban_boards]
+  - name: list after archive creates a default board
+    as: kanban_ben
+    request: {method: GET, path: /v1/boards}
+    snapshot: [kanban_boards, kanban_columns]
+  - name: delete archived board
+    as: kanban_ben
+    request: {method: DELETE, path: "/v1/boards/{{board}}"}
+    snapshot: [kanban_boards, kanban_columns, kanban_cards]
+  - name: get deleted board
+    as: kanban_ben
+    request: {method: GET, path: "/v1/boards/{{board}}"}
+  - name: version of deleted board
+    as: kanban_ben
+    request: {method: GET, path: "/v1/boards/{{board}}/version"}
