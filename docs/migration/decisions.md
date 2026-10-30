@@ -241,3 +241,15 @@ flip.
 instead of editing `base.sql`. That keeps the parallel wave-2 branches from
 conflicting. CI runs the Swift-vs-Swift self-test before the Go comparison, so
 every PR proves its scenarios are deterministic.
+
+## D-identify: auth.Identify for routes that check something before identity
+
+Swift's `JWTAuthenticator` never rejects. It attaches the user when the token
+is valid, and the 401 comes later from `requireIdentity()` inside the handler.
+`auth.Middleware` rejects up front, which matches every route that calls
+`requireIdentity()` first. `VaultAccessService.resolve` does not: it reads
+X-Vault-ID first, so a malformed header is a 400 even with no token. Routes
+that resolve vault access sit behind `auth.Identify` and get identity from
+`auth.Identity`. `internal/vaultaccess` (Teams/VaultAccessService.swift) and
+`internal/vaultactivity` (the DB half of VaultActivityRecorder) are shared by
+Spaces, Kanban and the later vault modules.
