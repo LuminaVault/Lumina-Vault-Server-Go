@@ -1,0 +1,35 @@
+module: apple
+steps:
+  - {name: pending no token, request: {method: GET, path: /v1/devices/commands/pending}}
+  - {name: result no token, request: {method: POST, path: /v1/devices/command/C0000000-0000-4000-8000-000000000001/result, json: {id: C0000000-0000-4000-8000-000000000001, ok: true}}}
+  - {name: alice pending oldest first, as: alice, request: {method: GET, path: /v1/devices/commands/pending}}
+  - {name: bob pending, as: bob, request: {method: GET, path: /v1/devices/commands/pending}}
+  - name: bob posting a result for alice's command changes nothing
+    as: bob
+    request: {method: POST, path: /v1/devices/command/C0000000-0000-4000-8000-000000000001/result, json: {id: C0000000-0000-4000-8000-000000000001, ok: true}}
+    snapshot: [device_command_queue]
+  - name: alice reports a failure
+    as: alice
+    request: {method: POST, path: /v1/devices/command/C0000000-0000-4000-8000-000000000001/result, json: {id: C0000000-0000-4000-8000-000000000001, ok: false, error: denied}}
+    snapshot: [device_command_queue]
+  - name: the path id is ignored; the body id counts
+    as: alice
+    request: {method: POST, path: /v1/devices/command/not-a-uuid/result, json: {id: c0000000-0000-4000-8000-000000000002, ok: true, payload: {eventID: E1}}}
+    snapshot: [device_command_queue]
+  - name: a second result for a delivered command changes nothing
+    as: alice
+    request: {method: POST, path: /v1/devices/command/C0000000-0000-4000-8000-000000000001/result, json: {id: C0000000-0000-4000-8000-000000000001, ok: true}}
+    snapshot: [device_command_queue]
+  - {name: unknown command id is accepted, as: alice, request: {method: POST, path: /v1/devices/command/00000000-0000-4000-8000-000000000000/result, json: {id: 00000000-0000-4000-8000-000000000000, ok: true}}}
+  - {name: null payload and error, as: alice, request: {method: POST, path: /v1/devices/command/x/result, raw: "{\"id\":\"00000000-0000-4000-8000-000000000000\",\"ok\":true,\"payload\":null,\"error\":null}"}}
+  - {name: alice pending after results, as: alice, request: {method: GET, path: /v1/devices/commands/pending}}
+  - {name: missing ok, as: alice, request: {method: POST, path: /v1/devices/command/x/result, json: {id: 00000000-0000-4000-8000-000000000000}}}
+  - {name: missing id, as: alice, request: {method: POST, path: /v1/devices/command/x/result, json: {ok: true}}}
+  - {name: bad id, as: alice, request: {method: POST, path: /v1/devices/command/x/result, json: {id: nope, ok: true}}}
+  - {name: id wrong type, as: alice, request: {method: POST, path: /v1/devices/command/x/result, json: {id: 7, ok: true}}}
+  - {name: ok wrong type, as: alice, request: {method: POST, path: /v1/devices/command/x/result, json: {id: 00000000-0000-4000-8000-000000000000, ok: "true"}}}
+  - {name: payload wrong type, as: alice, request: {method: POST, path: /v1/devices/command/x/result, json: {id: 00000000-0000-4000-8000-000000000000, ok: true, payload: x}}}
+  - {name: payload value wrong type, as: alice, request: {method: POST, path: /v1/devices/command/x/result, json: {id: 00000000-0000-4000-8000-000000000000, ok: true, payload: {count: 1}}}}
+  - {name: error wrong type, as: alice, request: {method: POST, path: /v1/devices/command/x/result, json: {id: 00000000-0000-4000-8000-000000000000, ok: false, error: 500}}}
+  - {name: malformed json, as: alice, request: {method: POST, path: /v1/devices/command/x/result, raw: "{\"id\":"}}
+  - {name: empty body, as: alice, request: {method: POST, path: /v1/devices/command/x/result, raw: ""}}
