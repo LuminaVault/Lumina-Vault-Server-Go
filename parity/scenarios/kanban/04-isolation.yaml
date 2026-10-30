@@ -15,6 +15,6 @@ steps:
   - {name: delete foreign card, as: kanban_cy, request: {method: DELETE, path: /v1/cards/CA4BD000-0000-4000-8000-0000000000A1}}
   - {name: shared vault without membership, as: kanban_cy, request: {method: GET, path: /v1/boards, headers: {X-Vault-ID: CA4BF000-0000-4000-8000-000000000001}}, snapshot: [kanban_boards, kanban_columns, kanban_cards]}
   - {name: alice reads her own seeded board, as: alice, request: {method: GET, path: /v1/boards/CA4BB000-0000-4000-8000-0000000000A1}}
-  - {name: alice lists, archived board hidden, as: alice, request: {method: GET, path: /v1/boards}}
+  - {name: alice lists without the archived board, as: alice, request: {method: GET, path: /v1/boards}}
   - {name: alice cannot read bob's board, as: alice, request: {method: GET, path: /v1/boards/CA4BB000-0000-4000-8000-0000000000B1}}
   - {name: alice promotes a card with both cron and runAt, as: alice, request: {method: POST, path: /v1/cards/CA4BD000-0000-4000-8000-0000000000A2/promote}}
