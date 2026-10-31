@@ -68,7 +68,7 @@ modules:
   spaces:
     wave: 2
     swiftDir: Sources/App/Spaces
-    status: swift
+    status: parity
     prefixes: [/v1/spaces]
     jobs: []
   account:
