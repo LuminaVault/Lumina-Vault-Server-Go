@@ -1,6 +1,10 @@
 # Fixture users seeded by parity/seed/base.sql. UPPERCASE as Swift writes them.
 alice: A11CE000-0000-4000-8000-000000000001
 bob: B0B00000-0000-4000-8000-000000000002
+# kanban (parity/seed/kanban.sql): extra users so no settingsByUser bucket fills.
+kanban_ann: CA4B0000-0000-4000-8000-0000000000A1
+kanban_ben: CA4B0000-0000-4000-8000-0000000000B2
+kanban_cy: CA4B0000-0000-4000-8000-0000000000C3
 # news (parity/seed/news.sql): one user per news-ticker install state.
 news_amy: A0E00000-0000-4000-8000-0000000000A1
 news_dan: A0E00000-0000-4000-8000-0000000000B2
@@ -15,7 +19,3 @@ news_nox: A0E00000-0000-4000-8000-0000000000DA
 news_nog: A0E00000-0000-4000-8000-0000000000EB
 news_probe: A0E00000-0000-4000-8000-0000000000FC
 news_nul: A0E00000-0000-4000-8000-0000000000AD
-# kanban (parity/seed/kanban.sql): extra users so no settingsByUser bucket fills.
-kanban_ann: CA4B0000-0000-4000-8000-0000000000A1
-kanban_ben: CA4B0000-0000-4000-8000-0000000000B2
-kanban_cy: CA4B0000-0000-4000-8000-0000000000C3

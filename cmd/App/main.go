@@ -13,18 +13,16 @@ import (
 	"lumina/internal/httpserver"
 	"lumina/internal/migrations"
 	"lumina/internal/modules/achievements"
-	"lumina/internal/modules/news"
-	"lumina/internal/modules/kanban"
-	"lumina/internal/modules/projects"
-	"lumina/internal/ratelimit"
-	"lumina/internal/modules/spaces"
-	"lumina/internal/modules/profiles"
-	"lumina/internal/modules/projects"
-	"lumina/internal/modules/sessions"
 	"lumina/internal/modules/apple"
 	"lumina/internal/modules/devices"
+	"lumina/internal/modules/kanban"
+	"lumina/internal/modules/news"
+	"lumina/internal/modules/profiles"
 	"lumina/internal/modules/projects"
 	"lumina/internal/modules/reminders"
+	"lumina/internal/modules/sessions"
+	"lumina/internal/modules/spaces"
+	"lumina/internal/ratelimit"
 	"lumina/internal/telemetry"
 	"lumina/internal/vaultpaths"
 	"net"
@@ -112,22 +110,25 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		// One rate-limit store per process: Swift's buckets are shared by
 		// every route group that uses the same policy name.
 		limits := ratelimit.NewStore()
+		// Identify: vault-scoped routes check X-Vault-ID before identity (decisions.md D-identify).
+		identify := auth.Identify(keys, auth.PGUsers(pool))
+		paths := vaultpaths.Paths{Root: cfg.VaultRootPath}
 		// Migrated modules (modules.yaml status ≥ parity). Traffic only reaches
 		// them through the api ingress.extraPaths that name them.
 		deps.Modules = []httpserver.Module{
 			projects.New(pool),
-			achievements.New(pool),
-		}
-		if m := news.New(pool, cfg, auth.Identify(keys, auth.PGUsers(pool)), limits); m != nil { // nil without LV_SECRET_MASTER_KEY, as in Swift
-			deps.Modules = append(deps.Modules, m)
-			kanban.New(pool, auth.Identify(keys, auth.PGUsers(pool)), limits, vaultpaths.Paths{Root: cfg.VaultRootPath}),
-			spaces.New(pool, vaultpaths.Paths{Root: cfg.VaultRootPath}, auth.Identify(keys, auth.PGUsers(pool))),
+			kanban.New(pool, identify, limits, paths),
+			spaces.New(pool, paths, identify),
 			profiles.New(pool),
 			sessions.New(pool),
 			// apple, devices and reminders flip together (D-shared-prefixes).
 			apple.New(pool, apple.Options{EmbeddingProvider: cfg.EmbeddingProvider, EmbeddingMonthlyCap: cfg.EmbeddingMonthlyTokenCapDefault}),
 			devices.New(pool, cfg.APNSBundleID),
 			reminders.New(pool, nil, cfg.HermesDefaultModel),
+			achievements.New(pool, identify, limits),
+		}
+		if m := news.New(pool, cfg, identify, limits); m != nil { // nil without LV_SECRET_MASTER_KEY, as in Swift
+			deps.Modules = append(deps.Modules, m)
 		}
 	}
 	e := httpserver.New(cfg, deps)

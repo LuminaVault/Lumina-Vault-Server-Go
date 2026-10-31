@@ -53,7 +53,7 @@ func setup(t *testing.T) env {
 	}
 	e := httpserver.New(config.Config{}, httpserver.Deps{
 		Auth:    auth.Middleware(keys, auth.PGUsers(pool)),
-		Modules: []httpserver.Module{achievements.New(pool)},
+		Modules: []httpserver.Module{achievements.New(pool, auth.Identify(keys, auth.PGUsers(pool)), ratelimit.NewStore())},
 	})
 	return env{t: t, e: e, pool: pool}
 }
@@ -405,3 +405,15 @@ func subKeys(subs []achievements.Sub) []string {
 }
 
 func ptr[T any](v T) *T { return &v }
+
+// Swift's chain is authenticator → achievementsByUser (60/60 s) → requireIdentity,
+// so the 61st request in a window is a 429 even without a token.
+func TestRateLimitBeforeIdentity(t *testing.T) {
+	v := setup(t)
+	for i := range 60 {
+		require.Equal(t, http.StatusUnauthorized, v.get(uuid.Nil, "/v1/achievements").code, i)
+	}
+	r := v.get(uuid.Nil, "/v1/achievements/recent")
+	require.Equal(t, http.StatusTooManyRequests, r.code, "both routes share the bucket")
+	require.Equal(t, http.StatusOK, v.get(alice, "/v1/achievements").code, "users have their own bucket")
+}

@@ -272,3 +272,19 @@ is Hermes (wave 6). Porting Settings in wave 2 would mean porting those pieces
 early, or diverging on the DB columns the probe writes. So Settings is wave 6
 (`scripts/gen-modules.py` WAVES). Its SSRF guard and no-redirect probe port
 with it.
+
+## D-reminders-detect: `/v1/reminders/detect` waits for LLM routing (wave 5)
+
+`POST /v1/reminders/detect` runs `ReminderIntentClassifier` through Swift's LLM
+routing (wave 5). The parity environment has no LLM, so both servers answer
+`{"isReminder":false}` and parity is 0 differences. In production, though, Go
+would quietly turn off reminder suggestions. Reminders therefore stays `swift`.
+Proposal for the owner: route only `/v1/reminders` and `/v1/reminders/{id}` to
+Go when apple/devices/reminders flip, and leave the `/v1/reminders/detect`
+prefix on Swift until LLM routing lands in wave 5 (longest-prefix routing keeps
+it there). Until the owner accepts that, the apple/devices/reminders group can't
+flip. The group has a second flip blocker: `DeviceCommandBroker` waiters live
+in Swift memory. Once `/v1/devices/command/{id}/result` reaches Go, live device
+RPCs from Swift time out after 12 s and reminder or calendar writes are replayed.
+It needs a Valkey bridge, or that route stays on Swift until MCP and Skills
+(wave 5) move.
