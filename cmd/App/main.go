@@ -13,7 +13,9 @@ import (
 	"lumina/internal/httpserver"
 	"lumina/internal/migrations"
 	"lumina/internal/modules/kanban"
+	"lumina/internal/modules/profiles"
 	"lumina/internal/modules/projects"
+	"lumina/internal/modules/sessions"
 	"lumina/internal/modules/spaces"
 	"lumina/internal/ratelimit"
 	"lumina/internal/telemetry"
@@ -112,6 +114,8 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 			projects.New(pool),
 			kanban.New(pool, identify, limits, paths),
 			spaces.New(pool, paths, identify),
+			profiles.New(pool),
+			sessions.New(pool),
 		}
 	}
 	e := httpserver.New(cfg, deps)
