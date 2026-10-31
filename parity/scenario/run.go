@@ -45,11 +45,12 @@ type Transcript struct {
 }
 
 type StepResult struct {
-	Name        string         `json:"name"`
-	Status      int            `json:"status"`
-	ContentType string         `json:"contentType"`
-	Body        any            `json:"body"`
-	Snapshots   map[string]any `json:"snapshots,omitempty"`
+	Name        string            `json:"name"`
+	Status      int               `json:"status"`
+	ContentType string            `json:"contentType"`
+	Body        any               `json:"body"`
+	Headers     map[string]string `json:"headers,omitempty"`
+	Snapshots   map[string]any    `json:"snapshots,omitempty"`
 }
 
 // Run executes sc against t. One Normalizer spans the whole run, so an id
@@ -72,7 +73,10 @@ func Run(ctx context.Context, sc Scenario, t Target) (Transcript, error) {
 		if err != nil {
 			return tr, fmt.Errorf("%s/%s: %w", sc.File, st.Name, err)
 		}
-		raw, err := io.ReadAll(resp.Body)
+		var raw []byte
+		if !st.Stream {
+			raw, err = io.ReadAll(resp.Body)
+		}
 		_ = resp.Body.Close()
 		if err != nil {
 			return tr, err
@@ -85,6 +89,12 @@ func Run(ctx context.Context, sc Scenario, t Target) (Transcript, error) {
 			return tr, err
 		}
 		res := StepResult{Name: st.Name, Status: resp.StatusCode, ContentType: resp.Header.Get("Content-Type"), Body: body}
+		for _, h := range st.Headers {
+			if res.Headers == nil {
+				res.Headers = map[string]string{}
+			}
+			res.Headers[h] = strings.Join(resp.Header.Values(h), ", ")
+		}
 		if t.Snapshot != nil && len(st.Snapshot) > 0 {
 			res.Snapshots = map[string]any{}
 			for _, table := range st.Snapshot {

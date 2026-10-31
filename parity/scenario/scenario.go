@@ -29,6 +29,11 @@ type Step struct {
 	Capture  map[string]string `yaml:"capture"`  // var → JSON path into the response
 	Snapshot []string          `yaml:"snapshot"` // tables compared after the step
 	Ignore   []string          `yaml:"ignore"`
+	// Headers lists response headers to compare, besides Content-Type.
+	Headers []string `yaml:"headers"`
+	// Stream reads only the status and headers: the body is an open event
+	// stream (SSE) that never ends, so it is closed unread.
+	Stream bool `yaml:"stream"`
 }
 
 type Request struct {
@@ -74,6 +79,9 @@ func (sc Scenario) validate() error {
 	for i, st := range sc.Steps {
 		if st.Name == "" || st.Request.Method == "" || st.Request.Path == "" {
 			return fmt.Errorf("step %d needs name, request.method and request.path", i)
+		}
+		if st.Stream && len(st.Capture) > 0 {
+			return fmt.Errorf("step %q: a stream step has no body to capture from", st.Name)
 		}
 		if st.Request.JSON != nil && st.Request.Raw != nil {
 			return fmt.Errorf("step %q: json and raw are exclusive", st.Name)
