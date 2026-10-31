@@ -39,36 +39,57 @@ var ErrUnauthorized = wire.ErrUnauthenticated
 // user) is a 401, as in Swift where the authenticator returns nil and the
 // route's requireIdentity() throws.
 func Middleware(keys Keyset, users UserLoader) echo.MiddlewareFunc {
+	identify := Identify(keys, users)
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return identify(func(c *echo.Context) error {
+			if _, ok := Identity(c); !ok {
+				return ErrUnauthorized
+			}
+			return next(c)
+		})
+	}
+}
+
+// Identify is Swift's JWTAuthenticator on its own: it attaches the user when
+// the token is valid and the user exists, and never rejects. Routes that
+// check something before requireIdentity() (VaultAccessService reads
+// X-Vault-ID first) use it and call Identity themselves.
+func Identify(keys Keyset, users UserLoader) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c *echo.Context) error {
 			claims, err := Verify(keys, c.Request().Header.Get("Authorization"))
 			if err != nil {
-				return ErrUnauthorized
+				return next(c)
 			}
 			id, err := ids.Parse(claims.Subject)
 			if err != nil {
-				return ErrUnauthorized
+				return next(c)
 			}
 			ok, err := users.Exists(c.Request().Context(), id)
 			if err != nil {
 				return err
 			}
-			if !ok {
-				return ErrUnauthorized
+			if ok {
+				c.Set(ctxUserID, id)
+				c.Set(ctxHPID, claims.HPID)
 			}
-			c.Set(ctxUserID, id)
-			c.Set(ctxHPID, claims.HPID)
 			return next(c)
 		}
 	}
+}
+
+// Identity returns the user Identify attached, if any.
+func Identity(c *echo.Context) (uuid.UUID, bool) {
+	id, ok := c.Get(ctxUserID).(uuid.UUID)
+	return id, ok
 }
 
 var errNoBearer = errors.New("auth: no bearer token")
 
 // Verify checks the header value and returns the claims of a general session
 // token. Scoped tokens (scp set) are machine credentials for one route group
-// and never pass here.
-func Verify(keys Keyset, header string) (*Claims, error) {
+// and never pass here. opts are extra parser options (tests pin the clock).
+func Verify(keys Keyset, header string, opts ...jwt.ParserOption) (*Claims, error) {
 	token, ok := strings.CutPrefix(header, "Bearer ")
 	if !ok || token == "" {
 		return nil, errNoBearer
@@ -81,7 +102,7 @@ func Verify(keys Keyset, header string) (*Claims, error) {
 			return nil, errors.New("auth: unknown kid")
 		}
 		return key.Secret, nil
-	}, jwt.WithValidMethods([]string{"HS256"}), jwt.WithExpirationRequired())
+	}, append([]jwt.ParserOption{jwt.WithValidMethods([]string{"HS256"}), jwt.WithExpirationRequired()}, opts...)...)
 	if err != nil {
 		return nil, err
 	}

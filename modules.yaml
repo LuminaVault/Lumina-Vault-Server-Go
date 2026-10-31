@@ -65,12 +65,6 @@ modules:
     status: swift
     prefixes: [/v1/sessions]
     jobs: []
-  settings:
-    wave: 2
-    swiftDir: Sources/App/Settings
-    status: swift
-    prefixes: [/v1/settings]
-    jobs: []
   spaces:
     wave: 2
     swiftDir: Sources/App/Spaces
@@ -262,6 +256,12 @@ modules:
     swiftDir: Sources/App/Plugins
     status: swift
     prefixes: [/v1/plugins]
+    jobs: []
+  settings:
+    wave: 6
+    swiftDir: Sources/App/Settings
+    status: swift
+    prefixes: [/v1/settings]
     jobs: []
   admin:
     wave: 7

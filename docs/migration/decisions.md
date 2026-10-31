@@ -222,3 +222,48 @@ Registered in `Sources/App/App+build.swift`. Claim mechanisms are not read yet.
 - The in-process `EventBus` (built at L483) has subscribers `MeTodayCache` (L1851)
   and `skillRunner.startEventSubscriptions()` (unmanaged `Task`, L3612). It needs
   a row in `coupling.md`.
+
+## D-wave2-early: wave 2 is ported while the pilot is still in G2/G3
+
+The phase-0-4 plan (Task 4.5 step 5) starts wave 2 only after the pilot's
+retro. The owner chose on 2026-10-30 to port wave 2 to `parity` in parallel,
+because the pilot's G2/G3 steps are waiting on human merges and a 7-day watch.
+What stays gated: no wave-2 module goes past `parity` (no staging status, no
+`extraPaths`) until `projects` is `done` and `pilot-retro.md` exists. Anything
+the retro changes in the recipe is applied to the wave-2 modules before they
+flip.
+
+## D-seed-files: one seed file per module
+
+`parity/seed/base.sql` holds the shared users, vaults and pilot rows.
+`scripts/parity-up.sh` now loads it first and then every other
+`parity/seed/*.sql` in name order, so each module adds `parity/seed/<module>.sql`
+instead of editing `base.sql`. That keeps the parallel wave-2 branches from
+conflicting. CI runs the Swift-vs-Swift self-test before the Go comparison, so
+every PR proves its scenarios are deterministic.
+
+## D-identify: auth.Identify for routes that check something before identity
+
+Swift's `JWTAuthenticator` never rejects. It attaches the user when the token
+is valid, and the 401 comes later from `requireIdentity()` inside the handler.
+`auth.Middleware` rejects up front, which matches every route that calls
+`requireIdentity()` first. `VaultAccessService.resolve` does not: it reads
+X-Vault-ID first, so a malformed header is a 400 even with no token. Routes
+that resolve vault access sit behind `auth.Identify` and get identity from
+`auth.Identity`. `internal/vaultaccess` (Teams/VaultAccessService.swift) and
+`internal/vaultactivity` (the DB half of VaultActivityRecorder) are shared by
+Spaces, Kanban and the later vault modules.
+
+## D-settings-wave6: Settings moves to wave 6, with Hermes
+
+`HermesConfigController` (`/v1/settings/hermes`) is not leaf CRUD. Every `PUT`
+and every successful `POST /test` calls
+`HermesRemoteCapabilitiesService.capabilities(force: true)`. That service
+resolves the tenant's endpoint through `HermesEndpointResolver`, probes the
+remote `/v1/capabilities` and the dashboard through `HermesDashboardCredentialStore`,
+and writes `user_hermes_config.capabilities`/`capabilities_checked_at`. PUT also
+nudges the Hermes mirror worker (coupling.md, HermesMirrorNudging). All of that
+is Hermes (wave 6). Porting Settings in wave 2 would mean porting those pieces
+early, or diverging on the DB columns the probe writes. So Settings is wave 6
+(`scripts/gen-modules.py` WAVES). Its SSRF guard and no-redirect probe port
+with it.

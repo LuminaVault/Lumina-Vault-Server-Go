@@ -1,6 +1,6 @@
 # Parity environment (Phase 2 Task 2.3). Bring up with scripts/parity-up.sh, not
 # `docker compose up`, because the databases must exist first:
-#   parity_template  migrated by the Swift image's `migrate`, plus parity/seed/base.sql
+#   parity_template  migrated by the Swift image's `migrate`, plus parity/seed/*.sql (base.sql first)
 #   parity_swift / parity_go / parity_swift2  CREATE DATABASE ... TEMPLATE parity_template
 #
 # The Swift image defaults to the one apps/api/values-staging.yaml pins. A
