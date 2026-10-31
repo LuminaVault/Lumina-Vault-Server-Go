@@ -48,6 +48,12 @@ type Config struct {
 	// VaultRootPath holds tenants/<UUID>/{raw,wiki,memories} on the shared PVC.
 	VaultRootPath string `env:"VAULT_ROOT_PATH" envDefault:"/tmp/luminavault"`
 
+	// Wave 3 account/health. HermesDataRoot holds profiles/<id>/ (account
+	// deletion soft-renames it). BillingEnforcementEnabled stays a string:
+	// Swift enables it only when it lowercases to "true" (entitlement package).
+	HermesDataRoot            string `env:"HERMES_DATA_ROOT" envDefault:"/app/data/hermes"`
+	BillingEnforcementEnabled string `env:"BILLING_ENFORCEMENT_ENABLED" envDefault:"false"`
+
 	// LVGoJobs lists the background jobs this Go process runs. It is set only
 	// on api-go-* (extraEnv), so a Swift job flag inherited from api-* never
 	// starts a Go job by accident. See the roadmap's background job rule.

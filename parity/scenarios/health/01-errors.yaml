@@ -1,0 +1,37 @@
+module: health
+steps:
+  - {name: list no token, request: {method: GET, path: /v1/health}}
+  - {name: daily no token, request: {method: GET, path: "/v1/health/daily?type=steps"}}
+  - {name: ingest no token, request: {method: POST, path: /v1/health, json: {events: []}}}
+  - {name: ingest no token bad body, request: {method: POST, path: /v1/health, raw: "nope"}}
+  - {name: list bad token, request: {method: GET, path: /v1/health, headers: {Authorization: "Bearer not.a.jwt"}}}
+  - {name: daily bad token, request: {method: GET, path: "/v1/health/daily?type=steps", headers: {Authorization: "Bearer not.a.jwt"}}}
+  - {name: ingest bad token, request: {method: POST, path: /v1/health, json: {events: []}, headers: {Authorization: "Bearer not.a.jwt"}}}
+  - {name: malformed json, as: hea_bea, request: {method: POST, path: /v1/health, raw: "{\"events\":"}}
+  - {name: empty body, as: hea_bea, request: {method: POST, path: /v1/health, raw: ""}}
+  - {name: array body, as: hea_bea, request: {method: POST, path: /v1/health, raw: "[]"}}
+  - {name: missing events, as: hea_bea, request: {method: POST, path: /v1/health, json: {}}}
+  - {name: null events, as: hea_bea, request: {method: POST, path: /v1/health, raw: "{\"events\":null}"}}
+  - {name: events not an array, as: hea_bea, request: {method: POST, path: /v1/health, json: {events: x}}}
+  - {name: empty events, as: hea_bea, request: {method: POST, path: /v1/health, json: {events: []}}}
+  - {name: event not an object, as: hea_bea, request: {method: POST, path: /v1/health, raw: "{\"events\":[1]}"}}
+  - {name: missing type, as: hea_bea, request: {method: POST, path: /v1/health, json: {events: [{recordedAt: "2026-10-01T10:00:00Z", valueNumeric: 1}]}}}
+  - {name: missing recordedAt, as: hea_bea, request: {method: POST, path: /v1/health, json: {events: [{type: steps, valueNumeric: 1}]}}}
+  - {name: null type, as: hea_bea, request: {method: POST, path: /v1/health, raw: "{\"events\":[{\"type\":null,\"recordedAt\":\"2026-10-01T10:00:00Z\"}]}"}}
+  - {name: type wrong type, as: hea_bea, request: {method: POST, path: /v1/health, json: {events: [{type: 5, recordedAt: "2026-10-01T10:00:00Z"}]}}}
+  - {name: bad date, as: hea_bea, request: {method: POST, path: /v1/health, json: {events: [{type: steps, recordedAt: yesterday, valueNumeric: 1}]}}}
+  - {name: date only, as: hea_bea, request: {method: POST, path: /v1/health, json: {events: [{type: steps, recordedAt: "2026-10-01", valueNumeric: 1}]}}}
+  - {name: numeric date, as: hea_bea, request: {method: POST, path: /v1/health, json: {events: [{type: steps, recordedAt: 0, valueNumeric: 1}]}}}
+  - {name: value wrong type, as: hea_bea, request: {method: POST, path: /v1/health, json: {events: [{type: steps, recordedAt: "2026-10-01T10:00:00Z", valueNumeric: "1"}]}}}
+  - {name: text wrong type, as: hea_bea, request: {method: POST, path: /v1/health, json: {events: [{type: steps, recordedAt: "2026-10-01T10:00:00Z", valueText: 1}]}}}
+  - {name: metadata value wrong type, as: hea_bea, request: {method: POST, path: /v1/health, json: {events: [{type: steps, recordedAt: "2026-10-01T10:00:00Z", valueNumeric: 1, metadata: {a: 1}}]}}}
+  - {name: metadata not an object, as: hea_bea, request: {method: POST, path: /v1/health, json: {events: [{type: steps, recordedAt: "2026-10-01T10:00:00Z", valueNumeric: 1, metadata: x}]}}}
+  - {name: second event bad, as: hea_bea, request: {method: POST, path: /v1/health, json: {events: [{type: steps, recordedAt: "2026-10-01T10:00:00Z", valueNumeric: 1}, {type: steps, recordedAt: "2026-10-01T10:00:00Z", unit: 7}]}}, snapshot: [health_events]}
+  - {name: daily missing type, as: hea_hal, request: {method: GET, path: /v1/health/daily}}
+  - {name: daily empty type, as: hea_hal, request: {method: GET, path: "/v1/health/daily?type="}}
+  - {name: daily blank type, as: hea_hal, request: {method: GET, path: "/v1/health/daily?type=%20%20"}}
+  - {name: daily key without value, as: hea_hal, request: {method: GET, path: "/v1/health/daily?type"}}
+  - {name: daily days 0, as: hea_hal, request: {method: GET, path: "/v1/health/daily?type=steps&days=0"}}
+  - {name: daily days 91, as: hea_hal, request: {method: GET, path: "/v1/health/daily?type=steps&days=91"}}
+  - {name: daily days negative, as: hea_hal, request: {method: GET, path: "/v1/health/daily?type=steps&days=-1"}}
+  - {name: daily type checked before days, as: hea_hal, request: {method: GET, path: "/v1/health/daily?days=0"}}
