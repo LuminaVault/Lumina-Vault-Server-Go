@@ -231,6 +231,11 @@ sql:
       go:
         package: db
         out: internal/modules/teams/db
+    queries: internal/modules/account/queries.sql
+    gen:
+      go:
+        package: db
+        out: internal/modules/account/db
         sql_package: pgx/v5
         emit_pointers_for_null_types: true
         omit_unused_structs: true
@@ -257,6 +262,11 @@ sql:
       go:
         package: db
         out: internal/modules/me/db
+    queries: internal/modules/onboarding/queries.sql
+    gen:
+      go:
+        package: db
+        out: internal/modules/onboarding/db
         sql_package: pgx/v5
         emit_pointers_for_null_types: true
         omit_unused_structs: true
@@ -269,6 +279,26 @@ sql:
               import: github.com/google/uuid
               type: UUID
               pointer: true
+          - db_type: pg_catalog.timestamptz
+            go_type: time.Time
+          - db_type: pg_catalog.timestamptz
+            nullable: true
+            go_type:
+              type: time.Time
+              pointer: true
+  - engine: postgresql
+    schema: internal/migrations/sql/schema-swift.sql
+    queries: internal/modules/health/queries.sql
+    gen:
+      go:
+        package: db
+        out: internal/modules/health/db
+        sql_package: pgx/v5
+        emit_pointers_for_null_types: true
+        omit_unused_structs: true
+        overrides:
+          - db_type: uuid
+            go_type: github.com/google/uuid.UUID
           - db_type: pg_catalog.timestamptz
             go_type: time.Time
           - db_type: pg_catalog.timestamptz
