@@ -1,0 +1,6 @@
+module: news
+steps:
+  - {name: ticker no token, request: {method: GET, path: /v1/news/ticker}}
+  - {name: ticker bad token, request: {method: GET, path: "/v1/news/ticker?limit=5", headers: {Authorization: "Bearer not.a.jwt"}}}
+  - {name: not installed is 404, as: news_ned, request: {method: GET, path: /v1/news/ticker}}
+  - {name: disabled is 409, as: news_dan, request: {method: GET, path: /v1/news/ticker}}
