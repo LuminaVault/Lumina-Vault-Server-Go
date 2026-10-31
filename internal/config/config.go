@@ -35,6 +35,11 @@ type Config struct {
 
 	RedisURL string `env:"REDIS_URL"`
 
+	// Wave 2 apple/devices/reminders.
+	APNSBundleID                    string `env:"APNS_BUNDLE_ID"`
+	EmbeddingProvider               string `env:"EMBEDDING_PROVIDER" envDefault:"deterministic"`
+	EmbeddingMonthlyTokenCapDefault int64  `env:"EMBEDDING_MONTHLY_TOKEN_CAP_DEFAULT" envDefault:"2000000"`
+	HermesDefaultModel              string `env:"HERMES_DEFAULT_MODEL" envDefault:"hermes-3"`
 	// Shared feed aggregator for the news ticker (news module). Raw strings:
 	// the module splits FEEDS_DEFAULT_FEEDS exactly as Swift does.
 	FeedsBaseURL      string `env:"FEEDS_BASE_URL"`
@@ -42,11 +47,6 @@ type Config struct {
 
 	// VaultRootPath holds tenants/<UUID>/{raw,wiki,memories} on the shared PVC.
 	VaultRootPath string `env:"VAULT_ROOT_PATH" envDefault:"/tmp/luminavault"`
-	// Wave 2 apple/devices/reminders.
-	APNSBundleID                    string `env:"APNS_BUNDLE_ID"`
-	EmbeddingProvider               string `env:"EMBEDDING_PROVIDER" envDefault:"deterministic"`
-	EmbeddingMonthlyTokenCapDefault int64  `env:"EMBEDDING_MONTHLY_TOKEN_CAP_DEFAULT" envDefault:"2000000"`
-	HermesDefaultModel              string `env:"HERMES_DEFAULT_MODEL" envDefault:"hermes-3"`
 
 	// LVGoJobs lists the background jobs this Go process runs. It is set only
 	// on api-go-* (extraEnv), so a Swift job flag inherited from api-* never

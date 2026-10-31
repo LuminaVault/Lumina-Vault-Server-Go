@@ -13,6 +13,7 @@ import (
 	"lumina/internal/auth"
 	"lumina/internal/httpserver"
 	"lumina/internal/modules/achievements/db"
+	"lumina/internal/ratelimit"
 	"lumina/internal/wire"
 	"net/http"
 	"strconv"
@@ -59,17 +60,26 @@ type UnlockDTO struct {
 }
 
 type Module struct {
-	q       *db.Queries
-	catalog Catalog
+	q        *db.Queries
+	catalog  Catalog
+	identify echo.MiddlewareFunc
+	limits   *ratelimit.Store
 }
 
-func New(pool *pgxpool.Pool) *Module {
-	return &Module{q: db.New(pool), catalog: Current}
+// New builds the module. identify is auth.Identify; limits is the process-wide
+// rate-limit store.
+func New(pool *pgxpool.Pool, identify echo.MiddlewareFunc, limits *ratelimit.Store) *Module {
+	return &Module{q: db.New(pool), catalog: Current, identify: identify, limits: limits}
 }
 
-func (m *Module) Register(r httpserver.Router, authMW echo.MiddlewareFunc) {
-	r.GET("/v1/achievements", m.list, authMW)
-	r.GET("/v1/achievements/recent", m.recent, authMW)
+// Register mounts Swift's chain for the group: jwtAuthenticator, then
+// RateLimitMiddleware(.achievementsByUser), then requireIdentity. An
+// unauthenticated request therefore counts against its ip: bucket and can get
+// a 429 before the 401.
+func (m *Module) Register(r httpserver.Router, _ echo.MiddlewareFunc) {
+	limit := ratelimit.Middleware(m.limits, ratelimit.AchievementsByUser, ratelimit.UserOrIPKey)
+	r.GET("/v1/achievements", m.list, m.identify, limit, auth.Require)
+	r.GET("/v1/achievements/recent", m.recent, m.identify, limit, auth.Require)
 }
 
 func (m *Module) list(c *echo.Context) error {

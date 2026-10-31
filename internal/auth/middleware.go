@@ -78,6 +78,17 @@ func Identify(keys Keyset, users UserLoader) echo.MiddlewareFunc {
 	}
 }
 
+// Require is requireIdentity() as route middleware, for chains where
+// something (a rate limit) runs between Identify and the handler, as in Swift.
+func Require(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c *echo.Context) error {
+		if _, ok := Identity(c); !ok {
+			return ErrUnauthorized
+		}
+		return next(c)
+	}
+}
+
 // Identity returns the user Identify attached, if any.
 func Identity(c *echo.Context) (uuid.UUID, bool) {
 	id, ok := c.Get(ctxUserID).(uuid.UUID)
