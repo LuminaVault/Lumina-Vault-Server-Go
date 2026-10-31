@@ -77,8 +77,8 @@ Blocked on human steps:
   upsert and purge, consent-before-decode 403s, last-writer-wins, 413 over 1000 items,
   nested decode errors, deterministic embeddings, the embedding cap with a partial batch,
   the device queue and cross-tenant results. Seed: `parity/seed/apple.sql`.
-- Go tests: `internal/modules/apple` (22 tests) port 18 Swift assertions sets
-  (all of the above except the broker) and validate bodies against `api/openapi.yaml`.
+- Go tests: `internal/modules/apple` (22 tests) port the 18 Swift tests above (all but
+  the broker's 2) and validate bodies against `api/openapi.yaml`.
 - `lint`, `test`, `vuln` pass on PR #5.
 
 ### G2 staging deploy: blocked
