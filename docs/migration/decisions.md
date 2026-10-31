@@ -288,3 +288,29 @@ in Swift memory. Once `/v1/devices/command/{id}/result` reaches Go, live device
 RPCs from Swift time out after 12 s and reminder or calendar writes are replayed.
 It needs a Valkey bridge, or that route stays on Swift until MCP and Skills
 (wave 5) move.
+
+## D-wave3-early: wave 3 is ported while waves 1–2 wait on human merges
+
+The owner's goal (2026-10-30) is to keep going until LuminaVaultServer can be
+archived, and wave 2 went ahead on the same terms (D-wave2-early). Wave 3 is
+ported to `parity` on branches stacked on `go-migration/wave-2`. Two gates
+apply. No wave-3 module goes past `parity` until `projects` is `done`. Wave-3
+branches never touch the infra repo.
+
+## D-me-split: Me's gateway and provider controllers move with their owners
+
+`Sources/App/Me` holds three kinds of controller:
+- HermesGatewaysController (`/v1/me/hermes-gateways/*`, plus
+  `/v1/gateways/photon/inbound` in App+build.swift) is an HTTP face on the
+  HermesGateways services. Its apply/pair/setup sessions are in-process SSE
+  (coupling.md), so it moves with Hermes in wave 6 as `me-gateways`.
+- ProvidersController, LLMPreferencesController and ConnectionsController
+  (`/v1/me/providers`, `/v1/me/preferences/llm`, `/v1/me/connections`) write
+  and probe the BYO credentials behind `UserCredentialStore`'s 600 s cache, and
+  `test-all` calls the LLM routing adapters. They move with LLM in wave 5 as
+  `me-providers`.
+- Everything else (today, brief, recap, resurface, learned, commitments,
+  location, apns-categories) stays `me` in wave 3.
+
+`scripts/gen-modules.py` assigns routes by controller file (`SPLITS`). The
+prefixes don't overlap, so each part flips with its own `extraPaths` entry.

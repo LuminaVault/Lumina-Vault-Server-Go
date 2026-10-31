@@ -42,7 +42,22 @@ WAVES = {
     "Billing": 7, "Admin": 7, "System": 7, "Telemetry": 7, "WebSockets": 7,
     "Auth": 8, "Crypto": 8,
     "App": 8,  # root-mounted routes (/health, AASA, /v1/ws, /v1/auth/me*) move with the final cutover
+    # Pseudo-modules split out of a Swift dir by controller (SPLITS below).
+    "MeGateways": 6, "MeProviders": 5,
 }
+
+# Some Swift dirs hold controllers that belong to a later wave
+# (decisions.md D-me-split). A route whose source file is listed here is
+# assigned to the named pseudo-module instead of its dir.
+SPLITS = {
+    "Sources/App/Me/HermesGatewaysController.swift": "MeGateways",
+    "Sources/App/Me/ProvidersController.swift": "MeProviders",
+    "Sources/App/Me/LLMPreferencesController.swift": "MeProviders",
+    "Sources/App/Me/ConnectionsController.swift": "MeProviders",
+}
+# Routes registered in App+build.swift that belong to a split module.
+SPLIT_PATHS = {"/v1/gateways/photon/inbound": "MeGateways"}
+SWIFT_DIRS = {"App": "Sources/App/App+build.swift", "MeGateways": "Sources/App/Me", "MeProviders": "Sources/App/Me"}
 
 
 def kebab(name: str) -> str:
@@ -64,7 +79,8 @@ def main() -> int:
     routes = json.loads(ROUTES.read_text())
     by_module: dict[str, list[list[str]]] = {}
     for r in routes:
-        by_module.setdefault(r["module"], []).append(segments(r["path"]))
+        module = SPLIT_PATHS.get(r["path"]) or SPLITS.get(r["source"].split(":")[0], r["module"])
+        by_module.setdefault(module, []).append(segments(r["path"]))
 
     missing_wave = sorted(m for m in by_module if m not in WAVES)
     if missing_wave:
@@ -130,7 +146,7 @@ def main() -> int:
         lines += [
             f"  {key}:",
             f"    wave: {WAVES[module]}",
-            f"    swiftDir: Sources/App/{module}" if module != "App" else "    swiftDir: Sources/App/App+build.swift",
+            f"    swiftDir: {SWIFT_DIRS.get(module, f'Sources/App/{module}')}",
             f"    status: {existing.get(key, 'swift')}",
             f"    prefixes: [{', '.join(prefixes)}]",
         ]
