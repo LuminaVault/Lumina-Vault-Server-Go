@@ -137,8 +137,7 @@ func (s *Service) fetch(ctx context.Context, feeds []string, limit int, now time
 	if err != nil {
 		return NewsTickerResponse{}, errInvalidBaseURL
 	}
-	// Encode sorts by key, which is Swift's order too (feeds, limit).
-	u.RawQuery = url.Values{"feeds": {strings.Join(feeds, ",")}, "limit": {strconv.Itoa(limit)}}.Encode()
+	u.RawQuery = "feeds=" + queryItemEscape(strings.Join(feeds, ",")) + "&limit=" + strconv.Itoa(limit)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
 		return NewsTickerResponse{}, errInvalidBaseURL
@@ -192,7 +191,7 @@ func UserFeeds(config map[string]string, limit int) []string {
 		if t == "" || seen[t] {
 			continue
 		}
-		u, err := url.Parse(t)
+		u, err := url.Parse(encodeInvalidCharacters(t))
 		if err != nil || !IsPublic(u) {
 			continue
 		}
@@ -204,7 +203,8 @@ func UserFeeds(config map[string]string, limit int) []string {
 
 // splitFeedURLs splits on "," and "\n" the way Swift's Character-wise
 // split(whereSeparator:) does: "\r\n" is one Character in Swift, not "\n",
-// so it does not separate. Empty pieces are dropped (Swift's default).
+// so it does not separate (the glued piece is then kept as one feed URL).
+// Empty pieces are dropped (Swift's default).
 func splitFeedURLs(raw string) []string {
 	var out []string
 	start := 0
@@ -225,6 +225,52 @@ func splitFeedURLs(raw string) []string {
 		out = append(out, raw[start:])
 	}
 	return out
+}
+
+// queryItemEscape percent-encodes a query item value the way Foundation's
+// URLComponents.queryItems does (parity run 41196161637): everything outside
+// RFC 3986 query characters, plus "&" and "=". "+" stays raw, so a
+// form-decoding aggregator reads it as a space, as it does for Swift.
+func queryItemEscape(s string) string {
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if isUnreserved(c) || strings.IndexByte("!$'()*+,;:@/?", c) >= 0 {
+			b.WriteByte(c)
+			continue
+		}
+		fmt.Fprintf(&b, "%%%02X", c)
+	}
+	return b.String()
+}
+
+// encodeInvalidCharacters mirrors URL(string:) in swift-foundation, which
+// percent-encodes characters that are not valid in a URL instead of failing
+// (encodingInvalidCharacters: true). Parity showed it: a feed_urls piece with
+// an inner "\r\n" or a non-ASCII path is kept. Bytes outside RFC 3986 and a
+// "%" not starting an escape are encoded; the rest is left for url.Parse.
+func encodeInvalidCharacters(s string) string {
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c == '%' && i+2 < len(s) && isHex(s[i+1]) && isHex(s[i+2]):
+			b.WriteByte(c)
+		case isUnreserved(c) || strings.IndexByte(":/?#[]@!$&'()*+,;=", c) >= 0:
+			b.WriteByte(c)
+		default:
+			fmt.Fprintf(&b, "%%%02X", c)
+		}
+	}
+	return b.String()
+}
+
+func isUnreserved(c byte) bool {
+	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-' || c == '.' || c == '_' || c == '~'
+}
+
+func isHex(c byte) bool {
+	return c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F'
 }
 
 // FeedList is NewsTickerService.feedList(curated:user:): curated first, then

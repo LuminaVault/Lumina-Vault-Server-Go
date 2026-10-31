@@ -106,6 +106,7 @@ func TestMapsItemsStaleAndCaches(t *testing.T) {
 	require.Equal(t, "/v1/items", req.URL.Path)
 	require.Equal(t, "10", req.URL.Query().Get("limit"))
 	require.Equal(t, "https://feeds.bbci.co.uk/news/rss.xml", req.URL.Query().Get("feeds"))
+	require.Equal(t, "feeds=https://feeds.bbci.co.uk/news/rss.xml&limit=10", req.URL.RawQuery, "Foundation's query encoding")
 	require.Equal(t, "application/feed+json, application/json", req.Header.Get("Accept"))
 
 	_, err = s.Ticker(ctx, tenant, 10)
@@ -227,10 +228,13 @@ func TestUserFeedsAndFeedList(t *testing.T) {
 }
 
 func TestUserFeedsSwiftQuirks(t *testing.T) {
-	// "\r\n" is one Swift Character, so it does not split; the glued piece
-	// is not a valid URL and is dropped.
-	require.Equal(t, []string{"https://c.example/x"},
+	// "\r\n" is one Swift Character, so it does not split, and URL(string:)
+	// percent-encodes the inner CRLF instead of failing: the glued piece is
+	// kept verbatim (parity run 41196161637).
+	require.Equal(t, []string{"https://a.example/rss\r\nhttps://b.example/rss", "https://c.example/x"},
 		UserFeeds(map[string]string{"feed_urls": "https://a.example/rss\r\nhttps://b.example/rss,https://c.example/x"}, 10))
+	require.Equal(t, []string{"https://a.example/ünï code.json", "https://a.example/100%.json"},
+		UserFeeds(map[string]string{"feed_urls": "https://a.example/ünï code.json,https://a.example/100%.json,not a url"}, 10))
 	require.Equal(t, []string{"https://a.example/rss", "https://b.example/rss"},
 		UserFeeds(map[string]string{"feed_urls": "https://a.example/rss\n\n,https://b.example/rss"}, 10))
 }
@@ -267,6 +271,11 @@ func TestIsPublic(t *testing.T) {
 		require.NoError(t, err, raw)
 		require.Equal(t, want, IsPublic(u), raw)
 	}
+}
+
+func TestQueryItemEscape(t *testing.T) {
+	require.Equal(t, "https://x.test/a+b.json?x%3D1%26y%3D2,https://x.test/with%20space%23f%C3%BC",
+		queryItemEscape("https://x.test/a+b.json?x=1&y=2,https://x.test/with space#fü"))
 }
 
 func TestCuratedFeeds(t *testing.T) {
