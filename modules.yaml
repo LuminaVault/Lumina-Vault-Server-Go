@@ -17,7 +17,7 @@ modules:
   apple:
     wave: 2
     swiftDir: Sources/App/Apple
-    status: swift
+    status: parity
     prefixes: [/v1/apple, /v1/devices/commands/pending, /v1/photos]
     exactPaths: [/v1/reminders/sync]
     sharedPrefixes: [/v1/devices/command]
@@ -26,7 +26,7 @@ modules:
   devices:
     wave: 2
     swiftDir: Sources/App/Devices
-    status: swift
+    status: parity
     prefixes: []
     exactPaths: [/v1/devices]
     sharedPrefixes: [/v1/devices]

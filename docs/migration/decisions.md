@@ -203,7 +203,12 @@ one wave.
   - wrong type: ``Type mismatch for `archived` key, expected `Bool` type.`` (a top-level non-object gives key `` and `Dictionary<String, Any>`)
   - bad UUID or date: `The given data was not valid input: Attempted to decode UUID from invalid UUID string.` / `…Expected date string to be ISO8601-formatted.`
 - Unknown fields are ignored.
-- Not captured yet: the key path format for nested fields. Capture it when the first module with nested request DTOs is ported.
+- Nested fields (confirmed by the wave-2-apple parity run): a missing key names only the key
+  (``Coding key `completed` not found.``); null and type mismatches name the dotted coding
+  path with array indices (``Type mismatch for `reminders.1.priority` key, expected `Int` type.``).
+  A null where a non-optional **Bool** is required is a type mismatch
+  (``Type mismatch for `allowed` key, expected `Bool` type.``), not "Value not found";
+  every other type gives "Value not found". `wire.Bind` does all of this.
 - Create endpoints that return a DTO answer **200**, not 201. Delete answers 204.
 
 ## D-jwt-numeric-dates: Swift mints fractional iat/exp
@@ -267,3 +272,19 @@ is Hermes (wave 6). Porting Settings in wave 2 would mean porting those pieces
 early, or diverging on the DB columns the probe writes. So Settings is wave 6
 (`scripts/gen-modules.py` WAVES). Its SSRF guard and no-redirect probe port
 with it.
+
+## D-reminders-detect: `/v1/reminders/detect` waits for LLM routing (wave 5)
+
+`POST /v1/reminders/detect` runs `ReminderIntentClassifier` through Swift's LLM
+routing (wave 5). The parity environment has no LLM, so both servers answer
+`{"isReminder":false}` and parity is 0 differences. In production, though, Go
+would quietly turn off reminder suggestions. Reminders therefore stays `swift`.
+Proposal for the owner: route only `/v1/reminders` and `/v1/reminders/{id}` to
+Go when apple/devices/reminders flip, and leave the `/v1/reminders/detect`
+prefix on Swift until LLM routing lands in wave 5 (longest-prefix routing keeps
+it there). Until the owner accepts that, the apple/devices/reminders group can't
+flip. The group has a second flip blocker: `DeviceCommandBroker` waiters live
+in Swift memory. Once `/v1/devices/command/{id}/result` reaches Go, live device
+RPCs from Swift time out after 12 s and reminder or calendar writes are replayed.
+It needs a Valkey bridge, or that route stays on Swift until MCP and Skills
+(wave 5) move.

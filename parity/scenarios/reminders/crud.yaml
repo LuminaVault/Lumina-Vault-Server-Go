@@ -1,0 +1,52 @@
+module: reminders
+smoke: true
+steps:
+  - {name: list seeded, as: alice, request: {method: GET, path: /v1/reminders}}
+  - name: create trims title, keeps body, fractional fireAt
+    as: alice
+    request: {method: POST, path: /v1/reminders, json: {title: "  Call mom ", body: " at home ", fireAt: "2026-11-01T09:00:00.500Z"}}
+    capture: {call: $.id}
+    snapshot: [reminders]
+  - name: create with an empty cron keeps it as ""
+    as: alice
+    request: {method: POST, path: /v1/reminders, json: {title: Empty cron, body: "", fireAt: "2026-11-03T09:00:00Z", recurrenceCron: ""}}
+    capture: {empty: $.id}
+    snapshot: [reminders]
+  - name: create recurring
+    as: alice
+    request: {method: POST, path: /v1/reminders, json: {title: Stretch, body: "", fireAt: "2026-11-04T15:00:00Z", recurrenceCron: "*/15 9-17 * * 1-5"}}
+  - name: create with offset fireAt and Swift-accepted odd cron
+    as: alice
+    request: {method: POST, path: /v1/reminders, json: {title: Odd cron, body: b, fireAt: "2026-11-02T11:00:00+02:00", recurrenceCron: " 1,,2 */ 1-31/7 +5 0-6 "}}
+  - name: create with null cron
+    as: alice
+    request: {method: POST, path: /v1/reminders, raw: "{\"title\":\"Null cron\",\"body\":\"\",\"fireAt\":\"2026-11-05T09:00:00Z\",\"recurrenceCron\":null}"}
+  - {name: list newest fireAt first, as: alice, request: {method: GET, path: /v1/reminders}}
+  - {name: limit 1, as: alice, request: {method: GET, path: "/v1/reminders?limit=1"}}
+  - {name: limit 0 clamps to 1, as: alice, request: {method: GET, path: "/v1/reminders?limit=0"}}
+  - {name: limit 999 clamps to 200, as: alice, request: {method: GET, path: "/v1/reminders?limit=999"}}
+  - {name: limit not a number, as: alice, request: {method: GET, path: "/v1/reminders?limit=abc"}}
+  - name: rename and clear body
+    as: alice
+    request: {method: PATCH, path: "/v1/reminders/{{call}}", json: {title: " Call dad ", body: ""}}
+    snapshot: [reminders]
+  - name: new fireAt re-arms the fired reminder
+    as: alice
+    request: {method: PATCH, path: /v1/reminders/E0000000-0000-4000-8000-000000000001, json: {fireAt: "2026-12-01T08:00:00Z"}}
+    snapshot: [reminders]
+  - name: empty cron on PATCH clears it
+    as: alice
+    request: {method: PATCH, path: /v1/reminders/e0000000-0000-4000-8000-000000000002, json: {recurrenceCron: ""}}
+    snapshot: [reminders]
+  - name: set a cron
+    as: alice
+    request: {method: PATCH, path: "/v1/reminders/{{empty}}", json: {recurrenceCron: "0 7 * * *"}}
+    snapshot: [reminders]
+  - {name: empty patch leaves it unchanged, as: alice, request: {method: PATCH, path: "/v1/reminders/{{call}}", json: {}}}
+  - {name: null title leaves it unchanged, as: alice, request: {method: PATCH, path: "/v1/reminders/{{call}}", raw: "{\"title\":null}"}}
+  - name: delete
+    as: alice
+    request: {method: DELETE, path: "/v1/reminders/{{call}}"}
+    snapshot: [reminders]
+  - {name: delete again is 404, as: alice, request: {method: DELETE, path: "/v1/reminders/{{call}}"}}
+  - {name: list after delete, as: alice, request: {method: GET, path: /v1/reminders}}

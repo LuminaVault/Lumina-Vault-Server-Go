@@ -12,9 +12,12 @@ import (
 	"lumina/internal/db"
 	"lumina/internal/httpserver"
 	"lumina/internal/migrations"
+	"lumina/internal/modules/apple"
+	"lumina/internal/modules/devices"
 	"lumina/internal/modules/kanban"
 	"lumina/internal/modules/profiles"
 	"lumina/internal/modules/projects"
+	"lumina/internal/modules/reminders"
 	"lumina/internal/modules/sessions"
 	"lumina/internal/modules/spaces"
 	"lumina/internal/ratelimit"
@@ -116,6 +119,10 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 			spaces.New(pool, paths, identify),
 			profiles.New(pool),
 			sessions.New(pool),
+			// apple, devices and reminders flip together (D-shared-prefixes).
+			apple.New(pool, apple.Options{EmbeddingProvider: cfg.EmbeddingProvider, EmbeddingMonthlyCap: cfg.EmbeddingMonthlyTokenCapDefault}),
+			devices.New(pool, cfg.APNSBundleID),
+			reminders.New(pool, nil, cfg.HermesDefaultModel),
 		}
 	}
 	e := httpserver.New(cfg, deps)

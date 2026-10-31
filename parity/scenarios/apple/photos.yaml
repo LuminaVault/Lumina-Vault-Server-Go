@@ -1,0 +1,49 @@
+module: apple
+steps:
+  - {name: index no token, request: {method: POST, path: /v1/photos/index, json: {items: []}}}
+  - {name: alice without photos consent is forbidden, as: alice, request: {method: POST, path: /v1/photos/index, json: {items: [{assetLocalID: a-1, isScreenshot: true, ocrText: hi}]}}}
+  - {name: consent is checked before the body is decoded, as: alice, request: {method: POST, path: /v1/photos/index, raw: "nope"}}
+  - {name: alice grants photos, as: alice, request: {method: PUT, path: /v1/apple/consent, json: {domain: photos, allowed: true}}}
+  - name: inserts ocr, bare, tags-only, quoted tag; skips blank asset id
+    as: alice
+    request:
+      method: POST
+      path: /v1/photos/index
+      json:
+        items:
+          - {assetLocalID: " a-1 ", takenAt: "2026-04-01T08:30:00.750Z", isScreenshot: true, ocrText: "  Flight AB123 gate 7  "}
+          - {assetLocalID: a-2, takenAt: "2026-04-01T10:30:00+02:00", isScreenshot: false}
+          - {assetLocalID: a-3, isScreenshot: false, sceneTags: [receipt, document]}
+          - {assetLocalID: a-4, isScreenshot: false, ocrText: "Total $42.10", sceneTags: ["O'Brien", "café"]}
+          - {assetLocalID: a-5, isScreenshot: false, ocrText: "   ", sceneTags: []}
+          - {assetLocalID: "  ", isScreenshot: false, ocrText: no id}
+    snapshot: [photo_index, embedding_usage]
+  - name: re-index updates by assetLocalID
+    as: alice
+    request:
+      method: POST
+      path: /v1/photos/index
+      json: {items: [{assetLocalID: a-1, isScreenshot: false, ocrText: v2, sceneTags: [receipt]}, {assetLocalID: seed-asset, isScreenshot: true}]}
+    snapshot: [photo_index, embedding_usage]
+  - {name: empty items is fine, as: alice, request: {method: POST, path: /v1/photos/index, json: {items: []}}}
+  - {name: missing items, as: alice, request: {method: POST, path: /v1/photos/index, json: {}}}
+  - {name: items not an array, as: alice, request: {method: POST, path: /v1/photos/index, json: {items: x}}}
+  - {name: element missing isScreenshot, as: alice, request: {method: POST, path: /v1/photos/index, json: {items: [{assetLocalID: z}]}}}
+  - {name: element missing assetLocalID, as: alice, request: {method: POST, path: /v1/photos/index, json: {items: [{isScreenshot: true}]}}}
+  - {name: sceneTags not an array, as: alice, request: {method: POST, path: /v1/photos/index, json: {items: [{assetLocalID: z, isScreenshot: true, sceneTags: receipt}]}}}
+  - {name: sceneTags element wrong type, as: alice, request: {method: POST, path: /v1/photos/index, json: {items: [{assetLocalID: z, isScreenshot: true, sceneTags: [ok, 1]}]}}}
+  - {name: bad takenAt, as: alice, request: {method: POST, path: /v1/photos/index, json: {items: [{assetLocalID: z, isScreenshot: true, takenAt: yesterday}]}}}
+  - {name: malformed json, as: alice, request: {method: POST, path: /v1/photos/index, raw: "{\"items\":[{"}}
+  - {name: array body, as: alice, request: {method: POST, path: /v1/photos/index, raw: "[]"}}
+  - {name: bob grants photos, as: bob, request: {method: PUT, path: /v1/apple/consent, json: {domain: photos, allowed: true}}}
+  - name: bob over his embedding cap keeps rows written before the failing embed
+    as: bob
+    request:
+      method: POST
+      path: /v1/photos/index
+      json: {items: [{assetLocalID: b-1, isScreenshot: false}, {assetLocalID: b-2, isScreenshot: false, ocrText: needs an embed}, {assetLocalID: b-3, isScreenshot: false}]}
+    snapshot: [photo_index, embedding_usage]
+  - name: revoking photos purges only alice's index
+    as: alice
+    request: {method: PUT, path: /v1/apple/consent, json: {domain: photos, allowed: false}}
+    snapshot: [photo_index]
