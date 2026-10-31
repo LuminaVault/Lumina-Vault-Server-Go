@@ -1,0 +1,17 @@
+module: spaces
+steps:
+  - {name: bob sees none of alice's spaces, as: bob, request: {method: GET, path: /v1/spaces}}
+  - {name: bob cannot get alice's space, as: bob, request: {method: GET, path: /v1/spaces/5BACE000-0000-4000-8000-0000000000A1}}
+  - {name: bob cannot update alice's space, as: bob, request: {method: PUT, path: /v1/spaces/5BACE000-0000-4000-8000-0000000000A1, json: {name: hijack}}, snapshot: [spaces]}
+  - {name: bob cannot delete alice's space, as: bob, request: {method: DELETE, path: /v1/spaces/5BACE000-0000-4000-8000-0000000000A1}, snapshot: [spaces]}
+  - {name: bob cannot name alice's personal vault, as: bob, request: {method: GET, path: /v1/spaces, headers: {X-Vault-ID: A11CE000-0000-4000-8000-000000000001}}}
+  - {name: viewer lists team vault, as: bob, request: {method: GET, path: /v1/spaces, headers: {X-Vault-ID: 5BACE000-0000-4000-8000-0000000000C1}}}
+  - {name: viewer gets team space lowercase header, as: bob, request: {method: GET, path: /v1/spaces/5BACE000-0000-4000-8000-0000000000A3, headers: {X-Vault-ID: 5bace000-0000-4000-8000-0000000000c1}}}
+  - {name: viewer cannot create, as: bob, request: {method: POST, path: /v1/spaces, json: {name: Nope}, headers: {X-Vault-ID: 5BACE000-0000-4000-8000-0000000000C1}}}
+  - {name: viewer cannot update, as: bob, request: {method: PUT, path: /v1/spaces/5BACE000-0000-4000-8000-0000000000A3, json: {name: Nope}, headers: {X-Vault-ID: 5BACE000-0000-4000-8000-0000000000C1}}}
+  - {name: viewer cannot delete, as: bob, request: {method: DELETE, path: /v1/spaces/5BACE000-0000-4000-8000-0000000000A3, headers: {X-Vault-ID: 5BACE000-0000-4000-8000-0000000000C1}}}
+  - {name: write check comes before body decode, as: bob, request: {method: POST, path: /v1/spaces, raw: "{", headers: {X-Vault-ID: 5BACE000-0000-4000-8000-0000000000C1}}}
+  - {name: team owner without membership is denied, as: alice, request: {method: GET, path: /v1/spaces, headers: {X-Vault-ID: 5BACE000-0000-4000-8000-0000000000C1}}}
+  - {name: team space invisible from personal vault, as: bob, request: {method: GET, path: /v1/spaces/5BACE000-0000-4000-8000-0000000000A3}}
+  - {name: bob creates in own vault, as: bob, request: {method: POST, path: /v1/spaces, json: {name: Mine}}, snapshot: [spaces, vault_activity_events]}
+  - {name: same slug in another vault is fine, as: bob, request: {method: POST, path: /v1/spaces, json: {name: alpha, slug: alpha}}, snapshot: [spaces]}

@@ -14,6 +14,7 @@ import (
 	"lumina/internal/migrations"
 	"lumina/internal/modules/kanban"
 	"lumina/internal/modules/projects"
+	"lumina/internal/modules/spaces"
 	"lumina/internal/ratelimit"
 	"lumina/internal/telemetry"
 	"lumina/internal/vaultpaths"
@@ -102,11 +103,15 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		// One rate-limit store per process: Swift's buckets are shared by
 		// every route group that uses the same policy name.
 		limits := ratelimit.NewStore()
+		// Identify: vault-scoped routes check X-Vault-ID before identity (decisions.md D-identify).
+		identify := auth.Identify(keys, auth.PGUsers(pool))
+		paths := vaultpaths.Paths{Root: cfg.VaultRootPath}
 		// Migrated modules (modules.yaml status ≥ parity). Traffic only reaches
 		// them through the api ingress.extraPaths that name them.
 		deps.Modules = []httpserver.Module{
 			projects.New(pool),
-			kanban.New(pool, auth.Identify(keys, auth.PGUsers(pool)), limits, vaultpaths.Paths{Root: cfg.VaultRootPath}),
+			kanban.New(pool, identify, limits, paths),
+			spaces.New(pool, paths, identify),
 		}
 	}
 	e := httpserver.New(cfg, deps)
