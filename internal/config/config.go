@@ -45,6 +45,13 @@ type Config struct {
 	FeedsBaseURL      string `env:"FEEDS_BASE_URL"`
 	FeedsDefaultFeeds string `env:"FEEDS_DEFAULT_FEEDS"`
 
+	// Team invitations (teams module): makeTeamInvitationSender's inputs.
+	EmailKind         string `env:"EMAIL_KIND" envDefault:"logging"`
+	EmailResendAPIKey string `env:"EMAIL_RESEND_API_KEY"`
+	EmailFromAddress  string `env:"EMAIL_FROM_ADDRESS"`
+	EmailReplyTo      string `env:"EMAIL_REPLY_TO"`
+	TeamInviteBaseURL string `env:"TEAM_INVITE_BASE_URL" envDefault:"http://localhost:5173"`
+
 	// VaultRootPath holds tenants/<UUID>/{raw,wiki,memories} on the shared PVC.
 	VaultRootPath string `env:"VAULT_ROOT_PATH" envDefault:"/tmp/luminavault"`
 
