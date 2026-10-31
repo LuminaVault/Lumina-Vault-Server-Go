@@ -33,6 +33,11 @@ func Diff(swift, goT Transcript) []Difference {
 		if a.ContentType != b.ContentType {
 			add(a.Name, "content-type", a.ContentType, b.ContentType)
 		}
+		for _, h := range sortedKeys(headerNames(a.Headers, b.Headers)) {
+			if a.Headers[h] != b.Headers[h] {
+				add(a.Name, "header:"+h, a.Headers[h], b.Headers[h])
+			}
+		}
 		walk("$", a.Body, b.Body, func(path string, x, y any) { add(a.Name, path, x, y) })
 		tables := map[string]bool{}
 		for t := range a.Snapshots {
@@ -107,5 +112,16 @@ func sortedKeys(m map[string]bool) []string {
 		out = append(out, k)
 	}
 	sort.Strings(out)
+	return out
+}
+
+func headerNames(a, b map[string]string) map[string]bool {
+	out := map[string]bool{}
+	for k := range a {
+		out[k] = true
+	}
+	for k := range b {
+		out[k] = true
+	}
 	return out
 }
