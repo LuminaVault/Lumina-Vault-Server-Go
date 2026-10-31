@@ -8,6 +8,7 @@ import (
 	"lumina/internal/httpserver"
 	"lumina/internal/migrations"
 	"lumina/internal/modules/news"
+	"lumina/internal/ratelimit"
 	"lumina/internal/secretbox"
 	"lumina/parity/scenario"
 	"net/http"
@@ -47,7 +48,15 @@ func dbSetup(t *testing.T) *pgxpool.Pool {
 		_, err = pool.Exec(ctx, string(seed))
 		require.NoError(t, err, f)
 	}
+	// alice: enabled, empty (unopenable) config; bob: disabled.
+	_, err := pool.Exec(ctx, `INSERT INTO plugin_installs (id, tenant_id, plugin_slug, status, config_ciphertext, config_nonce)
+		VALUES (gen_random_uuid(), $1, 'news-ticker', 'enabled', '', ''), (gen_random_uuid(), $2, 'news-ticker', 'disabled', '', '')`, alice, bob)
+	require.NoError(t, err)
 	return pool
+}
+
+func newsModule(pool *pgxpool.Pool, cfg config.Config) *news.Module {
+	return news.New(pool, cfg, auth.Identify(keys, auth.PGUsers(pool)), ratelimit.NewStore())
 }
 
 func server(pool *pgxpool.Pool, m *news.Module) *echo.Echo {
@@ -94,8 +103,8 @@ func TestRoutes(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("no master key: route not mounted, like Swift", func(t *testing.T) {
-		require.Nil(t, news.New(pool, config.Config{}))
-		require.Nil(t, news.New(pool, config.Config{LVSecretMasterKey: "not-base64"}))
+		require.Nil(t, newsModule(pool, config.Config{}))
+		require.Nil(t, newsModule(pool, config.Config{LVSecretMasterKey: "not-base64"}))
 		e := server(pool, nil)
 		r := get(t, e, alice, "/v1/news/ticker")
 		require.Equal(t, http.StatusNotFound, r.code)
@@ -103,7 +112,7 @@ func TestRoutes(t *testing.T) {
 	})
 
 	t.Run("parity env: 401 without a token, 503 for everyone with one", func(t *testing.T) {
-		m := news.New(pool, config.Config{LVSecretMasterKey: masterKey})
+		m := newsModule(pool, config.Config{LVSecretMasterKey: masterKey})
 		require.NotNil(t, m)
 		e := server(pool, m)
 		r := get(t, e, uuid.Nil, "/v1/news/ticker")
@@ -123,7 +132,7 @@ func TestRoutes(t *testing.T) {
 	var lastFeeds atomic.Value
 	base := stubAggregator(t, &calls, &lastFeeds)
 	cfg := config.Config{LVSecretMasterKey: masterKey, FeedsBaseURL: base, FeedsDefaultFeeds: "https://curated.example/rss"}
-	e := server(pool, news.New(pool, cfg))
+	e := server(pool, newsModule(pool, cfg))
 
 	t.Run("configured: install state from plugin_installs", func(t *testing.T) {
 		r := get(t, e, bob, "/v1/news/ticker")
@@ -165,6 +174,28 @@ func TestRoutes(t *testing.T) {
 		r = get(t, e, bob, "/v1/news/ticker?limit=7")
 		require.Equal(t, http.StatusOK, r.code, r.body)
 		require.Equal(t, "https://curated.example/rss", lastFeeds.Load())
+	})
+
+	t.Run("settingsByUser: 30 per minute per user, unauthenticated by IP, 429 before 401", func(t *testing.T) {
+		limits := ratelimit.NewStore()
+		e := server(pool, news.New(pool, cfg, auth.Identify(keys, auth.PGUsers(pool)), limits))
+		for i := range 30 {
+			require.Equal(t, http.StatusOK, get(t, e, alice, "/v1/news/ticker").code, i)
+		}
+		r := get(t, e, alice, "/v1/news/ticker")
+		require.Equal(t, http.StatusTooManyRequests, r.code)
+		require.JSONEq(t, `{"error":{"message":"rate limit exceeded"}}`, r.body)
+		require.Equal(t, http.StatusOK, get(t, e, bob, "/v1/news/ticker").code, "bob's bucket is his own")
+
+		// The same store already counted for another settingsByUser module:
+		// news shares it (Swift buckets are per policy name).
+		shared := ratelimit.NewStore()
+		for range 30 {
+			shared.Hit(ratelimit.SettingsByUser, "ip:anon")
+		}
+		e = server(pool, news.New(pool, cfg, auth.Identify(keys, auth.PGUsers(pool)), shared))
+		r = get(t, e, uuid.Nil, "/v1/news/ticker")
+		require.Equal(t, http.StatusTooManyRequests, r.code, "no token still counts against ip:anon, so 429 wins over 401")
 	})
 
 	t.Run("200 conforms to api/openapi.yaml", func(t *testing.T) {
