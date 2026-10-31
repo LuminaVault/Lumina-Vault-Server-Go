@@ -134,3 +134,37 @@ Blocked on human steps:
   401), and the spec conformance of the 200.
 - CI: PR #3, run 41196472076. `parity`, `lint`, `test` and `vuln` pass
   (https://github.com/LuminaVault/Lumina-Vault-Server-Go/actions/runs/41196472076/job/124523530129).
+## kanban (wave 2)
+
+### G0 entry: met 2026-10-31
+
+- Routes: 15 in `docs/migration/routes.json` (`boards*`, `cards*`, `columns*`),
+  under the disjoint prefixes `/v1/boards` and `/v1/cards`.
+- Coupling: writes `vault_activity_events` (Teams' "Vault activity → SSE"
+  channel, coupling.md). Go writes the row; the live SSE push stays Swift-only
+  until Teams (wave 3) moves or the channel is bridged. **Flip blocker.**
+- Jobs: none moved. Promote writes `skills_state` plus
+  `<vault>/tenants/<ID>/skills/<slug>/SKILL.md`, which the Swift `CronScheduler`
+  reads from the DB and the PVC. There is no in-process cache, so jobs authored in
+  Go are scheduled by Swift.
+- Route middleware: `jwtAuthenticator` + `RateLimitMiddleware(.settingsByUser)`,
+  ported as `internal/ratelimit` (in-memory, like Swift's default
+  `rateLimit.storageKind=memory`). During the split each server counts
+  separately, so the effective limit doubles.
+- Swift tests: `Tests/AppTests/Kanban/` RankStringTests (5), CardExtraTests (3),
+  KanbanServiceTests (11), KanbanControllerTests (1).
+
+### G1 parity: met 2026-10-31 (CI)
+
+- CI `parity` (PR #6, run 41122278875): Swift-vs-Swift self-test and Swift-vs-Go
+  both give **10 scenarios, 0 differences**
+  (https://github.com/LuminaVault/Lumina-Vault-Server-Go/actions/runs/41122278875/job/124291230424).
+  Kanban accounts for 6 of those scenarios (134 steps: crud, default board, errors,
+  isolation, shared team boards with version checks, promote).
+- Go tests: `internal/modules/kanban` (rank, internal, module: 30 tests) port the
+  Swift assertions above, plus error order, team vaults, the rate limit and spec
+  conformance. lint, test and vuln are green.
+- Known differences (not reachable by parity): Swift traps on a cron field that
+  is exactly `/` while Go answers 400. Slugs and excerpts are cut by rune, not
+  grapheme cluster; switch them to `internal/swiftstr` (PR #4) once both are
+  merged into prep.

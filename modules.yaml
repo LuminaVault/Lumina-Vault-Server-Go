@@ -35,7 +35,7 @@ modules:
   kanban:
     wave: 2
     swiftDir: Sources/App/Kanban
-    status: swift
+    status: parity
     prefixes: [/v1/boards, /v1/cards]
     jobs: []
   news:
