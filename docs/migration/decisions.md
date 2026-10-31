@@ -203,7 +203,12 @@ one wave.
   - wrong type: ``Type mismatch for `archived` key, expected `Bool` type.`` (a top-level non-object gives key `` and `Dictionary<String, Any>`)
   - bad UUID or date: `The given data was not valid input: Attempted to decode UUID from invalid UUID string.` / `…Expected date string to be ISO8601-formatted.`
 - Unknown fields are ignored.
-- Not captured yet: the key path format for nested fields. Capture it when the first module with nested request DTOs is ported.
+- Nested fields (confirmed by the wave-2-apple parity run): a missing key names only the key
+  (``Coding key `completed` not found.``); null and type mismatches name the dotted coding
+  path with array indices (``Type mismatch for `reminders.1.priority` key, expected `Int` type.``).
+  A null where a non-optional **Bool** is required is a type mismatch
+  (``Type mismatch for `allowed` key, expected `Bool` type.``), not "Value not found";
+  every other type gives "Value not found". `wire.Bind` does all of this.
 - Create endpoints that return a DTO answer **200**, not 201. Delete answers 204.
 
 ## D-jwt-numeric-dates: Swift mints fractional iat/exp

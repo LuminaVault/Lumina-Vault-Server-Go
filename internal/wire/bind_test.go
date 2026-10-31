@@ -139,6 +139,7 @@ func TestBindNestedPaths(t *testing.T) {
 		{`{"items":[{"id":"a"}]}`, "Coding key `done` not found."},
 		{`{"items":[{"id":"a","done":true},{"id":"b","done":"no"}]}`, "Type mismatch for `items.1.done` key, expected `Bool` type."},
 		{`{"items":[{"id":null,"done":true}]}`, "Value not found for `items.0.id` key."},
+		{`{"items":[{"id":"a","done":null}]}`, "Type mismatch for `items.0.done` key, expected `Bool` type."},
 		{`{"items":[1]}`, "Type mismatch for `items.0` key, expected `Dictionary<String, Any>` type."},
 		{`{"items":[null]}`, "Value not found for `items.0` key."},
 		{`{"items":{}}`, "Type mismatch for `items` key, expected `Array<Any>` type."},
