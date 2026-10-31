@@ -1,0 +1,15 @@
+# Models only (decisions.md D2); handlers are hand-written on Echo v5.
+# include-operation-ids = this module's routes in docs/migration/routes.json.
+package: teams
+output: internal/modules/teams/models.gen.go
+generate:
+  models: true
+output-options:
+  include-operation-ids: [teamsList, teamsCreate, teamVaultsList, teamVaultsCreate, teamInvitationsCreate, teamInvitationsList, teamInvitationsResend, teamInvitationsRevoke, teamsTransferOwner, teamsArchive, teamsRestore, teamsLeave, vaultsList, vaultMembersList, vaultMembersUpdate, vaultMembersRemove, vaultActivityList, vaultActivityStream, teamInvitationsAccept]
+  type-mapping:
+    string:
+      formats:
+        uuid: { type: wire.UUID, import: lumina/internal/wire }
+        date-time: { type: wire.Time, import: lumina/internal/wire }
+        # A plain string: the viewer-facing VaultMember.email is "" (Swift hides it).
+        email: { type: string }
