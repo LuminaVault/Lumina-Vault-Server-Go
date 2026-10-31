@@ -7,7 +7,7 @@
 module: news
 smoke: true
 steps:
-  - {name: curated then user feeds, private and invalid dropped, deduped, as: news_amy, request: {method: GET, path: /v1/news/ticker}}
+  - {name: "curated then user feeds; private and invalid dropped; deduped", as: news_amy, request: {method: GET, path: /v1/news/ticker}}
   - {name: limit 1, as: news_amy, request: {method: GET, path: "/v1/news/ticker?limit=1"}}
   - {name: limit 0 clamps to 1, as: news_amy, request: {method: GET, path: "/v1/news/ticker?limit=0"}}
   - {name: limit 500 clamps to 100, as: news_amy, request: {method: GET, path: "/v1/news/ticker?limit=500"}}
