@@ -1,6 +1,9 @@
 module: account
-# teams.owner_user_id is ON DELETE RESTRICT: the user delete fails, and the
-# eraser's deletes in the same transaction roll back with it.
+# Deletions Postgres refuses. The eraser's deletes in the same transaction
+# roll back with the failed users delete, and Swift answers a bare 500.
 steps:
   - {name: team owner cannot be deleted, as: acct_owner, request: {method: DELETE, path: /v1/account, json: {password: correct horse battery staple}}, snapshot: [users, teams, device_command_queue]}
   - {name: owner still signed in, as: acct_owner, request: {method: GET, path: /v1/onboarding}}
+  # Swift bug, reproduced: activity in one's own personal vault makes the
+  # delete fail (SET NULL on actor_user_id runs after the vault cascade).
+  - {name: own-vault activity blocks deletion, as: acct_self, request: {method: DELETE, path: /v1/account, json: {password: correct horse battery staple}}, snapshot: [users, vaults, vault_activity_events]}

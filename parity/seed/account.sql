@@ -12,7 +12,8 @@ VALUES
   ('acc70000-0000-4000-8000-0000000000e5', 'acct-nobody@parity.test', '$2b$12$asMTTkraZGgSRkkBR0CDpe.fsvorxUmu0Ue0zUG9.53O.GnHPewau', true, 'acct-nobody', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
   ('acc70000-0000-4000-8000-0000000000f6', 'acct-type@parity.test',   '$2b$12$asMTTkraZGgSRkkBR0CDpe.fsvorxUmu0Ue0zUG9.53O.GnHPewau', true, 'acct-type',   '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
   ('acc70000-0000-4000-8000-0000000000a7', 'acct-owner@parity.test',  '$2b$12$asMTTkraZGgSRkkBR0CDpe.fsvorxUmu0Ue0zUG9.53O.GnHPewau', true, 'acct-owner',  '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
-  ('acc70000-0000-4000-8000-0000000000b8', 'acct-wrong@parity.test',  '$2b$12$asMTTkraZGgSRkkBR0CDpe.fsvorxUmu0Ue0zUG9.53O.GnHPewau', true, 'acct-wrong',  '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+  ('acc70000-0000-4000-8000-0000000000b8', 'acct-wrong@parity.test',  '$2b$12$asMTTkraZGgSRkkBR0CDpe.fsvorxUmu0Ue0zUG9.53O.GnHPewau', true, 'acct-wrong',  '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
+  ('acc70000-0000-4000-8000-0000000000c9', 'acct-self@parity.test',   '$2b$12$asMTTkraZGgSRkkBR0CDpe.fsvorxUmu0Ue0zUG9.53O.GnHPewau', true, 'acct-self',   '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
 
 -- acct-del owns rows in tables reached by ON DELETE CASCADE ...
 INSERT INTO vaults (id, personal_owner_user_id, name, created_at, updated_at)
@@ -74,12 +75,9 @@ VALUES
   ('acc7f000-0000-4000-8000-00000000000f', 'evt-acct-del', 'INITIAL_PURCHASE', 'acc70000-0000-4000-8000-0000000000a1', '2026-01-01T00:00:00Z'),
   ('acc7f000-0000-4000-8000-000000000010', 'evt-acct-fresh', 'INITIAL_PURCHASE', 'acc70000-0000-4000-8000-0000000000b2', '2026-01-01T00:00:00Z');
 
--- acct-del acted in alice's vault: the row stays (alice's feed) but loses the
--- name; acct-del's own vault feed cascades away with the vault.
+-- acct-del acted in alice's vault: the row stays (alice's feed) but loses the name.
 INSERT INTO vault_activity_events (id, vault_id, actor_user_id, actor_name, action, target_type, created_at)
-VALUES
-  ('acc7f000-0000-4000-8000-000000000011', 'a11ce000-0000-4000-8000-000000000001', 'acc70000-0000-4000-8000-0000000000a1', 'acct-del-display-name', 'note.created', 'note', '2026-01-01T00:00:00Z'),
-  ('acc7f000-0000-4000-8000-000000000012', 'acc70000-0000-4000-8000-0000000000a1', 'acc70000-0000-4000-8000-0000000000a1', 'acct-del-display-name', 'note.created', 'note', '2026-01-01T00:00:01Z');
+VALUES ('acc7f000-0000-4000-8000-000000000011', 'a11ce000-0000-4000-8000-000000000001', 'acc70000-0000-4000-8000-0000000000a1', 'acct-del-display-name', 'note.created', 'note', '2026-01-01T00:00:00Z');
 
 -- ON DELETE SET NULL, left to the FK.
 INSERT INTO provider_failover_events (id, tenant_id, provider, model, status_code, source, happened_at)
@@ -91,3 +89,13 @@ INSERT INTO teams (id, name, owner_user_id, billing_sponsor_user_id, created_at,
 VALUES ('acc7f000-0000-4000-8000-000000000014', 'Owner''s team', 'acc70000-0000-4000-8000-0000000000a7', 'acc70000-0000-4000-8000-0000000000a7', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
 INSERT INTO device_command_queue (id, tenant_id, kind, payload, created_at, expires_at)
 VALUES ('acc7f000-0000-4000-8000-000000000015', 'acc70000-0000-4000-8000-0000000000a7', 'reminder_create', '{"title":"kept"}', '2026-01-01T00:00:00Z', '2099-01-01T00:00:00Z');
+
+-- acct-self has activity in their own personal vault. Deleting the user fires
+-- two FK actions on that row: actor_user_id SET NULL (users) and the vault_id
+-- CASCADE (users -> vaults -> vault_activity_events). Postgres runs the SET
+-- NULL update after the vault is gone and the update fails its vault_id check,
+-- so Swift answers 500 and the account cannot be deleted. Go reproduces it.
+INSERT INTO vaults (id, personal_owner_user_id, name, created_at, updated_at)
+VALUES ('acc70000-0000-4000-8000-0000000000c9', 'acc70000-0000-4000-8000-0000000000c9', 'acct-self''s Vault', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+INSERT INTO vault_activity_events (id, vault_id, actor_user_id, actor_name, action, target_type, created_at)
+VALUES ('acc7f000-0000-4000-8000-000000000016', 'acc70000-0000-4000-8000-0000000000c9', 'acc70000-0000-4000-8000-0000000000c9', 'acct-self', 'note.created', 'note', '2026-01-01T00:00:00Z');

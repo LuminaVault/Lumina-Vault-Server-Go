@@ -28,6 +28,7 @@ acct_nobody: ACC70000-0000-4000-8000-0000000000E5
 acct_type: ACC70000-0000-4000-8000-0000000000F6
 acct_owner: ACC70000-0000-4000-8000-0000000000A7
 acct_wrong: ACC70000-0000-4000-8000-0000000000B8
+acct_self: ACC70000-0000-4000-8000-0000000000C9
 # onboarding (parity/seed/onboarding.sql): no onboarding_state rows until the scenarios create them.
 onb_ann: 0B0A0000-0000-4000-8000-0000000000A1
 onb_bob: 0B0A0000-0000-4000-8000-0000000000B2
