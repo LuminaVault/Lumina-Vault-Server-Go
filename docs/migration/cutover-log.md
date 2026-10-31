@@ -42,13 +42,15 @@ evidence, not intent: commands, counts, links, numbers.
 
 - Deploy: LuminaVaultInfra #488 merged 2026-10-30 19:38Z. `api-go-staging` ran
   `4325ccaa` for 15 h with 0 ERROR log lines. Release run 41198570420 then moved
-  it to `dd434496` (wave 2 merged; projects code unchanged), rolled out
-  2026-10-31 11:54Z, healthy.
+  it to `dd434496` (wave 2 merged, projects code unchanged), rolled out
+  2026-10-31 11:54Z, healthy. At 12:02:58Z it moved to `d7297f97` (wave 3
+  prep, docs only). The smoke below was re-run on `d7297f97`, so that is the
+  SHA G3 pins.
 - Smoke user: `smoke+g2@facorreia.com` (`BA2E7201-987C-47F2-A0E3-2C232BC9C549`),
   registered on Swift staging by the agent. Its password is a random secret,
   kept only in the agent's session scratchpad.
 - `parity smoke --module projects` against `api-go-staging` (port-forward),
-  with Swift transcripts from main CI run 41198741960: `crud.yaml` matches
+  with Swift transcripts from main CI run 41198741960, on `d7297f97` with 0 ERROR logs: `crud.yaml` matches
   except two steps, `patch seeded keeps todoCount` and `lowercase id accepted`
   (404, transcript 200). Both PATCH the parity seed project
   `5EED0000-…-0000000000A1`, which exists only in the parity DB.
