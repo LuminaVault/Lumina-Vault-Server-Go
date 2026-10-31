@@ -22,6 +22,7 @@ import (
 	"lumina/internal/modules/reminders"
 	"lumina/internal/modules/sessions"
 	"lumina/internal/modules/spaces"
+	"lumina/internal/modules/teams"
 	"lumina/internal/ratelimit"
 	"lumina/internal/telemetry"
 	"lumina/internal/vaultpaths"
@@ -126,6 +127,10 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 			devices.New(pool, cfg.APNSBundleID),
 			reminders.New(pool, nil, cfg.HermesDefaultModel),
 			achievements.New(pool, identify, limits),
+			teams.New(pool, identify, limits, paths, teams.NewSender(teams.SenderConfig{
+				Kind: cfg.EmailKind, APIKey: cfg.EmailResendAPIKey, FromAddress: cfg.EmailFromAddress,
+				ReplyTo: cfg.EmailReplyTo, BaseURL: cfg.TeamInviteBaseURL,
+			}, slog.Default().With("module", "teams"))),
 		}
 		if m := news.New(pool, cfg, identify, limits); m != nil { // nil without LV_SECRET_MASTER_KEY, as in Swift
 			deps.Modules = append(deps.Modules, m)
