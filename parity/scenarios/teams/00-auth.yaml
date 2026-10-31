@@ -1,0 +1,42 @@
+# Every route without a token, and the checks Swift runs before identity.
+# Anonymous steps send their own X-Forwarded-For so they get an "ip:" rate-limit
+# bucket (settingsByUser, 30/min) of their own instead of the shared "ip:anon".
+# Team Alpha 7EA51000-...01, Alpha Main vault 7EA53000-...01.
+module: teams
+steps:
+  # Restore checks the 30-day window; Team Ancient was archived in January.
+  - {name: restore a long-archived team is gone, as: team_tom, request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000005/restore}}
+  # GET /v1/teams purges teams archived over 30 days ago before it checks the token.
+  - name: list no token purges expired archives
+    request: {method: GET, path: /v1/teams, headers: {X-Forwarded-For: 10.75.0.1}}
+    snapshot: [teams, vaults, team_memberships]
+  - {name: create no token, request: {method: POST, path: /v1/teams, json: {name: Nope}, headers: {X-Forwarded-For: 10.75.0.1}}}
+  - {name: team vaults no token, request: {method: GET, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/vaults, headers: {X-Forwarded-For: 10.75.0.1}}}
+  - {name: team vaults bad id beats the missing token, request: {method: GET, path: /v1/teams/nope/vaults, headers: {X-Forwarded-For: 10.75.0.1}}}
+  - {name: create vault no token, request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/vaults, json: {name: Nope}, headers: {X-Forwarded-For: 10.75.0.1}}}
+  - {name: invite no token, request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/invitations, json: {email: a@b.c, vaultGrants: {}}, headers: {X-Forwarded-For: 10.75.0.1}}}
+  - {name: list invitations no token, request: {method: GET, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/invitations, headers: {X-Forwarded-For: 10.75.0.1}}}
+  - {name: resend no token, request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/invitations/7EA55000-0000-4000-8000-000000000008/resend, headers: {X-Forwarded-For: 10.75.0.1}}}
+  - {name: resend bad invitation id without token, request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/invitations/nope/resend, headers: {X-Forwarded-For: 10.75.0.1}}}
+  - {name: revoke no token, request: {method: DELETE, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/invitations/7EA55000-0000-4000-8000-000000000009, headers: {X-Forwarded-For: 10.75.0.1}}}
+  - {name: revoke bad team id without token, request: {method: DELETE, path: /v1/teams/nope/invitations/nope, headers: {X-Forwarded-For: 10.75.0.1}}}
+  - {name: transfer no token, request: {method: PUT, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/owner, json: {userID: 7EA50000-0000-4000-8000-0000000000A2}, headers: {X-Forwarded-For: 10.75.0.1}}}
+  - {name: transfer bad id without token, request: {method: PUT, path: /v1/teams/nope/owner, json: {}, headers: {X-Forwarded-For: 10.75.0.1}}}
+  - {name: archive no token, request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/archive, headers: {X-Forwarded-For: 10.75.0.1}}}
+  - {name: restore no token, request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/restore, headers: {X-Forwarded-For: 10.75.0.1}}}
+  - {name: leave no token, request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/leave, headers: {X-Forwarded-For: 10.75.0.1}}}
+  - {name: vaults no token, request: {method: GET, path: /v1/vaults, headers: {X-Forwarded-For: 10.75.0.1}}}
+  - {name: members no token, request: {method: GET, path: /v1/vaults/7EA53000-0000-4000-8000-000000000001/members, headers: {X-Forwarded-For: 10.75.0.1}}}
+  - {name: members bad id beats the missing token, request: {method: GET, path: /v1/vaults/nope/members, headers: {X-Forwarded-For: 10.75.0.1}}}
+  - {name: update member no token, request: {method: PUT, path: /v1/vaults/7EA53000-0000-4000-8000-000000000001/members/nope, json: {role: viewer, canUseAI: false}, headers: {X-Forwarded-For: 10.75.0.1}}}
+  - {name: remove member no token, request: {method: DELETE, path: /v1/vaults/7EA53000-0000-4000-8000-000000000001/members/7EA50000-0000-4000-8000-0000000000A3, headers: {X-Forwarded-For: 10.75.0.1}}}
+  - {name: activity no token, request: {method: GET, path: /v1/vaults/7EA53000-0000-4000-8000-000000000001/activity, headers: {X-Forwarded-For: 10.75.0.1}}}
+  - {name: activity stream no token, request: {method: GET, path: /v1/vaults/7EA53000-0000-4000-8000-000000000001/activity/stream, headers: {X-Forwarded-For: 10.75.0.1}}}
+  - {name: activity stream bad id without token, request: {method: GET, path: /v1/vaults/nope/activity/stream, headers: {X-Forwarded-For: 10.75.0.1}}}
+  - {name: accept no token, request: {method: POST, path: /v1/team-invitations/parity-invite-1/accept, headers: {X-Forwarded-For: 10.75.0.1}}}
+  - {name: bad token, request: {method: GET, path: /v1/teams, headers: {Authorization: "Bearer not.a.jwt", X-Forwarded-For: 10.75.0.1}}}
+  - {name: bad token on vaults, request: {method: GET, path: /v1/vaults, headers: {Authorization: "Bearer not.a.jwt", X-Forwarded-For: 10.75.0.1}}}
+  - name: nothing was written
+    as: team_out
+    request: {method: GET, path: /v1/teams}
+    snapshot: [team_invitations, vault_memberships, vault_activity_events]
