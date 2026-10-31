@@ -1,0 +1,41 @@
+# /v1/vaults/{vaultID}/members. Alpha Main 7EA53000-...01: olga admin, adam
+# admin, mia viewer, kim viewer. Users: olga ...A1, adam ...A2, mia ...A3, out ...A4.
+module: teams
+steps:
+  - {name: admin sees emails, as: team_adam, request: {method: GET, path: /v1/vaults/7EA53000-0000-4000-8000-000000000001/members}}
+  - {name: viewer sees blank emails, as: team_mia, request: {method: GET, path: /v1/vaults/7EA53000-0000-4000-8000-000000000001/members}}
+  - {name: the path wins over X-Vault-ID, as: team_adam, request: {method: GET, path: /v1/vaults/7EA53000-0000-4000-8000-000000000001/members, headers: {X-Vault-ID: nope}}}
+  - {name: personal vault has its owner, as: team_olga, request: {method: GET, path: /v1/vaults/7EA50000-0000-4000-8000-0000000000A1/members}}
+  - {name: bad vault id, as: team_adam, request: {method: GET, path: /v1/vaults/not-a-uuid/members}}
+  - {name: no seat, as: team_out, request: {method: GET, path: /v1/vaults/7EA53000-0000-4000-8000-000000000001/members}}
+  - {name: someone else's personal vault, as: team_out, request: {method: GET, path: /v1/vaults/7EA50000-0000-4000-8000-0000000000A1/members}}
+  - {name: unknown vault, as: team_adam, request: {method: GET, path: /v1/vaults/00000000-0000-4000-8000-000000000000/members}}
+  - {name: archived vault, as: team_olga, request: {method: GET, path: /v1/vaults/7EA53000-0000-4000-8000-000000000003/members}}
+  - {name: archived team vault, as: team_tom, request: {method: GET, path: /v1/vaults/7EA53000-0000-4000-8000-000000000006/members}}
+
+  - name: admin promotes mia
+    as: team_adam
+    request: {method: PUT, path: /v1/vaults/7EA53000-0000-4000-8000-000000000001/members/7EA50000-0000-4000-8000-0000000000A3, json: {role: editor, canUseAI: true}}
+    snapshot: [vault_memberships, vault_activity_events]
+  - {name: editor is not admin, as: team_mia, request: {method: PUT, path: /v1/vaults/7EA53000-0000-4000-8000-000000000001/members/nope, raw: ""}}
+  - {name: bad user id, as: team_adam, request: {method: PUT, path: /v1/vaults/7EA53000-0000-4000-8000-000000000001/members/nope, json: {role: viewer, canUseAI: false}}}
+  - {name: bad role, as: team_adam, request: {method: PUT, path: /v1/vaults/7EA53000-0000-4000-8000-000000000001/members/00000000-0000-4000-8000-000000000000, json: {role: owner, canUseAI: false}}}
+  - {name: unknown user, as: team_adam, request: {method: PUT, path: /v1/vaults/7EA53000-0000-4000-8000-000000000001/members/00000000-0000-4000-8000-000000000000, json: {role: viewer, canUseAI: false}}}
+  - {name: user without a seat, as: team_adam, request: {method: PUT, path: /v1/vaults/7EA53000-0000-4000-8000-000000000001/members/7EA50000-0000-4000-8000-0000000000A4, json: {role: viewer, canUseAI: false}}}
+  - {name: missing canUseAI, as: team_adam, request: {method: PUT, path: /v1/vaults/7EA53000-0000-4000-8000-000000000001/members/7EA50000-0000-4000-8000-0000000000A3, json: {role: viewer}}}
+  - {name: null canUseAI, as: team_adam, request: {method: PUT, path: /v1/vaults/7EA53000-0000-4000-8000-000000000001/members/7EA50000-0000-4000-8000-0000000000A3, raw: "{\"role\":\"viewer\",\"canUseAI\":null}"}}
+  - {name: role wrong type, as: team_adam, request: {method: PUT, path: /v1/vaults/7EA53000-0000-4000-8000-000000000001/members/7EA50000-0000-4000-8000-0000000000A3, json: {role: 1, canUseAI: false}}}
+  - {name: array body, as: team_adam, request: {method: PUT, path: /v1/vaults/7EA53000-0000-4000-8000-000000000001/members/7EA50000-0000-4000-8000-0000000000A3, raw: "[]"}}
+  - {name: personal vault owner may demote themself, as: team_olga, request: {method: PUT, path: /v1/vaults/7EA50000-0000-4000-8000-0000000000A1/members/7EA50000-0000-4000-8000-0000000000A1, json: {role: editor, canUseAI: false}}, snapshot: [vault_memberships]}
+
+  - {name: the team owner cannot be removed, as: team_adam, request: {method: DELETE, path: /v1/vaults/7EA53000-0000-4000-8000-000000000001/members/7EA50000-0000-4000-8000-0000000000A1}}
+  - {name: personal vault has no team, as: team_out, request: {method: DELETE, path: /v1/vaults/7EA50000-0000-4000-8000-0000000000A4/members/7EA50000-0000-4000-8000-0000000000A4}}
+  - {name: remove someone without a seat, as: team_adam, request: {method: DELETE, path: /v1/vaults/7EA53000-0000-4000-8000-000000000001/members/7EA50000-0000-4000-8000-0000000000A4}}
+  - {name: remove bad user id, as: team_adam, request: {method: DELETE, path: /v1/vaults/7EA53000-0000-4000-8000-000000000001/members/nope}}
+  - {name: viewer cannot remove, as: team_kim, request: {method: DELETE, path: /v1/vaults/7EA53000-0000-4000-8000-000000000001/members/nope}}
+  - name: admin removes mia
+    as: team_adam
+    request: {method: DELETE, path: /v1/vaults/7EA53000-0000-4000-8000-000000000001/members/7EA50000-0000-4000-8000-0000000000A3}
+    snapshot: [vault_memberships, vault_activity_events]
+  - {name: mia lost access, as: team_mia, request: {method: GET, path: /v1/vaults/7EA53000-0000-4000-8000-000000000001/members}}
+  - {name: members after the changes, as: team_adam, request: {method: GET, path: /v1/vaults/7EA53000-0000-4000-8000-000000000001/members}}

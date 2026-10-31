@@ -1,0 +1,36 @@
+# GET /v1/vaults, GET/POST /v1/teams/{teamID}/vaults.
+# Alpha 7EA51000-...01 (olga owner, adam admin, mia member); Epsilon ...04 is archived.
+module: teams
+steps:
+  # Personal first, then case-insensitive by name: Alpha Archive, alpha lab, Alpha Main.
+  - {name: olga sees personal then team vaults, as: team_olga, request: {method: GET, path: /v1/vaults}}
+  - {name: mia sees only her seats, as: team_mia, request: {method: GET, path: /v1/vaults}}
+  - {name: outsider sees the personal vault, as: team_out, request: {method: GET, path: /v1/vaults}}
+  - {name: archived vaults are listed, as: team_tom, request: {method: GET, path: /v1/vaults}}
+  - {name: team vaults the member holds a seat in, as: team_mia, request: {method: GET, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/vaults}}
+  - {name: team vaults for the owner, as: team_olga, request: {method: GET, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/vaults}}
+  - {name: lowercase team id, as: team_olga, request: {method: GET, path: /v1/teams/7ea51000-0000-4000-8000-000000000001/vaults}}
+  - {name: team vaults of a stranger team, as: team_out, request: {method: GET, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/vaults}}
+  - {name: team vaults bad id, as: team_olga, request: {method: GET, path: /v1/teams/not-a-uuid/vaults}}
+  - {name: team vaults unknown team, as: team_olga, request: {method: GET, path: /v1/teams/00000000-0000-4000-8000-000000000000/vaults}}
+  - {name: archived team still lists its vaults, as: team_tom, request: {method: GET, path: /v1/teams/7EA51000-0000-4000-8000-000000000004/vaults}}
+  - {name: seat-only reader is not on the team, as: team_kim, request: {method: GET, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/vaults}}
+  - name: owner creates a vault
+    as: team_olga
+    request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/vaults, json: {name: " Design "}}
+    snapshot: [vaults, vault_memberships, vault_activity_events]
+  - name: admin creates a vault
+    as: team_adam
+    request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/vaults, json: {name: Adam Space}}
+    snapshot: [vaults, vault_memberships]
+  - {name: member cannot create, as: team_mia, request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/vaults, raw: ""}}
+  - {name: stranger cannot create, as: team_out, request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/vaults, json: {name: Nope}}}
+  - {name: archived team is not found, as: team_tom, request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000004/vaults, raw: "[]"}}
+  - {name: bad team id, as: team_olga, request: {method: POST, path: /v1/teams/nope/vaults, json: {name: Nope}}}
+  - {name: name too short, as: team_olga, request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/vaults, json: {name: " x "}}}
+  - {name: malformed json, as: team_olga, request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/vaults, raw: "{"}}
+  - {name: missing name, as: team_olga, request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/vaults, json: {title: x}}}
+  - {name: name wrong type, as: team_olga, request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/vaults, json: {name: [a]}}}
+  - {name: olga sees the vault she made, as: team_olga, request: {method: GET, path: /v1/vaults}}
+  - {name: adam sees his, as: team_adam, request: {method: GET, path: /v1/vaults}}
+  - {name: team list shows both new vaults to the owner only where seated, as: team_olga, request: {method: GET, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/vaults}}

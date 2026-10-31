@@ -1,0 +1,32 @@
+# PUT /v1/teams/{teamID}/owner and POST /v1/teams/{teamID}/leave.
+# Beta 7EA51000-...02: rex ...A7 owner, bea ...A8 admin, max ...A9 member, ivy ...A5 member.
+module: teams
+steps:
+  - {name: admin is not the owner, as: team_bea, request: {method: PUT, path: /v1/teams/7EA51000-0000-4000-8000-000000000002/owner, json: {userID: 7EA50000-0000-4000-8000-0000000000A8}}}
+  - {name: member is not an admin, as: team_max, request: {method: PUT, path: /v1/teams/7EA51000-0000-4000-8000-000000000002/owner, raw: "{"}}
+  - {name: stranger, as: team_out, request: {method: PUT, path: /v1/teams/7EA51000-0000-4000-8000-000000000002/owner, json: {userID: 7EA50000-0000-4000-8000-0000000000A4}}}
+  - {name: bad team id, as: team_rex, request: {method: PUT, path: /v1/teams/nope/owner, json: {userID: 7EA50000-0000-4000-8000-0000000000A8}}}
+  - {name: missing userID, as: team_rex, request: {method: PUT, path: /v1/teams/7EA51000-0000-4000-8000-000000000002/owner, json: {}}}
+  - {name: userID not a uuid, as: team_rex, request: {method: PUT, path: /v1/teams/7EA51000-0000-4000-8000-000000000002/owner, json: {userID: nope}}}
+  - {name: userID wrong type, as: team_rex, request: {method: PUT, path: /v1/teams/7EA51000-0000-4000-8000-000000000002/owner, json: {userID: 7}}}
+  - {name: userID null, as: team_rex, request: {method: PUT, path: /v1/teams/7EA51000-0000-4000-8000-000000000002/owner, raw: "{\"userID\":null}"}}
+  - {name: empty body, as: team_rex, request: {method: PUT, path: /v1/teams/7EA51000-0000-4000-8000-000000000002/owner, raw: ""}}
+  - {name: to yourself, as: team_rex, request: {method: PUT, path: /v1/teams/7EA51000-0000-4000-8000-000000000002/owner, json: {userID: 7EA50000-0000-4000-8000-0000000000A7}}}
+  - {name: to a non-member, as: team_rex, request: {method: PUT, path: /v1/teams/7EA51000-0000-4000-8000-000000000002/owner, json: {userID: 7EA50000-0000-4000-8000-0000000000A4}}}
+  - name: owner hands Beta to bea
+    as: team_rex
+    request: {method: PUT, path: /v1/teams/7EA51000-0000-4000-8000-000000000002/owner, json: {userID: 7ea50000-0000-4000-8000-0000000000a8}}
+    snapshot: [teams, team_memberships]
+  - {name: the old owner no longer can, as: team_rex, request: {method: PUT, path: /v1/teams/7EA51000-0000-4000-8000-000000000002/owner, json: {userID: 7EA50000-0000-4000-8000-0000000000A9}}}
+  - {name: bea lists Beta as owner, as: team_bea, request: {method: GET, path: /v1/teams}}
+  - {name: the owner cannot leave, as: team_bea, request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000002/leave}}
+  - {name: stranger cannot leave, as: team_out, request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000002/leave}}
+  - {name: leave bad id, as: team_max, request: {method: POST, path: /v1/teams/nope/leave}}
+  - name: rex leaves and loses his vault seats
+    as: team_rex
+    request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000002/leave}
+    snapshot: [team_memberships, vault_memberships]
+  - {name: rex has no teams, as: team_rex, request: {method: GET, path: /v1/teams}}
+  - {name: rex keeps his personal vault, as: team_rex, request: {method: GET, path: /v1/vaults}}
+  - {name: rex cannot read Beta Main, as: team_rex, request: {method: GET, path: /v1/vaults/7EA53000-0000-4000-8000-000000000004/members}}
+  - {name: leaving twice, as: team_rex, request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000002/leave}}
