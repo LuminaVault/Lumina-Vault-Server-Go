@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -162,4 +163,40 @@ func TestLoadValidates(t *testing.T) {
 	write("c.yaml", "module: todos\nstepz: []\n")
 	_, err = Load(dir)
 	require.Error(t, err, "unknown fields are rejected")
+}
+
+// A stream step returns once the headers arrive, without waiting for the
+// never-ending SSE body, and compares the listed headers.
+func TestStreamStepReadsHeadersOnly(t *testing.T) {
+	sse := func(cache string) *httptest.Server {
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.Header().Set("Cache-Control", cache)
+			w.WriteHeader(http.StatusOK)
+			w.(http.Flusher).Flush()
+			<-r.Context().Done()
+		}))
+	}
+	sc := Scenario{File: "s.yaml", Module: "teams", Steps: []Step{
+		{Name: "stream", As: "alice", Request: Request{Method: "GET", Path: "/stream"}, Stream: true, Headers: []string{"Cache-Control"}},
+	}}
+	runOn := func(srv *httptest.Server) Transcript {
+		tr, err := Run(context.Background(), sc, Target{
+			Name: "x", BaseURL: srv.URL, Keys: keys, Users: map[string]uuid.UUID{"alice": alice},
+			Client: &http.Client{Timeout: 5 * time.Second},
+		})
+		require.NoError(t, err)
+		return tr
+	}
+	a, b := sse("no-cache"), sse("max-age=1")
+	defer a.Close()
+	defer b.Close()
+	ta := runOn(a)
+	require.Equal(t, http.StatusOK, ta.Steps[0].Status)
+	require.Equal(t, "text/event-stream", ta.Steps[0].ContentType)
+	require.Equal(t, map[string]string{"Cache-Control": "no-cache"}, ta.Steps[0].Headers)
+	require.Empty(t, Diff(ta, runOn(a)))
+	diffs := Diff(ta, runOn(b))
+	require.Len(t, diffs, 1)
+	require.Equal(t, "header:Cache-Control", diffs[0].Field)
 }
