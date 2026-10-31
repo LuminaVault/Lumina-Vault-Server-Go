@@ -108,7 +108,7 @@ func decodeStruct(path []string, raw []byte, rv reflect.Value) error {
 		case !present && required:
 			return NewError(http.StatusBadRequest, fmt.Sprintf("Coding key `%s` not found.", name))
 		case isNull && required:
-			return NewError(http.StatusBadRequest, fmt.Sprintf("Value not found for `%s` key.", strings.Join(keyPath, ".")))
+			return nullErr(keyPath, f.Type)
 		case !present || isNull:
 			continue
 		}
@@ -120,6 +120,19 @@ func decodeStruct(path []string, raw []byte, rv reflect.Value) error {
 }
 
 var unmarshalerType = reflect.TypeFor[json.Unmarshaler]()
+
+// nullErr is Foundation's error for null where a non-optional value is
+// required. swift-foundation checks for null (valueNotFound) before decoding
+// strings, numbers, containers and Decodable types, but decodes Bool with a
+// bare `case .bool` match, so a null Bool is a type mismatch (confirmed by
+// parity CI against the Swift image).
+func nullErr(path []string, t reflect.Type) *Error {
+	key := strings.Join(path, ".")
+	if t.Kind() == reflect.Bool {
+		return mismatch(key, "Bool")
+	}
+	return NewError(http.StatusBadRequest, fmt.Sprintf("Value not found for `%s` key.", key))
+}
 
 // decodeValue decodes raw (not null unless fv is a pointer) into fv, recursing
 // into structs, slices and string-keyed maps so errors carry the full path.
@@ -159,7 +172,7 @@ func decodeValue(path []string, raw []byte, fv reflect.Value) error {
 			e = bytes.TrimSpace(e)
 			elemPath := append(append([]string{}, path...), strconv.Itoa(i))
 			if bytes.Equal(e, []byte("null")) && t.Elem().Kind() != reflect.Pointer {
-				return NewError(http.StatusBadRequest, fmt.Sprintf("Value not found for `%s` key.", strings.Join(elemPath, ".")))
+				return nullErr(elemPath, t.Elem())
 			}
 			if err := decodeValue(elemPath, e, out.Index(i)); err != nil {
 				return err
@@ -185,7 +198,7 @@ func decodeValue(path []string, raw []byte, fv reflect.Value) error {
 			e := bytes.TrimSpace(entries[k])
 			elemPath := append(append([]string{}, path...), k)
 			if bytes.Equal(e, []byte("null")) && t.Elem().Kind() != reflect.Pointer {
-				return NewError(http.StatusBadRequest, fmt.Sprintf("Value not found for `%s` key.", strings.Join(elemPath, ".")))
+				return nullErr(elemPath, t.Elem())
 			}
 			v := reflect.New(t.Elem()).Elem()
 			if err := decodeValue(elemPath, e, v); err != nil {
