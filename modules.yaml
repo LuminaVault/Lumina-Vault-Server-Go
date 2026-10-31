@@ -117,7 +117,7 @@ modules:
     wave: 3
     swiftDir: Sources/App/Me
     status: swift
-    prefixes: [/v1/gateways, /v1/me/apns-categories, /v1/me/brief, /v1/me/commitments, /v1/me/connections, /v1/me/hermes-gateways, /v1/me/learned, /v1/me/location, /v1/me/preferences/llm, /v1/me/providers, /v1/me/recap, /v1/me/resurface, /v1/me/today]
+    prefixes: [/v1/me/apns-categories, /v1/me/brief, /v1/me/commitments, /v1/me/learned, /v1/me/location, /v1/me/recap, /v1/me/resurface, /v1/me/today]
     jobs: []
   onboarding:
     wave: 3
@@ -215,6 +215,12 @@ modules:
     status: swift
     prefixes: [/v1/mcp, /v1/me/agent-connections]
     jobs: []
+  me-providers:
+    wave: 5
+    swiftDir: Sources/App/Me
+    status: swift
+    prefixes: [/v1/me/connections, /v1/me/preferences/llm, /v1/me/providers]
+    jobs: []
   self-improvement:
     wave: 5
     swiftDir: Sources/App/SelfImprovement
@@ -250,6 +256,12 @@ modules:
     swiftDir: Sources/App/Integrations
     status: swift
     prefixes: [/v1/integrations]
+    jobs: []
+  me-gateways:
+    wave: 6
+    swiftDir: Sources/App/Me
+    status: swift
+    prefixes: [/v1/gateways, /v1/me/hermes-gateways]
     jobs: []
   plugins:
     wave: 6
