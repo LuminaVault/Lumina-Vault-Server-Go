@@ -9,6 +9,7 @@ import (
 	"lumina/internal/httpserver"
 	"lumina/internal/migrations"
 	"lumina/internal/modules/achievements"
+	"lumina/internal/ratelimit"
 	"lumina/parity/scenario"
 	"net/http"
 	"net/http/httptest"
