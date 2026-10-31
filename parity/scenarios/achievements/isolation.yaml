@@ -1,0 +1,5 @@
+module: achievements
+steps:
+  - {name: bob list sees only his progress, as: bob, request: {method: GET, path: /v1/achievements}}
+  - {name: bob recent sees only his unlock, as: bob, request: {method: GET, path: /v1/achievements/recent}}
+  - {name: alice recent excludes bob, as: alice, request: {method: GET, path: "/v1/achievements/recent?limit=50"}, snapshot: [achievement_progress]}

@@ -1,0 +1,6 @@
+# feed_urls parsing edge cases (NewsTickerService.userFeeds): letter case,
+# spaces, "+", "&", nip.io, fdic.gov, IPv6, CRLF, non-ASCII, ftp, and the cap of
+# 10 user feeds. The stub echoes each requested feed in its item ids.
+module: news
+steps:
+  - {name: feed_urls edge cases and cap, as: news_probe, request: {method: GET, path: "/v1/news/ticker?limit=100"}}

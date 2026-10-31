@@ -1,0 +1,7 @@
+module: achievements
+steps:
+  - {name: list no token, request: {method: GET, path: /v1/achievements}}
+  - {name: recent no token, request: {method: GET, path: /v1/achievements/recent}}
+  - {name: list bad token, request: {method: GET, path: /v1/achievements, headers: {Authorization: "Bearer not.a.jwt"}}}
+  - {name: recent bad token, request: {method: GET, path: /v1/achievements/recent, headers: {Authorization: "Bearer not.a.jwt"}}}
+  - {name: list non-bearer auth, request: {method: GET, path: /v1/achievements, headers: {Authorization: "Basic YWxpY2U6eA=="}}}

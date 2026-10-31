@@ -25,6 +25,10 @@ x-common-env: &common-env
   HERMES_GATEWAY_URL: http://127.0.0.1:9
   BOOTSTRAP_ADMIN_EMAIL: golden@example.test
   BOOTSTRAP_ADMIN_PASSWORD: correct horse battery staple
+  # News ticker: the deterministic stub aggregator below (parity/stubs/feeds),
+  # plus one curated feed so the curated + user merge is exercised.
+  FEEDS_BASE_URL: http://feeds:8080
+  FEEDS_DEFAULT_FEEDS: "https://news.parity.test/world.json"
 
 services:
   pg:
@@ -45,7 +49,7 @@ services:
       <<: *common-env
       POSTGRES_DATABASE: ${SWIFT_DB:-parity_swift}
     ports: ["18080:8080"]
-    depends_on: { pg: { condition: service_healthy } }
+    depends_on: { pg: { condition: service_healthy }, feeds: { condition: service_started } }
     profiles: [servers]
 
   swift2:
@@ -54,7 +58,7 @@ services:
       <<: *common-env
       POSTGRES_DATABASE: parity_swift2
     ports: ["18082:8080"]
-    depends_on: { pg: { condition: service_healthy } }
+    depends_on: { pg: { condition: service_healthy }, feeds: { condition: service_started } }
     profiles: [servers]
 
   go:
@@ -63,5 +67,10 @@ services:
       <<: *common-env
       POSTGRES_DATABASE: parity_go
     ports: ["18081:8080"]
-    depends_on: { pg: { condition: service_healthy } }
+    depends_on: { pg: { condition: service_healthy }, feeds: { condition: service_started } }
+    profiles: [servers]
+
+  # Stub feed aggregator for the news ticker; fixed answers, see main.go.
+  feeds:
+    build: { context: ., dockerfile: parity/stubs/feeds/Dockerfile }
     profiles: [servers]

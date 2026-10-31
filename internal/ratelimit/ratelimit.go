@@ -33,6 +33,9 @@ type Policy struct {
 // SettingsByUser is RateLimitPolicy.settingsByUser: 30 per 60 s, keyed by user or IP.
 var SettingsByUser = Policy{Name: "settingsByUser", Max: 30, Window: 60 * time.Second}
 
+// AchievementsByUser is RateLimitPolicy.achievementsByUser: 60 per 60 s, keyed by user or IP.
+var AchievementsByUser = Policy{Name: "achievementsByUser", Max: 60, Window: 60 * time.Second}
+
 // ErrLimited is the Swift 429 body.
 var ErrLimited = wire.NewError(http.StatusTooManyRequests, "rate limit exceeded")
 

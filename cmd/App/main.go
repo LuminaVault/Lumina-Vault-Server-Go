@@ -12,9 +12,11 @@ import (
 	"lumina/internal/db"
 	"lumina/internal/httpserver"
 	"lumina/internal/migrations"
+	"lumina/internal/modules/achievements"
 	"lumina/internal/modules/apple"
 	"lumina/internal/modules/devices"
 	"lumina/internal/modules/kanban"
+	"lumina/internal/modules/news"
 	"lumina/internal/modules/profiles"
 	"lumina/internal/modules/projects"
 	"lumina/internal/modules/reminders"
@@ -123,6 +125,10 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 			apple.New(pool, apple.Options{EmbeddingProvider: cfg.EmbeddingProvider, EmbeddingMonthlyCap: cfg.EmbeddingMonthlyTokenCapDefault}),
 			devices.New(pool, cfg.APNSBundleID),
 			reminders.New(pool, nil, cfg.HermesDefaultModel),
+			achievements.New(pool, identify, limits),
+		}
+		if m := news.New(pool, cfg, identify, limits); m != nil { // nil without LV_SECRET_MASTER_KEY, as in Swift
+			deps.Modules = append(deps.Modules, m)
 		}
 	}
 	e := httpserver.New(cfg, deps)

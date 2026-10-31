@@ -273,3 +273,93 @@ Beyond the pilot gate (D-wave2-early):
   service the env lacks keeps this module at `swift` until LLM routing is ported (waves 5/6)
   or a human accepts the gap. Because the three modules flip together, apple and devices
   cannot flip before this is settled.
+## achievements (wave 2)
+
+### G0 entry: met 2026-10-30
+
+- Routes: 2 in `docs/migration/routes.json` (`achievementsList`, `achievementsRecent`),
+  both `x-lv-module: achievements` in the spec.
+- Prefix: `/v1/achievements`, disjoint (`internal/manifest`).
+- Coupling: the routes only read `achievement_progress`. The writers
+  (`AchievementsWorker` inbox, EventBus `achievement_unlocked`) stay in Swift
+  (`coupling.md` rows 2 and 15, `jobs.md`).
+- Jobs: none move. `AchievementsWorker` stays in Swift.
+- Route middleware: `jwtAuthenticator` plus `RateLimitMiddleware(.achievementsByUser)`
+  (60/min per user or IP). Ported in the wave-2 integration branch
+  (`ratelimit.AchievementsByUser`, chain identify → limit → `auth.Require`,
+  `TestRateLimitBeforeIdentity`).
+- Spec: the spec's `AchievementsListResponse` and `AchievementsRecentResponse` do not
+  describe Swift's output. The Go DTOs are hand-written from LuminaVaultShared 5.32.0.
+  The canary `TestSpecAchievementsSchemasAreStale` fails once the spec is fixed.
+- Swift tests: `AchievementsFlowTests` (2), `AchievementsServiceTests` (4) and the
+  PowerLevel half of `PowerLevelTests` (5). The 4 streak tests belong to Dashboard.
+
+### G1 parity: met 2026-10-30
+
+- Parity: 3 scenarios (`read`, `errors`, `isolation`), 19 steps:
+  - list and recent for alice and bob
+  - recent `limit` default, 1, 2, 0, -3, 999, `abc`, empty, and an Int overflow
+  - a retired key's label fallback, and fractional `unlocked_at`
+  - no token, bad token, and a non-Bearer token on both routes
+  - 2 `achievement_progress` snapshots
+  
+  Seed: `parity/seed/achievements.sql`.
+- Self-test (Swift vs Swift) and Swift vs Go: **8 scenarios, 0 differences**
+  (whole suite, with news and projects).
+- Go tests: `internal/modules/achievements` (11 tests), including a verbatim catalog pin.
+- CI: PR #3, run 41120945344. `parity`, `lint`, `test` and `vuln` pass
+  (https://github.com/LuminaVault/Lumina-Vault-Server-Go/actions/runs/41120945344/job/124286993965).
+
+## news (wave 2)
+
+### G0 entry: met 2026-10-31
+
+- Routes: 1 in `docs/migration/routes.json` (`newsTicker`, `x-lv-module: news`).
+- Prefix: `/v1/news`, disjoint (`internal/manifest`).
+- Coupling: none. `NewsTickerCache` is per process and nobody else invalidates it
+  (`coupling.md`). It reads `plugin_installs` (Plugins) and opens its config
+  with SecretBox.
+- Jobs: none.
+- Route middleware: `jwtAuthenticator` (identify, never rejects), then
+  `RateLimitMiddleware(.settingsByUser)` (30/min, bucket shared with
+  `/v1/plugins`, kanban and spaces), then `requireTenantID`. Go uses
+  `auth.Identify`, then `internal/ratelimit` with the process-wide store, then
+  `auth.Identity`, so an unauthenticated request counts against `ip:` and can
+  get a 429 before its 401.
+- Mounted only when `LV_SECRET_MASTER_KEY` opens a SecretBox, as in Swift.
+- Swift tests: `Tests/AppTests/Plugins/NewsTickerPluginTests.swift`, 4 of 5. The
+  `PluginCatalog`/`NewsTickerConnector` test belongs to Plugins.
+
+### G1 parity: met 2026-10-31
+
+- Environment: `parity/stubs/feeds` is a stdlib-only stub aggregator with fixed
+  JSON Feed answers, and fixed errors for feeds named `/error`, `/notfound`,
+  `/malformed`, `/missingkey` and `/hangup`. It runs as the `feeds` service in
+  `docker-compose.parity.yml`. Both servers get `FEEDS_BASE_URL=http://feeds:8080`
+  and one curated feed.
+- Seed: `parity/seed/news.sql` has 13 `news_*` users, one per install state, with
+  SecretBox-sealed configs. Each bucket stays far under 30 per minute:
+  `news_amy` 6 requests, every other user 1, `ip:anon` 2.
+- Parity: 4 scenarios (`ticker`, `errors`, `upstream`, `feedlist`), 20 steps:
+  - 401 with no token and with a bad token
+  - 404 not installed, 409 disabled
+  - an unopenable config and a config without `feed_urls` (curated only)
+  - curated plus user feeds: private, invalid and duplicate entries dropped
+  - `limit` set to 1, 0, 500 and `abc`, and a repeat served from the cache
+  - a response without `_feeds`, and `_feeds` without `generated_at`
+  - aggregator 503 or 404 → 502; non-JSON body, missing key and a closed
+    connection → 500
+  - a 17-entry `feed_urls` probe (letter case, space, `+`, `&`, nip.io, fdic.gov,
+    IPv6, CRLF, non-ASCII, ftp, cap of 10)
+- The probe found two Foundation behaviours, both now ported:
+  - `URL(string:)` percent-encodes invalid characters instead of failing, so a
+    piece with an inner CRLF is kept.
+  - `URLComponents.queryItems` leaves `+` raw (the aggregator reads it as a space)
+    and escapes `&` and `=`.
+- Self-test (Swift vs Swift) and Swift vs Go: **11 scenarios, 0 differences**
+  (whole suite).
+- Go tests: `internal/modules/news` covers the service against a stub
+  aggregator, the routes on Postgres, the rate limit (30 then 429; 429 before
+  401), and the spec conformance of the 200.
+- CI: PR #3, run 41196472076. `parity`, `lint`, `test` and `vuln` pass
+  (https://github.com/LuminaVault/Lumina-Vault-Server-Go/actions/runs/41196472076/job/124523530129).

@@ -40,6 +40,10 @@ type Config struct {
 	EmbeddingProvider               string `env:"EMBEDDING_PROVIDER" envDefault:"deterministic"`
 	EmbeddingMonthlyTokenCapDefault int64  `env:"EMBEDDING_MONTHLY_TOKEN_CAP_DEFAULT" envDefault:"2000000"`
 	HermesDefaultModel              string `env:"HERMES_DEFAULT_MODEL" envDefault:"hermes-3"`
+	// Shared feed aggregator for the news ticker (news module). Raw strings:
+	// the module splits FEEDS_DEFAULT_FEEDS exactly as Swift does.
+	FeedsBaseURL      string `env:"FEEDS_BASE_URL"`
+	FeedsDefaultFeeds string `env:"FEEDS_DEFAULT_FEEDS"`
 
 	// VaultRootPath holds tenants/<UUID>/{raw,wiki,memories} on the shared PVC.
 	VaultRootPath string `env:"VAULT_ROOT_PATH" envDefault:"/tmp/luminavault"`
