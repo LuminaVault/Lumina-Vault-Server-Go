@@ -149,7 +149,7 @@ func (m *Module) createSpace(ctx context.Context, vault, actor uuid.UUID, name, 
 		return db.Space{}, err
 	}
 	folder := filepath.Join(m.paths.Raw(vault), slug)
-	if err := os.MkdirAll(folder, 0o755); err != nil {
+	if err := os.MkdirAll(folder, 0o755); err != nil { //nolint:gosec // Foundation createDirectory gives 0755; both servers share the PVC
 		return db.Space{}, err
 	}
 	if category != nil && *category == "" {
