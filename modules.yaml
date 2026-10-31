@@ -41,7 +41,7 @@ modules:
   news:
     wave: 2
     swiftDir: Sources/App/News
-    status: swift
+    status: parity
     prefixes: [/v1/news]
     jobs: []
   profiles:
