@@ -47,7 +47,7 @@ modules:
   profiles:
     wave: 2
     swiftDir: Sources/App/Profiles
-    status: swift
+    status: parity
     prefixes: [/v1/profiles]
     jobs: []
   reminders:
@@ -62,7 +62,7 @@ modules:
   sessions:
     wave: 2
     swiftDir: Sources/App/Sessions
-    status: swift
+    status: parity
     prefixes: [/v1/sessions]
     jobs: []
   spaces:
