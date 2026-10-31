@@ -45,3 +45,34 @@ Blocked on human steps:
 2. Merge PR #1 to `main`, which publishes the first image. `INFRA_REPO_TOKEN` must be set.
 3. Put that SHA into #488 and merge it.
 4. Provide a staging session token for `make parity-smoke MODULE=projects`.
+
+## spaces (wave 2)
+
+### G0 entry: met 2026-10-31
+
+- Routes: 5 in `docs/migration/routes.json` (`spacesList`, `spacesCreate`,
+  `spacesGet`, `spacesUpdate`, `spacesDelete`), prefix `/v1/spaces`.
+- Coupling: writes `vault_activity_events` (Teams' "Vault activity → SSE",
+  coupling.md). Go writes the row; the live SSE push stays Swift-only until
+  Teams (wave 3) moves or the channel is bridged. **Flip blocker.**
+- Jobs: none. Disk: creates `<VAULT_ROOT_PATH>/tenants/<VAULT UUID>/raw/<slug>`
+  (0755) and soft-deletes it to `_deleted_<unix>_<slug>`, so `api-go-*` must mount
+  the same PVC (it does: `apps/api-go/values-*.yaml` `persistence.existingClaim`).
+- Route middleware: only `jwtAuthenticator` (`App+build.swift:2559`); no rate limit.
+- Swift tests: `Tests/AppTests/Spaces/SpaceSlugDerivationTests.swift` (5),
+  `SpacesCategoryTests.swift` (3).
+
+### G1 parity: met 2026-10-31 (CI)
+
+- CI `parity` (PR #7, run 41195436271): the Swift-vs-Swift self-test and
+  Swift-vs-Go both give 0 differences
+  (https://github.com/LuminaVault/Lumina-Vault-Server-Go/actions/runs/41195436271/job/124520541028).
+  Spaces has 3 scenarios and 69 steps: crud, errors, vaults (personal, foreign,
+  team viewer, header-before-identity). Snapshots cover `spaces` and
+  `vault_activity_events`.
+- Go tests: `internal/modules/spaces` ports all 8 Swift tests (the seed-defaults
+  test goes through `SeedDefaults`, since `/v1/vault/create` is wave 4), plus
+  error wording, team vaults, the folder layout, soft delete, activity rows,
+  live note counts and spec conformance. lint, test and vuln are green.
+- Not compared by parity: on-disk folders (each server has its own container
+  filesystem). Go tests cover them.
