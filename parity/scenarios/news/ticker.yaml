@@ -1,0 +1,19 @@
+# GET /v1/news/ticker against the stub aggregator (parity/stubs/feeds), with
+# curated FEEDS_DEFAULT_FEEDS=https://news.parity.test/world.json. Users and
+# sealed install configs: parity/seed/news.sql. Each user's steps stay well
+# under the 30/min settingsByUser bucket; the 60 s ticker cache is keyed by
+# tenant, limit and feed list, and the stub is deterministic, so a cached
+# answer equals a fresh one.
+module: news
+smoke: true
+steps:
+  - {name: "curated then user feeds; private and invalid dropped; deduped", as: news_amy, request: {method: GET, path: /v1/news/ticker}}
+  - {name: limit 1, as: news_amy, request: {method: GET, path: "/v1/news/ticker?limit=1"}}
+  - {name: limit 0 clamps to 1, as: news_amy, request: {method: GET, path: "/v1/news/ticker?limit=0"}}
+  - {name: limit 500 clamps to 100, as: news_amy, request: {method: GET, path: "/v1/news/ticker?limit=500"}}
+  - {name: limit not a number is 30, as: news_amy, request: {method: GET, path: "/v1/news/ticker?limit=abc"}}
+  - {name: repeat is served from cache, as: news_amy, request: {method: GET, path: /v1/news/ticker}}
+  - {name: config sealed for another tenant reads as empty, as: news_eve, request: {method: GET, path: /v1/news/ticker}}
+  - {name: config without feed_urls, as: news_nul, request: {method: GET, path: "/v1/news/ticker?limit=2"}}
+  - {name: no _feeds extension, as: news_nox, request: {method: GET, path: /v1/news/ticker}}
+  - {name: _feeds without generated_at, as: news_nog, request: {method: GET, path: /v1/news/ticker}, snapshot: [plugin_installs]}

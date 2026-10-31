@@ -1,0 +1,8 @@
+# Aggregator failures, each from one fixed stub answer (parity/stubs/feeds).
+module: news
+steps:
+  - {name: aggregator 503 is 502, as: news_err, request: {method: GET, path: /v1/news/ticker}}
+  - {name: aggregator 404 is 502, as: news_nf, request: {method: GET, path: /v1/news/ticker}}
+  - {name: body not JSON, as: news_bad, request: {method: GET, path: /v1/news/ticker}}
+  - {name: item missing title, as: news_mk, request: {method: GET, path: /v1/news/ticker}}
+  - {name: connection closed, as: news_hup, request: {method: GET, path: /v1/news/ticker}}

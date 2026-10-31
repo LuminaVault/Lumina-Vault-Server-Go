@@ -35,6 +35,11 @@ type Config struct {
 
 	RedisURL string `env:"REDIS_URL"`
 
+	// Shared feed aggregator for the news ticker (news module). Raw strings:
+	// the module splits FEEDS_DEFAULT_FEEDS exactly as Swift does.
+	FeedsBaseURL      string `env:"FEEDS_BASE_URL"`
+	FeedsDefaultFeeds string `env:"FEEDS_DEFAULT_FEEDS"`
+
 	// VaultRootPath holds tenants/<UUID>/{raw,wiki,memories} on the shared PVC.
 	VaultRootPath string `env:"VAULT_ROOT_PATH" envDefault:"/tmp/luminavault"`
 
