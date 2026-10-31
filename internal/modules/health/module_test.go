@@ -480,3 +480,20 @@ func TestResponsesConformToSpec(t *testing.T) {
 		require.NoError(t, openapi3filter.ValidateResponse(ctx, out), "%s: %s", path, r.body)
 	}
 }
+
+// parity/seed/health.sql loads on the migrated schema and dates its relative
+// rows where the scenarios expect them.
+func TestParitySeedLoads(t *testing.T) {
+	ctx := context.Background()
+	pool := dbtest.Postgres(t)
+	require.NoError(t, migrations.Up(ctx, pool, migrations.SQL()))
+	for _, f := range []string{"base.sql", "health.sql"} {
+		seed, err := os.ReadFile("../../../parity/seed/" + f)
+		require.NoError(t, err)
+		_, err = pool.Exec(ctx, string(seed))
+		require.NoError(t, err, f)
+	}
+	var recent int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT COUNT(*)::int FROM health_events WHERE tenant_id = $1 AND recorded_at >= now() - interval '7 days'`, hal).Scan(&recent))
+	require.Equal(t, 6, recent)
+}
