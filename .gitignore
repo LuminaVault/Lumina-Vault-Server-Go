@@ -3,3 +3,5 @@ bin/
 coverage.out
 /golden
 .worktrees/
+swift-transcripts/
+__pycache__/
