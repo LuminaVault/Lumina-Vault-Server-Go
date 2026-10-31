@@ -1,0 +1,6 @@
+module: account
+# teams.owner_user_id is ON DELETE RESTRICT: the user delete fails, and the
+# eraser's deletes in the same transaction roll back with it.
+steps:
+  - {name: team owner cannot be deleted, as: acct_owner, request: {method: DELETE, path: /v1/account, json: {password: correct horse battery staple}}, snapshot: [users, teams, device_command_queue]}
+  - {name: owner still signed in, as: acct_owner, request: {method: GET, path: /v1/onboarding}}

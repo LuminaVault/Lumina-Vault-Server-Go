@@ -1,0 +1,25 @@
+module: onboarding
+steps:
+  - {name: get no token, request: {method: GET, path: /v1/onboarding}}
+  - {name: patch no token, request: {method: PATCH, path: /v1/onboarding, json: {signupCompleted: true}}}
+  - {name: get bad token, request: {method: GET, path: /v1/onboarding, headers: {Authorization: "Bearer not.a.jwt"}}}
+  - {name: patch bad token, request: {method: PATCH, path: /v1/onboarding, json: {signupCompleted: true}, headers: {Authorization: "Bearer not.a.jwt"}}}
+  - {name: malformed json, as: onb_bob, request: {method: PATCH, path: /v1/onboarding, raw: "{\"signupCompleted\":"}}
+  - {name: empty body, as: onb_bob, request: {method: PATCH, path: /v1/onboarding, raw: ""}}
+  - {name: no body, as: onb_bob, request: {method: PATCH, path: /v1/onboarding}}
+  - {name: array body, as: onb_bob, request: {method: PATCH, path: /v1/onboarding, raw: "[]"}}
+  - {name: string body, as: onb_bob, request: {method: PATCH, path: /v1/onboarding, raw: "\"x\""}}
+  - {name: flag wrong type, as: onb_bob, request: {method: PATCH, path: /v1/onboarding, json: {signupCompleted: "yes"}}}
+  - {name: flag number, as: onb_bob, request: {method: PATCH, path: /v1/onboarding, json: {firstQueryCompleted: 1}}}
+  - {name: dismissal wrong type, as: onb_bob, request: {method: PATCH, path: /v1/onboarding, json: {guidedStartDismissed: "no"}}}
+  # Each latch rejects false, before any row is created.
+  - {name: signup false, as: onb_bob, request: {method: PATCH, path: /v1/onboarding, json: {signupCompleted: false}}}
+  - {name: email false, as: onb_bob, request: {method: PATCH, path: /v1/onboarding, json: {emailVerifiedCompleted: false}}}
+  - {name: soul false, as: onb_bob, request: {method: PATCH, path: /v1/onboarding, json: {soulConfiguredCompleted: false}}}
+  - {name: capture false, as: onb_bob, request: {method: PATCH, path: /v1/onboarding, json: {firstCaptureCompleted: false}}}
+  - {name: kb false, as: onb_bob, request: {method: PATCH, path: /v1/onboarding, json: {firstKBCompileCompleted: false}}}
+  - {name: query false, as: onb_bob, request: {method: PATCH, path: /v1/onboarding, json: {firstQueryCompleted: false}}}
+  - {name: brain false, as: onb_bob, request: {method: PATCH, path: /v1/onboarding, json: {brainConfiguredCompleted: false}}}
+  # Checked in a fixed order: signup is reported though brain comes first in the body.
+  - {name: first false in check order, as: onb_bob, request: {method: PATCH, path: /v1/onboarding, raw: "{\"brainConfiguredCompleted\":false,\"firstQueryCompleted\":false,\"signupCompleted\":false}"}}
+  - {name: false with a true, as: onb_bob, request: {method: PATCH, path: /v1/onboarding, json: {emailVerifiedCompleted: true, soulConfiguredCompleted: false}}, snapshot: [onboarding_state]}

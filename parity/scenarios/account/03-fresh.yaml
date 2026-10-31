@@ -1,0 +1,13 @@
+module: account
+# The harness mints tokens with iat = now, inside the 5-minute window, so
+# these delete without a password. Any body Swift cannot decode counts as
+# "no password" rather than a 400.
+steps:
+  - {name: fresh empty object, as: acct_fresh, request: {method: DELETE, path: /v1/account, json: {}}, snapshot: [users, workflow_spend_buckets, billing_event_logs]}
+  - {name: fresh malformed body, as: acct_raw, request: {method: DELETE, path: /v1/account, raw: "{\"password\":"}, snapshot: [users]}
+  - {name: fresh no body, as: acct_nobody, request: {method: DELETE, path: /v1/account}, snapshot: [users]}
+  - {name: fresh password wrong type, as: acct_type, request: {method: DELETE, path: /v1/account, raw: "[1,2]"}, snapshot: [users]}
+  - {name: fresh empty password, as: acct_wrong, request: {method: DELETE, path: /v1/account, json: {password: ""}}, snapshot: [users]}
+  - name: stale token with the right password
+    request: {method: DELETE, path: /v1/account, json: {password: correct horse battery staple}, headers: {Authorization: "Bearer eyJhbGciOiJIUzI1NiIsImtpZCI6InBhcml0eSIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJBQ0M3MDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwQzMiLCJpYXQiOjE3NjcyMjU2MDAsImV4cCI6NDEwMjQ0NDgwMCwianRpIjoiQUNDNzAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDBGRkMzIn0.CwAAaqQJ-Diqaj5nZGmj1DADyrm3BIl_ZF4StsTY2zQ"}}
+    snapshot: [users]

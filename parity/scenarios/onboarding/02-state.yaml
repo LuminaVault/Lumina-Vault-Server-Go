@@ -1,0 +1,20 @@
+module: onboarding
+steps:
+  - {name: get creates the row, as: onb_ann, request: {method: GET, path: /v1/onboarding}, snapshot: [onboarding_state]}
+  - {name: get is stable, as: onb_ann, request: {method: GET, path: /v1/onboarding}, snapshot: [onboarding_state]}
+  # PATCH as a tenant's first call creates the row (signup latched), then applies the body.
+  - {name: patch creates the row, as: onb_bob, request: {method: PATCH, path: /v1/onboarding, json: {guidedStartDismissed: true, firstQueryCompleted: true}}, snapshot: [onboarding_state]}
+  - {name: latch two flags, as: onb_ann, request: {method: PATCH, path: /v1/onboarding, json: {emailVerifiedCompleted: true, soulConfiguredCompleted: true}}, snapshot: [onboarding_state]}
+  - {name: relatch keeps timestamps, as: onb_ann, request: {method: PATCH, path: /v1/onboarding, json: {emailVerifiedCompleted: true, signupCompleted: true}}, snapshot: [onboarding_state]}
+  - {name: kb compile dual-writes, as: onb_ann, request: {method: PATCH, path: /v1/onboarding, json: {firstKBCompileCompleted: true}}, snapshot: [onboarding_state]}
+  - {name: capture query brain, as: onb_ann, request: {method: PATCH, path: /v1/onboarding, json: {firstCaptureCompleted: true, firstQueryCompleted: true, brainConfiguredCompleted: true}}, snapshot: [onboarding_state]}
+  - {name: empty patch, as: onb_ann, request: {method: PATCH, path: /v1/onboarding, json: {}}, snapshot: [onboarding_state]}
+  - {name: nulls are absent, as: onb_ann, request: {method: PATCH, path: /v1/onboarding, raw: "{\"signupCompleted\":null,\"guidedStartDismissed\":null}"}}
+  - {name: unknown field ignored, as: onb_ann, request: {method: PATCH, path: /v1/onboarding, json: {bogus: 1}}}
+  - {name: dismiss, as: onb_ann, request: {method: PATCH, path: /v1/onboarding, json: {guidedStartDismissed: true}}, snapshot: [onboarding_state]}
+  - {name: dismiss again keeps stamp, as: onb_ann, request: {method: PATCH, path: /v1/onboarding, json: {guidedStartDismissed: true}}, snapshot: [onboarding_state]}
+  - {name: undismiss, as: onb_ann, request: {method: PATCH, path: /v1/onboarding, json: {guidedStartDismissed: false}}, snapshot: [onboarding_state]}
+  - {name: undismiss when not dismissed, as: onb_ann, request: {method: PATCH, path: /v1/onboarding, json: {guidedStartDismissed: false}}, snapshot: [onboarding_state]}
+  - {name: latches still reject false, as: onb_ann, request: {method: PATCH, path: /v1/onboarding, json: {firstCaptureCompleted: false}}}
+  - {name: get after all, as: onb_ann, request: {method: GET, path: /v1/onboarding}}
+  - {name: other user unaffected, as: onb_bob, request: {method: GET, path: /v1/onboarding}}

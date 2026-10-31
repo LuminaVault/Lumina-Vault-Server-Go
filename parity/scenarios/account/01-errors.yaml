@@ -1,0 +1,30 @@
+module: account
+# Requests that must not delete anything. acct_stale's tokens are hand-minted
+# (kid "parity", HS256, exp 2100): iat 2026-01-01 (stale), iat 2100 (future,
+# so now - iat < 0) and no iat at all. None of them passes the fresh-JWT gate.
+steps:
+  - {name: no token, request: {method: DELETE, path: /v1/account}}
+  - {name: bad token, request: {method: DELETE, path: /v1/account, headers: {Authorization: "Bearer not.a.jwt"}}}
+  - {name: no token with password, request: {method: DELETE, path: /v1/account, json: {password: correct horse battery staple}}}
+  - name: stale token no body
+    request: {method: DELETE, path: /v1/account, headers: {Authorization: "Bearer eyJhbGciOiJIUzI1NiIsImtpZCI6InBhcml0eSIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJBQ0M3MDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwQzMiLCJpYXQiOjE3NjcyMjU2MDAsImV4cCI6NDEwMjQ0NDgwMCwianRpIjoiQUNDNzAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDBGRkMzIn0.CwAAaqQJ-Diqaj5nZGmj1DADyrm3BIl_ZF4StsTY2zQ"}}
+  - name: stale token empty object
+    request: {method: DELETE, path: /v1/account, json: {}, headers: {Authorization: "Bearer eyJhbGciOiJIUzI1NiIsImtpZCI6InBhcml0eSIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJBQ0M3MDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwQzMiLCJpYXQiOjE3NjcyMjU2MDAsImV4cCI6NDEwMjQ0NDgwMCwianRpIjoiQUNDNzAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDBGRkMzIn0.CwAAaqQJ-Diqaj5nZGmj1DADyrm3BIl_ZF4StsTY2zQ"}}
+  - name: stale token empty password
+    request: {method: DELETE, path: /v1/account, json: {password: ""}, headers: {Authorization: "Bearer eyJhbGciOiJIUzI1NiIsImtpZCI6InBhcml0eSIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJBQ0M3MDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwQzMiLCJpYXQiOjE3NjcyMjU2MDAsImV4cCI6NDEwMjQ0NDgwMCwianRpIjoiQUNDNzAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDBGRkMzIn0.CwAAaqQJ-Diqaj5nZGmj1DADyrm3BIl_ZF4StsTY2zQ"}}
+  - name: stale token null password
+    request: {method: DELETE, path: /v1/account, raw: "{\"password\":null}", headers: {Authorization: "Bearer eyJhbGciOiJIUzI1NiIsImtpZCI6InBhcml0eSIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJBQ0M3MDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwQzMiLCJpYXQiOjE3NjcyMjU2MDAsImV4cCI6NDEwMjQ0NDgwMCwianRpIjoiQUNDNzAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDBGRkMzIn0.CwAAaqQJ-Diqaj5nZGmj1DADyrm3BIl_ZF4StsTY2zQ"}}
+  - name: stale token wrong password
+    request: {method: DELETE, path: /v1/account, json: {password: nope}, headers: {Authorization: "Bearer eyJhbGciOiJIUzI1NiIsImtpZCI6InBhcml0eSIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJBQ0M3MDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwQzMiLCJpYXQiOjE3NjcyMjU2MDAsImV4cCI6NDEwMjQ0NDgwMCwianRpIjoiQUNDNzAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDBGRkMzIn0.CwAAaqQJ-Diqaj5nZGmj1DADyrm3BIl_ZF4StsTY2zQ"}}
+  - name: stale token password wrong type
+    request: {method: DELETE, path: /v1/account, json: {password: 42}, headers: {Authorization: "Bearer eyJhbGciOiJIUzI1NiIsImtpZCI6InBhcml0eSIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJBQ0M3MDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwQzMiLCJpYXQiOjE3NjcyMjU2MDAsImV4cCI6NDEwMjQ0NDgwMCwianRpIjoiQUNDNzAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDBGRkMzIn0.CwAAaqQJ-Diqaj5nZGmj1DADyrm3BIl_ZF4StsTY2zQ"}}
+  - name: stale token password case differs
+    request: {method: DELETE, path: /v1/account, json: {password: Correct horse battery staple}, headers: {Authorization: "Bearer eyJhbGciOiJIUzI1NiIsImtpZCI6InBhcml0eSIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJBQ0M3MDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwQzMiLCJpYXQiOjE3NjcyMjU2MDAsImV4cCI6NDEwMjQ0NDgwMCwianRpIjoiQUNDNzAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDBGRkMzIn0.CwAAaqQJ-Diqaj5nZGmj1DADyrm3BIl_ZF4StsTY2zQ"}}
+  - name: future iat
+    request: {method: DELETE, path: /v1/account, json: {}, headers: {Authorization: "Bearer eyJhbGciOiJIUzI1NiIsImtpZCI6InBhcml0eSIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJBQ0M3MDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwQzMiLCJpYXQiOjQxMDI0NDQwMDAsImV4cCI6NDEwMjQ0NDgwMCwianRpIjoiQUNDNzAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDBGRkM0In0.bYMKYGa9VxkApMeWafDtrkader1nGtPjrBdiqQM57d8"}}
+  - name: no iat
+    request: {method: DELETE, path: /v1/account, json: {}, headers: {Authorization: "Bearer eyJhbGciOiJIUzI1NiIsImtpZCI6InBhcml0eSIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJBQ0M3MDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwQzMiLCJleHAiOjQxMDI0NDQ4MDAsImp0aSI6IkFDQzcwMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwRkZDNSJ9.eINbrFzTlh_LibipEpcAiWJWwzDgSwE6jQv7PikrvuI"}}
+    snapshot: [users]
+  # A wrong password loses even with a fresh token: the password is checked first.
+  - {name: fresh token wrong password, as: acct_wrong, request: {method: DELETE, path: /v1/account, json: {password: wrong}}, snapshot: [users]}
+  - {name: still signed in, as: acct_wrong, request: {method: GET, path: /v1/onboarding}}

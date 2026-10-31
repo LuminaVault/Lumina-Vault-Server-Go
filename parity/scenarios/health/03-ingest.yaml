@@ -1,0 +1,27 @@
+module: health
+steps:
+  - name: mixed batch
+    as: hea_bea
+    request:
+      method: POST
+      path: /v1/health
+      json:
+        events:
+          - {type: "  Steps ", recordedAt: "2026-10-01T10:00:00Z", valueNumeric: 100, unit: count, source: apple_health, metadata: {device: watch, app: health}}
+          - {type: hr_bpm, recordedAt: "2026-10-01T10:00:00.5Z", valueNumeric: 61.5, unit: bpm}
+          - {type: sleep_quality, recordedAt: "2026-10-01T09:00:00+02:00", valueText: deep}
+          - {type: "   ", recordedAt: "2026-10-01T11:00:00Z", valueNumeric: 1}
+          - {type: steps, recordedAt: "2026-10-01T12:00:00Z", unit: count}
+          - {type: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", recordedAt: "2026-10-01T13:00:00Z", valueNumeric: 1}
+          - {type: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", recordedAt: "2026-10-01T14:00:00Z", valueNumeric: 1}
+          - {type: sleep_session, recordedAt: "2026-10-01T15:00:00Z", valueNumeric: 0, valueText: core, metadata: {}}
+          - {type: "ÉTAPES", recordedAt: "2026-10-01T16:00:00Z", valueNumeric: -2.25, unit: null, source: null, metadata: null}
+          - {type: "\tweight_kg\n", recordedAt: "2026-10-01T17:00:00Z", valueNumeric: 70, bogus: true}
+    snapshot: [health_events]
+  - name: all skipped
+    as: hea_bea
+    request: {method: POST, path: /v1/health, json: {events: [{type: " ", recordedAt: "2026-10-02T10:00:00Z", valueNumeric: 1}, {type: steps, recordedAt: "2026-10-02T10:00:00Z"}]}}
+    snapshot: [health_events]
+  - {name: read back, as: hea_bea, request: {method: GET, path: "/v1/health?from=2026-10-01T00:00:00Z&to=2026-10-02T00:00:00Z"}}
+  - {name: read back by type, as: hea_bea, request: {method: GET, path: "/v1/health?type=sleep_quality&from=2026-10-01T00:00:00Z&to=2026-10-02T00:00:00Z"}}
+  - {name: ingester tenant isolated, as: hea_hal, request: {method: GET, path: "/v1/health?from=2026-10-01T00:00:00Z&to=2026-10-02T00:00:00Z"}}
