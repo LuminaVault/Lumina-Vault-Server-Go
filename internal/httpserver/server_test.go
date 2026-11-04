@@ -85,6 +85,16 @@ func TestCORSPreflightAllowedOrigin(t *testing.T) {
 	require.Empty(t, rec.Header().Get("Allow"))
 }
 
+func TestOptionsWithOriginIsAlwaysAPreflight(t *testing.T) {
+	for _, path := range []string{"/v1/test/json", "/v1/does-not-exist"} {
+		req := httptest.NewRequest(http.MethodOptions, path, nil)
+		req.Header.Set("Origin", "https://app.luminavault.fyi")
+		rec := do(t, newTestServer(), req)
+		require.Equal(t, http.StatusNoContent, rec.Code, path)
+		require.Equal(t, "https://app.luminavault.fyi", rec.Header().Get("Access-Control-Allow-Origin"), path)
+	}
+}
+
 func TestCORSDisallowedOriginIsForbidden(t *testing.T) {
 	for _, method := range []string{http.MethodGet, http.MethodOptions} {
 		req := httptest.NewRequest(method, "/health", nil)

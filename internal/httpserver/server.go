@@ -179,15 +179,28 @@ func allowedOrigins(origins []string) echo.MiddlewareFunc {
 
 // cors mirrors Swift: an empty origin list allows all origins without
 // credentials (dev only); otherwise only listed origins, with credentials.
+// Hummingbird treats every OPTIONS with an Origin as a preflight, while Echo
+// also wants Access-Control-Request-Method, so that header is filled in.
 func cors(origins []string) echo.MiddlewareFunc {
-	if len(origins) == 0 {
-		return middleware.CORSWithConfig(middleware.CORSConfig{AllowOrigins: []string{"*"}})
+	conf := middleware.CORSConfig{AllowOrigins: []string{"*"}}
+	if len(origins) > 0 {
+		conf = middleware.CORSConfig{
+			AllowOrigins:     origins,
+			AllowHeaders:     []string{echo.HeaderContentType, echo.HeaderAuthorization},
+			AllowMethods:     []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodOptions, http.MethodPatch},
+			AllowCredentials: true,
+			MaxAge:           600,
+		}
 	}
-	return middleware.CORSWithConfig(middleware.CORSConfig{
-		AllowOrigins:     origins,
-		AllowHeaders:     []string{echo.HeaderContentType, echo.HeaderAuthorization},
-		AllowMethods:     []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodOptions, http.MethodPatch},
-		AllowCredentials: true,
-		MaxAge:           600,
-	})
+	mw := middleware.CORSWithConfig(conf)
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		h := mw(next)
+		return func(c *echo.Context) error {
+			r := c.Request()
+			if r.Method == http.MethodOptions && r.Header.Get(echo.HeaderOrigin) != "" && r.Header.Get(echo.HeaderAccessControlRequestMethod) == "" {
+				r.Header.Set(echo.HeaderAccessControlRequestMethod, http.MethodOptions)
+			}
+			return h(c)
+		}
+	}
 }
