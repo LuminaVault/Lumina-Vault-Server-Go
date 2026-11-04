@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"net/http"
 	"reflect"
 	"sort"
@@ -213,10 +214,24 @@ func decodeValue(path []string, raw []byte, fv reflect.Value) error {
 		fv.Set(out)
 		return nil
 	}
-	if err := json.Unmarshal(raw, fv.Addr().Interface()); err != nil {
+	if err := json.Unmarshal(integralNumber(t, raw), fv.Addr().Interface()); err != nil {
 		return mapErr(key, err)
 	}
 	return nil
+}
+
+// integralNumber rewrites a number like 4.0 or 1e0 for an integer field as plain
+// digits: Foundation decodes those as an Int, and only refuses a value that has a
+// fraction or does not fit (parity CI).
+func integralNumber(t reflect.Type, raw []byte) []byte {
+	if swiftType(t) != "Int" || t.Kind() == reflect.Slice || !bytes.ContainsAny(raw, ".eE") {
+		return raw
+	}
+	r, ok := new(big.Rat).SetString(string(raw))
+	if !ok || !r.IsInt() {
+		return raw
+	}
+	return []byte(r.Num().String())
 }
 
 func mapErr(key string, err error) error {
