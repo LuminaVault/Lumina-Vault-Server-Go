@@ -21,8 +21,12 @@ func (q *Queries) AnonymizeBillingEvents(ctx context.Context, userID uuid.UUID) 
 }
 
 const anonymizeVaultActivity = `-- name: AnonymizeVaultActivity :exec
-UPDATE vault_activity_events SET actor_name = $1::text
-WHERE actor_user_id = $2::uuid
+UPDATE vault_activity_events e SET actor_name = $1::text
+WHERE e.actor_user_id = $2::uuid
+  AND NOT EXISTS (
+    SELECT 1 FROM vaults v
+    WHERE v.id = e.vault_id AND v.personal_owner_user_id = $2::uuid
+  )
 `
 
 type AnonymizeVaultActivityParams struct {
@@ -30,6 +34,12 @@ type AnonymizeVaultActivityParams struct {
 	ActorUserID uuid.UUID
 }
 
+// Skips the user's own personal vault: those rows cascade away with it, so the
+// end state is Swift's. Updating them here would make Postgres recheck their
+// vault_id when the delete's SET NULL touches them (a row written earlier in
+// the transaction always gets the FK check), and if the SET NULL trigger fires
+// before the vault cascade, as it does on the goose baseline, that check
+// fails after the vault is gone.
 func (q *Queries) AnonymizeVaultActivity(ctx context.Context, arg AnonymizeVaultActivityParams) error {
 	_, err := q.db.Exec(ctx, anonymizeVaultActivity, arg.ActorName, arg.ActorUserID)
 	return err

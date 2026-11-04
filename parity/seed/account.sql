@@ -92,9 +92,7 @@ VALUES ('acc7f000-0000-4000-8000-000000000015', 'acc70000-0000-4000-8000-0000000
 
 -- acct-self has activity in their own personal vault. Deleting the user fires
 -- two FK actions on that row: actor_user_id SET NULL (users) and the vault_id
--- CASCADE (users -> vaults -> vault_activity_events). Postgres runs the SET
--- NULL update after the vault is gone and the update fails its vault_id check,
--- so Swift answers 500 and the account cannot be deleted. Go reproduces it.
+-- CASCADE (users -> vaults -> vault_activity_events). The row must end up gone.
 INSERT INTO vaults (id, personal_owner_user_id, name, created_at, updated_at)
 VALUES ('acc70000-0000-4000-8000-0000000000c9', 'acc70000-0000-4000-8000-0000000000c9', 'acct-self''s Vault', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
 INSERT INTO vault_activity_events (id, vault_id, actor_user_id, actor_name, action, target_type, created_at)
