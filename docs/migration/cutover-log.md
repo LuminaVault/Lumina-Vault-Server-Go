@@ -848,3 +848,29 @@ Beyond the pilot gate (D-wave2-early):
 - Proposal for the owner: route `/v1/analytics`, `/v1/insights`, `/v1/tasks` and the other
   `/v1/dashboard` routes to Go, and leave the `/v1/dashboard/home` prefix on Swift until
   Hermes moves (longest-prefix routing keeps it there).
+
+## Flip batch 1: profiles, sessions, news, achievements, health
+
+### G2 staging deploy: smoke met 2026-11-04, on `c17c3f6`
+
+- Image: `api-go-staging` ran `c17c3f6` from 2026-11-04 14:40:50Z, 1/1 Ready.
+- Smoke: `parity smoke` per module with throwaway staging users, against Swift
+  transcripts from CI run 41847129028. Swift staging ran the same smoke as the
+  control, because the gate's user has no parity seed data.
+
+| Module | Go mismatches | Swift control | Same set |
+|---|---|---|---|
+| profiles | 11 | 11 | yes |
+| sessions | 0 | 0 | yes |
+| news | 10 | 10 | yes |
+| achievements | 0 | 0 | yes |
+| health | 0 | 0 | yes |
+
+- Every mismatch is a 404 where the transcript has 2xx, on a step that needs
+  parity seed rows. `profiles` had to be re-run with a separate user per server:
+  on one shared user, Swift answered 409 for slugs Go had just created.
+- `profiles/crud` and `health/02-read` gained `smoke: true`, since the gate needs
+  a smoke scenario per module.
+- Coupling accepted for the flip: `AchievementsWorker` and
+  `HealthCorrelationService` stay in Swift and write the same tables.
+
