@@ -9,3 +9,43 @@ steps:
     request: {method: GET, path: /.well-known/apple-app-site-association}
   - name: unknown route
     request: {method: GET, path: /v1/does-not-exist}
+  - name: disallowed origin
+    request: {method: GET, path: /health, headers: {Origin: "https://evil.example"}}
+  - name: disallowed origin on a module route
+    request: {method: GET, path: /v1/projects, headers: {Origin: "https://evil.example"}}
+  - name: allowed origin
+    request: {method: GET, path: /health, headers: {Origin: "https://app.luminavault.fyi"}}
+  - name: preflight from an allowed origin
+    request: {method: OPTIONS, path: /v1/projects, headers: {Origin: "https://app.luminavault.fyi", Access-Control-Request-Method: POST, Access-Control-Request-Headers: "authorization,content-type"}}
+  - name: preflight from a disallowed origin
+    request: {method: OPTIONS, path: /v1/projects, headers: {Origin: "https://evil.example", Access-Control-Request-Method: POST}}
+  - name: options with no origin
+    request: {method: OPTIONS, path: /v1/projects}
+  - name: wrong method on a collection
+    request: {method: PUT, path: /v1/projects}
+  - name: wrong method on an item
+    request: {method: GET, path: /v1/projects/5EED0000-0000-4000-8000-0000000000A1}
+  - name: head
+    request: {method: HEAD, path: /v1/projects}
+  - name: extra segment after an item
+    request: {method: PATCH, path: /v1/projects/5EED0000-0000-4000-8000-0000000000A1/x}
+  - name: trailing slash
+    request: {method: GET, path: /v1/projects/}
+  - name: repeated slashes
+    request: {method: GET, path: //v1//projects}
+  - name: trailing slash with a query
+    request: {method: GET, path: "/v1/projects/?x=1"}
+  - name: path case matters
+    request: {method: GET, path: /V1/projects}
+  - name: string parameter does not span segments
+    request: {method: DELETE, path: /v1/devices/abc/def}
+  - name: disallowed origin on an unknown route
+    request: {method: GET, path: /v1/does-not-exist, headers: {Origin: "https://evil.example"}}
+  - name: preflight on an unknown route
+    request: {method: OPTIONS, path: /v1/does-not-exist, headers: {Origin: "https://app.luminavault.fyi", Access-Control-Request-Method: POST}}
+  - name: options from an allowed origin without a request method
+    request: {method: OPTIONS, path: /v1/projects, headers: {Origin: "https://app.luminavault.fyi"}}
+  - name: wrong method from an allowed origin
+    request: {method: PUT, path: /v1/projects, headers: {Origin: "https://app.luminavault.fyi"}}
+  - name: wrong method from a disallowed origin
+    request: {method: PUT, path: /v1/projects, headers: {Origin: "https://evil.example"}}

@@ -314,3 +314,22 @@ branches never touch the infra repo.
 
 `scripts/gen-modules.py` assigns routes by controller file (`SPLITS`). The
 prefixes don't overlap, so each part flips with its own `extraPaths` entry.
+
+## D-router-parity: routing edges now match Hummingbird
+
+Probing production after the pilot flip (2026-11-04) showed differences the
+scenarios had never exercised, in every module:
+- Echo answers a wrong method with 405 + `Allow`, and `OPTIONS` with 204.
+  Hummingbird answers 404 with an empty body. With an allowed `Origin`, its CORS
+  middleware still answers `OPTIONS` with 204.
+- Hummingbird ignores empty path segments, so `/v1/spaces/` is `/v1/spaces`.
+  Echo gave 404.
+- Echo lets a trailing `:param` swallow slashes, so `DELETE /v1/devices/a/b`
+  reached the handler with token `a/b`. Hummingbird's parameters are one segment.
+- `AllowedOriginsMiddleware` was not ported: Swift rejects an unlisted `Origin`
+  with 403 `origin not allowed` on every path, including unknown ones.
+
+All four are fixed in `internal/httpserver` and covered in
+`parity/scenarios/base/health.yaml`. Not copied on purpose: Swift's
+`Server: ObsidianClaudeBrainServer` header, a stale name that no client reads.
+It is also how to tell which server answered a request.

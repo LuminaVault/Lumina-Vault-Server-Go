@@ -23,6 +23,7 @@ type testModule struct{}
 
 func (testModule) Register(r Router, auth echo.MiddlewareFunc) {
 	big := strings.Repeat("x", 2048)
+	r.PATCH("/v1/test/items/:id", func(c *echo.Context) error { return c.NoContent(http.StatusOK) })
 	r.GET("/v1/test/json", func(c *echo.Context) error {
 		return c.JSON(http.StatusOK, map[string]string{"data": big})
 	})
@@ -81,13 +82,53 @@ func TestCORSPreflightAllowedOrigin(t *testing.T) {
 	require.Equal(t, "true", rec.Header().Get("Access-Control-Allow-Credentials"))
 	require.Equal(t, "600", rec.Header().Get("Access-Control-Max-Age"))
 	require.Contains(t, strings.ToLower(rec.Header().Get("Access-Control-Allow-Headers")), "authorization")
+	require.Empty(t, rec.Header().Get("Allow"))
 }
 
-func TestCORSDisallowedOriginGetsNoAllowHeader(t *testing.T) {
+func TestCORSDisallowedOriginIsForbidden(t *testing.T) {
+	for _, method := range []string{http.MethodGet, http.MethodOptions} {
+		req := httptest.NewRequest(method, "/health", nil)
+		req.Header.Set("Origin", "https://evil.example")
+		rec := do(t, newTestServer(), req)
+		require.Equal(t, http.StatusForbidden, rec.Code, method)
+		require.JSONEq(t, `{"error":{"message":"origin not allowed"}}`, rec.Body.String(), method)
+		require.Empty(t, rec.Header().Get("Access-Control-Allow-Origin"), method)
+	}
+}
+
+func TestNoOriginPasses(t *testing.T) {
+	rec := do(t, newTestServer(), httptest.NewRequest(http.MethodGet, "/health", nil))
+	require.Equal(t, http.StatusOK, rec.Code)
+}
+
+func TestNoAllowListSkipsTheOriginGuard(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	req.Header.Set("Origin", "https://evil.example")
-	rec := do(t, newTestServer(), req)
-	require.Empty(t, rec.Header().Get("Access-Control-Allow-Origin"))
+	rec := do(t, New(config.Config{}, Deps{Auth: denyAll, Modules: []Module{testModule{}}}), req)
+	require.Equal(t, http.StatusOK, rec.Code)
+}
+
+func TestRouterAnswersLikeHummingbird(t *testing.T) {
+	for _, tc := range []struct {
+		method, path string
+		want         int
+	}{
+		{http.MethodPut, "/v1/test/json", http.StatusNotFound},
+		{http.MethodHead, "/v1/test/json", http.StatusNotFound},
+		{http.MethodOptions, "/v1/test/json", http.StatusNotFound},
+		{http.MethodGet, "/v1/test/items/1", http.StatusNotFound},
+		{http.MethodPatch, "/v1/test/items/1/x", http.StatusNotFound},
+		{http.MethodPatch, "/v1/test/items/1", http.StatusOK},
+		{http.MethodPatch, "/v1/test/items/1/", http.StatusOK},
+		{http.MethodPatch, "//v1//test/items/1", http.StatusOK},
+		{http.MethodGet, "/v1/test/json/", http.StatusOK},
+		{http.MethodGet, "/", http.StatusOK},
+		{http.MethodGet, "/V1/test/json", http.StatusNotFound},
+	} {
+		rec := do(t, newTestServer(), httptest.NewRequest(tc.method, tc.path, nil))
+		require.Equal(t, tc.want, rec.Code, "%s %s", tc.method, tc.path)
+		require.Empty(t, rec.Header().Get("Allow"), "%s %s", tc.method, tc.path)
+	}
 }
 
 func TestGzipSkipsEventStream(t *testing.T) {
