@@ -17,6 +17,9 @@ import (
 var (
 	uuidRe = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 	tsRe   = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$`)
+
+	uuidInTextRe = regexp.MustCompile(`[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`)
+	tsInTextRe   = regexp.MustCompile(`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})`)
 )
 
 // Ignored replaces values at ignore paths.
@@ -84,6 +87,17 @@ func (n *Normalizer) Value(v any) any {
 	default:
 		return v
 	}
+}
+
+// UUIDs replaces every UUID inside s, such as a file name, with its placeholder.
+func (n *Normalizer) UUIDs(s string) string {
+	return uuidInTextRe.ReplaceAllStringFunc(s, n.str)
+}
+
+// Text replaces every UUID and timestamp inside s, such as a file's contents,
+// with its placeholder.
+func (n *Normalizer) Text(s string) string {
+	return tsInTextRe.ReplaceAllStringFunc(n.UUIDs(s), n.str)
 }
 
 func (n *Normalizer) str(s string) string {
