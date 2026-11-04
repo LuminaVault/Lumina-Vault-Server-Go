@@ -21,8 +21,10 @@ import (
 
 const (
 	defaultBufferSize = 256
-	// shutdownBudget bounds the final drain, which Swift doesn't.
+	// shutdownBudget bounds the final drain, and jobTimeout one job. Swift has
+	// neither: here a stuck database or APNS can't wedge the worker or shutdown.
 	shutdownBudget = 10 * time.Second
+	jobTimeout     = 30 * time.Second
 )
 
 // Recorder is achievements.Recorder.
@@ -139,8 +141,10 @@ func (s *Sink) drain(ctx context.Context) {
 }
 
 // recordAndPush never fails: errors are logged, and one failed push doesn't stop
-// the next.
+// the next. A job that has started finishes even if shutdown begins meanwhile.
 func (s *Sink) recordAndPush(ctx context.Context, j job) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), jobTimeout)
+	defer cancel()
 	unlocks, err := s.recorder.Record(ctx, j.tenant, j.event)
 	if err != nil {
 		slog.WarnContext(ctx, "achievements record failed", "event", string(j.event), "tenant", ids.Upper(j.tenant), "error", err)

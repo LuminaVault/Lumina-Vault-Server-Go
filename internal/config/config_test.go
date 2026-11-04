@@ -90,7 +90,7 @@ func TestBYOHermesRequireHTTPS(t *testing.T) {
 		{"dev", "1", false},
 	}
 	for _, tc := range cases {
-		c := Config{LVEnvironment: tc.env, BYOHermesRequireHTTPSRaw: tc.raw}
+		c := config.Config{LVEnvironment: tc.env, BYOHermesRequireHTTPSRaw: tc.raw}
 		if got := c.BYOHermesRequireHTTPS(); got != tc.want {
 			t.Errorf("env %q raw %q: got %v", tc.env, tc.raw, got)
 		}

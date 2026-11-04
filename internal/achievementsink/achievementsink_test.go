@@ -96,6 +96,33 @@ func TestDrainsInOrder(t *testing.T) {
 	require.Equal(t, tenant, rec.calls[0].tenant)
 }
 
+// Shutdown beginning mid-job doesn't fail the job: Record sees a live context.
+func TestJobInFlightSurvivesShutdown(t *testing.T) {
+	var ctxErr error
+	started, release := make(chan struct{}), make(chan struct{})
+	rec := recorderFunc(func(ctx context.Context) {
+		close(started)
+		<-release
+		ctxErr = ctx.Err()
+	})
+	s := New(rec, nil, Options{})
+	stop := run(t, s)
+	s.Enqueue(uuid.New(), achievements.EventQueryRan)
+	<-started
+	go stop()
+	time.Sleep(20 * time.Millisecond)
+	close(release)
+	stop()
+	require.NoError(t, ctxErr)
+}
+
+type recorderFunc func(context.Context)
+
+func (f recorderFunc) Record(ctx context.Context, _ uuid.UUID, _ achievements.Event) ([]achievements.Sub, error) {
+	f(ctx)
+	return nil, nil
+}
+
 // The handler's side: with the worker stuck on the database, Enqueue still
 // returns at once.
 func TestEnqueueNeverWaits(t *testing.T) {

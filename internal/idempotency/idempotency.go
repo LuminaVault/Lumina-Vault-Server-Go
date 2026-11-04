@@ -148,20 +148,20 @@ func (m *middleware) handle(c *echo.Context, next echo.HandlerFunc) error {
 
 	// Re-attach the buffered body so the handler sees it, and buffer the response.
 	r.Body = io.NopCloser(bytes.NewReader(body))
-	real := c.Response()
-	rec := newRecorder(real.Header())
+	w := c.Response()
+	rec := newRecorder(w.Header())
 	c.SetResponse(rec)
-	defer c.SetResponse(real)
+	defer c.SetResponse(w)
 	if err := next(c); err != nil {
 		return err
 	}
-	c.SetResponse(real)
+	c.SetResponse(w)
 
 	status := rec.statusCode()
 	if status >= 200 && status < 500 && status != http.StatusRequestTimeout && rec.body.Len() <= m.opts.MaxResponseBody {
 		m.persist(ctx, tenant, key, requestHash, status, rec)
 	}
-	return rec.forward(real)
+	return rec.forward(w)
 }
 
 // parseKey is `UUID(uuidString:)` on HTTPFields' combined value: exactly the
