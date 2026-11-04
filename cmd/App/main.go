@@ -14,6 +14,7 @@ import (
 	"lumina/internal/migrations"
 	"lumina/internal/modules/achievements"
 	"lumina/internal/modules/apple"
+	"lumina/internal/modules/dashboard"
 	"lumina/internal/modules/devices"
 	"lumina/internal/modules/kanban"
 	"lumina/internal/modules/news"
@@ -126,6 +127,7 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 			devices.New(pool, cfg.APNSBundleID),
 			reminders.New(pool, nil, cfg.HermesDefaultModel),
 			achievements.New(pool, identify, limits),
+			dashboard.New(pool, identify),
 		}
 		if m := news.New(pool, cfg, identify, limits); m != nil { // nil without LV_SECRET_MASTER_KEY, as in Swift
 			deps.Modules = append(deps.Modules, m)
