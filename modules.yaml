@@ -110,7 +110,7 @@ modules:
   marketplace:
     wave: 3
     swiftDir: Sources/App/Marketplace
-    status: swift
+    status: parity
     prefixes: [/v1/marketplace]
     jobs: []
   me:
