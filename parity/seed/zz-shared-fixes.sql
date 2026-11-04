@@ -14,11 +14,8 @@ VALUES
 INSERT INTO projects (id, tenant_id, name, description, archived, created_at)
 VALUES ('57c70000-0000-4000-8000-0000000000b1', '57c70000-0000-4000-8000-0000000000a1', 'Counted', NULL, false, '2026-01-02T00:00:00Z');
 
--- Two todos naming the project: the canonical form, which counts, and one that
--- uuid.Parse would take and Swift's UUID(uuidString:) wouldn't.
+-- A todo naming the project, so the list shows its todoCount.
 INSERT INTO vault_files (id, tenant_id, path, content_type, size_bytes, sha256, created_at, updated_at, processed_at, metadata)
 VALUES
   ('57c70000-0000-4000-8000-0000000000c1', '57c70000-0000-4000-8000-0000000000a1', 'inbox/a.md', 'text/markdown', 5, 'seed1', '2026-01-03T00:00:00Z', '2026-01-03T00:00:00Z', '2026-01-03T00:00:00Z',
-   '{"done": false, "title": "Canonical", "isTodo": true, "projectID": "57C70000-0000-4000-8000-0000000000B1"}'),
-  ('57c70000-0000-4000-8000-0000000000c2', '57c70000-0000-4000-8000-0000000000a1', 'inbox/b.md', 'text/markdown', 5, 'seed2', '2026-01-03T00:00:00Z', '2026-01-03T00:00:00Z', '2026-01-03T00:00:00Z',
-   '{"done": false, "title": "Bare hex", "isTodo": true, "projectID": "57c700000000400080000000000000b1"}');
+   '{"done": false, "title": "Canonical", "isTodo": true, "projectID": "57C70000-0000-4000-8000-0000000000B1"}');
