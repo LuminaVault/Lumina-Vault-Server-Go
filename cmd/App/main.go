@@ -18,6 +18,7 @@ import (
 	"lumina/internal/modules/apple"
 	"lumina/internal/modules/calendar"
 	"lumina/internal/modules/community"
+	"lumina/internal/modules/dashboard"
 	"lumina/internal/modules/devices"
 	"lumina/internal/modules/health"
 	"lumina/internal/modules/kanban"
@@ -150,6 +151,7 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 				ReplyTo: cfg.EmailReplyTo, BaseURL: cfg.TeamInviteBaseURL,
 			}, slog.Default().With("module", "teams"))),
 			me.New(pool, identify, limits, me.Options{RecapThemesEnabled: cfg.RecapThemesEnabled}),
+			dashboard.New(pool, identify),
 		}
 		// Wave 3: account, onboarding, health. Health ingest sits behind the
 		// billing gate; the BYO-key exemption needs the SecretBox (nil without

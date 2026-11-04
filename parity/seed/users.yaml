@@ -135,3 +135,14 @@ cal_bri: CA1E0000-0000-4000-8000-0000000000DA
 cal_bal: CA1E0000-0000-4000-8000-0000000000EB
 cal_cap: CA1E0000-0000-4000-8000-0000000000FC
 cal_quo: CA1E0000-0000-4000-8000-0000000000AD
+# dashboard (parity/seed/dashboard.sql): ann is the rich managed tenant, ben BYOK,
+# cat fresh, dan has no vault row, eli holds a team vault membership without a team
+# membership, wri takes the write scenarios, ins the insights, ovf overflows Int32 tokens.
+dash_ann: DA5B0000-0000-4000-8000-0000000000A1
+dash_ben: DA5B0000-0000-4000-8000-0000000000B2
+dash_cat: DA5B0000-0000-4000-8000-0000000000C3
+dash_dan: DA5B0000-0000-4000-8000-0000000000D4
+dash_eli: DA5B0000-0000-4000-8000-0000000000E5
+dash_wri: DA5B0000-0000-4000-8000-0000000000F6
+dash_ins: DA5B0000-0000-4000-8000-0000000000A7
+dash_ovf: DA5B0000-0000-4000-8000-0000000000B8

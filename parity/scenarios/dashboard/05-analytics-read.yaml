@@ -1,0 +1,77 @@
+module: dashboard
+steps:
+  - {name: "usage-summary dash_ann", as: dash_ann, request: {method: GET, path: "/v1/analytics/usage-summary"}}
+  - {name: "retrieval-health dash_ann", as: dash_ann, request: {method: GET, path: "/v1/analytics/retrieval-health"}}
+  - {name: "usage-summary dash_ben", as: dash_ben, request: {method: GET, path: "/v1/analytics/usage-summary"}}
+  - {name: "retrieval-health dash_ben", as: dash_ben, request: {method: GET, path: "/v1/analytics/retrieval-health"}}
+  - {name: "usage-summary dash_cat", as: dash_cat, request: {method: GET, path: "/v1/analytics/usage-summary"}}
+  - {name: "retrieval-health dash_cat", as: dash_cat, request: {method: GET, path: "/v1/analytics/retrieval-health"}}
+  - {name: "usage-summary dash_eli", as: dash_eli, request: {method: GET, path: "/v1/analytics/usage-summary"}}
+  - {name: "retrieval-health dash_eli", as: dash_eli, request: {method: GET, path: "/v1/analytics/retrieval-health"}}
+  - {name: "usage-summary dash_wri", as: dash_wri, request: {method: GET, path: "/v1/analytics/usage-summary"}}
+  - {name: "retrieval-health dash_wri", as: dash_wri, request: {method: GET, path: "/v1/analytics/retrieval-health"}}
+  - {name: "usage-summary dash_ins", as: dash_ins, request: {method: GET, path: "/v1/analytics/usage-summary"}}
+  - {name: "retrieval-health dash_ins", as: dash_ins, request: {method: GET, path: "/v1/analytics/retrieval-health"}}
+  - {name: "usage-summary dash_ovf", as: dash_ovf, request: {method: GET, path: "/v1/analytics/usage-summary"}}
+  - {name: "retrieval-health dash_ovf", as: dash_ovf, request: {method: GET, path: "/v1/analytics/retrieval-health"}}
+  - {name: "usage-summary dash_dan", as: dash_dan, request: {method: GET, path: "/v1/analytics/usage-summary"}}
+  - {name: "retrieval-health dash_dan", as: dash_dan, request: {method: GET, path: "/v1/analytics/retrieval-health"}}
+  - {name: "overview dash_ann", as: dash_ann, request: {method: GET, path: "/v1/analytics/overview"}}
+  - {name: "models dash_ann", as: dash_ann, request: {method: GET, path: "/v1/analytics/models"}}
+  - {name: "overview dash_ben", as: dash_ben, request: {method: GET, path: "/v1/analytics/overview"}}
+  - {name: "models dash_ben", as: dash_ben, request: {method: GET, path: "/v1/analytics/models"}}
+  - {name: "overview dash_cat", as: dash_cat, request: {method: GET, path: "/v1/analytics/overview"}}
+  - {name: "models dash_cat", as: dash_cat, request: {method: GET, path: "/v1/analytics/models"}}
+  - {name: "overview dash_eli", as: dash_eli, request: {method: GET, path: "/v1/analytics/overview"}}
+  - {name: "models dash_eli", as: dash_eli, request: {method: GET, path: "/v1/analytics/models"}}
+  - {name: "overview dash_ins", as: dash_ins, request: {method: GET, path: "/v1/analytics/overview"}}
+  - {name: "models dash_ins", as: dash_ins, request: {method: GET, path: "/v1/analytics/models"}}
+  - {name: "overview dash_ovf", as: dash_ovf, request: {method: GET, path: "/v1/analytics/overview"}}
+  - {name: "models dash_ovf", as: dash_ovf, request: {method: GET, path: "/v1/analytics/models"}}
+  - {name: "overview dash_dan", as: dash_dan, request: {method: GET, path: "/v1/analytics/overview"}}
+  - {name: "models dash_dan", as: dash_dan, request: {method: GET, path: "/v1/analytics/models"}}
+  - {name: "overview range=7d", as: dash_ann, request: {method: GET, path: "/v1/analytics/overview?range=7d"}}
+  - {name: "models range=7d", as: dash_ben, request: {method: GET, path: "/v1/analytics/models?range=7d"}}
+  - {name: "overview range=30d", as: dash_ann, request: {method: GET, path: "/v1/analytics/overview?range=30d"}}
+  - {name: "models range=30d", as: dash_ben, request: {method: GET, path: "/v1/analytics/models?range=30d"}}
+  - {name: "overview range=90d", as: dash_ann, request: {method: GET, path: "/v1/analytics/overview?range=90d"}}
+  - {name: "models range=90d", as: dash_ben, request: {method: GET, path: "/v1/analytics/models?range=90d"}}
+  - {name: "overview range=1d", as: dash_ann, request: {method: GET, path: "/v1/analytics/overview?range=1d"}}
+  - {name: "models range=1d", as: dash_ben, request: {method: GET, path: "/v1/analytics/models?range=1d"}}
+  - {name: "overview range=", as: dash_ann, request: {method: GET, path: "/v1/analytics/overview?range="}}
+  - {name: "models range=", as: dash_ben, request: {method: GET, path: "/v1/analytics/models?range="}}
+  - {name: "overview scope=personal", as: dash_ann, request: {method: GET, path: "/v1/analytics/overview?scope=personal"}}
+  - {name: "overview team header scope=personal", as: dash_ben, request: {method: GET, path: "/v1/analytics/overview?scope=personal&range=7d", headers: {X-Vault-ID: "DA5BC000-0000-4000-8000-0000000000C1"}}}
+  - {name: "models team header scope=personal", as: dash_ann, request: {method: GET, path: "/v1/analytics/models?scope=personal", headers: {X-Vault-ID: "DA5BC000-0000-4000-8000-0000000000C1"}}}
+  - {name: "overview scope=active", as: dash_ann, request: {method: GET, path: "/v1/analytics/overview?scope=active"}}
+  - {name: "overview team header scope=active", as: dash_ben, request: {method: GET, path: "/v1/analytics/overview?scope=active&range=7d", headers: {X-Vault-ID: "DA5BC000-0000-4000-8000-0000000000C1"}}}
+  - {name: "models team header scope=active", as: dash_ann, request: {method: GET, path: "/v1/analytics/models?scope=active", headers: {X-Vault-ID: "DA5BC000-0000-4000-8000-0000000000C1"}}}
+  - {name: "overview scope=nope", as: dash_ann, request: {method: GET, path: "/v1/analytics/overview?scope=nope"}}
+  - {name: "overview team header scope=nope", as: dash_ben, request: {method: GET, path: "/v1/analytics/overview?scope=nope&range=7d", headers: {X-Vault-ID: "DA5BC000-0000-4000-8000-0000000000C1"}}}
+  - {name: "models team header scope=nope", as: dash_ann, request: {method: GET, path: "/v1/analytics/models?scope=nope", headers: {X-Vault-ID: "DA5BC000-0000-4000-8000-0000000000C1"}}}
+  - {name: "overview scope=", as: dash_ann, request: {method: GET, path: "/v1/analytics/overview?scope="}}
+  - {name: "overview team header scope=", as: dash_ben, request: {method: GET, path: "/v1/analytics/overview?scope=&range=7d", headers: {X-Vault-ID: "DA5BC000-0000-4000-8000-0000000000C1"}}}
+  - {name: "models team header scope=", as: dash_ann, request: {method: GET, path: "/v1/analytics/models?scope=", headers: {X-Vault-ID: "DA5BC000-0000-4000-8000-0000000000C1"}}}
+  - {name: "personal scope ignores a bad vault header", as: dash_cat, request: {method: GET, path: "/v1/analytics/overview?scope=personal", headers: {X-Vault-ID: "nope"}}}
+  - {name: "personal scope ignores a foreign vault header", as: dash_cat, request: {method: GET, path: "/v1/analytics/models?scope=personal", headers: {X-Vault-ID: "DA5B0000-0000-4000-8000-0000000000A1"}}}
+  - {name: "personal scope, user without a vault", as: dash_dan, request: {method: GET, path: "/v1/analytics/overview?scope=personal"}}
+  - {name: "overview foreign vault", as: dash_cat, request: {method: GET, path: "/v1/analytics/overview", headers: {X-Vault-ID: "DA5B0000-0000-4000-8000-0000000000A1"}}}
+  - {name: "overview foreign team vault", as: dash_wri, request: {method: GET, path: "/v1/analytics/overview", headers: {X-Vault-ID: "DA5BC000-0000-4000-8000-0000000000C1"}}}
+  - {name: "overview unknown vault", as: dash_ann, request: {method: GET, path: "/v1/analytics/overview", headers: {X-Vault-ID: "DA5B9999-0000-4000-8000-000000000000"}}}
+  - {name: "overview archived vault", as: dash_ann, request: {method: GET, path: "/v1/analytics/overview", headers: {X-Vault-ID: "DA5BC000-0000-4000-8000-0000000000C2"}}}
+  - {name: "overview lowercase vault header", as: dash_ann, request: {method: GET, path: "/v1/analytics/overview", headers: {X-Vault-ID: "da5bc000-0000-4000-8000-0000000000c1"}}}
+  - {name: "models foreign vault", as: dash_cat, request: {method: GET, path: "/v1/analytics/models", headers: {X-Vault-ID: "DA5B0000-0000-4000-8000-0000000000A1"}}}
+  - {name: "usage-summary ignores X-Vault-ID", as: dash_cat, request: {method: GET, path: "/v1/analytics/usage-summary", headers: {X-Vault-ID: "nope"}}}
+  - {name: "retrieval-health ignores X-Vault-ID", as: dash_cat, request: {method: GET, path: "/v1/analytics/retrieval-health", headers: {X-Vault-ID: "nope"}}}
+  - {name: "team on a personal vault", as: dash_ann, request: {method: GET, path: "/v1/analytics/team"}}
+  - {name: "team with own personal header", as: dash_ann, request: {method: GET, path: "/v1/analytics/team", headers: {X-Vault-ID: "DA5B0000-0000-4000-8000-0000000000A1"}}}
+  - {name: "team user without a vault", as: dash_dan, request: {method: GET, path: "/v1/analytics/team"}}
+  - {name: "team admin sees members", as: dash_ann, request: {method: GET, path: "/v1/analytics/team", headers: {X-Vault-ID: "DA5BC000-0000-4000-8000-0000000000C1"}}}
+  - {name: "team viewer gets no members", as: dash_ben, request: {method: GET, path: "/v1/analytics/team", headers: {X-Vault-ID: "DA5BC000-0000-4000-8000-0000000000C1"}}}
+  - {name: "team editor without team membership", as: dash_eli, request: {method: GET, path: "/v1/analytics/team", headers: {X-Vault-ID: "DA5BC000-0000-4000-8000-0000000000C1"}}}
+  - {name: "team non-member", as: dash_cat, request: {method: GET, path: "/v1/analytics/team", headers: {X-Vault-ID: "DA5BC000-0000-4000-8000-0000000000C1"}}}
+  - {name: "team archived", as: dash_ann, request: {method: GET, path: "/v1/analytics/team", headers: {X-Vault-ID: "DA5BC000-0000-4000-8000-0000000000C2"}}}
+  - {name: "team unknown", as: dash_ann, request: {method: GET, path: "/v1/analytics/team", headers: {X-Vault-ID: "DA5B9999-0000-4000-8000-000000000000"}}}
+  - {name: "team range=7d", as: dash_ann, request: {method: GET, path: "/v1/analytics/team?range=7d", headers: {X-Vault-ID: "DA5BC000-0000-4000-8000-0000000000C1"}}}
+  - {name: "team range=90d", as: dash_ann, request: {method: GET, path: "/v1/analytics/team?range=90d", headers: {X-Vault-ID: "DA5BC000-0000-4000-8000-0000000000C1"}}}
+  - {name: "team range=nope", as: dash_ann, request: {method: GET, path: "/v1/analytics/team?range=nope", headers: {X-Vault-ID: "DA5BC000-0000-4000-8000-0000000000C1"}}}

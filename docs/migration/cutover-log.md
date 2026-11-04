@@ -812,3 +812,39 @@ Beyond the pilot gate (D-wave2-early):
   suite).
 - CI: PR #19, run 41819569386. `parity`, `lint`, `test` and `vuln` pass
   (https://github.com/LuminaVault/Lumina-Vault-Server-Go/actions/runs/41819569386/job/126539035089).
+
+## dashboard (wave 3)
+
+### G0 entry: met 2026-11-04
+
+- Routes: 16 in `docs/migration/routes.json`, under `/v1/analytics`, `/v1/dashboard`,
+  `/v1/insights` and `/v1/tasks`.
+- Prefixes: disjoint (`internal/manifest`).
+- Coupling: the routes read many tables and write only `analytics_events`,
+  `analytics_daily_rollups`, `analytics_recommendation_states` and `insights.dismissed_at`.
+- Jobs: none move. `AnalyticsMaintenanceService` and `SynthesisWorker` stay in Swift.
+- Swift tests: 37 in scope, 36 ported.
+  - In scope: the 33 tests in `Tests/AppTests/Dashboard` and the 4 streak tests in
+    `PowerLevelTests`.
+  - Not ported: "Memory health queues validate their filter", which hits `/v1/memory`
+    (wave 4).
+- DTOs: hand-written from LuminaVaultShared 5.32.0, because Swift's `Double` text differs
+  from Go's (`swiftDouble`).
+
+### G1 parity: not met (status stays `swift`)
+
+- CI run 41849219723 on head 7d63bc8: self-test (Swift vs Swift) and Swift vs Go give
+  **92 scenarios, 0 differences** (whole suite). `parity/scenarios/dashboard` has 6 files
+  and 373 steps, 48 of them with snapshots. `parity`, `lint`, `test` and `vuln` pass
+  (https://github.com/LuminaVault/Lumina-Vault-Server-Go/actions/runs/41849219723/job/126640690180).
+- Go tests: `internal/modules/dashboard` has 34 cases on Postgres, including spec
+  conformance, and 10 unit tests.
+- Gap: `cronJobs` on `/v1/dashboard/home` comes from Swift's `CronBridgeService`, which runs
+  `docker exec` in the tenant's managed container or calls a BYO Hermes dashboard. Neither
+  is ported, so Go always answers `[]`. The parity env has neither source, so Swift answers
+  `[]` there too and parity cannot see the difference. In production, Go would silently
+  empty the cron preview for tenants who have cron jobs. The brief's rule keeps this module
+  at `swift` until the bridge is ported (wave 6, Hermes) or a human accepts the gap.
+- Proposal for the owner: route `/v1/analytics`, `/v1/insights`, `/v1/tasks` and the other
+  `/v1/dashboard` routes to Go, and leave the `/v1/dashboard/home` prefix on Swift until
+  Hermes moves (longest-prefix routing keeps it there).

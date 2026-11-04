@@ -1,0 +1,126 @@
+module: dashboard
+steps:
+  - {name: "/v1/dashboard/stats no token", request: {method: GET, path: "/v1/dashboard/stats"}}
+  - {name: "/v1/dashboard/stats bad token", request: {method: GET, path: "/v1/dashboard/stats", headers: {Authorization: "Bearer not.a.jwt"}}}
+  - {name: "/v1/dashboard/profile no token", request: {method: GET, path: "/v1/dashboard/profile"}}
+  - {name: "/v1/dashboard/profile bad token", request: {method: GET, path: "/v1/dashboard/profile", headers: {Authorization: "Bearer not.a.jwt"}}}
+  - {name: "/v1/dashboard/home no token", request: {method: GET, path: "/v1/dashboard/home"}}
+  - {name: "/v1/dashboard/home bad token", request: {method: GET, path: "/v1/dashboard/home", headers: {Authorization: "Bearer not.a.jwt"}}}
+  - {name: "/v1/dashboard/activity no token", request: {method: GET, path: "/v1/dashboard/activity"}}
+  - {name: "/v1/dashboard/activity bad token", request: {method: GET, path: "/v1/dashboard/activity", headers: {Authorization: "Bearer not.a.jwt"}}}
+  - {name: "/v1/insights no token", request: {method: GET, path: "/v1/insights"}}
+  - {name: "/v1/insights bad token", request: {method: GET, path: "/v1/insights", headers: {Authorization: "Bearer not.a.jwt"}}}
+  - {name: "/v1/insights/synthesis/latest no token", request: {method: GET, path: "/v1/insights/synthesis/latest"}}
+  - {name: "/v1/insights/synthesis/latest bad token", request: {method: GET, path: "/v1/insights/synthesis/latest", headers: {Authorization: "Bearer not.a.jwt"}}}
+  - {name: "/v1/tasks no token", request: {method: GET, path: "/v1/tasks"}}
+  - {name: "/v1/tasks bad token", request: {method: GET, path: "/v1/tasks", headers: {Authorization: "Bearer not.a.jwt"}}}
+  - {name: "/v1/analytics/usage-summary no token", request: {method: GET, path: "/v1/analytics/usage-summary"}}
+  - {name: "/v1/analytics/usage-summary bad token", request: {method: GET, path: "/v1/analytics/usage-summary", headers: {Authorization: "Bearer not.a.jwt"}}}
+  - {name: "/v1/analytics/retrieval-health no token", request: {method: GET, path: "/v1/analytics/retrieval-health"}}
+  - {name: "/v1/analytics/retrieval-health bad token", request: {method: GET, path: "/v1/analytics/retrieval-health", headers: {Authorization: "Bearer not.a.jwt"}}}
+  - {name: "/v1/analytics/overview no token", request: {method: GET, path: "/v1/analytics/overview"}}
+  - {name: "/v1/analytics/overview bad token", request: {method: GET, path: "/v1/analytics/overview", headers: {Authorization: "Bearer not.a.jwt"}}}
+  - {name: "/v1/analytics/models no token", request: {method: GET, path: "/v1/analytics/models"}}
+  - {name: "/v1/analytics/models bad token", request: {method: GET, path: "/v1/analytics/models", headers: {Authorization: "Bearer not.a.jwt"}}}
+  - {name: "/v1/analytics/team no token", request: {method: GET, path: "/v1/analytics/team"}}
+  - {name: "/v1/analytics/team bad token", request: {method: GET, path: "/v1/analytics/team", headers: {Authorization: "Bearer not.a.jwt"}}}
+  - {name: "stats non-bearer", request: {method: GET, path: "/v1/dashboard/stats", headers: {Authorization: "Basic YWxpY2U6eA=="}}}
+  - {name: "dismiss no token", request: {method: POST, path: "/v1/insights/DA5B8100-0000-4000-8000-000000000001/dismiss"}}
+  - {name: "dismiss bad token with bad id: identity first", request: {method: POST, path: "/v1/insights/nope/dismiss", headers: {Authorization: "Bearer not.a.jwt"}}}
+  - {name: "/v1/analytics/overview no token bad vault header", request: {method: GET, path: "/v1/analytics/overview", headers: {X-Vault-ID: "nope"}}}
+  - {name: "/v1/analytics/overview no token good vault header", request: {method: GET, path: "/v1/analytics/overview", headers: {X-Vault-ID: "DA5BC000-0000-4000-8000-0000000000C1"}}}
+  - {name: "/v1/analytics/overview empty vault header", as: dash_ann, request: {method: GET, path: "/v1/analytics/overview", headers: {X-Vault-ID: ""}}}
+  - {name: "/v1/analytics/overview braced vault header", as: dash_ann, request: {method: GET, path: "/v1/analytics/overview", headers: {X-Vault-ID: "{DA5BC000-0000-4000-8000-0000000000C1}"}}}
+  - {name: "/v1/analytics/models no token bad vault header", request: {method: GET, path: "/v1/analytics/models", headers: {X-Vault-ID: "nope"}}}
+  - {name: "/v1/analytics/models no token good vault header", request: {method: GET, path: "/v1/analytics/models", headers: {X-Vault-ID: "DA5BC000-0000-4000-8000-0000000000C1"}}}
+  - {name: "/v1/analytics/models empty vault header", as: dash_ann, request: {method: GET, path: "/v1/analytics/models", headers: {X-Vault-ID: ""}}}
+  - {name: "/v1/analytics/models braced vault header", as: dash_ann, request: {method: GET, path: "/v1/analytics/models", headers: {X-Vault-ID: "{DA5BC000-0000-4000-8000-0000000000C1}"}}}
+  - {name: "/v1/analytics/team no token bad vault header", request: {method: GET, path: "/v1/analytics/team", headers: {X-Vault-ID: "nope"}}}
+  - {name: "/v1/analytics/team no token good vault header", request: {method: GET, path: "/v1/analytics/team", headers: {X-Vault-ID: "DA5BC000-0000-4000-8000-0000000000C1"}}}
+  - {name: "/v1/analytics/team empty vault header", as: dash_ann, request: {method: GET, path: "/v1/analytics/team", headers: {X-Vault-ID: ""}}}
+  - {name: "/v1/analytics/team braced vault header", as: dash_ann, request: {method: GET, path: "/v1/analytics/team", headers: {X-Vault-ID: "{DA5BC000-0000-4000-8000-0000000000C1}"}}}
+  - {name: "/v1/analytics/overview?scope=personal no token", request: {method: GET, path: "/v1/analytics/overview?scope=personal"}}
+  - {name: "/v1/analytics/overview?scope=personal no token bad header: scope skips the header", request: {method: GET, path: "/v1/analytics/overview?scope=personal", headers: {X-Vault-ID: "nope"}}}
+  - {name: "/v1/analytics/models?scope=personal no token", request: {method: GET, path: "/v1/analytics/models?scope=personal"}}
+  - {name: "/v1/analytics/models?scope=personal no token bad header: scope skips the header", request: {method: GET, path: "/v1/analytics/models?scope=personal", headers: {X-Vault-ID: "nope"}}}
+  - {name: "/v1/tasks/ trailing slash", as: dash_cat, request: {method: GET, path: "/v1/tasks/"}}
+  - {name: "/v1/insights/ trailing slash", as: dash_cat, request: {method: GET, path: "/v1/insights/"}}
+  - {name: "/v1/dashboard/stats/ trailing slash", as: dash_cat, request: {method: GET, path: "/v1/dashboard/stats/"}}
+  - {name: "/v1/analytics/overview/ trailing slash", as: dash_cat, request: {method: GET, path: "/v1/analytics/overview/"}}
+  - {name: "POST on a GET route", as: dash_cat, request: {method: POST, path: "/v1/tasks"}}
+  - {name: "unknown dashboard route", as: dash_cat, request: {method: GET, path: "/v1/dashboard/nope"}}
+  - {name: "/v1/analytics/events empty with token", as: dash_cat, request: {method: POST, path: "/v1/analytics/events", raw: ""}}
+  - {name: "/v1/analytics/events not json with token", as: dash_cat, request: {method: POST, path: "/v1/analytics/events", raw: "nope"}}
+  - {name: "/v1/analytics/events array with token", as: dash_cat, request: {method: POST, path: "/v1/analytics/events", raw: "[]"}}
+  - {name: "/v1/analytics/events string with token", as: dash_cat, request: {method: POST, path: "/v1/analytics/events", raw: "\"x\""}}
+  - {name: "/v1/analytics/events number with token", as: dash_cat, request: {method: POST, path: "/v1/analytics/events", raw: "1"}}
+  - {name: "/v1/analytics/events null with token", as: dash_cat, request: {method: POST, path: "/v1/analytics/events", raw: "null"}}
+  - {name: "/v1/analytics/events object empty with token", as: dash_cat, request: {method: POST, path: "/v1/analytics/events", raw: "{}"}}
+  - {name: "/v1/analytics/events malformed without token: decode runs first", request: {method: POST, path: "/v1/analytics/events", raw: "nope"}}
+  - {name: "/v1/analytics/events good body without token", request: {method: POST, path: "/v1/analytics/events", json: {"name": "analytics_dashboard_viewed", "source": "web"}}}
+  - {name: "/v1/analytics/events bad token", request: {method: POST, path: "/v1/analytics/events", headers: {Authorization: "Bearer not.a.jwt"}, json: {"name": "analytics_dashboard_viewed", "source": "web"}}}
+  - {name: "/v1/analytics/events bad vault header without token", request: {method: POST, path: "/v1/analytics/events", headers: {X-Vault-ID: "nope"}, json: {"name": "analytics_dashboard_viewed", "source": "web"}}}
+  - {name: "/v1/analytics/events missing name", as: dash_cat, request: {method: POST, path: "/v1/analytics/events", json: {"source": "web"}}}
+  - {name: "/v1/analytics/events missing source", as: dash_cat, request: {method: POST, path: "/v1/analytics/events", json: {"name": "analytics_dashboard_viewed"}}}
+  - {name: "/v1/analytics/events name=\"x\"", as: dash_cat, request: {method: POST, path: "/v1/analytics/events", json: {"name": "x", "source": "web"}}}
+  - {name: "/v1/analytics/events name=5", as: dash_cat, request: {method: POST, path: "/v1/analytics/events", json: {"name": 5, "source": "web"}}}
+  - {name: "/v1/analytics/events name=null", as: dash_cat, request: {method: POST, path: "/v1/analytics/events", json: {"name": null, "source": "web"}}}
+  - {name: "/v1/analytics/events source=\"android\"", as: dash_cat, request: {method: POST, path: "/v1/analytics/events", json: {"name": "analytics_dashboard_viewed", "source": "android"}}}
+  - {name: "/v1/analytics/events source=5", as: dash_cat, request: {method: POST, path: "/v1/analytics/events", json: {"name": "analytics_dashboard_viewed", "source": 5}}}
+  - {name: "/v1/analytics/events source=null", as: dash_cat, request: {method: POST, path: "/v1/analytics/events", json: {"name": "analytics_dashboard_viewed", "source": null}}}
+  - {name: "/v1/analytics/events range=\"1d\"", as: dash_cat, request: {method: POST, path: "/v1/analytics/events", json: {"name": "analytics_dashboard_viewed", "source": "web", "range": "1d"}}}
+  - {name: "/v1/analytics/events range=5", as: dash_cat, request: {method: POST, path: "/v1/analytics/events", json: {"name": "analytics_dashboard_viewed", "source": "web", "range": 5}}}
+  - {name: "/v1/analytics/events recommendationId=5", as: dash_cat, request: {method: POST, path: "/v1/analytics/events", json: {"name": "analytics_dashboard_viewed", "source": "web", "recommendationId": 5}}}
+  - {name: "/v1/analytics/events idempotencyKey=5", as: dash_cat, request: {method: POST, path: "/v1/analytics/events", json: {"name": "analytics_dashboard_viewed", "source": "web", "idempotencyKey": 5}}}
+  - {name: "/v1/analytics/events foreign vault", as: dash_cat, request: {method: POST, path: "/v1/analytics/events", headers: {X-Vault-ID: "DA5B0000-0000-4000-8000-0000000000A1"}, json: {"name": "analytics_dashboard_viewed", "source": "web"}}}
+  - {name: "/v1/analytics/events unknown vault", as: dash_cat, request: {method: POST, path: "/v1/analytics/events", headers: {X-Vault-ID: "DA5B9999-0000-4000-8000-000000000000"}, json: {"name": "analytics_dashboard_viewed", "source": "web"}}}
+  - {name: "/v1/analytics/events archived vault", as: dash_ann, request: {method: POST, path: "/v1/analytics/events", headers: {X-Vault-ID: "DA5BC000-0000-4000-8000-0000000000C2"}, json: {"name": "analytics_dashboard_viewed", "source": "web"}}}
+  - {name: "/v1/analytics/events user without a vault", as: dash_dan, request: {method: POST, path: "/v1/analytics/events", json: {"name": "analytics_dashboard_viewed", "source": "web"}}}
+  - {name: "/v1/analytics/model-feedback empty with token", as: dash_cat, request: {method: POST, path: "/v1/analytics/model-feedback", raw: ""}}
+  - {name: "/v1/analytics/model-feedback not json with token", as: dash_cat, request: {method: POST, path: "/v1/analytics/model-feedback", raw: "nope"}}
+  - {name: "/v1/analytics/model-feedback array with token", as: dash_cat, request: {method: POST, path: "/v1/analytics/model-feedback", raw: "[]"}}
+  - {name: "/v1/analytics/model-feedback string with token", as: dash_cat, request: {method: POST, path: "/v1/analytics/model-feedback", raw: "\"x\""}}
+  - {name: "/v1/analytics/model-feedback number with token", as: dash_cat, request: {method: POST, path: "/v1/analytics/model-feedback", raw: "1"}}
+  - {name: "/v1/analytics/model-feedback null with token", as: dash_cat, request: {method: POST, path: "/v1/analytics/model-feedback", raw: "null"}}
+  - {name: "/v1/analytics/model-feedback object empty with token", as: dash_cat, request: {method: POST, path: "/v1/analytics/model-feedback", raw: "{}"}}
+  - {name: "/v1/analytics/model-feedback malformed without token: decode runs first", request: {method: POST, path: "/v1/analytics/model-feedback", raw: "nope"}}
+  - {name: "/v1/analytics/model-feedback good body without token", request: {method: POST, path: "/v1/analytics/model-feedback", json: {"provider": "openai", "model": "gpt-test", "rating": "positive"}}}
+  - {name: "/v1/analytics/model-feedback bad token", request: {method: POST, path: "/v1/analytics/model-feedback", headers: {Authorization: "Bearer not.a.jwt"}, json: {"provider": "openai", "model": "gpt-test", "rating": "positive"}}}
+  - {name: "/v1/analytics/model-feedback bad vault header without token", request: {method: POST, path: "/v1/analytics/model-feedback", headers: {X-Vault-ID: "nope"}, json: {"provider": "openai", "model": "gpt-test", "rating": "positive"}}}
+  - {name: "/v1/analytics/model-feedback missing provider", as: dash_cat, request: {method: POST, path: "/v1/analytics/model-feedback", json: {"model": "gpt-test", "rating": "positive"}}}
+  - {name: "/v1/analytics/model-feedback missing model", as: dash_cat, request: {method: POST, path: "/v1/analytics/model-feedback", json: {"provider": "openai", "rating": "positive"}}}
+  - {name: "/v1/analytics/model-feedback missing rating", as: dash_cat, request: {method: POST, path: "/v1/analytics/model-feedback", json: {"provider": "openai", "model": "gpt-test"}}}
+  - {name: "/v1/analytics/model-feedback provider=5", as: dash_cat, request: {method: POST, path: "/v1/analytics/model-feedback", json: {"provider": 5, "model": "gpt-test", "rating": "positive"}}}
+  - {name: "/v1/analytics/model-feedback provider=null", as: dash_cat, request: {method: POST, path: "/v1/analytics/model-feedback", json: {"provider": null, "model": "gpt-test", "rating": "positive"}}}
+  - {name: "/v1/analytics/model-feedback model=5", as: dash_cat, request: {method: POST, path: "/v1/analytics/model-feedback", json: {"provider": "openai", "model": 5, "rating": "positive"}}}
+  - {name: "/v1/analytics/model-feedback model=null", as: dash_cat, request: {method: POST, path: "/v1/analytics/model-feedback", json: {"provider": "openai", "model": null, "rating": "positive"}}}
+  - {name: "/v1/analytics/model-feedback rating=\"meh\"", as: dash_cat, request: {method: POST, path: "/v1/analytics/model-feedback", json: {"provider": "openai", "model": "gpt-test", "rating": "meh"}}}
+  - {name: "/v1/analytics/model-feedback rating=5", as: dash_cat, request: {method: POST, path: "/v1/analytics/model-feedback", json: {"provider": "openai", "model": "gpt-test", "rating": 5}}}
+  - {name: "/v1/analytics/model-feedback rating=null", as: dash_cat, request: {method: POST, path: "/v1/analytics/model-feedback", json: {"provider": "openai", "model": "gpt-test", "rating": null}}}
+  - {name: "/v1/analytics/model-feedback idempotencyKey=5", as: dash_cat, request: {method: POST, path: "/v1/analytics/model-feedback", json: {"provider": "openai", "model": "gpt-test", "rating": "positive", "idempotencyKey": 5}}}
+  - {name: "/v1/analytics/model-feedback foreign vault", as: dash_cat, request: {method: POST, path: "/v1/analytics/model-feedback", headers: {X-Vault-ID: "DA5B0000-0000-4000-8000-0000000000A1"}, json: {"provider": "openai", "model": "gpt-test", "rating": "positive"}}}
+  - {name: "/v1/analytics/model-feedback unknown vault", as: dash_cat, request: {method: POST, path: "/v1/analytics/model-feedback", headers: {X-Vault-ID: "DA5B9999-0000-4000-8000-000000000000"}, json: {"provider": "openai", "model": "gpt-test", "rating": "positive"}}}
+  - {name: "/v1/analytics/model-feedback archived vault", as: dash_ann, request: {method: POST, path: "/v1/analytics/model-feedback", headers: {X-Vault-ID: "DA5BC000-0000-4000-8000-0000000000C2"}, json: {"provider": "openai", "model": "gpt-test", "rating": "positive"}}}
+  - {name: "/v1/analytics/model-feedback user without a vault", as: dash_dan, request: {method: POST, path: "/v1/analytics/model-feedback", json: {"provider": "openai", "model": "gpt-test", "rating": "positive"}}}
+  - {name: "/v1/analytics/recommendations empty with token", as: dash_cat, request: {method: PATCH, path: "/v1/analytics/recommendations", raw: ""}}
+  - {name: "/v1/analytics/recommendations not json with token", as: dash_cat, request: {method: PATCH, path: "/v1/analytics/recommendations", raw: "nope"}}
+  - {name: "/v1/analytics/recommendations array with token", as: dash_cat, request: {method: PATCH, path: "/v1/analytics/recommendations", raw: "[]"}}
+  - {name: "/v1/analytics/recommendations string with token", as: dash_cat, request: {method: PATCH, path: "/v1/analytics/recommendations", raw: "\"x\""}}
+  - {name: "/v1/analytics/recommendations number with token", as: dash_cat, request: {method: PATCH, path: "/v1/analytics/recommendations", raw: "1"}}
+  - {name: "/v1/analytics/recommendations null with token", as: dash_cat, request: {method: PATCH, path: "/v1/analytics/recommendations", raw: "null"}}
+  - {name: "/v1/analytics/recommendations object empty with token", as: dash_cat, request: {method: PATCH, path: "/v1/analytics/recommendations", raw: "{}"}}
+  - {name: "/v1/analytics/recommendations malformed without token: decode runs first", request: {method: PATCH, path: "/v1/analytics/recommendations", raw: "nope"}}
+  - {name: "/v1/analytics/recommendations good body without token", request: {method: PATCH, path: "/v1/analytics/recommendations", json: {"recommendationId": "memory-organization", "disposition": "dismiss"}}}
+  - {name: "/v1/analytics/recommendations bad token", request: {method: PATCH, path: "/v1/analytics/recommendations", headers: {Authorization: "Bearer not.a.jwt"}, json: {"recommendationId": "memory-organization", "disposition": "dismiss"}}}
+  - {name: "/v1/analytics/recommendations bad vault header without token", request: {method: PATCH, path: "/v1/analytics/recommendations", headers: {X-Vault-ID: "nope"}, json: {"recommendationId": "memory-organization", "disposition": "dismiss"}}}
+  - {name: "/v1/analytics/recommendations missing recommendationId", as: dash_cat, request: {method: PATCH, path: "/v1/analytics/recommendations", json: {"disposition": "dismiss"}}}
+  - {name: "/v1/analytics/recommendations missing disposition", as: dash_cat, request: {method: PATCH, path: "/v1/analytics/recommendations", json: {"recommendationId": "memory-organization"}}}
+  - {name: "/v1/analytics/recommendations recommendationId=5", as: dash_cat, request: {method: PATCH, path: "/v1/analytics/recommendations", json: {"recommendationId": 5, "disposition": "dismiss"}}}
+  - {name: "/v1/analytics/recommendations recommendationId=null", as: dash_cat, request: {method: PATCH, path: "/v1/analytics/recommendations", json: {"recommendationId": null, "disposition": "dismiss"}}}
+  - {name: "/v1/analytics/recommendations disposition=\"later\"", as: dash_cat, request: {method: PATCH, path: "/v1/analytics/recommendations", json: {"recommendationId": "memory-organization", "disposition": "later"}}}
+  - {name: "/v1/analytics/recommendations disposition=5", as: dash_cat, request: {method: PATCH, path: "/v1/analytics/recommendations", json: {"recommendationId": "memory-organization", "disposition": 5}}}
+  - {name: "/v1/analytics/recommendations disposition=null", as: dash_cat, request: {method: PATCH, path: "/v1/analytics/recommendations", json: {"recommendationId": "memory-organization", "disposition": null}}}
+  - {name: "/v1/analytics/recommendations foreign vault", as: dash_cat, request: {method: PATCH, path: "/v1/analytics/recommendations", headers: {X-Vault-ID: "DA5B0000-0000-4000-8000-0000000000A1"}, json: {"recommendationId": "memory-organization", "disposition": "dismiss"}}}
+  - {name: "/v1/analytics/recommendations unknown vault", as: dash_cat, request: {method: PATCH, path: "/v1/analytics/recommendations", headers: {X-Vault-ID: "DA5B9999-0000-4000-8000-000000000000"}, json: {"recommendationId": "memory-organization", "disposition": "dismiss"}}}
+  - {name: "/v1/analytics/recommendations archived vault", as: dash_ann, request: {method: PATCH, path: "/v1/analytics/recommendations", headers: {X-Vault-ID: "DA5BC000-0000-4000-8000-0000000000C2"}, json: {"recommendationId": "memory-organization", "disposition": "dismiss"}}}
+  - {name: "/v1/analytics/recommendations user without a vault", as: dash_dan, request: {method: PATCH, path: "/v1/analytics/recommendations", json: {"recommendationId": "memory-organization", "disposition": "dismiss"}}}
