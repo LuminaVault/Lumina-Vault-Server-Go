@@ -93,6 +93,7 @@ func TestModule(t *testing.T) {
 		{"HomeCockpitSwallowsInt32Overflow", testHomeCockpitSwallowsInt32Overflow},
 		{"ActivityFeed", testActivityFeed},
 		{"Tasks", testTasks},
+		{"RoutingLikeHummingbird", testRoutingLikeHummingbird},
 		{"Insights", testInsights},
 		{"DismissInsight", testDismissInsight},
 		{"RetrievalHealthTrends", testRetrievalHealthTrends},
@@ -480,6 +481,28 @@ func testActivityFeed(t *testing.T, v env) {
 	require.NotContains(t, byTitle["Conversation"], "subtitle")
 	require.Len(t, v.get(ann, "/v1/dashboard/activity?limit=0")["items"], 1)
 	require.Len(t, v.get(ann, "/v1/dashboard/activity?limit=abc")["items"], 20)
+}
+
+// Hummingbird ignores a trailing slash and leaves "+" in a query value as "+".
+func testRoutingLikeHummingbird(t *testing.T, v env) {
+	for _, p := range []string{
+		"/v1/tasks/", "/v1/insights/", "/v1/insights/synthesis/latest/", "/v1/dashboard/stats/", "/v1/dashboard/profile/",
+		"/v1/dashboard/home/", "/v1/dashboard/activity/", "/v1/analytics/overview/", "/v1/analytics/models/",
+		"/v1/analytics/usage-summary/", "/v1/analytics/retrieval-health/",
+	} {
+		r := v.req(ins, http.MethodGet, p, "", nil)
+		require.Equal(t, http.StatusOK, r.code, p)
+	}
+	require.Equal(t, http.StatusOK, v.req(wri, http.MethodPost, "/v1/analytics/events/", `{"name":"analytics_dashboard_viewed","source":"web"}`, nil).code)
+	require.Equal(t, http.StatusOK, v.req(wri, http.MethodPost, "/v1/analytics/model-feedback/", `{"provider":"p","model":"m","rating":"positive"}`, nil).code)
+	require.Equal(t, http.StatusOK, v.req(wri, http.MethodPatch, "/v1/analytics/recommendations/", `{"recommendationId":"r","disposition":"dismiss"}`, nil).code)
+	require.Equal(t, http.StatusNoContent, v.req(ins, http.MethodPost, "/v1/insights/DA5B8100-0000-4000-8000-000000000003/dismiss/", "", nil).code)
+
+	require.Len(t, v.get(ann, "/v1/dashboard/activity?limit=+5")["items"], 5)
+	require.Len(t, v.get(ann, "/v1/dashboard/activity?limit=%2B5")["items"], 5)
+	require.Len(t, v.get(ann, "/v1/dashboard/activity?limit=%205")["items"], 20, "a space is not an Int")
+	require.Equal(t, "week", v.get(ann, "/v1/dashboard/home?period=week&period=today")["period"], "the first value wins")
+	require.Equal(t, "today", v.get(ann, "/v1/dashboard/home?period=we%ek")["period"], "malformed escapes stay raw")
 }
 
 func testTasks(t *testing.T, v env) {

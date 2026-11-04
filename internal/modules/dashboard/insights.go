@@ -62,13 +62,13 @@ func (r insightRow) toDTO() InsightDTO {
 // listInsights is InsightsController.list.
 func (m *Module) listInsights(c *echo.Context) error {
 	var section *string
-	if raw := c.QueryParam("section"); isInsightSection(raw) {
+	if raw := query(c, "section"); isInsightSection(raw) {
 		section = &raw
 	}
 	rows, err := m.q.ListInsights(requestContext(c), db.ListInsightsParams{
 		TenantID: auth.UserID(c),
 		Section:  section,
-		RowLimit: int32(clampedLimit(c.QueryParam("limit"), insightsDefaultLimit, insightsMaxLimit)), //nolint:gosec // clamped to 1..100
+		RowLimit: int32(clampedLimit(query(c, "limit"), insightsDefaultLimit, insightsMaxLimit)), //nolint:gosec // clamped to 1..100
 	})
 	if err != nil {
 		return err

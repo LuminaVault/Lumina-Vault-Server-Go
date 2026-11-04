@@ -129,7 +129,7 @@ func (m *Module) profile(c *echo.Context) error {
 func (m *Module) home(c *echo.Context) error {
 	ctx, tenant := requestContext(c), auth.UserID(c)
 	now := time.Now()
-	period := parsePeriod(c.QueryParam("period"))
+	period := parsePeriod(query(c, "period"))
 
 	p, err := m.loadPowerInputs(ctx, tenant)
 	if err != nil {
@@ -306,7 +306,7 @@ func (m *Module) periodCockpit(ctx context.Context, tenant uuid.UUID, period str
 func (m *Module) activity(c *echo.Context) error {
 	ctx, tenant := requestContext(c), auth.UserID(c)
 	limit := activityDefaultLimit
-	if n, err := strconv.Atoi(c.QueryParam("limit")); err == nil {
+	if n, err := strconv.Atoi(query(c, "limit")); err == nil {
 		limit = n
 	}
 	limit = min(max(limit, 1), activityMaxLimit)
