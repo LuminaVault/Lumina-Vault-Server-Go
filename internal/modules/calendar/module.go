@@ -11,9 +11,8 @@
 //   - OAuth sessions are in memory here as in Swift, so /v1/calendar/connect,
 //     /v1/mail/gmail/connect and /v1/calendar/oauth/callback must reach one
 //     process. calendar and mail flip together.
-//   - The brief's live match needs the embedding chain. Go only has the
-//     deterministic provider (apple.NewEmbedder); with a real provider a brief
-//     without stored memories answers 500.
+//   - The brief's live match embeds through internal/embedding, the same chain
+//     as Swift. A failed embed answers 500, as in Swift.
 //
 // Routes and middleware follow App+build.swift. status, connect, disconnect,
 // events and the callback exist only with a SecretBox. sync and brief always
@@ -28,9 +27,9 @@ import (
 	"errors"
 	"log/slog"
 	"lumina/internal/auth"
+	"lumina/internal/embedding"
 	"lumina/internal/httpserver"
 	"lumina/internal/ids"
-	"lumina/internal/modules/apple"
 	"lumina/internal/modules/calendar/db"
 	"lumina/internal/ratelimit"
 	"lumina/internal/swiftstr"
@@ -64,7 +63,7 @@ type Options struct {
 	// MaxDistance is meeting.brief.maxDistance.
 	MaxDistance float32
 	// Embeddings is the service behind the brief's live match.
-	Embeddings apple.Embedder
+	Embeddings embedding.Service
 }
 
 type Module struct {
