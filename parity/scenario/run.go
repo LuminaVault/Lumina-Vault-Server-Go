@@ -58,7 +58,12 @@ type StepResult struct {
 func Run(ctx context.Context, sc Scenario, t Target) (Transcript, error) {
 	client := t.Client
 	if client == nil {
-		client = &http.Client{Timeout: 30 * time.Second}
+		// Redirects are compared, not followed (the calendar OAuth callback answers
+		// 303 to a luminavault:// URL a Go client cannot fetch).
+		client = &http.Client{
+			Timeout:       30 * time.Second,
+			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+		}
 	}
 	norm := normalize.New()
 	vars := map[string]string{}

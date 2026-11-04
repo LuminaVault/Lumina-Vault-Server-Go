@@ -1,0 +1,38 @@
+# /v1/mail/gmail: rides on the Calendar grant. Connect is the disabled path (no
+# Google client in the parity env); revoking a connected Gmail-only grant calls
+# Google, so that is Go-tests only and needs_reauth covers the delete branch.
+module: mail
+steps:
+  - {name: status no token, request: {method: GET, path: /v1/mail/gmail/status}}
+  - {name: status bad token, request: {method: GET, path: /v1/mail/gmail/status, headers: {Authorization: Bearer nope}}}
+  - {name: status no account, as: cal_ben, request: {method: GET, path: /v1/mail/gmail/status}}
+  - {name: status calendar only, as: cal_ann, request: {method: GET, path: /v1/mail/gmail/status}}
+  - {name: status broader scopes, as: cal_wid, request: {method: GET, path: /v1/mail/gmail/status}}
+  - {name: status gmail only, as: cal_gmo, request: {method: GET, path: /v1/mail/gmail/status}}
+  - {name: status gmail only needs reauth, as: cal_gre, request: {method: GET, path: /v1/mail/gmail/status}}
+  - {name: status calendar only needs reauth, as: cal_rea, request: {method: GET, path: /v1/mail/gmail/status}}
+  - {name: connect no token, request: {method: POST, path: /v1/mail/gmail/connect}}
+  - {name: connect not configured, as: cal_ben, request: {method: POST, path: /v1/mail/gmail/connect}}
+  - {name: connect not configured beats a bad returnTo, as: cal_ben, request: {method: POST, path: "/v1/mail/gmail/connect?returnTo=https://evil.example/"}}
+  - {name: connect ignores a body, as: cal_ben, request: {method: POST, path: /v1/mail/gmail/connect, raw: "not json"}}
+  - {name: connect get not routed, as: cal_ben, request: {method: GET, path: /v1/mail/gmail/connect}}
+  - {name: disconnect no token, request: {method: POST, path: /v1/mail/gmail/disconnect}}
+  - name: disconnect no account
+    as: cal_ben
+    request: {method: POST, path: /v1/mail/gmail/disconnect}
+    snapshot: [calendar_accounts]
+  - name: disconnect keeps the calendar half and drops every mail scope
+    as: cal_wid
+    request: {method: POST, path: /v1/mail/gmail/disconnect}
+    snapshot: [calendar_accounts, calendar_events]
+  - {name: gmail status after, as: cal_wid, request: {method: GET, path: /v1/mail/gmail/status}}
+  - {name: calendar status after, as: cal_wid, request: {method: GET, path: /v1/calendar/status}}
+  - name: disconnect a calendar grant without gmail changes nothing that matters
+    as: cal_ann
+    request: {method: POST, path: /v1/mail/gmail/disconnect}
+    snapshot: [calendar_accounts, calendar_events]
+  - name: disconnect a dead gmail grant deletes the row and keeps events
+    as: cal_gre
+    request: {method: POST, path: /v1/mail/gmail/disconnect}
+    snapshot: [calendar_accounts, calendar_events]
+  - {name: status after delete, as: cal_gre, request: {method: GET, path: /v1/mail/gmail/status}}
