@@ -4,17 +4,20 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"lumina/internal/auth"
 	"lumina/internal/config"
 	"lumina/internal/dbtest"
 	"lumina/internal/entitlement"
 	"lumina/internal/httpserver"
 	"lumina/internal/migrations"
+	"lumina/internal/posthog"
 	"lumina/parity/scenario"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -43,6 +46,11 @@ type env struct {
 
 func setupWith(t *testing.T, gate func(*pgxpool.Pool) echo.MiddlewareFunc) env {
 	t.Helper()
+	return setupAnalytics(t, gate, nil)
+}
+
+func setupAnalytics(t *testing.T, gate func(*pgxpool.Pool) echo.MiddlewareFunc, analytics *posthog.Client) env {
+	t.Helper()
 	ctx := context.Background()
 	pool := dbtest.Postgres(t)
 	require.NoError(t, migrations.Up(ctx, pool, migrations.SQL()))
@@ -57,7 +65,7 @@ func setupWith(t *testing.T, gate func(*pgxpool.Pool) echo.MiddlewareFunc) env {
 	if gate != nil {
 		g = gate(pool)
 	}
-	m := New(pool, g)
+	m := New(pool, g, analytics)
 	m.now = func() time.Time { return clock }
 	e := httpserver.New(config.Config{}, httpserver.Deps{
 		Auth:    auth.Middleware(keys, auth.PGUsers(pool)),
@@ -496,4 +504,89 @@ func TestParitySeedLoads(t *testing.T) {
 	var recent int
 	require.NoError(t, pool.QueryRow(ctx, `SELECT COUNT(*)::int FROM health_events WHERE tenant_id = $1 AND recorded_at >= now() - interval '7 days'`, hal).Scan(&recent))
 	require.Equal(t, 6, recent)
+}
+
+// posthogStub is a stand-in PostHog; these tests never reach the real one.
+func posthogStub(t *testing.T, status int) (*posthog.Client, func() []map[string]any) {
+	t.Helper()
+	var mu sync.Mutex
+	events := []map[string]any{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		var body struct {
+			APIKey string           `json:"api_key"`
+			Batch  []map[string]any `json:"batch"`
+		}
+		if err := json.Unmarshal(b, &body); err == nil && body.APIKey == "phc_stub" {
+			mu.Lock()
+			events = append(events, body.Batch...)
+			mu.Unlock()
+		}
+		w.WriteHeader(status)
+	}))
+	t.Cleanup(srv.Close)
+	client := posthog.New("phc_stub", srv.URL, posthog.Options{})
+	return client, func() []map[string]any {
+		client.Flush(context.Background())
+		mu.Lock()
+		defer mu.Unlock()
+		return events
+	}
+}
+
+// Swift HealthIngestController.swift:269: event name, uppercase distinct ID and
+// properties, one aggregate event per batch.
+func TestIngestCapturesHealthEventsSynced(t *testing.T) {
+	client, captured := posthogStub(t, http.StatusOK)
+	v := setupAnalytics(t, nil, client)
+	r := v.do(hal, http.MethodPost, "/v1/health", `{"events":[
+		{"type":"HR_BPM","recordedAt":"2026-10-20T10:00:00Z","valueNumeric":70},
+		{"type":"steps","recordedAt":"2026-10-20T10:00:00Z","valueNumeric":1},
+		{"type":"steps","recordedAt":"2026-10-20T10:01:00Z","valueNumeric":2},
+		{"type":"steps","recordedAt":"2026-10-20T10:02:00Z"},
+		{"type":"  ","recordedAt":"2026-10-20T10:03:00Z","valueNumeric":3}]}`)
+	require.Equal(t, http.StatusOK, r.code, string(r.body))
+
+	events := captured()
+	require.Len(t, events, 1)
+	require.Equal(t, "health_events_synced", events[0]["event"])
+	require.Equal(t, "4EA10000-0000-4000-8000-0000000000A1", events[0]["distinct_id"])
+	require.Equal(t, map[string]any{
+		"inserted_count": 3.0,
+		"skipped_count":  2.0,
+		"dominant_type":  "steps",
+		"$lib":           "luminavault-server",
+	}, events[0]["properties"])
+}
+
+// Swift captures only `if !refs.isEmpty`.
+func TestIngestCapturesNothingWhenAllSkipped(t *testing.T) {
+	client, captured := posthogStub(t, http.StatusOK)
+	v := setupAnalytics(t, nil, client)
+	r := v.do(hal, http.MethodPost, "/v1/health", `{"events":[{"type":"  ","recordedAt":"2026-10-20T10:03:00Z","valueNumeric":3}]}`)
+	require.Equal(t, http.StatusOK, r.code, string(r.body))
+	require.Empty(t, captured())
+}
+
+// PostHog failing never touches the response, and an unset token (a nil client,
+// which is what setup uses) works the same as a configured one.
+func TestIngestUnaffectedByPostHog(t *testing.T) {
+	client, captured := posthogStub(t, http.StatusInternalServerError)
+	v := setupAnalytics(t, nil, client)
+	require.Equal(t, 1, v.ingest(hal, sample{"steps", clock, 1}).Inserted)
+	require.Len(t, captured(), 1, "PostHog was asked and said 500")
+	require.Equal(t, 1, setup(t).ingest(hal, sample{"steps", clock, 1}).Inserted)
+}
+
+func TestDominantSampleType(t *testing.T) {
+	refs := func(types ...string) []ingestedRef {
+		out := make([]ingestedRef, 0, len(types))
+		for _, ty := range types {
+			out = append(out, ingestedRef{Type: ty})
+		}
+		return out
+	}
+	require.Equal(t, "unknown", dominantSampleType(nil))
+	require.Equal(t, "b", dominantSampleType(refs("a", "b", "b")))
+	require.Equal(t, "a", dominantSampleType(refs("a", "b")), "a tie goes to the type seen first")
 }

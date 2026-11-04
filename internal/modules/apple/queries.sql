@@ -80,15 +80,3 @@ LIMIT 50;
 UPDATE device_command_queue
 SET delivered_at = sqlc.arg(delivered_at), result_ok = sqlc.arg(result_ok), result_error = sqlc.narg(result_error)
 WHERE tenant_id = sqlc.arg(tenant_id) AND id = sqlc.arg(id) AND delivered_at IS NULL;
-
--- name: EmbeddingUsageFor :one
-SELECT id, tokens_used FROM embedding_usage
-WHERE tenant_id = $1 AND year_month = $2
-LIMIT 1;
-
--- name: SetEmbeddingUsage :exec
-UPDATE embedding_usage SET tokens_used = $2, updated_at = $3 WHERE id = $1;
-
--- name: InsertEmbeddingUsage :exec
-INSERT INTO embedding_usage (id, tenant_id, year_month, tokens_used, created_at, updated_at)
-VALUES ($1, $2, $3, $4, $5, $5);
