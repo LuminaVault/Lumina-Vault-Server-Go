@@ -81,6 +81,7 @@ func setup(t *testing.T) env {
 		ArtifactRoot: t.TempDir(), ArtifactSigningKey: signingKey,
 	}, auth.Identify(keys, auth.PGUsers(pool)), ratelimit.NewStore(), paths)
 	require.NotNil(t, m)
+	m.SetVersionInserts(true)
 	e := httpserver.New(config.Config{}, httpserver.Deps{
 		Auth:    auth.Middleware(keys, auth.PGUsers(pool)),
 		Modules: []httpserver.Module{m},
@@ -475,6 +476,8 @@ func TestInstallUpgradeSealConfigForTheTenant(t *testing.T) {
 
 func TestCatalogSeedsOnFirstReadAndIsIdempotent(t *testing.T) {
 	v := setup(t)
+	_, err := v.pool.Exec(context.Background(), `DELETE FROM marketplace_publishers WHERE handle = 'luminavault'`)
+	require.NoError(t, err)
 	out := v.ok(rd, http.MethodGet, "/v1/marketplace/plugins?limit=50&featured=true", "")
 	items, ok := out["items"].([]any)
 	require.True(t, ok)
@@ -493,6 +496,30 @@ func TestCatalogSeedsOnFirstReadAndIsIdempotent(t *testing.T) {
 	var count int
 	require.NoError(t, v.pool.QueryRow(context.Background(), `SELECT count(*) FROM marketplace_listings l JOIN marketplace_publishers p ON p.id = l.publisher_id WHERE p.handle = 'luminavault'`).Scan(&count))
 	require.Equal(t, 6, count)
+}
+
+// Swift at fdbed9b0 cannot insert a marketplace_versions row (errVersionInsert).
+func TestVersionInsertsFailAsInSwift(t *testing.T) {
+	v := setup(t)
+	v.m.SetVersionInserts(false)
+	ctx := context.Background()
+
+	v.errIs(v.do(pub, http.MethodPost, "/v1/marketplace/publisher/plugins/alpha-notes/versions", `{"version":"9.9.9","runtimeKind":"declarative","permissions":[]}`),
+		http.StatusConflict, "version_already_exists")
+	v.errIs(v.do(pub, http.MethodPost, "/v1/marketplace/publisher/plugins/alpha-notes/versions", `{"version":"bad","runtimeKind":"declarative","permissions":[]}`),
+		http.StatusUnprocessableEntity, "invalid_semver")
+
+	_, err := v.pool.Exec(ctx, `DELETE FROM marketplace_publishers WHERE handle = 'luminavault'`)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusInternalServerError, v.do(rd, http.MethodGet, "/v1/marketplace/plugins", "").code)
+	var orphans int
+	require.NoError(t, v.pool.QueryRow(ctx, `SELECT count(*) FROM marketplace_listings l JOIN marketplace_publishers p ON p.id = l.publisher_id WHERE p.handle = 'luminavault' AND l.slug = 'byok-embeddings'`).Scan(&orphans))
+	require.Equal(t, 1, orphans)
+	// The orphan listing, published with no version, fails every list that reaches it.
+	v.errIs(v.do(rd, http.MethodGet, "/v1/marketplace/plugins", ""), http.StatusNotFound, "marketplace_version_not_found")
+	v.errIs(v.do(rd, http.MethodGet, "/v1/marketplace/plugins/byok-embeddings", ""), http.StatusNotFound, "marketplace_version_not_found")
+	v.errIs(v.do(rd, http.MethodGet, "/v1/marketplace/plugins/readwise", ""), http.StatusNotFound, "marketplace_plugin_not_found")
+	v.ok(rd, http.MethodGet, "/v1/marketplace/plugins/alpha-notes", "")
 }
 
 func TestNewIsNilWithoutAMasterKey(t *testing.T) {

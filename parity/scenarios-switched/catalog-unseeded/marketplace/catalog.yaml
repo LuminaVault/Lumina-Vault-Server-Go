@@ -1,0 +1,15 @@
+# An admin exists and nothing is seeded, as in production. The seed inserts its first
+# listing, then Swift's version insert fails: 500, and from then on the listing with no
+# version makes every list that reaches it a 404.
+module: marketplace
+steps:
+  - {"name": "first list seeds one listing then fails", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins"}, "snapshot": ["marketplace_publishers", "marketplace_listings", "marketplace_versions"]}
+  - {"name": "second list seeds nothing and hits the listing with no version", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins"}, "snapshot": ["marketplace_publishers", "marketplace_listings"]}
+  - {"name": "a filter that excludes the orphan works", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins?category=capture"}}
+  - {"name": "featured false", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins?featured=false"}}
+  - {"name": "a page past the orphan", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins?limit=1&cursor=4"}}
+  - {"name": "detail of the orphan", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins/byok-embeddings"}}
+  - {"name": "detail of a plugin never seeded", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins/readwise"}}
+  - {"name": "detail of a seeded listing", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins/alpha-notes"}}
+  - {"name": "reviews of the orphan", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins/byok-embeddings/reviews"}}
+  - {"name": "install the orphan", "as": "mkt_read", "request": {"method": "POST", "path": "/v1/marketplace/plugins/byok-embeddings/install", "json": {"versionId": "00000000-0000-4000-8000-000000000000", "grantedPermissions": [], "config": {}}}}

@@ -83,6 +83,17 @@ var (
 	toolNameRe = regexp.MustCompile(`^[a-z][a-z0-9_-]{1,63}$`)
 )
 
+// errVersionInsert is what every marketplace_versions INSERT does in Swift at
+// fdbed9b0. MarketplaceVersion.configFields is a [PluginConfigField], which
+// Fluent binds as jsonb[], while the column is jsonb, so Postgres refuses the
+// statement: "column config_fields is of type jsonb but expression is of type
+// jsonb[]". createVersion reports that as 409 version_already_exists, and the
+// first-party catalog stops after its first listing, which then has no version.
+// The port matches it (parity would not pass otherwise, and production must not
+// change on a flip). Fixing it is SetVersionInserts(true) as the default, once
+// the owner decides; see the PR.
+var errVersionInsert = errors.New("marketplace: version insert fails as in Swift (config_fields jsonb[])")
+
 // Options are the plugin.* settings MarketplaceService takes.
 type Options struct {
 	RunnerURL          string
@@ -101,6 +112,8 @@ type Module struct {
 	identify echo.MiddlewareFunc
 	limits   *ratelimit.Store
 	now      func() time.Time
+	// versionInserts is false in production: see errVersionInsert.
+	versionInserts bool
 }
 
 // New returns nil without a usable LV_SECRET_MASTER_KEY: Swift mounts
@@ -117,6 +130,10 @@ func New(pool *pgxpool.Pool, masterKey string, opts Options, identify echo.Middl
 		identify: identify, limits: limits, now: time.Now,
 	}
 }
+
+// SetVersionInserts lets marketplace_versions inserts work, which they do not in
+// Swift (see errVersionInsert). The Go tests use it to cover the code behind them.
+func (m *Module) SetVersionInserts(work bool) { m.versionInserts = work }
 
 // SetRunner replaces the plugin runner (tests).
 func (m *Module) SetRunner(r Runner) { m.runner = r }
@@ -702,6 +719,9 @@ func (m *Module) createVersion(c *echo.Context) error {
 			return err
 		}
 	}
+	if !m.versionInserts {
+		return wire.NewError(http.StatusConflict, "version_already_exists")
+	}
 	fields := []PluginConfigField{}
 	if req.ConfigFields != nil {
 		for _, f := range *req.ConfigFields {
@@ -1084,6 +1104,9 @@ func (m *Module) ensureFirstPartyCatalog(ctx context.Context) error {
 		})
 		if err != nil {
 			return err
+		}
+		if !m.versionInserts {
+			return errVersionInsert
 		}
 		if _, err := m.q.InsertVersion(ctx, db.InsertVersionParams{
 			ID: uuid.New(), ListingID: listing.ID, Version: "1.0.0", Status: "approved", RuntimeKind: "native",

@@ -1,10 +1,8 @@
-# Lists, detail, reviews. mkt_admin (or any admin in the seed) makes the first read
-# seed the first-party catalog. Its random ids are normalized; rows are compared.
+# Lists, detail, reviews. The seed's "luminavault" publisher skips the first-party
+# catalog seed; its failure is the catalog-unseeded state (scripts/parity-switches.sh).
 module: marketplace
 steps:
-  - {"name": "catalog is unseeded until the first read", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/publisher/submissions"}, "snapshot": ["marketplace_publishers", "marketplace_listings", "marketplace_versions"]}
-  - {"name": "first list seeds the catalog", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins"}, "snapshot": ["marketplace_publishers", "marketplace_listings", "marketplace_versions"]}
-  - {"name": "second list seeds nothing", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins"}, "snapshot": ["marketplace_publishers"]}
+  - {"name": "list", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins"}, "snapshot": ["marketplace_publishers", "marketplace_listings", "marketplace_versions"]}
   - {"name": "category filter", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins?category=capture"}}
   - {"name": "unknown category is no filter", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins?category=nope"}}
   - {"name": "featured true", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins?featured=true"}}
@@ -26,7 +24,7 @@ steps:
   - {"name": "query no match", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins?query=zzzzzz"}}
   - {"name": "category and query", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins?category=export&query=alpha"}}
   - {"name": "detail", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins/alpha-notes"}}
-  - {"name": "detail first party", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins/readwise"}}
+  - {"name": "detail of an unseeded first party plugin", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins/readwise"}}
   - {"name": "detail draft is 404", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins/draft-thing"}}
   - {"name": "detail unknown", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins/nope"}}
   - {"name": "reviews", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins/alpha-notes/reviews"}}
