@@ -874,3 +874,20 @@ Beyond the pilot gate (D-wave2-early):
 - Coupling accepted for the flip: `AchievementsWorker` and
   `HealthCorrelationService` stay in Swift and write the same tables.
 
+### Production flip: 2026-11-04
+
+- Infra #546 merged 15:48:52Z. `api-go-production` runs `c17c3f6`, rolled out and
+  confirmed 15:52:55Z.
+- Public check: `/v1/profiles`, `/v1/sessions`, `/v1/news/ticker`, `/v1/achievements`,
+  `/v1/health` and `/v1/projects` answer from Go, with no Swift `Server` header.
+  `/v1/spaces`, `/v1/me/today` and `/health` still answer from Swift.
+- The owner's merge waives the pilot gate: D-flip-before-pilot.
+
+### G3 production watch: running, 72 h ends 2026-11-07 15:53Z
+
+- Baseline: Swift's logs from 2026-11-01 15:55Z to the flip hold 7 lines for these
+  prefixes (`/v1/news` 3, the others 1 each) out of 47,053, and no 5xx-like status.
+  Some of those are the migration's own probes.
+- Limit of this evidence: these routes see almost no traffic, so a clean watch shows
+  the deploy is healthy, not that real clients behave the same.
+

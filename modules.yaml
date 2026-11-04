@@ -5,13 +5,13 @@ modules:
   projects:
     wave: 1
     swiftDir: Sources/App/Projects
-    status: staging
+    status: production
     prefixes: [/v1/projects]
     jobs: []
   achievements:
     wave: 2
     swiftDir: Sources/App/Achievements
-    status: staging
+    status: production
     prefixes: [/v1/achievements]
     jobs: []
   apple:
@@ -41,13 +41,13 @@ modules:
   news:
     wave: 2
     swiftDir: Sources/App/News
-    status: staging
+    status: production
     prefixes: [/v1/news]
     jobs: []
   profiles:
     wave: 2
     swiftDir: Sources/App/Profiles
-    status: staging
+    status: production
     prefixes: [/v1/profiles]
     jobs: []
   reminders:
@@ -62,7 +62,7 @@ modules:
   sessions:
     wave: 2
     swiftDir: Sources/App/Sessions
-    status: staging
+    status: production
     prefixes: [/v1/sessions]
     jobs: []
   spaces:
@@ -99,7 +99,7 @@ modules:
   health:
     wave: 3
     swiftDir: Sources/App/Health
-    status: staging
+    status: production
     prefixes: [/v1/health]
     jobs: []
   mail:
