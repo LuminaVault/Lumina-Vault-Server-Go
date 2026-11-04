@@ -1,0 +1,26 @@
+# GET /v1/me/resurface (due → on this day → fading) and GET /v1/me/learned.
+module: me
+steps:
+  - {name: resurface default limit, as: me_ann, request: {method: GET, path: /v1/me/resurface}}
+  - {name: resurface limit 10, as: me_ann, request: {method: GET, path: "/v1/me/resurface?limit=10"}}
+  - {name: resurface limit 1, as: me_ann, request: {method: GET, path: "/v1/me/resurface?limit=1"}}
+  - {name: resurface empty limit is the default, as: me_ann, request: {method: GET, path: "/v1/me/resurface?limit="}}
+  - {name: resurface limit 0, as: me_ann, request: {method: GET, path: "/v1/me/resurface?limit=0"}}
+  - {name: resurface limit 11, as: me_ann, request: {method: GET, path: "/v1/me/resurface?limit=11"}}
+  - {name: resurface limit not a number, as: me_ann, request: {method: GET, path: "/v1/me/resurface?limit=abc"}}
+  - {name: resurface in Los Angeles, as: me_lia, request: {method: GET, path: "/v1/me/resurface?limit=10"}}
+  - {name: resurface invalid timezone, as: me_bad, request: {method: GET, path: "/v1/me/resurface?limit=10"}}
+  - {name: resurface without data, as: me_new, request: {method: GET, path: /v1/me/resurface}}
+  - {name: resurface isolation, as: bob, request: {method: GET, path: "/v1/me/resurface?limit=10"}}
+  - {name: learned default window, as: me_ann, request: {method: GET, path: /v1/me/learned}}
+  - {name: learned since yesterday-ish, as: me_ann, request: {method: GET, path: "/v1/me/learned?since=2026-10-30T00:00:00Z"}}
+  - {name: learned since with fractional seconds, as: me_ann, request: {method: GET, path: "/v1/me/learned?since=2026-10-29T00:00:00.123Z"}}
+  - {name: learned since with an unencoded offset, as: me_ann, request: {method: GET, path: "/v1/me/learned?since=2026-10-29T01:00:00+01:00"}}
+  - {name: learned since with an encoded offset, as: me_ann, request: {method: GET, path: "/v1/me/learned?since=2026-10-28T19:00:00%2B05:00"}}
+  - {name: learned empty since is the default, as: me_ann, request: {method: GET, path: "/v1/me/learned?since="}}
+  - {name: learned since not a date, as: me_ann, request: {method: GET, path: "/v1/me/learned?since=yesterday"}}
+  - {name: learned since date only, as: me_ann, request: {method: GET, path: "/v1/me/learned?since=2026-10-30"}}
+  - {name: learned since in the future, as: me_ann, request: {method: GET, path: "/v1/me/learned?since=2099-01-01T00:00:00Z"}}
+  - {name: learned since too long ago, as: me_ann, request: {method: GET, path: "/v1/me/learned?since=2020-01-01T00:00:00Z"}}
+  - {name: learned without data, as: me_new, request: {method: GET, path: /v1/me/learned}}
+  - {name: learned isolation, as: bob, request: {method: GET, path: /v1/me/learned}}
