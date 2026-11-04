@@ -1,0 +1,31 @@
+module: dashboard
+ignore: ["$.tasks[*].elapsedSeconds"]
+steps:
+  - {name: "tasks ann", as: dash_ann, request: {method: GET, path: "/v1/tasks"}}
+  - {name: "tasks ben sees only his run", as: dash_ben, request: {method: GET, path: "/v1/tasks"}}
+  - {name: "tasks fresh", as: dash_cat, request: {method: GET, path: "/v1/tasks"}}
+  - {name: "tasks no vault row", as: dash_dan, request: {method: GET, path: "/v1/tasks"}}
+  - {name: "tasks state=running", as: dash_ann, request: {method: GET, path: "/v1/tasks?state=running"}}
+  - {name: "tasks state=queued", as: dash_ann, request: {method: GET, path: "/v1/tasks?state=queued"}}
+  - {name: "tasks state=completed", as: dash_ann, request: {method: GET, path: "/v1/tasks?state=completed"}}
+  - {name: "tasks state=failed", as: dash_ann, request: {method: GET, path: "/v1/tasks?state=failed"}}
+  - {name: "tasks state=nope", as: dash_ann, request: {method: GET, path: "/v1/tasks?state=nope"}}
+  - {name: "tasks state=RUNNING", as: dash_ann, request: {method: GET, path: "/v1/tasks?state=RUNNING"}}
+  - {name: "tasks state=", as: dash_ann, request: {method: GET, path: "/v1/tasks?state="}}
+  - {name: "tasks limit=1", as: dash_ann, request: {method: GET, path: "/v1/tasks?limit=1"}}
+  - {name: "tasks limit=2", as: dash_ann, request: {method: GET, path: "/v1/tasks?limit=2"}}
+  - {name: "tasks limit=3", as: dash_ann, request: {method: GET, path: "/v1/tasks?limit=3"}}
+  - {name: "tasks limit=4", as: dash_ann, request: {method: GET, path: "/v1/tasks?limit=4"}}
+  - {name: "tasks limit=5", as: dash_ann, request: {method: GET, path: "/v1/tasks?limit=5"}}
+  - {name: "tasks limit=100", as: dash_ann, request: {method: GET, path: "/v1/tasks?limit=100"}}
+  - {name: "tasks limit=101", as: dash_ann, request: {method: GET, path: "/v1/tasks?limit=101"}}
+  - {name: "tasks limit=0", as: dash_ann, request: {method: GET, path: "/v1/tasks?limit=0"}}
+  - {name: "tasks limit=-1", as: dash_ann, request: {method: GET, path: "/v1/tasks?limit=-1"}}
+  - {name: "tasks limit=abc", as: dash_ann, request: {method: GET, path: "/v1/tasks?limit=abc"}}
+  - {name: "tasks limit=", as: dash_ann, request: {method: GET, path: "/v1/tasks?limit="}}
+  - {name: "tasks limit=99999999999999999999", as: dash_ann, request: {method: GET, path: "/v1/tasks?limit=99999999999999999999"}}
+  - {name: "tasks limit=%2B2", as: dash_ann, request: {method: GET, path: "/v1/tasks?limit=%2B2"}}
+  - {name: "tasks limit=2&limit=1", as: dash_ann, request: {method: GET, path: "/v1/tasks?limit=2&limit=1"}}
+  - {name: "tasks limit caps each source before the state filter", as: dash_ann, request: {method: GET, path: "/v1/tasks?state=queued&limit=2"}}
+  - {name: "tasks running limit 1", as: dash_ann, request: {method: GET, path: "/v1/tasks?state=running&limit=1"}}
+  - {name: "tasks ignore X-Vault-ID", as: dash_cat, request: {method: GET, path: "/v1/tasks", headers: {X-Vault-ID: "DA5B0000-0000-4000-8000-0000000000A1"}}}

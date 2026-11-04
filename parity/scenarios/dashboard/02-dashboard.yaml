@@ -1,0 +1,60 @@
+module: dashboard
+ignore: ["$.activeJobs[*].elapsedSeconds"]
+steps:
+  - {name: "stats dash_ann", as: dash_ann, request: {method: GET, path: "/v1/dashboard/stats"}}
+  - {name: "profile dash_ann", as: dash_ann, request: {method: GET, path: "/v1/dashboard/profile"}}
+  - {name: "home dash_ann", as: dash_ann, request: {method: GET, path: "/v1/dashboard/home"}}
+  - {name: "activity dash_ann", as: dash_ann, request: {method: GET, path: "/v1/dashboard/activity"}}
+  - {name: "stats dash_ben", as: dash_ben, request: {method: GET, path: "/v1/dashboard/stats"}}
+  - {name: "profile dash_ben", as: dash_ben, request: {method: GET, path: "/v1/dashboard/profile"}}
+  - {name: "home dash_ben", as: dash_ben, request: {method: GET, path: "/v1/dashboard/home"}}
+  - {name: "activity dash_ben", as: dash_ben, request: {method: GET, path: "/v1/dashboard/activity"}}
+  - {name: "stats dash_cat", as: dash_cat, request: {method: GET, path: "/v1/dashboard/stats"}}
+  - {name: "profile dash_cat", as: dash_cat, request: {method: GET, path: "/v1/dashboard/profile"}}
+  - {name: "home dash_cat", as: dash_cat, request: {method: GET, path: "/v1/dashboard/home"}}
+  - {name: "activity dash_cat", as: dash_cat, request: {method: GET, path: "/v1/dashboard/activity"}}
+  - {name: "stats dash_eli", as: dash_eli, request: {method: GET, path: "/v1/dashboard/stats"}}
+  - {name: "profile dash_eli", as: dash_eli, request: {method: GET, path: "/v1/dashboard/profile"}}
+  - {name: "home dash_eli", as: dash_eli, request: {method: GET, path: "/v1/dashboard/home"}}
+  - {name: "activity dash_eli", as: dash_eli, request: {method: GET, path: "/v1/dashboard/activity"}}
+  - {name: "stats dash_wri", as: dash_wri, request: {method: GET, path: "/v1/dashboard/stats"}}
+  - {name: "profile dash_wri", as: dash_wri, request: {method: GET, path: "/v1/dashboard/profile"}}
+  - {name: "home dash_wri", as: dash_wri, request: {method: GET, path: "/v1/dashboard/home"}}
+  - {name: "activity dash_wri", as: dash_wri, request: {method: GET, path: "/v1/dashboard/activity"}}
+  - {name: "stats dash_ins", as: dash_ins, request: {method: GET, path: "/v1/dashboard/stats"}}
+  - {name: "profile dash_ins", as: dash_ins, request: {method: GET, path: "/v1/dashboard/profile"}}
+  - {name: "home dash_ins", as: dash_ins, request: {method: GET, path: "/v1/dashboard/home"}}
+  - {name: "activity dash_ins", as: dash_ins, request: {method: GET, path: "/v1/dashboard/activity"}}
+  - {name: "stats dash_ovf", as: dash_ovf, request: {method: GET, path: "/v1/dashboard/stats"}}
+  - {name: "profile dash_ovf", as: dash_ovf, request: {method: GET, path: "/v1/dashboard/profile"}}
+  - {name: "home dash_ovf", as: dash_ovf, request: {method: GET, path: "/v1/dashboard/home"}}
+  - {name: "activity dash_ovf", as: dash_ovf, request: {method: GET, path: "/v1/dashboard/activity"}}
+  - {name: "stats dash_dan", as: dash_dan, request: {method: GET, path: "/v1/dashboard/stats"}}
+  - {name: "profile dash_dan", as: dash_dan, request: {method: GET, path: "/v1/dashboard/profile"}}
+  - {name: "home dash_dan", as: dash_dan, request: {method: GET, path: "/v1/dashboard/home"}}
+  - {name: "activity dash_dan", as: dash_dan, request: {method: GET, path: "/v1/dashboard/activity"}}
+  - {name: "home period=today", as: dash_ann, request: {method: GET, path: "/v1/dashboard/home?period=today"}}
+  - {name: "home period=yesterday", as: dash_ann, request: {method: GET, path: "/v1/dashboard/home?period=yesterday"}}
+  - {name: "home period=week", as: dash_ann, request: {method: GET, path: "/v1/dashboard/home?period=week"}}
+  - {name: "home period=month", as: dash_ann, request: {method: GET, path: "/v1/dashboard/home?period=month"}}
+  - {name: "home period=nope", as: dash_ann, request: {method: GET, path: "/v1/dashboard/home?period=nope"}}
+  - {name: "home period=", as: dash_ann, request: {method: GET, path: "/v1/dashboard/home?period="}}
+  - {name: "home period first value wins", as: dash_ann, request: {method: GET, path: "/v1/dashboard/home?period=week&period=month"}}
+  - {name: "home period case sensitive", as: dash_ann, request: {method: GET, path: "/v1/dashboard/home?period=WEEK"}}
+  - {name: "home overflow period week", as: dash_ovf, request: {method: GET, path: "/v1/dashboard/home?period=week"}}
+  - {name: "activity limit=1", as: dash_ann, request: {method: GET, path: "/v1/dashboard/activity?limit=1"}}
+  - {name: "activity limit=3", as: dash_ann, request: {method: GET, path: "/v1/dashboard/activity?limit=3"}}
+  - {name: "activity limit=5", as: dash_ann, request: {method: GET, path: "/v1/dashboard/activity?limit=5"}}
+  - {name: "activity limit=20", as: dash_ann, request: {method: GET, path: "/v1/dashboard/activity?limit=20"}}
+  - {name: "activity limit=50", as: dash_ann, request: {method: GET, path: "/v1/dashboard/activity?limit=50"}}
+  - {name: "activity limit=51", as: dash_ann, request: {method: GET, path: "/v1/dashboard/activity?limit=51"}}
+  - {name: "activity limit=999", as: dash_ann, request: {method: GET, path: "/v1/dashboard/activity?limit=999"}}
+  - {name: "activity limit=0", as: dash_ann, request: {method: GET, path: "/v1/dashboard/activity?limit=0"}}
+  - {name: "activity limit=-3", as: dash_ann, request: {method: GET, path: "/v1/dashboard/activity?limit=-3"}}
+  - {name: "activity limit=abc", as: dash_ann, request: {method: GET, path: "/v1/dashboard/activity?limit=abc"}}
+  - {name: "activity limit=", as: dash_ann, request: {method: GET, path: "/v1/dashboard/activity?limit="}}
+  - {name: "activity limit=99999999999999999999", as: dash_ann, request: {method: GET, path: "/v1/dashboard/activity?limit=99999999999999999999"}}
+  - {name: "activity limit=%2B5", as: dash_ann, request: {method: GET, path: "/v1/dashboard/activity?limit=%2B5"}}
+  - {name: "activity limit=+5", as: dash_ann, request: {method: GET, path: "/v1/dashboard/activity?limit=+5"}}
+  - {name: "activity limit=2&limit=1", as: dash_ann, request: {method: GET, path: "/v1/dashboard/activity?limit=2&limit=1"}}
+  - {name: "activity limit=5.5", as: dash_ann, request: {method: GET, path: "/v1/dashboard/activity?limit=5.5"}}

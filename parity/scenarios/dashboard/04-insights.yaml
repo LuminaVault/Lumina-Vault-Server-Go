@@ -1,0 +1,38 @@
+module: dashboard
+steps:
+  - {name: "list ins", as: dash_ins, request: {method: GET, path: "/v1/insights"}}
+  - {name: "list fresh", as: dash_cat, request: {method: GET, path: "/v1/insights"}}
+  - {name: "list ben", as: dash_ben, request: {method: GET, path: "/v1/insights"}}
+  - {name: "latest ins, a dismissed synthesis still counts", as: dash_ins, request: {method: GET, path: "/v1/insights/synthesis/latest"}}
+  - {name: "latest fresh 404", as: dash_cat, request: {method: GET, path: "/v1/insights/synthesis/latest"}}
+  - {name: "latest ben", as: dash_ben, request: {method: GET, path: "/v1/insights/synthesis/latest"}}
+  - {name: "latest ann, only patterns: 404", as: dash_ann, request: {method: GET, path: "/v1/insights/synthesis/latest"}}
+  - {name: "list section=this_week", as: dash_ins, request: {method: GET, path: "/v1/insights?section=this_week"}}
+  - {name: "list section=this_month", as: dash_ins, request: {method: GET, path: "/v1/insights?section=this_month"}}
+  - {name: "list section=patterns", as: dash_ins, request: {method: GET, path: "/v1/insights?section=patterns"}}
+  - {name: "list section=contradictions", as: dash_ins, request: {method: GET, path: "/v1/insights?section=contradictions"}}
+  - {name: "list section=connections", as: dash_ins, request: {method: GET, path: "/v1/insights?section=connections"}}
+  - {name: "list section=retired_section", as: dash_ins, request: {method: GET, path: "/v1/insights?section=retired_section"}}
+  - {name: "list section=thisWeek", as: dash_ins, request: {method: GET, path: "/v1/insights?section=thisWeek"}}
+  - {name: "list section=", as: dash_ins, request: {method: GET, path: "/v1/insights?section="}}
+  - {name: "list limit=1", as: dash_ins, request: {method: GET, path: "/v1/insights?limit=1"}}
+  - {name: "list limit=2", as: dash_ins, request: {method: GET, path: "/v1/insights?limit=2"}}
+  - {name: "list limit=100", as: dash_ins, request: {method: GET, path: "/v1/insights?limit=100"}}
+  - {name: "list limit=101", as: dash_ins, request: {method: GET, path: "/v1/insights?limit=101"}}
+  - {name: "list limit=0", as: dash_ins, request: {method: GET, path: "/v1/insights?limit=0"}}
+  - {name: "list limit=-2", as: dash_ins, request: {method: GET, path: "/v1/insights?limit=-2"}}
+  - {name: "list limit=abc", as: dash_ins, request: {method: GET, path: "/v1/insights?limit=abc"}}
+  - {name: "list limit=", as: dash_ins, request: {method: GET, path: "/v1/insights?limit="}}
+  - {name: "list limit=99999999999999999999", as: dash_ins, request: {method: GET, path: "/v1/insights?limit=99999999999999999999"}}
+  - {name: "list section and limit", as: dash_ins, request: {method: GET, path: "/v1/insights?section=patterns&limit=1"}}
+  - {name: "dismiss bad id", as: dash_ins, request: {method: POST, path: "/v1/insights/nope/dismiss"}, snapshot: [insights]}
+  - {name: "dismiss short id", as: dash_ins, request: {method: POST, path: "/v1/insights/DA5B8100/dismiss"}}
+  - {name: "dismiss unknown id", as: dash_ins, request: {method: POST, path: "/v1/insights/DA5B9999-0000-4000-8000-000000000000/dismiss"}}
+  - {name: "dismiss foreign id", as: dash_ins, request: {method: POST, path: "/v1/insights/DA5B8100-0000-4000-8000-000000000007/dismiss"}}
+  - {name: "dismiss foreign id other way", as: dash_ben, request: {method: POST, path: "/v1/insights/DA5B8100-0000-4000-8000-000000000003/dismiss"}, snapshot: [insights]}
+  - {name: "dismiss lowercase id", as: dash_ins, request: {method: POST, path: "/v1/insights/da5b8100-0000-4000-8000-000000000003/dismiss"}, snapshot: [insights]}
+  - {name: "list after dismiss", as: dash_ins, request: {method: GET, path: "/v1/insights"}}
+  - {name: "dismiss again is a no-op", as: dash_ins, request: {method: POST, path: "/v1/insights/DA5B8100-0000-4000-8000-000000000003/dismiss"}, snapshot: [insights]}
+  - {name: "dismiss the synthesis", as: dash_ins, request: {method: POST, path: "/v1/insights/DA5B8100-0000-4000-8000-000000000001/dismiss"}, snapshot: [insights]}
+  - {name: "latest after dismissing the synthesis", as: dash_ins, request: {method: GET, path: "/v1/insights/synthesis/latest"}}
+  - {name: "dismiss body is ignored", as: dash_ins, request: {method: POST, path: "/v1/insights/DA5B8100-0000-4000-8000-000000000004/dismiss", raw: "nope"}}
