@@ -382,12 +382,18 @@ func TestRestrictRollsBackTheEraser(t *testing.T) {
 // The users delete fires actor_user_id SET NULL and the users -> vaults ->
 // vault_activity_events CASCADE on the same row; the SET NULL update runs
 // after the vault is gone and fails its vault_id check.
-func TestOwnVaultActivityBlocksDeletion(t *testing.T) {
+// Activity in the user's own personal vault cascades away with the vault, as
+// on Swift's Fluent schema. This runs on the goose baseline, whose FK triggers
+// fire in a different order, so it fails if the eraser touches those rows.
+func TestOwnVaultActivityCascades(t *testing.T) {
 	v := setup(t)
 	r := v.do(self, `{"password":"`+password+`"}`)
-	require.Equal(t, http.StatusInternalServerError, r.code)
-	require.Empty(t, r.body)
-	require.True(t, v.userExists(self))
+	require.Equal(t, http.StatusNoContent, r.code)
+	require.False(t, v.userExists(self))
+	var n int
+	require.NoError(t, v.pool.QueryRow(context.Background(),
+		`SELECT count(*) FROM vault_activity_events WHERE vault_id = $1`, self).Scan(&n))
+	require.Zero(t, n)
 }
 
 func TestProfileNamesAndDirectoryName(t *testing.T) {

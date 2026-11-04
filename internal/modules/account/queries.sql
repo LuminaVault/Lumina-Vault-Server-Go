@@ -37,8 +37,18 @@ WHERE lower(scope_key) IN (sqlc.arg(tenant_key)::text, sqlc.arg(freelane_key)::t
 UPDATE billing_event_logs SET user_id = NULL WHERE user_id = sqlc.arg(user_id)::uuid;
 
 -- name: AnonymizeVaultActivity :exec
-UPDATE vault_activity_events SET actor_name = sqlc.arg(actor_name)::text
-WHERE actor_user_id = sqlc.arg(actor_user_id)::uuid;
+-- Skips the user's own personal vault: those rows cascade away with it, so the
+-- end state is Swift's. Updating them here would make Postgres recheck their
+-- vault_id when the delete's SET NULL touches them (a row written earlier in
+-- the transaction always gets the FK check), and if the SET NULL trigger fires
+-- before the vault cascade, as it does on the goose baseline, that check
+-- fails after the vault is gone.
+UPDATE vault_activity_events e SET actor_name = sqlc.arg(actor_name)::text
+WHERE e.actor_user_id = sqlc.arg(actor_user_id)::uuid
+  AND NOT EXISTS (
+    SELECT 1 FROM vaults v
+    WHERE v.id = e.vault_id AND v.personal_owner_user_id = sqlc.arg(actor_user_id)::uuid
+  );
 
 -- name: DeleteUser :exec
 -- Every other per-tenant table cascades from here.
