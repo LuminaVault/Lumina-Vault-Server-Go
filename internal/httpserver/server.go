@@ -58,8 +58,6 @@ func New(cfg config.Config, deps Deps) *echo.Echo {
 		AllowOverwritingRoute:   true,
 		MethodNotAllowedHandler: notFound,
 		OptionsMethodHandler:    notFound,
-		AllowOverwritingRoute:   true, // Echo's own default router sets it
-		MethodNotAllowedHandler: func(*echo.Context) error { return echo.ErrNotFound },
 	})}), streaming: map[string]bool{}}
 	e := s.Echo
 	e.HTTPErrorHandler = wire.HTTPErrorHandler
