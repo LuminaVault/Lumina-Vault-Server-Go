@@ -911,5 +911,16 @@ Beyond the pilot gate (D-wave2-early):
 - Run `teams` scenarios one at a time: run together they exceed the 30/min limit, and all
   32 mismatches were 429s that proved only that the limiter matches.
 - Not observed on a deployed server: a real invitation email, and a pushed activity event.
-- Infra PR: LuminaVaultInfra #547, for the owner to merge.
+
+### Production flip: 2026-11-04
+
+- Infra #547 merged 19:37:45Z. `api-go-production` runs `f31b21f`; ingress confirmed
+  19:42:38Z with 12 paths on Go.
+- Public check: `/v1/spaces`, `/v1/boards`, `/v1/cards`, `/v1/teams`,
+  `/v1/team-invitations` and `/v1/vaults` answer from Go. `/v1/vault/files`, `/v1/me/today`
+  and `/health` answer from Swift.
+
+### G3 production watch: running, 72 h ends 2026-11-07 19:42Z
+
+- Owner's check still open: one real team invitation email.
 
