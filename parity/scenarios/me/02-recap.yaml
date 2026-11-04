@@ -1,0 +1,14 @@
+# GET /v1/me/recap (MeRecapService): 7d/30d windows against seed-relative rows.
+module: me
+steps:
+  - {name: recap default range, as: me_ann, request: {method: GET, path: /v1/me/recap}}
+  - {name: recap 7d, as: me_ann, request: {method: GET, path: "/v1/me/recap?range=7d"}}
+  - {name: recap 30d, as: me_ann, request: {method: GET, path: "/v1/me/recap?range=30d"}}
+  - {name: recap empty range is 7d, as: me_ann, request: {method: GET, path: "/v1/me/recap?range="}}
+  - {name: recap 90d rejected, as: me_ann, request: {method: GET, path: "/v1/me/recap?range=90d"}}
+  - {name: recap 1y rejected, as: me_ann, request: {method: GET, path: "/v1/me/recap?range=1y"}}
+  - {name: recap uppercase rejected, as: me_ann, request: {method: GET, path: "/v1/me/recap?range=7D"}}
+  - {name: recap in Los Angeles, as: me_lia, request: {method: GET, path: "/v1/me/recap?range=7d"}}
+  - {name: recap invalid timezone falls back to UTC, as: me_bad, request: {method: GET, path: /v1/me/recap}}
+  - {name: recap without data, as: me_new, request: {method: GET, path: "/v1/me/recap?range=30d"}}
+  - {name: recap isolation, as: bob, request: {method: GET, path: /v1/me/recap}}
