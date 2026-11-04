@@ -324,7 +324,7 @@ func toDTO(s db.Space, noteCount int) SpaceDTO {
 func parseID(c *echo.Context) (uuid.UUID, error) {
 	raw := c.Param("id")
 	id, err := ids.Parse(raw)
-	if err != nil || len(raw) != 36 {
+	if err != nil {
 		return uuid.Nil, errBadID
 	}
 	return id, nil

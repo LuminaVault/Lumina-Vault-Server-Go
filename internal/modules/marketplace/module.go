@@ -185,17 +185,14 @@ func (m *Module) list(c *echo.Context) error {
 		return wire.ErrUnauthenticated
 	}
 	ctx := c.Request().Context()
-	query := c.QueryParams()
 	var category *PluginCategory
-	if raw := query.Get("category"); PluginCategory(raw).Valid() {
+	if raw := wire.Query(c, "category"); PluginCategory(raw).Valid() {
 		category = new(PluginCategory(raw))
 	}
-	featured := parseBool(query.Get("featured"))
+	featured := parseBool(wire.Query(c, "featured"))
 	limit := 24
-	if raw, ok := param(query, "limit"); ok {
-		if n, err := strconv.Atoi(raw); err == nil {
-			limit = n
-		}
+	if n, ok := wire.QueryInt(c, "limit"); ok {
+		limit = n
 	}
 	limit = min(50, max(1, limit))
 
@@ -207,7 +204,7 @@ func (m *Module) list(c *echo.Context) error {
 		return err
 	}
 	normalized := ""
-	if raw, ok := param(query, "query"); ok {
+	if raw, ok := wire.QueryParam(c, "query"); ok {
 		normalized = strings.ToLower(swiftstr.TrimWhitespacesAndNewlines(raw))
 	}
 	filtered := rows[:0:0]
@@ -219,10 +216,8 @@ func (m *Module) list(c *echo.Context) error {
 		}
 	}
 	offset := 0
-	if raw, ok := param(query, "cursor"); ok {
-		if n, err := strconv.Atoi(raw); err == nil {
-			offset = n
-		}
+	if n, ok := wire.QueryInt(c, "cursor"); ok {
+		offset = n
 	}
 	page := filtered[min(max(0, offset), len(filtered)):]
 	page = page[:min(limit, len(page))]
@@ -237,14 +232,6 @@ func (m *Module) list(c *echo.Context) error {
 		out.NextCursor = &next
 	}
 	return wire.JSON(c, http.StatusOK, out)
-}
-
-func param(q url.Values, name string) (string, bool) {
-	vals, ok := q[name]
-	if !ok || len(vals) == 0 {
-		return "", false
-	}
-	return vals[0], true
 }
 
 func parseBool(s string) *bool {
@@ -1279,7 +1266,7 @@ func wireTime(t *time.Time) *wire.Time {
 func uuidParam(c *echo.Context, name string) (uuid.UUID, error) {
 	raw := c.Param(name)
 	id, err := ids.Parse(raw)
-	if err != nil || len(raw) != 36 {
+	if err != nil {
 		return uuid.Nil, wire.NewError(http.StatusBadRequest, "invalid_"+name)
 	}
 	return id, nil

@@ -40,12 +40,31 @@ func JSON(c *echo.Context, status int, v any) error {
 // maxBody mirrors Hummingbird's default request body limit (2 MiB).
 const maxBody = 2 << 20
 
+// ErrBodyTooLarge is Hummingbird's answer to a body over the limit:
+// NIOTooManyBytesError renders as a bare 413, with no body and no Content-Type.
+var ErrBodyTooLarge = echo.ErrStatusRequestEntityTooLarge
+
+// ReadBody collects the request body as `request.body.collect(upTo:
+// context.maxUploadSize)` does: exactly 2 MiB is allowed, one byte more is
+// ErrBodyTooLarge.
+func ReadBody(c *echo.Context) ([]byte, error) {
+	raw, err := io.ReadAll(io.LimitReader(c.Request().Body, maxBody+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) > maxBody {
+		return nil, ErrBodyTooLarge
+	}
+	return raw, nil
+}
+
 // Bind decodes the request body into *T as Foundation's JSONDecoder does, and
 // turns failures into the 400 messages Hummingbird returns. The strings are
 // verbatim from testdata/golden/errors-http.json. Struct fields without
-// `omitempty` are required; unknown keys are ignored.
+// `omitempty` are required; unknown keys are ignored. A body over the limit is
+// ErrBodyTooLarge, checked before any decoding, as in Swift.
 func Bind[T any](c *echo.Context) (*T, error) {
-	raw, err := io.ReadAll(io.LimitReader(c.Request().Body, maxBody))
+	raw, err := ReadBody(c)
 	if err != nil {
 		return nil, err
 	}

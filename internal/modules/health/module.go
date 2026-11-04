@@ -19,7 +19,6 @@ import (
 	"lumina/internal/swiftstr"
 	"lumina/internal/wire"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -164,32 +163,30 @@ func (m *Module) ingest(c *echo.Context) error {
 
 func (m *Module) list(c *echo.Context) error {
 	ctx, tenant := c.Request().Context(), auth.UserID(c)
-	raw := c.Request().URL.RawQuery
-
 	limit := defaultLimit
-	if v, ok := swiftInt(raw, "limit"); ok {
+	if v, ok := wire.QueryInt(c, "limit"); ok {
 		limit = v
 	}
 	limit = max(1, min(maxLimit, limit))
 	offset := 0
-	if v, ok := swiftInt(raw, "offset"); ok {
+	if v, ok := wire.QueryInt(c, "offset"); ok {
 		offset = v
 	}
 	offset = max(0, offset)
 	var eventType *string
-	if v, ok := queryParam(raw, "type"); ok {
+	if v, ok := wire.QueryParam(c, "type"); ok {
 		if t := strings.ToLower(trimWhitespaces(v)); t != "" {
 			eventType = &t
 		}
 	}
 	now := m.now()
 	from, to := now.Add(-defaultWindow), now
-	if v, ok := queryParam(raw, "from"); ok {
+	if v, ok := wire.QueryParam(c, "from"); ok {
 		if t, ok := parseISO(v); ok {
 			from = t
 		}
 	}
-	if v, ok := queryParam(raw, "to"); ok {
+	if v, ok := wire.QueryParam(c, "to"); ok {
 		if t, ok := parseISO(v); ok {
 			to = t
 		}
@@ -213,15 +210,13 @@ func (m *Module) list(c *echo.Context) error {
 
 func (m *Module) daily(c *echo.Context) error {
 	ctx, tenant := c.Request().Context(), auth.UserID(c)
-	raw := c.Request().URL.RawQuery
-
-	v, ok := queryParam(raw, "type")
+	v, ok := wire.QueryParam(c, "type")
 	eventType := strings.ToLower(trimWhitespaces(v))
 	if !ok || eventType == "" {
 		return errTypeRequired
 	}
 	days := dailyDefaultDay
-	if n, ok := swiftInt(raw, "days"); ok {
+	if n, ok := wire.QueryInt(c, "days"); ok {
 		days = n
 	}
 	if days < 1 || days > dailyMaxDays {
@@ -263,20 +258,6 @@ func (m *Module) daily(c *echo.Context) error {
 		out.Days = append(out.Days, HealthDayAggregateDTO{Date: wire.Time{Time: d}, Type: eventType, Value: b.value, SampleCount: b.count})
 	}
 	return wire.JSON(c, http.StatusOK, out)
-}
-
-// swiftInt is `req.uri.queryParameters[key].flatMap { Int($0) }`: absent or
-// not a base-10 Int (an optional sign, ASCII digits, in range) is "no value".
-func swiftInt(rawQuery, key string) (int, bool) {
-	v, ok := queryParam(rawQuery, key)
-	if !ok {
-		return 0, false
-	}
-	n, err := strconv.ParseInt(v, 10, 64)
-	if err != nil {
-		return 0, false
-	}
-	return int(n), true
 }
 
 // parseISO is the controller's ISO8601DateFormatter pair: internet date-time,

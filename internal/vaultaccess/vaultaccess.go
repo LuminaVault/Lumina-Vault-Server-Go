@@ -70,7 +70,7 @@ func (s *Service) Resolve(c *echo.Context, perm Permission) (Access, error) {
 	var requested *uuid.UUID
 	if raw, ok := c.Request().Header[http.CanonicalHeaderKey(Header)]; ok && len(raw) > 0 {
 		id, err := ids.Parse(raw[0])
-		if err != nil || len(raw[0]) != 36 {
+		if err != nil {
 			return Access{}, errBadHeader
 		}
 		requested = &id

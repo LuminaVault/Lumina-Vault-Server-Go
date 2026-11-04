@@ -427,28 +427,7 @@ func TestIngestPaywall(t *testing.T) {
 	require.Equal(t, http.StatusUnauthorized, v.do(uuid.Nil, http.MethodPost, "/v1/health", body).code)
 }
 
-func TestQueryParam(t *testing.T) {
-	for _, c := range []struct {
-		raw, key, want string
-		ok             bool
-	}{
-		{"a=1&b=2", "b", "2", true},
-		{"a=1&a=2", "a", "1", true},
-		{"a", "a", "", true},
-		{"a=", "a", "", true},
-		{"a=x+y", "a", "x+y", true},
-		{"a=x%2By%20z", "a", "x+y z", true},
-		{"a=100%", "a", "100%", true},
-		{"a=%zz", "a", "%zz", true},
-		{"%61=1", "a", "", false},
-		{"", "a", "", false},
-		{"&&a=3", "a", "3", true},
-		{"b=1=2", "b", "1=2", true},
-	} {
-		got, ok := queryParam(c.raw, c.key)
-		require.Equal(t, c.ok, ok, c.raw)
-		require.Equal(t, c.want, got, c.raw)
-	}
+func TestTrimWhitespaces(t *testing.T) {
 	require.Equal(t, "steps", trimWhitespaces("\t\u00a0 steps\u200b "))
 	require.Equal(t, "\nsteps", trimWhitespaces("\nsteps"))
 }

@@ -49,10 +49,6 @@ import (
 	_ "time/tzdata" // users.timezone is resolved in-process; the runtime image has no zoneinfo
 )
 
-// meTodayByUser is RateLimitPolicy.meTodayByUser: 60 per 60 s, keyed by user
-// or IP. Same name as Swift, so it is one bucket for every route using it.
-var meTodayByUser = ratelimit.Policy{Name: "meTodayByUser", Max: 60, Window: 60 * time.Second}
-
 // Options are the Swift config keys the module reads.
 type Options struct {
 	// RecapThemesEnabled is recap.themesEnabled (RECAP_THEMES_ENABLED, default true).
@@ -87,7 +83,7 @@ func New(pool *pgxpool.Pool, identify echo.MiddlewareFunc, limits *ratelimit.Sto
 func (m *Module) SetClock(now func() time.Time) { m.now = now }
 
 func (m *Module) Register(r httpserver.Router, authMW echo.MiddlewareFunc) {
-	limit := ratelimit.Middleware(m.limits, meTodayByUser, ratelimit.UserOrIPKey)
+	limit := ratelimit.Middleware(m.limits, ratelimit.MeTodayByUser, ratelimit.UserOrIPKey)
 	chain := []echo.MiddlewareFunc{m.identify, limit, auth.Require}
 	r.GET("/v1/me/today", m.getToday, chain...)
 	r.GET("/v1/me/recap", m.getRecap, chain...)

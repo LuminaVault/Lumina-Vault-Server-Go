@@ -329,7 +329,7 @@ func (m *Module) listThreads(c *echo.Context) error {
 	}
 	size := pageSize(limitParam(c))
 	args := db.ListThreadsParams{ViewerProfile: v.profile, RowLimit: int32(size + 1)} //nolint:gosec // size is at most maxPageSize
-	if raw, ok := queryParam(c, "cursor"); ok {
+	if raw, ok := wire.QueryParam(c, "cursor"); ok {
 		micros, id, err := DecodeCursor(raw)
 		if err != nil {
 			return err
@@ -384,7 +384,7 @@ func (m *Module) listReplies(c *echo.Context) error {
 	}
 	size := pageSize(limitParam(c))
 	args := db.ListRepliesParams{ParentID: &parent, ViewerProfile: v.profile, RowLimit: int32(size + 1)} //nolint:gosec // size is at most maxPageSize
-	if raw, ok := queryParam(c, "cursor"); ok {
+	if raw, ok := wire.QueryParam(c, "cursor"); ok {
 		micros, id, err := DecodeCursor(raw)
 		if err != nil {
 			return err
@@ -746,7 +746,7 @@ func (m *Module) adminQueue(c *echo.Context) error {
 		return err
 	}
 	filter := "all"
-	if raw, ok := queryParam(c, "status"); ok {
+	if raw, ok := wire.QueryParam(c, "status"); ok {
 		switch raw {
 		case "open", "pending", "hidden":
 			filter = raw
@@ -1018,28 +1018,16 @@ func validateBody(body string) error {
 func pageSize(limit int) int { return min(max(limit, 1), maxPageSize) }
 
 func limitParam(c *echo.Context) int {
-	if raw, ok := queryParam(c, "limit"); ok {
-		if n, err := strconv.Atoi(raw); err == nil {
-			return n
-		}
+	if n, ok := wire.QueryInt(c, "limit"); ok {
+		return n
 	}
 	return defaultPageSize
-}
-
-// queryParam tells a missing parameter from an empty one: Swift treats
-// ?cursor= as a cursor (and a bad one, a 400).
-func queryParam(c *echo.Context, name string) (string, bool) {
-	vals, ok := c.QueryParams()[name]
-	if !ok || len(vals) == 0 {
-		return "", false
-	}
-	return vals[0], true
 }
 
 func uuidParam(c *echo.Context, name string) (uuid.UUID, error) {
 	raw := c.Param(name)
 	id, err := ids.Parse(raw)
-	if err != nil || len(raw) != 36 {
+	if err != nil {
 		return uuid.Nil, wire.NewError(http.StatusBadRequest, "invalid_"+name)
 	}
 	return id, nil
@@ -1070,7 +1058,7 @@ func DecodeCursor(cursor string) (int64, uuid.UUID, error) {
 		return 0, uuid.Nil, errInvalidCursor
 	}
 	id, err := ids.Parse(parts[1])
-	if err != nil || len(parts[1]) != 36 {
+	if err != nil {
 		return 0, uuid.Nil, errInvalidCursor
 	}
 	return micros, id, nil

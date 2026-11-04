@@ -54,7 +54,7 @@ func (m *Module) Register(r httpserver.Router, authMW echo.MiddlewareFunc) {
 
 func (m *Module) list(c *echo.Context) error {
 	ctx, tenant := c.Request().Context(), auth.UserID(c)
-	rows, err := m.q.ListProjects(ctx, db.ListProjectsParams{TenantID: tenant, Limit: parseLimit(c.QueryParam("limit"))})
+	rows, err := m.q.ListProjects(ctx, db.ListProjectsParams{TenantID: tenant, Limit: parseLimit(wire.Query(c, "limit"))})
 	if err != nil {
 		return err
 	}
@@ -191,7 +191,7 @@ func toDTO(p db.Project, todoCount int) ProjectDTO {
 func parseID(c *echo.Context) (uuid.UUID, error) {
 	raw := c.Param("id")
 	id, err := ids.Parse(raw)
-	if err != nil || len(raw) != 36 {
+	if err != nil {
 		return uuid.Nil, errBadID
 	}
 	return id, nil

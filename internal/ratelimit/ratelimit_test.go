@@ -98,3 +98,56 @@ func TestMiddlewareAndIPKey(t *testing.T) {
 	call(map[string]string{"X-Real-IP": "10.0.0.4"})
 	require.Equal(t, []string{"ip:anon", "ip:anon", "ip:anon", "ip:anon", "ip:10.0.0.1", "ip:10.0.0.3", "ip:anon", "ip:10.0.0.4"}, keys)
 }
+
+// The numbers follow RateLimitPolicy.effectiveMax with standardTierScale.
+func TestEffectiveMax(t *testing.T) {
+	for _, c := range []struct {
+		tier              string
+		query, capture    int
+		kb, unscaledToday int
+	}{
+		{"ultimate", 120, 240, 20, 60},
+		{"pro", 60, 120, 10, 60},
+		{"trial", 30, 60, 5, 60},
+		{"free", 10, 20, 2, 60},
+		{"lapsed", 10, 20, 2, 60},
+		{"archived", 3, 6, 1, 60}, // 5 * 0.1 rounds to 1
+		{"not-a-tier", 10, 20, 2, 60},
+	} {
+		kb := ratelimit.Policy{Name: "kb", Max: 5, Window: time.Minute, TierScale: ratelimit.StandardTierScale}
+		require.Equal(t, c.query, ratelimit.QueryByUser.EffectiveMax(c.tier), c.tier)
+		require.Equal(t, c.capture, ratelimit.CaptureByUser.EffectiveMax(c.tier), c.tier)
+		require.Equal(t, c.kb, kb.EffectiveMax(c.tier), c.tier)
+		require.Equal(t, c.unscaledToday, ratelimit.MeTodayByUser.EffectiveMax(c.tier), c.tier)
+	}
+}
+
+func TestPolicyNamesMatchSwift(t *testing.T) {
+	require.Equal(t, "queryByUser", ratelimit.QueryByUser.Name)
+	require.Equal(t, "captureByUser", ratelimit.CaptureByUser.Name)
+	require.Equal(t, "meTodayByUser", ratelimit.MeTodayByUser.Name)
+}
+
+func TestTieredMiddleware(t *testing.T) {
+	store := ratelimit.NewStore()
+	tier, known := "archived", true
+	mw := ratelimit.TieredMiddleware(store, ratelimit.QueryByUser,
+		func(*echo.Context) string { return "k" },
+		func(*echo.Context) (string, bool) { return tier, known })
+	call := func() error {
+		c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/", nil), httptest.NewRecorder())
+		return mw(func(*echo.Context) error { return nil })(c)
+	}
+	for range 3 {
+		require.NoError(t, call())
+	}
+	require.ErrorIs(t, call(), ratelimit.ErrLimited, "archived allows 3")
+
+	// One bucket per caller: a tier change reads the same count (4 so far),
+	// and no tier at all is the baseline 30.
+	known = false
+	for range 26 {
+		require.NoError(t, call())
+	}
+	require.ErrorIs(t, call(), ratelimit.ErrLimited)
+}

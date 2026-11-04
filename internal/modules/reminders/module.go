@@ -92,7 +92,7 @@ func (m *Module) detect(c *echo.Context) error {
 
 func (m *Module) list(c *echo.Context) error {
 	rows, err := m.q.ListReminders(c.Request().Context(), db.ListRemindersParams{
-		TenantID: auth.UserID(c), Limit: parseLimit(c.QueryParam("limit")),
+		TenantID: auth.UserID(c), Limit: parseLimit(wire.Query(c, "limit")),
 	})
 	if err != nil {
 		return err
@@ -230,7 +230,7 @@ func toDTO(r db.Reminder) ReminderDTO {
 func parseID(c *echo.Context) (uuid.UUID, error) {
 	raw := c.Param("id")
 	id, err := ids.Parse(raw)
-	if err != nil || len(raw) != 36 {
+	if err != nil {
 		return uuid.Nil, errBadID
 	}
 	return id, nil

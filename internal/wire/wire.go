@@ -70,7 +70,7 @@ func (u *UUID) UnmarshalJSON(b []byte) error {
 		return err
 	}
 	parsed, err := ids.Parse(s)
-	if err != nil || len(s) != 36 {
+	if err != nil {
 		return errBadUUID
 	}
 	u.UUID = parsed
