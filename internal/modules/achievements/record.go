@@ -12,13 +12,8 @@ import (
 )
 
 // Recorder is the write half of AchievementsService (record(tenantID:event:)).
-// No Go route calls it yet: Swift's AchievementsWorker owns progress writes
-// until its producers (Capture, LLM, Memory, KB, Auth, Vault) move, and a Go
-// producer may then record directly (coupling.md, AchievementsWorker inbox).
-//
-// Not yet ported, and needed before a Go producer uses it: the APNS push per
-// unlock (recordAndPush) and the EventBus `achievement_unlocked` publish that
-// invalidates MeTodayCache.
+// Producers don't call it directly: a handler enqueues on
+// internal/achievementsink, whose worker calls this and pushes the unlocks.
 type Recorder struct {
 	q       *db.Queries
 	catalog Catalog

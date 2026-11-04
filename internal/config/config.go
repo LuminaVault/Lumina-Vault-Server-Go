@@ -99,6 +99,22 @@ type Config struct {
 	HermesDataRoot            string `env:"HERMES_DATA_ROOT" envDefault:"/app/data/hermes"`
 	BillingEnforcementEnabled string `env:"BILLING_ENFORCEMENT_ENABLED" envDefault:"false"`
 
+	// APNS unlock pushes (apns package). APNSEnabled stays a string: Swift
+	// enables it only when it lowercases to "true".
+	APNSEnabled        string `env:"APNS_ENABLED" envDefault:"false"`
+	APNSTeamID         string `env:"APNS_TEAM_ID"`
+	APNSKeyID          string `env:"APNS_KEY_ID"`
+	APNSPrivateKeyPath string `env:"APNS_PRIVATE_KEY_PATH"`
+	APNSEnvironment    string `env:"APNS_ENVIRONMENT" envDefault:"development"`
+
+	// BYO Hermes resolution (hermesresolve, ssrfguard). Strings, read with
+	// Swift's lowercased() == "true". BYOHermesRequireHTTPS has no default here
+	// because Swift's depends on LV_ENVIRONMENT; use its method.
+	HermesGatewayURL         string `env:"HERMES_GATEWAY_URL" envDefault:"http://hermes:8642"`
+	BYOHermesAllowPrivate    string `env:"BYO_HERMES_ALLOW_PRIVATE" envDefault:"false"`
+	BYOHermesRequireHTTPSRaw string `env:"BYO_HERMES_REQUIRE_HTTPS"`
+	BYOHermesAllowTailnet    string `env:"BYO_HERMES_ALLOW_TAILNET_HTTP" envDefault:"true"`
+
 	// Product analytics (posthog package). Off unless both are set, as in Swift.
 	PostHogProjectToken string `env:"POSTHOG_PROJECT_TOKEN"`
 	PostHogHost         string `env:"POSTHOG_HOST"`
@@ -139,6 +155,16 @@ func cleanCSV(in []string) []string {
 		}
 	}
 	return out
+}
+
+// BYOHermesRequireHTTPS is byoHermes.requireHttps: when unset, false in "dev"
+// and true everywhere else, with LV_ENVIRONMENT itself defaulting to "dev". A
+// set value is on only if it lowercases to "true".
+func (c Config) BYOHermesRequireHTTPS() bool {
+	if c.BYOHermesRequireHTTPSRaw == "" {
+		return c.LVEnvironment != "" && c.LVEnvironment != "dev"
+	}
+	return strings.EqualFold(c.BYOHermesRequireHTTPSRaw, "true")
 }
 
 // JobEnabled reports whether this process should run the named background job.
