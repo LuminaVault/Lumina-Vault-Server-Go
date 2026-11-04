@@ -1,6 +1,7 @@
 // Command llm is a deterministic stand-in for the LLM upstreams in the parity
-// environment. Swift and Go point at it (HERMES_GATEWAY_URL, ANTHROPIC_BASE_URL),
-// so success paths compare on identical answers with no key and no cost.
+// environment. Swift and Go point at it (HERMES_GATEWAY_URL; /v1/messages is there
+// for the Anthropic adapter's base URL), so success paths compare on identical
+// answers with no key and no cost.
 //
 //	POST /v1/chat/completions  OpenAI shape, as the Hermes gateway and the
 //	                           OpenAI-compatible providers speak it; SSE on stream:true

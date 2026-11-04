@@ -16,3 +16,5 @@ steps:
   - {name: limit literal plus, as: cal_ann, request: {method: GET, path: "/v1/calendar/events?limit=+1"}}
   - {name: limit too big for an int, as: cal_ann, request: {method: GET, path: "/v1/calendar/events?limit=99999999999999999999"}}
   - {name: first limit wins, as: cal_ann, request: {method: GET, path: "/v1/calendar/events?limit=1&limit=2"}}
+  - {name: limit with a literal plus, as: cal_ann, request: {method: GET, path: "/v1/calendar/events?limit=+1"}}
+  - {name: encoded limit key is no key, as: cal_ann, request: {method: GET, path: "/v1/calendar/events?%6Cimit=1"}}

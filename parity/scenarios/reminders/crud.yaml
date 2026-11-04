@@ -50,3 +50,5 @@ steps:
     snapshot: [reminders]
   - {name: delete again is 404, as: alice, request: {method: DELETE, path: "/v1/reminders/{{call}}"}}
   - {name: list after delete, as: alice, request: {method: GET, path: /v1/reminders}}
+  - {name: limit with a literal plus, as: alice, request: {method: GET, path: "/v1/reminders?limit=+1"}}
+  - {name: encoded limit key is no key, as: alice, request: {method: GET, path: "/v1/reminders?%6Cimit=1"}}

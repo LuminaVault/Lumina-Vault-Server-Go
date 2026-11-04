@@ -33,3 +33,5 @@ steps:
   - {name: month 0, as: me_new, request: {method: GET, path: "/v1/me/recap/period?period=month&month=0"}}
   - {name: month not a number, as: me_new, request: {method: GET, path: "/v1/me/recap/period?period=month&month=x"}}
   - {name: bad year beats bad month, as: me_new, request: {method: GET, path: "/v1/me/recap/period?period=month&year=x&month=x"}}
+  - {name: year with a literal plus, as: me_per, request: {method: GET, path: "/v1/me/recap/period?period=month&year=+2026&month=3"}}
+  - {name: month with a literal plus, as: me_per, request: {method: GET, path: "/v1/me/recap/period?period=month&year=2026&month=+3"}}

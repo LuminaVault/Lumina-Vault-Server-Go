@@ -12,3 +12,8 @@ steps:
   - {name: recent limit empty, as: alice, request: {method: GET, path: "/v1/achievements/recent?limit="}}
   - {name: recent limit overflows Int, as: alice, request: {method: GET, path: "/v1/achievements/recent?limit=99999999999999999999"}}
   - {name: list ignores unknown query, as: alice, request: {method: GET, path: "/v1/achievements?limit=1"}, snapshot: [achievement_progress]}
+  # A literal "+" is part of the value: Int("+1") is 1, where net/url's decoding
+  # would make it " 1" and so the default.
+  - {name: recent literal plus, as: alice, request: {method: GET, path: "/v1/achievements/recent?limit=+1"}}
+  - {name: recent encoded plus, as: alice, request: {method: GET, path: "/v1/achievements/recent?limit=%2B1"}}
+  - {name: recent encoded key is no key, as: alice, request: {method: GET, path: "/v1/achievements/recent?%6Cimit=1"}}

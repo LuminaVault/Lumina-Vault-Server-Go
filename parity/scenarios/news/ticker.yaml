@@ -17,3 +17,5 @@ steps:
   - {name: config without feed_urls, as: news_nul, request: {method: GET, path: "/v1/news/ticker?limit=2"}}
   - {name: no _feeds extension, as: news_nox, request: {method: GET, path: /v1/news/ticker}}
   - {name: _feeds without generated_at, as: news_nog, request: {method: GET, path: /v1/news/ticker}, snapshot: [parity_plugin_installs]}
+  - {name: limit with a literal plus, as: news_amy, request: {method: GET, path: "/v1/news/ticker?limit=+1"}}
+  - {name: malformed escape reads raw and so the default, as: news_amy, request: {method: GET, path: "/v1/news/ticker?limit=1%"}}

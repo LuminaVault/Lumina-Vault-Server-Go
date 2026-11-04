@@ -222,5 +222,3 @@ func (m Module) claimsByElement(route string) bool {
 	}
 	return slices.ContainsFunc(append(append([]string{}, m.Prefixes...), m.SharedPrefixes...), func(p string) bool { return ElementMatch(p, route) })
 }
-
-func (m Module) covers(path string) bool { return m.claimsByElement(path) }

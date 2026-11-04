@@ -1,7 +1,7 @@
 # GET /v1/vaults/{vaultID}/activity and /activity/stream. kim ...AD is a
 # viewer of Alpha Main 7EA53000-...01 and alpha lab ...02 (101 seeded events,
-# newest 100 listed). The stream is in-process SSE with no initial frame, so
-# parity sees its status and headers; the frames are covered by Go tests.
+# newest 100 listed). The stream is in-process SSE with no initial frame, so a
+# space created through `trigger` produces the frame that gets compared.
 module: teams
 steps:
   - {name: newest first with the scenario writes, as: team_kim, request: {method: GET, path: /v1/vaults/7EA53000-0000-4000-8000-000000000001/activity}}
@@ -18,6 +18,15 @@ steps:
     request: {method: GET, path: /v1/vaults/7EA53000-0000-4000-8000-000000000001/activity/stream}
     stream: true
     headers: [Cache-Control, X-Accel-Buffering]
+  - name: stream carries a frame for a write
+    as: team_kim
+    request: {method: GET, path: /v1/vaults/7EA53000-0000-4000-8000-000000000001/activity/stream}
+    stream: true
+    frames: 1
+    framesTimeout: 10s
+    trigger:
+      as: team_adam
+      request: {method: POST, path: /v1/spaces, json: {name: Streamed}, headers: {X-Vault-ID: 7EA53000-0000-4000-8000-000000000001}}
   - name: stream of the personal vault
     as: team_kim
     request: {method: GET, path: /v1/vaults/7EA50000-0000-4000-8000-0000000000AD/activity/stream, headers: {Accept: text/event-stream}}

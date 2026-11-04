@@ -87,7 +87,7 @@ func DirFiles(root string) FileReader {
 				}
 			default:
 				e.Type = "file"
-				if e.Content, err = os.ReadFile(p); err != nil {
+				if e.Content, err = os.ReadFile(p); err != nil { //nolint:gosec // operator's own test directory
 					return err
 				}
 			}

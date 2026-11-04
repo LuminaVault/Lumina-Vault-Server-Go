@@ -24,3 +24,8 @@ steps:
   - {name: learned since too long ago, as: me_ann, request: {method: GET, path: "/v1/me/learned?since=2020-01-01T00:00:00Z"}}
   - {name: learned without data, as: me_new, request: {method: GET, path: /v1/me/learned}}
   - {name: learned isolation, as: bob, request: {method: GET, path: /v1/me/learned}}
+  # A literal "+" in a query value. This fixed date is out of the 90-day window, so
+  # Swift parses it and says so; net/url's space would make it not a date at all.
+  - {name: resurface limit with a literal plus, as: me_ann, request: {method: GET, path: "/v1/me/resurface?limit=+1"}}
+  - {name: learned since with a literal plus offset, as: me_ann, request: {method: GET, path: "/v1/me/learned?since=2026-01-01T00:00:00+00:00"}}
+  - {name: learned since with an encoded plus offset, as: me_ann, request: {method: GET, path: "/v1/me/learned?since=2026-01-01T00:00:00%2B00:00"}}

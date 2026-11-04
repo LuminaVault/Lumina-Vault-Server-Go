@@ -29,3 +29,4 @@ steps:
   - {name: "tasks limit caps each source before the state filter", as: dash_ann, request: {method: GET, path: "/v1/tasks?state=queued&limit=2"}}
   - {name: "tasks running limit 1", as: dash_ann, request: {method: GET, path: "/v1/tasks?state=running&limit=1"}}
   - {name: "tasks ignore X-Vault-ID", as: dash_cat, request: {method: GET, path: "/v1/tasks", headers: {X-Vault-ID: "DA5B0000-0000-4000-8000-0000000000A1"}}}
+  - {name: "tasks limit with a literal plus", as: dash_ann, request: {method: GET, path: "/v1/tasks?limit=+1"}}

@@ -30,3 +30,7 @@ steps:
   - {"name": "reviews", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins/alpha-notes/reviews"}}
   - {"name": "reviews of a draft listing", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins/draft-thing/reviews"}}
   - {"name": "reviews unknown", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins/nope/reviews"}}
+  - {"name": "limit with a literal plus", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins?limit=+1"}}
+  - {"name": "cursor with a literal plus", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins?cursor=+1"}}
+  - {"name": "query with a literal plus", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins?query=a+b"}}
+  - {"name": "encoded limit key is no key", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins?%6Cimit=1"}}
