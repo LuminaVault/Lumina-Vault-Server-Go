@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
-	"lumina/internal/modules/apple"
+	"lumina/internal/embedding"
 	"lumina/internal/modules/calendar/db"
 	"lumina/internal/swiftstr"
 	"lumina/internal/wire"
@@ -39,7 +39,7 @@ const (
 // The push half (MeetingBriefScheduler) stays in Swift.
 type briefService struct {
 	q           *db.Queries
-	embeddings  apple.Embedder
+	embeddings  embedding.Service
 	maxDistance float32
 }
 
@@ -202,7 +202,7 @@ func (b *briefService) match(ctx context.Context, tenant uuid.UUID, ev briefEven
 	if err != nil {
 		return nil, err
 	}
-	hits, err := b.search(ctx, tenant, query, apple.FormatVector(vector))
+	hits, err := b.search(ctx, tenant, query, embedding.FormatVector(vector))
 	if err != nil {
 		return nil, err
 	}

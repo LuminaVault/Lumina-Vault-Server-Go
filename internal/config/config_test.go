@@ -39,7 +39,13 @@ func TestKeyToEnv(t *testing.T) {
 // Every env tag on Config must be the env name of a key Swift reads, so Go
 // never invents a variable the sealed secret does not carry.
 func TestConfigEnvNamesComeFromSwiftKeys(t *testing.T) {
-	known := map[string]bool{"LV_GO_JOBS": true}
+	known := map[string]bool{
+		"LV_GO_JOBS": true,
+		// ProviderRegistry.loadConfig builds these as llm.provider.\(key).apiKey
+		// and llm.provider.\(key.lowercased()).apikey with key = "openRouter".
+		"LLM_PROVIDER_OPEN_ROUTER_API_KEY": true,
+		"LLM_PROVIDER_OPENROUTER_APIKEY":   true,
+	}
 	raw, err := os.ReadFile("../../docs/migration/config-keys.txt")
 	require.NoError(t, err)
 	for line := range strings.Lines(string(raw)) {
