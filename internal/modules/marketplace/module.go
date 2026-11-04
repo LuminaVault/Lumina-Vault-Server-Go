@@ -116,6 +116,16 @@ type Module struct {
 	versionInserts bool
 }
 
+// CheckConfig is the guard in Swift's buildRouter: outside dev, a runner token
+// with no usable signing key refuses to boot. An unset environment is dev.
+func CheckConfig(environment string, opts Options) error {
+	if opts.RunnerToken == "" || len(opts.ArtifactSigningKey) >= minSigningKey || environment == "" || environment == "dev" {
+		return nil
+	}
+	return errors.New("PLUGIN_ARTIFACT_SIGNING_KEY must contain at least 32 bytes when the plugin runner is enabled. " +
+		"Use a secret independent from PLUGIN_RUNNER_TOKEN")
+}
+
 // New returns nil without a usable LV_SECRET_MASTER_KEY: Swift mounts
 // /v1/marketplace only inside the plugins block, which needs SecretBox.
 func New(pool *pgxpool.Pool, masterKey string, opts Options, identify echo.MiddlewareFunc, limits *ratelimit.Store, paths vaultpaths.Paths) *Module {

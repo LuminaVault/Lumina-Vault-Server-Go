@@ -6,7 +6,9 @@
 #
 #   community-off   COMMUNITY_ENABLED=false
 #   posting-off     COMMUNITY_POSTING_ENABLED=false, and today's daily post published
-#   unconfigured    ADMIN_TOKEN empty, plugin signing key too short
+#   unconfigured    ADMIN_TOKEN empty, plugin signing key too short, no runner token
+#                   (a short key with a runner token refuses to boot, in both servers)
+#   runner-off      no runner token
 #   catalog-unseeded  no "luminavault" publisher: the first read tries to seed the catalog
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -47,7 +49,8 @@ run_state() {
 failed=0
 run_state community-off SWITCH_COMMUNITY_ENABLED=false
 run_state posting-off SWITCH_COMMUNITY_POSTING_ENABLED=false
-run_state unconfigured SWITCH_ADMIN_TOKEN= SWITCH_SIGNING_KEY=too-short
+run_state unconfigured SWITCH_ADMIN_TOKEN= SWITCH_SIGNING_KEY=too-short SWITCH_RUNNER_TOKEN=
+run_state runner-off SWITCH_RUNNER_TOKEN=
 run_state catalog-unseeded SWITCH_NONE=
 "${COMPOSE[@]}" stop swift-switched go-switched >/dev/null 2>&1 || true
 exit "$failed"
