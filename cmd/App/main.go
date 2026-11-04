@@ -16,6 +16,7 @@ import (
 	"lumina/internal/modules/apple"
 	"lumina/internal/modules/devices"
 	"lumina/internal/modules/kanban"
+	"lumina/internal/modules/me"
 	"lumina/internal/modules/news"
 	"lumina/internal/modules/profiles"
 	"lumina/internal/modules/projects"
@@ -131,6 +132,7 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 				Kind: cfg.EmailKind, APIKey: cfg.EmailResendAPIKey, FromAddress: cfg.EmailFromAddress,
 				ReplyTo: cfg.EmailReplyTo, BaseURL: cfg.TeamInviteBaseURL,
 			}, slog.Default().With("module", "teams"))),
+			me.New(pool, identify, limits, me.Options{RecapThemesEnabled: cfg.RecapThemesEnabled}),
 		}
 		if m := news.New(pool, cfg, identify, limits); m != nil { // nil without LV_SECRET_MASTER_KEY, as in Swift
 			deps.Modules = append(deps.Modules, m)

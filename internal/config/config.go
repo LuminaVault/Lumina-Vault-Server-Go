@@ -51,6 +51,9 @@ type Config struct {
 	EmailFromAddress  string `env:"EMAIL_FROM_ADDRESS"`
 	EmailReplyTo      string `env:"EMAIL_REPLY_TO"`
 	TeamInviteBaseURL string `env:"TEAM_INVITE_BASE_URL" envDefault:"http://localhost:5173"`
+	// RecapThemesEnabled is recap.themesEnabled: the model-written card of
+	// /v1/me/recap/period (me module). Off reports it as disabled.
+	RecapThemesEnabled bool `env:"RECAP_THEMES_ENABLED" envDefault:"true"`
 
 	// VaultRootPath holds tenants/<UUID>/{raw,wiki,memories} on the shared PVC.
 	VaultRootPath string `env:"VAULT_ROOT_PATH" envDefault:"/tmp/luminavault"`
