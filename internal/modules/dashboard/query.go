@@ -71,7 +71,6 @@ func unhex(c byte) (byte, bool) {
 	return 0, false
 }
 
-
 // query is the request's parameter as Swift reads it, "" when absent.
 func query(c *echo.Context, key string) string {
 	v, _ := queryParam(c.Request().URL.RawQuery, key)
