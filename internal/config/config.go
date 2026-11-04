@@ -74,6 +74,10 @@ type Config struct {
 
 	// VaultRootPath holds tenants/<UUID>/{raw,wiki,memories} on the shared PVC.
 	VaultRootPath string `env:"VAULT_ROOT_PATH" envDefault:"/tmp/luminavault"`
+	// storage.minFreeBytes and storage.minFreeRatio: internal/diskguard's floors
+	// and Swift's defaults (3 GiB, 10%). Zero switches a floor off.
+	StorageMinFreeBytes int64   `env:"STORAGE_MIN_FREE_BYTES" envDefault:"3221225472"`
+	StorageMinFreeRatio float64 `env:"STORAGE_MIN_FREE_RATIO" envDefault:"0.10"`
 
 	// Wave 3 account/health. HermesDataRoot holds profiles/<id>/ (account
 	// deletion soft-renames it). BillingEnforcementEnabled stays a string:
