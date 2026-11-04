@@ -80,7 +80,7 @@ modules:
   calendar:
     wave: 3
     swiftDir: Sources/App/Calendar
-    status: swift
+    status: parity
     prefixes: [/v1/calendar]
     jobs: []
   community:
@@ -104,7 +104,7 @@ modules:
   mail:
     wave: 3
     swiftDir: Sources/App/Mail
-    status: swift
+    status: parity
     prefixes: [/v1/mail]
     jobs: []
   marketplace:
