@@ -207,7 +207,7 @@ func capture(raw []byte, captures map[string]string, vars map[string]string) err
 	for name, path := range captures {
 		v, err := normalize.Get(doc, path)
 		if err != nil {
-			return fmt.Errorf("capture %s: %w", name, err)
+			return fmt.Errorf("capture %s: %w, in response %.300s", name, err, raw)
 		}
 		vars[name] = fmt.Sprint(v)
 	}

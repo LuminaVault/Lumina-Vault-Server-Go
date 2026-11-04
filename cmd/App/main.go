@@ -16,10 +16,12 @@ import (
 	"lumina/internal/modules/account"
 	"lumina/internal/modules/achievements"
 	"lumina/internal/modules/apple"
+	"lumina/internal/modules/community"
 	"lumina/internal/modules/dashboard"
 	"lumina/internal/modules/devices"
 	"lumina/internal/modules/health"
 	"lumina/internal/modules/kanban"
+	"lumina/internal/modules/marketplace"
 	"lumina/internal/modules/me"
 	"lumina/internal/modules/news"
 	"lumina/internal/modules/onboarding"
@@ -103,6 +105,13 @@ func migrate(ctx context.Context, cfg config.Config, cmd Command) error {
 }
 
 func serve(ctx context.Context, cfg config.Config, cmd Command) error {
+	pluginOptions := marketplace.Options{
+		RunnerURL: cfg.PluginRunnerURL, RunnerToken: cfg.PluginRunnerToken,
+		ArtifactRoot: cfg.PluginArtifactRoot, ArtifactSigningKey: cfg.PluginArtifactSigningKey,
+	}
+	if err := marketplace.CheckConfig(cfg.LVEnvironment, pluginOptions); err != nil {
+		return err
+	}
 	deps := httpserver.Deps{}
 	if cfg.FluentEnabled {
 		pool, err := db.Open(ctx, db.DSN(cfg))
@@ -153,6 +162,13 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 			health.New(pool, healthGate),
 		)
 		if m := news.New(pool, cfg, identify, limits); m != nil { // nil without LV_SECRET_MASTER_KEY, as in Swift
+			deps.Modules = append(deps.Modules, m)
+		}
+		deps.Modules = append(deps.Modules, community.New(pool, community.Config{
+			Enabled: community.ParseFlag(cfg.CommunityEnabled), PostingEnabled: community.ParseFlag(cfg.CommunityPostingEnabled),
+			AdminToken: cfg.AdminToken,
+		}, identify, limits, nil))
+		if m := marketplace.New(pool, cfg.LVSecretMasterKey, pluginOptions, identify, limits, paths); m != nil { // nil without LV_SECRET_MASTER_KEY, as in Swift
 			deps.Modules = append(deps.Modules, m)
 		}
 	}

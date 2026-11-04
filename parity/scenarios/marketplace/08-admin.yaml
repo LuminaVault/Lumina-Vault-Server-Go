@@ -1,0 +1,31 @@
+# Moderation, publisher decisions, revocation. Revoking a listing's last approved
+# version makes the whole list a 404 (a Swift quirk this port keeps), so that is last.
+module: marketplace
+steps:
+  - {"name": "admin submissions not an admin", "as": "mkt_none", "request": {"method": "GET", "path": "/v1/marketplace/admin/submissions"}}
+  - {"name": "admin publishers not an admin", "as": "mkt_none", "request": {"method": "GET", "path": "/v1/marketplace/admin/publishers"}}
+  - {"name": "decision not an admin", "as": "mkt_none", "request": {"method": "POST", "path": "/v1/marketplace/admin/submissions/AA7B0000-0000-4000-8000-000000000001/decision", "json": {"approved": true}}}
+  - {"name": "publisher decision not an admin", "as": "mkt_none", "request": {"method": "POST", "path": "/v1/marketplace/admin/publishers/AA780000-0000-4000-8000-000000000003/decision", "json": {"approved": true}}}
+  - {"name": "revoke not an admin", "as": "mkt_none", "request": {"method": "POST", "path": "/v1/marketplace/admin/versions/AA7A0000-0000-4000-8000-000000000009/revoke", "json": {"reason": "long enough"}}}
+  - {"name": "admin submissions", "as": "mkt_admin", "request": {"method": "GET", "path": "/v1/marketplace/admin/submissions"}}
+  - {"name": "admin publishers", "as": "mkt_admin", "request": {"method": "GET", "path": "/v1/marketplace/admin/publishers"}}
+  - {"name": "decide unknown submission", "as": "mkt_admin", "request": {"method": "POST", "path": "/v1/marketplace/admin/submissions/00000000-0000-4000-8000-000000000000/decision", "json": {"approved": true}}}
+  - {"name": "decide a submission not in review", "as": "mkt_admin", "request": {"method": "POST", "path": "/v1/marketplace/admin/submissions/AA7B0000-0000-4000-8000-000000000002/decision", "json": {"approved": true}}}
+  - {"name": "reject", "as": "mkt_admin", "request": {"method": "POST", "path": "/v1/marketplace/admin/submissions/AA7B0000-0000-4000-8000-000000000001/decision", "json": {"approved": false, "note": "Needs work"}}, "snapshot": ["marketplace_submissions", "marketplace_versions", "marketplace_listings"]}
+  - {"name": "rejected publisher can resubmit", "as": "mkt_pub", "request": {"method": "POST", "path": "/v1/marketplace/publisher/plugins/draft-thing/versions/AA7A0000-0000-4000-8000-000000000008/submit"}, "snapshot": ["marketplace_submissions", "marketplace_versions"]}
+  - {"name": "approve it publishes the listing", "as": "mkt_admin", "request": {"method": "POST", "path": "/v1/marketplace/admin/submissions/AA7B0000-0000-4000-8000-000000000001/decision", "json": {"approved": true}}, "snapshot": ["marketplace_submissions", "marketplace_versions", "marketplace_listings"]}
+  - {"name": "resubmit an approved version is 409", "as": "mkt_pub", "request": {"method": "POST", "path": "/v1/marketplace/publisher/plugins/draft-thing/versions/AA7A0000-0000-4000-8000-000000000008/submit"}}
+  - {"name": "approve publisher", "as": "mkt_admin", "request": {"method": "POST", "path": "/v1/marketplace/admin/publishers/AA780000-0000-4000-8000-000000000003/decision", "json": {"approved": true, "note": "ok"}}, "snapshot": ["marketplace_publishers"]}
+  - {"name": "reject publisher", "as": "mkt_admin", "request": {"method": "POST", "path": "/v1/marketplace/admin/publishers/AA780000-0000-4000-8000-000000000004/decision", "json": {"approved": false}}, "snapshot": ["marketplace_publishers"]}
+  - {"name": "decide unknown publisher", "as": "mkt_admin", "request": {"method": "POST", "path": "/v1/marketplace/admin/publishers/00000000-0000-4000-8000-000000000000/decision", "json": {"approved": true}}}
+  - {"name": "publishers after", "as": "mkt_admin", "request": {"method": "GET", "path": "/v1/marketplace/admin/publishers"}}
+  - {"name": "approved publisher can list", "as": "mkt_pend", "request": {"method": "POST", "path": "/v1/marketplace/publisher/plugins", "json": {"slug": "from-pending", "name": "N", "summary": "S", "description": "D", "category": "skill"}}}
+  - {"name": "revoke with a short reason", "as": "mkt_adm2", "request": {"method": "POST", "path": "/v1/marketplace/admin/versions/AA7A0000-0000-4000-8000-000000000009/revoke", "json": {"reason": " abc "}}}
+  - {"name": "revoke unknown", "as": "mkt_adm2", "request": {"method": "POST", "path": "/v1/marketplace/admin/versions/00000000-0000-4000-8000-000000000000/revoke", "json": {"reason": "long enough"}}}
+  - {"name": "revoke disables installs", "as": "mkt_adm2", "request": {"method": "POST", "path": "/v1/marketplace/admin/versions/AA7A0000-0000-4000-8000-000000000009/revoke", "json": {"reason": "Security issue"}}, "snapshot": ["marketplace_versions", "parity_plugin_installs"]}
+  - {"name": "listing still shows the other version", "as": "mkt_adm2", "request": {"method": "GET", "path": "/v1/marketplace/plugins/revoke-me"}}
+  - {"name": "install a revoked version", "as": "mkt_adm2", "request": {"method": "POST", "path": "/v1/marketplace/plugins/revoke-me/install", "json": {"versionId": "AA7A0000-0000-4000-8000-000000000009", "grantedPermissions": [], "config": {}}}}
+  - {"name": "revoke the last version", "as": "mkt_adm2", "request": {"method": "POST", "path": "/v1/marketplace/admin/versions/AA7A0000-0000-4000-8000-00000000000a/revoke", "json": {"reason": "Security issue"}}}
+  - {"name": "list now fails on the listing with no version", "as": "mkt_adm2", "request": {"method": "GET", "path": "/v1/marketplace/plugins?limit=50"}}
+  - {"name": "detail too", "as": "mkt_adm2", "request": {"method": "GET", "path": "/v1/marketplace/plugins/revoke-me"}}
+  - {"name": "other listings still work", "as": "mkt_adm2", "request": {"method": "GET", "path": "/v1/marketplace/plugins/alpha-notes"}}

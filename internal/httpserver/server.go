@@ -51,7 +51,11 @@ func (s *server) Streaming(method, path string) { s.streaming[method+" "+path] =
 
 // New returns the configured Echo instance.
 func New(cfg config.Config, deps Deps) *echo.Echo {
-	s := &server{Echo: echo.New(), streaming: map[string]bool{}}
+	// Hummingbird answers a known path with the wrong method as 404, not 405 (parity CI).
+	s := &server{Echo: echo.NewWithConfig(echo.Config{Router: echo.NewRouter(echo.RouterConfig{
+		AllowOverwritingRoute:   true, // Echo's own default router sets it
+		MethodNotAllowedHandler: func(*echo.Context) error { return echo.ErrNotFound },
+	})}), streaming: map[string]bool{}}
 	e := s.Echo
 	e.HTTPErrorHandler = wire.HTTPErrorHandler
 
