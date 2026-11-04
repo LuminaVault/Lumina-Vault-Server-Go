@@ -848,3 +848,46 @@ Beyond the pilot gate (D-wave2-early):
 - Proposal for the owner: route `/v1/analytics`, `/v1/insights`, `/v1/tasks` and the other
   `/v1/dashboard` routes to Go, and leave the `/v1/dashboard/home` prefix on Swift until
   Hermes moves (longest-prefix routing keeps it there).
+
+## Flip batch 1: profiles, sessions, news, achievements, health
+
+### G2 staging deploy: smoke met 2026-11-04, on `c17c3f6`
+
+- Image: `api-go-staging` ran `c17c3f6` from 2026-11-04 14:40:50Z, 1/1 Ready.
+- Smoke: `parity smoke` per module with throwaway staging users, against Swift
+  transcripts from CI run 41847129028. Swift staging ran the same smoke as the
+  control, because the gate's user has no parity seed data.
+
+| Module | Go mismatches | Swift control | Same set |
+|---|---|---|---|
+| profiles | 11 | 11 | yes |
+| sessions | 0 | 0 | yes |
+| news | 10 | 10 | yes |
+| achievements | 0 | 0 | yes |
+| health | 0 | 0 | yes |
+
+- Every mismatch is a 404 where the transcript has 2xx, on a step that needs
+  parity seed rows. `profiles` had to be re-run with a separate user per server:
+  on one shared user, Swift answered 409 for slugs Go had just created.
+- `profiles/crud` and `health/02-read` gained `smoke: true`, since the gate needs
+  a smoke scenario per module.
+- Coupling accepted for the flip: `AchievementsWorker` and
+  `HealthCorrelationService` stay in Swift and write the same tables.
+
+### Production flip: 2026-11-04
+
+- Infra #546 merged 15:48:52Z. `api-go-production` runs `c17c3f6`, rolled out and
+  confirmed 15:52:55Z.
+- Public check: `/v1/profiles`, `/v1/sessions`, `/v1/news/ticker`, `/v1/achievements`,
+  `/v1/health` and `/v1/projects` answer from Go, with no Swift `Server` header.
+  `/v1/spaces`, `/v1/me/today` and `/health` still answer from Swift.
+- The owner's merge waives the pilot gate: D-flip-before-pilot.
+
+### G3 production watch: running, 72 h ends 2026-11-07 15:53Z
+
+- Baseline: Swift's logs from 2026-11-01 15:55Z to the flip hold 7 lines for these
+  prefixes (`/v1/news` 3, the others 1 each) out of 47,053, and no 5xx-like status.
+  Some of those are the migration's own probes.
+- Limit of this evidence: these routes see almost no traffic, so a clean watch shows
+  the deploy is healthy, not that real clients behave the same.
+

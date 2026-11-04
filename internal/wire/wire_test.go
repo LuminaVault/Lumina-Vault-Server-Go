@@ -3,13 +3,17 @@ package wire_test
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"lumina/internal/wire"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"regexp"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/labstack/echo/v5"
 	"github.com/stretchr/testify/require"
 )
 
@@ -77,3 +81,23 @@ func TestTimeMatchesGolden(t *testing.T) {
 }
 
 var isoRe = regexp.MustCompile(`"\d{4}-\d{2}-\d{2}T[^"]+"`)
+
+type selfRendering struct{}
+
+func (selfRendering) Error() string { return "self" }
+
+func (selfRendering) WriteResponse(c *echo.Context) error {
+	return c.Blob(http.StatusTeapot, "text/x-self", []byte("rendered"))
+}
+
+// A ResponseError writes its own body, also when wrapped.
+func TestHTTPErrorHandlerResponseError(t *testing.T) {
+	e := echo.New()
+	e.HTTPErrorHandler = wire.HTTPErrorHandler
+	e.GET("/", func(*echo.Context) error { return fmt.Errorf("wrapped: %w", selfRendering{}) })
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	require.Equal(t, http.StatusTeapot, rec.Code)
+	require.Equal(t, "text/x-self", rec.Header().Get("Content-Type"))
+	require.Equal(t, "rendered", rec.Body.String())
+}

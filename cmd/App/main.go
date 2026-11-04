@@ -10,6 +10,7 @@ import (
 	"lumina/internal/auth"
 	"lumina/internal/config"
 	"lumina/internal/db"
+	"lumina/internal/embedding"
 	"lumina/internal/entitlement"
 	"lumina/internal/httpserver"
 	"lumina/internal/migrations"
@@ -33,6 +34,7 @@ import (
 	"lumina/internal/modules/sessions"
 	"lumina/internal/modules/spaces"
 	"lumina/internal/modules/teams"
+	"lumina/internal/posthog"
 	"lumina/internal/ratelimit"
 	"lumina/internal/secretbox"
 	"lumina/internal/telemetry"
@@ -115,6 +117,19 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 	if err := marketplace.CheckConfig(cfg.LVEnvironment, pluginOptions); err != nil {
 		return err
 	}
+	// Analytics outlive the HTTP server: the deferred cancel runs after Start
+	// returns, so requests finishing in graceful shutdown still get flushed.
+	analytics := posthog.New(cfg.PostHogProjectToken, cfg.PostHogHost, posthog.Options{})
+	analyticsCtx, stopAnalytics := context.WithCancel(context.WithoutCancel(ctx))
+	analyticsDone := make(chan struct{})
+	go func() {
+		defer close(analyticsDone)
+		analytics.Run(analyticsCtx)
+	}()
+	defer func() {
+		stopAnalytics()
+		<-analyticsDone
+	}()
 	deps := httpserver.Deps{}
 	if cfg.FluentEnabled {
 		pool, err := db.Open(ctx, db.DSN(cfg))
@@ -133,6 +148,9 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		// Identify: vault-scoped routes check X-Vault-ID before identity (decisions.md D-identify).
 		identify := auth.Identify(keys, auth.PGUsers(pool))
 		paths := vaultpaths.Paths{Root: cfg.VaultRootPath}
+		// SecretBox: nil without LV_SECRET_MASTER_KEY, as in Swift.
+		box, _ := secretbox.New(cfg.LVSecretMasterKey)
+		embeddings := embedding.New(pool, embeddingConfig(cfg), box)
 		// Migrated modules (modules.yaml status ≥ parity). Traffic only reaches
 		// them through the api ingress.extraPaths that name them.
 		deps.Modules = []httpserver.Module{
@@ -142,7 +160,7 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 			profiles.New(pool),
 			sessions.New(pool),
 			// apple, devices and reminders flip together (D-shared-prefixes).
-			apple.New(pool, apple.Options{EmbeddingProvider: cfg.EmbeddingProvider, EmbeddingMonthlyCap: cfg.EmbeddingMonthlyTokenCapDefault}),
+			apple.New(pool, apple.Options{Embedder: embeddings}),
 			devices.New(pool, cfg.APNSBundleID),
 			reminders.New(pool, nil, cfg.HermesDefaultModel),
 			achievements.New(pool, identify, limits),
@@ -156,15 +174,14 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		// Wave 3: account, onboarding, health. Health ingest sits behind the
 		// billing gate; the BYO-key exemption needs the SecretBox (nil without
 		// LV_SECRET_MASTER_KEY, as Swift's UserCredentialStore).
-		box, _ := secretbox.New(cfg.LVSecretMasterKey)
 		healthGate := entitlement.Middleware(pool, entitlement.HealthIngest,
 			entitlement.EnforcementEnabled(cfg.BillingEnforcementEnabled), entitlement.PGCredentials(pool, box))
 		deps.Modules = append(deps.Modules,
 			account.New(pool, keys, paths, cfg.HermesDataRoot),
 			onboarding.New(pool),
-			health.New(pool, healthGate),
+			health.New(pool, healthGate, analytics),
 		)
-		deps.Modules = append(deps.Modules, calendarModules(pool, cfg, identify, limits)...)
+		deps.Modules = append(deps.Modules, calendarModules(pool, cfg, identify, limits, embeddings)...)
 		if m := news.New(pool, cfg, identify, limits); m != nil { // nil without LV_SECRET_MASTER_KEY, as in Swift
 			deps.Modules = append(deps.Modules, m)
 		}
@@ -193,7 +210,24 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 // calendarModules builds calendar and mail, which share the Google grant and
 // flip together. Without a usable LV_SECRET_MASTER_KEY there is no Google side:
 // Swift then registers only /v1/calendar/sync and the brief.
-func calendarModules(pool *pgxpool.Pool, cfg config.Config, identify echo.MiddlewareFunc, limits *ratelimit.Store) []httpserver.Module {
+// embeddingConfig maps the env onto EmbeddingProviderRegistry.bootstrap's reads.
+func embeddingConfig(cfg config.Config) embedding.Config {
+	return embedding.Config{
+		Provider:      cfg.EmbeddingProvider,
+		FallbackChain: cfg.EmbeddingFallbackChain,
+		MonthlyCap:    cfg.EmbeddingMonthlyTokenCapDefault,
+		OpenAIAPIKey:  cfg.LLMOpenAIAPIKey,
+		OpenAIBaseURL: cfg.LLMOpenAIBaseURL,
+		OpenRouterAPIKeys: []string{
+			cfg.LLMOpenRouterAPIKey, cfg.LLMOpenRouterAPIKeyLegacy, cfg.OpenRouterAPIKey, cfg.OpenRouterFallbackAPIKey,
+		},
+		OpenRouterBaseURL: cfg.EmbeddingOpenRouterBaseURL,
+		OpenRouterModel:   cfg.EmbeddingOpenRouterModel,
+		NomicAPIKey:       cfg.EmbeddingNomicAPIKey,
+	}
+}
+
+func calendarModules(pool *pgxpool.Pool, cfg config.Config, identify echo.MiddlewareFunc, limits *ratelimit.Store, embeddings embedding.Service) []httpserver.Module {
 	var google *calendar.Google
 	if box, err := secretbox.New(cfg.LVSecretMasterKey); err == nil {
 		google = calendar.NewGoogle(pool, calendar.GoogleOptions{
@@ -205,7 +239,7 @@ func calendarModules(pool *pgxpool.Pool, cfg config.Config, identify echo.Middle
 		calendar.New(pool, identify, limits, calendar.Options{
 			Google:      google,
 			MaxDistance: float32(cfg.MeetingBriefMaxDistance),
-			Embeddings:  apple.NewEmbedder(pool, apple.Options{EmbeddingProvider: cfg.EmbeddingProvider, EmbeddingMonthlyCap: cfg.EmbeddingMonthlyTokenCapDefault}),
+			Embeddings:  embeddings,
 		}),
 		mail.New(google),
 	}
