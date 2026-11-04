@@ -21,6 +21,11 @@ import (
 	"lumina/internal/modules/health"
 	"lumina/internal/modules/kanban"
 	"lumina/internal/modules/marketplace"
+	"lumina/internal/modules/calendar"
+	"lumina/internal/modules/devices"
+	"lumina/internal/modules/health"
+	"lumina/internal/modules/kanban"
+	"lumina/internal/modules/mail"
 	"lumina/internal/modules/me"
 	"lumina/internal/modules/news"
 	"lumina/internal/modules/onboarding"
@@ -41,6 +46,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/labstack/echo/v5"
 )
 
@@ -159,6 +165,7 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 			onboarding.New(pool),
 			health.New(pool, healthGate),
 		)
+		deps.Modules = append(deps.Modules, calendarModules(pool, cfg, identify, limits)...)
 		if m := news.New(pool, cfg, identify, limits); m != nil { // nil without LV_SECRET_MASTER_KEY, as in Swift
 			deps.Modules = append(deps.Modules, m)
 		}
@@ -182,4 +189,25 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		return err
 	}
 	return nil
+}
+
+// calendarModules builds calendar and mail, which share the Google grant and
+// flip together. Without a usable LV_SECRET_MASTER_KEY there is no Google side:
+// Swift then registers only /v1/calendar/sync and the brief.
+func calendarModules(pool *pgxpool.Pool, cfg config.Config, identify echo.MiddlewareFunc, limits *ratelimit.Store) []httpserver.Module {
+	var google *calendar.Google
+	if box, err := secretbox.New(cfg.LVSecretMasterKey); err == nil {
+		google = calendar.NewGoogle(pool, calendar.GoogleOptions{
+			Box: box, ClientID: cfg.GoogleCalendarClientID, ClientSecret: cfg.GoogleCalendarClientSecret,
+			RedirectURI: cfg.GoogleCalendarRedirectURI, WebReturnOrigins: cfg.CORSAllowedOrigins,
+		})
+	}
+	return []httpserver.Module{
+		calendar.New(pool, identify, limits, calendar.Options{
+			Google:      google,
+			MaxDistance: float32(cfg.MeetingBriefMaxDistance),
+			Embeddings:  apple.NewEmbedder(pool, apple.Options{EmbeddingProvider: cfg.EmbeddingProvider, EmbeddingMonthlyCap: cfg.EmbeddingMonthlyTokenCapDefault}),
+		}),
+		mail.New(google),
+	}
 }
