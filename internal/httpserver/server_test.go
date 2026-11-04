@@ -70,6 +70,14 @@ func TestBaseRoutes(t *testing.T) {
 	require.Equal(t, "application/json", rec.Header().Get(echo.HeaderContentType))
 }
 
+func TestWrongMethodIsNotFound(t *testing.T) {
+	e := New(config.Config{}, Deps{})
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/health", http.NoBody))
+	require.Equal(t, http.StatusNotFound, rec.Code)
+	require.Empty(t, rec.Body.String())
+}
+
 func TestCORSPreflightAllowedOrigin(t *testing.T) {
 	req := httptest.NewRequest(http.MethodOptions, "/v1/test/protected", nil)
 	req.Header.Set("Origin", "https://app.luminavault.fyi")

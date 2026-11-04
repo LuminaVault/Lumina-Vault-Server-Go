@@ -164,3 +164,21 @@ func TestBindNestedPaths(t *testing.T) {
 	require.Equal(t, map[string]string{"k": "v"}, *got.Items[0].Args)
 	require.Equal(t, 2026, got.Items[0].When.Year())
 }
+
+func TestBindNullRootAndNonIntegerNumbers(t *testing.T) {
+	type body struct {
+		N int `json:"n"`
+	}
+	for raw, want := range map[string]string{
+		`null`:      "Value not found for `` key.",
+		`{"n":4.5}`: "The given data was not valid input: The given data was not valid JSON.",
+		`{"n":"x"}`: "Type mismatch for `n` key, expected `Int` type.",
+	} {
+		e := echo.New()
+		c := e.NewContext(httptest.NewRequest(http.MethodPost, "/", strings.NewReader(raw)), httptest.NewRecorder())
+		_, err := wire.Bind[body](c)
+		var we *wire.Error
+		require.ErrorAs(t, err, &we, raw)
+		require.Equal(t, want, we.Message, raw)
+	}
+}

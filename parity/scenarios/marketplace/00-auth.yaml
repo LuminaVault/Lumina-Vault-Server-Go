@@ -23,6 +23,9 @@ steps:
   - {"name": "rating rating string", "request": {"method": "PUT", "path": "/v1/marketplace/plugins/alpha-notes/rating", "raw": "{\"rating\":\"five\"}", "headers": {"X-Forwarded-For": "10.77.0.2"}}}
   - {"name": "rating rating null", "request": {"method": "PUT", "path": "/v1/marketplace/plugins/alpha-notes/rating", "raw": "{\"rating\":null}", "headers": {"X-Forwarded-For": "10.77.0.2"}}}
   - {"name": "rating rating float", "request": {"method": "PUT", "path": "/v1/marketplace/plugins/alpha-notes/rating", "raw": "{\"rating\":4.5}", "headers": {"X-Forwarded-For": "10.77.0.2"}}}
+  - {"name": "rating rating whole float", "request": {"method": "PUT", "path": "/v1/marketplace/plugins/alpha-notes/rating", "raw": "{\"rating\":4.0}", "headers": {"X-Forwarded-For": "10.77.0.2"}}}
+  - {"name": "rating rating exponent", "request": {"method": "PUT", "path": "/v1/marketplace/plugins/alpha-notes/rating", "raw": "{\"rating\":1e0}", "headers": {"X-Forwarded-For": "10.77.0.2"}}}
+  - {"name": "rating rating too big", "request": {"method": "PUT", "path": "/v1/marketplace/plugins/alpha-notes/rating", "raw": "{\"rating\":99999999999999999999}", "headers": {"X-Forwarded-For": "10.77.0.2"}}}
   - {"name": "rating body number", "request": {"method": "PUT", "path": "/v1/marketplace/plugins/alpha-notes/rating", "raw": "{\"rating\":5,\"body\":3}", "headers": {"X-Forwarded-For": "10.77.0.2"}}}
   - {"name": "install malformed", "request": {"method": "POST", "path": "/v1/marketplace/plugins/alpha-notes/install", "raw": "{bad", "headers": {"X-Forwarded-For": "10.77.0.3"}}}
   - {"name": "install empty", "request": {"method": "POST", "path": "/v1/marketplace/plugins/alpha-notes/install", "raw": "", "headers": {"X-Forwarded-For": "10.77.0.3"}}}
