@@ -1,0 +1,10 @@
+# PLUGIN_RUNNER_TOKEN empty: a run passes every check, records its execution, and the
+# runner client answers plugin_runner_disabled.
+module: marketplace
+steps:
+  - {"name": "upload", "as": "mkt_wasm", "request": {"method": "POST", "path": "/v1/marketplace/publisher/plugins/wasm-tool/artifacts", "json": {"fileName": "TOOL.WASM", "bytesBase64": "AGFzbQEAAAA="}}, "capture": {"key": "$.artifactKey", "sha": "$.sha256", "sig": "$.signature"}}
+  - {"name": "submit", "as": "mkt_wasm", "request": {"method": "POST", "path": "/v1/marketplace/publisher/plugins/wasm-tool/versions/AA7A0000-0000-4000-8000-000000000010/submit"}, "capture": {"sid": "$.id"}, "snapshot": ["marketplace_versions", "marketplace_submissions"]}
+  - {"name": "approve wasm", "as": "mkt_admin", "request": {"method": "POST", "path": "/v1/marketplace/admin/submissions/{{sid}}/decision", "json": {"approved": true, "note": "  looks fine  "}}, "snapshot": ["marketplace_versions", "marketplace_listings", "marketplace_submissions"]}
+  - {"name": "install with every permission", "as": "mkt_run", "request": {"method": "POST", "path": "/v1/marketplace/plugins/wasm-tool/install", "json": {"versionId": "AA7A0000-0000-4000-8000-000000000010", "grantedPermissions": ["memory.read", "memory.write", "vault.read", "vault.write", "network.fetch", "output.emit"], "config": {}}}, "snapshot": ["parity_plugin_installs"]}
+  - {"name": "run with the runner off", "as": "mkt_run", "request": {"method": "POST", "path": "/v1/marketplace/plugins/wasm-tool/tools/echo/run", "json": {"input": {"a": "1", "b": "two"}}}, "snapshot": ["parity_marketplace_executions"]}
+  - {"name": "unknown tool is still 404", "as": "mkt_run", "request": {"method": "POST", "path": "/v1/marketplace/plugins/wasm-tool/tools/nope/run", "json": {"input": {}}}}

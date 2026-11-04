@@ -1,0 +1,37 @@
+# GET /me and PUT /profile: validation order, terms, handle rules.
+# PUT checks identity first, so body cases carry a token.
+module: community
+steps:
+  - {"name": "me with no profile", "as": "comm_new", "request": {"method": "GET", "path": "/v1/community/me"}}
+  - {"name": "create profile", "as": "comm_new", "request": {"method": "PUT", "path": "/v1/community/profile", "json": {"handle": "nice_handle", "displayName": "Nice Name", "acceptTerms": true, "termsVersion": 1}}, "snapshot": ["community_profiles"]}
+  - {"name": "me with profile", "as": "comm_new", "request": {"method": "GET", "path": "/v1/community/me"}}
+  - {"name": "rename and trim", "as": "comm_new", "request": {"method": "PUT", "path": "/v1/community/profile", "json": {"handle": "  Renamed_H  ", "displayName": "  Spaced Name  ", "acceptTerms": true, "termsVersion": 1}}, "snapshot": ["community_profiles"]}
+  - {"name": "reuse own handle in another case", "as": "comm_new", "request": {"method": "PUT", "path": "/v1/community/profile", "json": {"handle": "RENAMED_H", "displayName": "Spaced Name", "acceptTerms": true, "termsVersion": 1}}}
+  - {"name": "handle equal to the username", "as": "comm_new2", "request": {"method": "PUT", "path": "/v1/community/profile", "json": {"handle": "comm_new2", "displayName": "Nice Name", "acceptTerms": true, "termsVersion": 1}}}
+  - {"name": "handle equal to the username in another case", "as": "comm_new2", "request": {"method": "PUT", "path": "/v1/community/profile", "json": {"handle": "COMM_NEW2", "displayName": "Nice Name", "acceptTerms": true, "termsVersion": 1}}}
+  - {"name": "me moderator", "as": "comm_mod", "request": {"method": "GET", "path": "/v1/community/me"}}
+  - {"name": "me old terms", "as": "comm_old", "request": {"method": "GET", "path": "/v1/community/me"}}
+  - {"name": "me suspended", "as": "comm_sus", "request": {"method": "GET", "path": "/v1/community/me"}}
+  - {"name": "me alice has no board profile", "as": "alice", "request": {"method": "GET", "path": "/v1/community/me"}}
+  - {"name": "profile malformed", "as": "comm_val", "request": {"method": "PUT", "path": "/v1/community/profile", "raw": "{bad"}}
+  - {"name": "profile empty", "as": "comm_val", "request": {"method": "PUT", "path": "/v1/community/profile", "raw": ""}}
+  - {"name": "profile array", "as": "comm_val", "request": {"method": "PUT", "path": "/v1/community/profile", "raw": "[]"}}
+  - {"name": "profile null", "as": "comm_val", "request": {"method": "PUT", "path": "/v1/community/profile", "raw": "null"}}
+  - {"name": "profile empty object", "as": "comm_val", "request": {"method": "PUT", "path": "/v1/community/profile", "raw": "{}"}}
+  - {"name": "profile handle number", "as": "comm_val", "request": {"method": "PUT", "path": "/v1/community/profile", "raw": "{\"handle\":5,\"displayName\":\"N\",\"acceptTerms\":true,\"termsVersion\":1}"}}
+  - {"name": "profile missing acceptTerms", "as": "comm_val", "request": {"method": "PUT", "path": "/v1/community/profile", "raw": "{\"handle\":\"good_one\",\"displayName\":\"N\",\"termsVersion\":1}"}}
+  - {"name": "profile terms string", "as": "comm_val", "request": {"method": "PUT", "path": "/v1/community/profile", "raw": "{\"handle\":\"good_one\",\"displayName\":\"N\",\"acceptTerms\":true,\"termsVersion\":\"1\"}"}}
+  - {"name": "profile terms float", "as": "comm_val", "request": {"method": "PUT", "path": "/v1/community/profile", "raw": "{\"handle\":\"good_one\",\"displayName\":\"N\",\"acceptTerms\":true,\"termsVersion\":1.5}"}}
+  - {"name": "profile handle too short", "as": "comm_val2", "request": {"method": "PUT", "path": "/v1/community/profile", "json": {"handle": "ab", "displayName": "Nice Name", "acceptTerms": true, "termsVersion": 1}}}
+  - {"name": "profile handle too long", "as": "comm_val2", "request": {"method": "PUT", "path": "/v1/community/profile", "json": {"handle": "aaaaaaaaaaaaaaaaaaaaa", "displayName": "Nice Name", "acceptTerms": true, "termsVersion": 1}}}
+  - {"name": "profile handle with a dash", "as": "comm_val2", "request": {"method": "PUT", "path": "/v1/community/profile", "json": {"handle": "an-na", "displayName": "Nice Name", "acceptTerms": true, "termsVersion": 1}}}
+  - {"name": "profile handle reserved", "as": "comm_val2", "request": {"method": "PUT", "path": "/v1/community/profile", "json": {"handle": "admin", "displayName": "Nice Name", "acceptTerms": true, "termsVersion": 1}}}
+  - {"name": "profile handle lumina", "as": "comm_val2", "request": {"method": "PUT", "path": "/v1/community/profile", "json": {"handle": "lumina", "displayName": "Nice Name", "acceptTerms": true, "termsVersion": 1}}}
+  - {"name": "profile name empty", "as": "comm_val2", "request": {"method": "PUT", "path": "/v1/community/profile", "json": {"handle": "nice_handle", "displayName": "   ", "acceptTerms": true, "termsVersion": 1}}}
+  - {"name": "profile name too long", "as": "comm_val2", "request": {"method": "PUT", "path": "/v1/community/profile", "json": {"handle": "nice_handle", "displayName": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", "acceptTerms": true, "termsVersion": 1}}}
+  - {"name": "profile name with an email", "as": "comm_val2", "request": {"method": "PUT", "path": "/v1/community/profile", "json": {"handle": "nice_handle", "displayName": "me a@b.co", "acceptTerms": true, "termsVersion": 1}}}
+  - {"name": "profile terms not accepted", "as": "comm_val2", "request": {"method": "PUT", "path": "/v1/community/profile", "json": {"handle": "nice_handle", "displayName": "Nice Name", "acceptTerms": false, "termsVersion": 1}}}
+  - {"name": "profile wrong terms version", "as": "comm_val2", "request": {"method": "PUT", "path": "/v1/community/profile", "json": {"handle": "nice_handle", "displayName": "Nice Name", "acceptTerms": true, "termsVersion": 2}}}
+  - {"name": "handle taken", "as": "comm_new2", "request": {"method": "PUT", "path": "/v1/community/profile", "json": {"handle": "ann_h", "displayName": "Nice Name", "acceptTerms": true, "termsVersion": 1}}}
+  - {"name": "handle taken in another case", "as": "comm_new2", "request": {"method": "PUT", "path": "/v1/community/profile", "json": {"handle": "ANN_H", "displayName": "Nice Name", "acceptTerms": true, "termsVersion": 1}}}
+  - {"name": "nothing else was written", "as": "comm_new2", "request": {"method": "GET", "path": "/v1/community/me"}, "snapshot": ["community_profiles"]}

@@ -633,3 +633,80 @@ Beyond the pilot gate (D-wave2-early):
   functions.
 - CI: PR #12, run 41811507269. `parity`, `lint`, `test` and `vuln` pass
   (https://github.com/LuminaVault/Lumina-Vault-Server-Go/actions/runs/41811507269/job/126511630338).
+
+## community (wave 3)
+
+### G0 entry: met 2026-11-04
+
+- Routes: 17 in `docs/migration/routes.json`, under `/v1/community` and
+  `/v1/admin/community`, tagged `x-lv-module: community`.
+- Prefix: disjoint (`internal/manifest`).
+- Coupling: moderation and the daily post call `RoutedLLMTransport` (wave 5).
+- Jobs: `DailyPostWorker` and the `recheckPending` sweep stay in Swift.
+- Route middleware: `jwtAuthenticator`, rate buckets `settingsByUser` and
+  `communityWriteByUser`. `community.enabled` and `community.postingEnabled` gate
+  routes, and both states are compared.
+- Swift tests: 7 controller tests, plus the content filter, handle, cursor and config
+  flag unit tests. Page-size clamp and DTO mapping have only scenarios. Not ported:
+  moderator parse and payload, DailyPost rules and `DailyPostWorkerTests`, which test
+  code that stays in Swift.
+
+### G1 parity: not met (status stays `swift`)
+
+- CI run 41818972732: `parity/scenarios/community` (9 scenarios, 248 steps, 25 with
+  snapshots) gives 0 differences, and `internal/modules/community` has 16 Go tests.
+  The switch states `community-off`, `posting-off` and `unconfigured` give 0 differences
+  (https://github.com/LuminaVault/Lumina-Vault-Server-Go/actions/runs/41818972732/job/126536959709).
+- Gap: Swift moderates each post that passes the filter with `RoutedLLMTransport`. Go has
+  the same filter and nothing behind it, so the post stays `pending` until Swift's sweep
+  (15-minute tick, 5-minute minimum age), roughly 5 to 20 minutes. In production Swift
+  publishes it at once. The parity gateway is unroutable, so both servers hold it and CI
+  cannot see this.
+- Gap: `POST /v1/admin/community/daily/run` can only record a failed attempt in Go. Three
+  runs mark the day `skipped`, which would cost a real daily post.
+- Keeps this module at `swift` under the rule in `D-reminders-detect`, until LLM routing is
+  ported (wave 5) or a human accepts the delay and flips with `/v1/admin/community` left on
+  Swift.
+
+## marketplace (wave 3)
+
+### G0 entry: met 2026-11-04
+
+- Routes: 19 in `docs/migration/routes.json`, under `/v1/marketplace`, tagged
+  `x-lv-module: marketplace`.
+- Prefix: disjoint (`internal/manifest`).
+- Coupling: none. Install, upgrade, the runner client and the capability broker are
+  self-contained, and no call waits on a later wave.
+- Jobs: none.
+- Route middleware: `jwtAuthenticator`, rate bucket `settingsByUser`. Mounted only with a
+  usable `LV_SECRET_MASTER_KEY`, as in Swift.
+- Swift tests: `MarketplaceSafetyTests` 7, plus the featured curation check.
+
+### G1 parity: met 2026-11-04
+
+- Seed: `parity/seed/marketplace.sql`, with a `luminavault` publisher so the catalog seed
+  is skipped, and versions inserted directly (see the Swift bug below).
+- Parity: 9 scenarios, 328 steps, 38 with snapshots. The stub in `parity/stubs/feeds`
+  answers `POST /v1/execute` as the runner.
+- Switch states (`scripts/parity-switches.sh`, 69 steps across all five states, community included):
+  `unconfigured` (short signing key, no runner token), `runner-off`
+  (`plugin_runner_disabled`) and `catalog-unseeded` give 0 differences.
+- Self-test (Swift vs Swift) and Swift vs Go: **78 scenarios, 0 differences** (whole suite).
+- Go tests: `internal/modules/marketplace` 18 test functions.
+- CI: PR #18, run 41818972732. `parity`, `lint`, `test` and `vuln` pass
+  (https://github.com/LuminaVault/Lumina-Vault-Server-Go/actions/runs/41818972732/job/126536959709).
+- Swift bug, matched on purpose: at `fdbed9b0`, `MarketplaceVersion.configFields` binds as
+  `jsonb[]` into a `jsonb` column, so every `marketplace_versions` INSERT fails.
+  `POST .../versions` is always 409 `version_already_exists`. The catalog seed inserts the
+  publisher and the first listing, then answers 500, and after that a list that reaches the
+  orphan listing is 404 `marketplace_version_not_found`. Go matches this behind one switch
+  (`versionInserts`, false in production). Tests set it to true to cover the working path.
+- Boot guard: outside dev, a runner token with a signing key under 32 bytes stops both
+  servers (`marketplace.CheckConfig`). Go test only, as a server that does not boot gives
+  parity nothing to compare.
+- Coverage only in Go tests: `network.fetch` success, redirect refusal and size cap, because
+  the parity stub has no TLS.
+- Before flipping: production's `PLUGIN_*` values must reach the Go deployment, and
+  `PLUGIN_ARTIFACT_ROOT` must be the same volume. Check
+  `SELECT count(*) FROM marketplace_versions` in production, since this log cannot say what
+  state the Swift bug left there.

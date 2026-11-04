@@ -55,6 +55,18 @@ type Config struct {
 	// /v1/me/recap/period (me module). Off reports it as disabled.
 	RecapThemesEnabled bool `env:"RECAP_THEMES_ENABLED" envDefault:"true"`
 
+	// Community board (community module). Raw strings: the module reads them
+	// with Swift's flag() rules, so "0" and "off" are off too.
+	CommunityEnabled        string `env:"COMMUNITY_ENABLED"`
+	CommunityPostingEnabled string `env:"COMMUNITY_POSTING_ENABLED" envDefault:"true"`
+	AdminToken              string `env:"ADMIN_TOKEN"`
+
+	// WASM plugin runner and artifact store (marketplace module).
+	PluginRunnerURL          string `env:"PLUGIN_RUNNER_URL" envDefault:"http://plugin-runner:8090"`
+	PluginRunnerToken        string `env:"PLUGIN_RUNNER_TOKEN"`
+	PluginArtifactRoot       string `env:"PLUGIN_ARTIFACT_ROOT" envDefault:"/app/data/plugin-artifacts"`
+	PluginArtifactSigningKey string `env:"PLUGIN_ARTIFACT_SIGNING_KEY"`
+
 	// VaultRootPath holds tenants/<UUID>/{raw,wiki,memories} on the shared PVC.
 	VaultRootPath string `env:"VAULT_ROOT_PATH" envDefault:"/tmp/luminavault"`
 

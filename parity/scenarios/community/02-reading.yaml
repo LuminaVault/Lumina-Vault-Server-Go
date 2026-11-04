@@ -1,0 +1,46 @@
+# Board, posts, replies, today, cursors and clamps. Nothing here may leak an
+# email, username or user id: the transcript would show it on both sides, but
+# the port's projection is the same one Swift's tests pin (module_test.go).
+module: community
+steps:
+  - {"name": "board", "as": "comm_read", "request": {"method": "GET", "path": "/v1/community/posts"}}
+  - {"name": "board limit 2", "as": "comm_read", "request": {"method": "GET", "path": "/v1/community/posts?limit=2"}, "capture": {"c1": "$.nextCursor"}}
+  - {"name": "board next page", "as": "comm_read", "request": {"method": "GET", "path": "/v1/community/posts?limit=2&cursor={{c1}}"}}
+  - {"name": "board limit 0 is clamped", "as": "comm_read", "request": {"method": "GET", "path": "/v1/community/posts?limit=0"}}
+  - {"name": "board limit 500 is clamped", "as": "comm_read", "request": {"method": "GET", "path": "/v1/community/posts?limit=500"}}
+  - {"name": "board limit not a number", "as": "comm_read", "request": {"method": "GET", "path": "/v1/community/posts?limit=abc"}}
+  - {"name": "board bad cursor", "as": "comm_read", "request": {"method": "GET", "path": "/v1/community/posts?cursor=not-a-cursor"}}
+  - {"name": "board empty cursor", "as": "comm_read", "request": {"method": "GET", "path": "/v1/community/posts?cursor="}}
+  - {"name": "board cursor with a bad uuid", "as": "comm_read", "request": {"method": "GET", "path": "/v1/community/posts?cursor=MTIzfG5vcGU"}}
+  - {"name": "visible thread", "as": "comm_read", "request": {"method": "GET", "path": "/v1/community/posts/C0AC0000-0000-4000-8000-000000000001"}}
+  - {"name": "lowercase id", "as": "comm_read", "request": {"method": "GET", "path": "/v1/community/posts/c0ac0000-0000-4000-8000-000000000001"}}
+  - {"name": "ai daily thread", "as": "comm_read", "request": {"method": "GET", "path": "/v1/community/posts/C0AC0000-0000-4000-8000-000000000003"}}
+  - {"name": "a reply", "as": "comm_read", "request": {"method": "GET", "path": "/v1/community/posts/C0AC0000-0000-4000-8000-000000000004"}}
+  - {"name": "hidden thread is 404", "as": "comm_read", "request": {"method": "GET", "path": "/v1/community/posts/C0AC0000-0000-4000-8000-000000000006"}}
+  - {"name": "someone elses pending is 404", "as": "comm_read", "request": {"method": "GET", "path": "/v1/community/posts/C0AC0000-0000-4000-8000-000000000007"}}
+  - {"name": "rejected is 404", "as": "comm_read", "request": {"method": "GET", "path": "/v1/community/posts/C0AC0000-0000-4000-8000-000000000008"}}
+  - {"name": "deleted is 404", "as": "comm_read", "request": {"method": "GET", "path": "/v1/community/posts/C0AC0000-0000-4000-8000-000000000009"}}
+  - {"name": "unknown post", "as": "comm_read", "request": {"method": "GET", "path": "/v1/community/posts/00000000-0000-4000-8000-000000000000"}}
+  - {"name": "bad post id", "as": "comm_read", "request": {"method": "GET", "path": "/v1/community/posts/nope"}}
+  - {"name": "short post id", "as": "comm_read", "request": {"method": "GET", "path": "/v1/community/posts/C0AC0000"}}
+  - {"name": "replies", "as": "comm_page", "request": {"method": "GET", "path": "/v1/community/posts/C0AC0000-0000-4000-8000-000000000001/replies"}}
+  - {"name": "replies limit 1", "as": "comm_page", "request": {"method": "GET", "path": "/v1/community/posts/C0AC0000-0000-4000-8000-000000000001/replies?limit=1"}, "capture": {"c2": "$.nextCursor"}}
+  - {"name": "replies next page", "as": "comm_page", "request": {"method": "GET", "path": "/v1/community/posts/C0AC0000-0000-4000-8000-000000000001/replies?limit=1&cursor={{c2}}"}}
+  - {"name": "replies bad cursor", "as": "comm_page", "request": {"method": "GET", "path": "/v1/community/posts/C0AC0000-0000-4000-8000-000000000001/replies?cursor=not-a-cursor"}}
+  - {"name": "replies of a reply", "as": "comm_page", "request": {"method": "GET", "path": "/v1/community/posts/C0AC0000-0000-4000-8000-000000000004/replies"}}
+  - {"name": "replies of hidden", "as": "comm_page", "request": {"method": "GET", "path": "/v1/community/posts/C0AC0000-0000-4000-8000-000000000006/replies"}}
+  - {"name": "replies unknown", "as": "comm_page", "request": {"method": "GET", "path": "/v1/community/posts/00000000-0000-4000-8000-000000000000/replies"}}
+  - {"name": "replies bad id", "as": "comm_page", "request": {"method": "GET", "path": "/v1/community/posts/nope/replies"}}
+  - {"name": "today has no post", "as": "comm_read", "request": {"method": "GET", "path": "/v1/community/daily/today"}}
+  - {"name": "blocks empty", "as": "comm_read", "request": {"method": "GET", "path": "/v1/community/blocks"}}
+  - {"name": "author sees own pending", "as": "comm_ann", "request": {"method": "GET", "path": "/v1/community/posts/C0AC0000-0000-4000-8000-000000000007"}}
+  - {"name": "author sees own board", "as": "comm_ann", "request": {"method": "GET", "path": "/v1/community/posts"}}
+  - {"name": "pending reply author sees it", "as": "comm_cid", "request": {"method": "GET", "path": "/v1/community/posts/C0AC0000-0000-4000-8000-000000000001/replies"}}
+  - {"name": "no profile board", "as": "comm_dee", "request": {"method": "GET", "path": "/v1/community/posts"}}
+  - {"name": "no profile post", "as": "comm_dee", "request": {"method": "GET", "path": "/v1/community/posts/C0AC0000-0000-4000-8000-000000000001"}}
+  - {"name": "no profile blocks", "as": "comm_dee", "request": {"method": "GET", "path": "/v1/community/blocks"}}
+  - {"name": "no profile replies", "as": "comm_dee", "request": {"method": "GET", "path": "/v1/community/posts/C0AC0000-0000-4000-8000-000000000001/replies"}}
+  - {"name": "no profile today", "as": "comm_dee", "request": {"method": "GET", "path": "/v1/community/daily/today"}}
+  - {"name": "tied page 1", "as": "comm_page", "request": {"method": "GET", "path": "/v1/community/posts?limit=8"}, "capture": {"p1": "$.nextCursor"}}
+  - {"name": "tied page 2", "as": "comm_page", "request": {"method": "GET", "path": "/v1/community/posts?limit=3&cursor={{p1}}"}, "capture": {"p2": "$.nextCursor"}}
+  - {"name": "tied page 3", "as": "comm_page", "request": {"method": "GET", "path": "/v1/community/posts?limit=3&cursor={{p2}}"}}

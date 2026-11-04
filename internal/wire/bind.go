@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"net/http"
 	"reflect"
 	"sort"
@@ -65,6 +66,10 @@ func decode(raw []byte, dst any) error {
 	trimmed := bytes.TrimSpace(raw)
 	if len(trimmed) == 0 || !json.Valid(trimmed) {
 		return notJSON
+	}
+	// A null root is valueNotFound with an empty coding path (parity CI).
+	if bytes.Equal(trimmed, []byte("null")) {
+		return NewError(http.StatusBadRequest, "Value not found for `` key.")
 	}
 	rv := reflect.ValueOf(dst).Elem()
 	if rv.Kind() != reflect.Struct {
@@ -209,10 +214,24 @@ func decodeValue(path []string, raw []byte, fv reflect.Value) error {
 		fv.Set(out)
 		return nil
 	}
-	if err := json.Unmarshal(raw, fv.Addr().Interface()); err != nil {
+	if err := json.Unmarshal(integralNumber(t, raw), fv.Addr().Interface()); err != nil {
 		return mapErr(key, err)
 	}
 	return nil
+}
+
+// integralNumber rewrites a number like 4.0 or 1e0 for an integer field as plain
+// digits: Foundation decodes those as an Int, and only refuses a value that has a
+// fraction or does not fit (parity CI).
+func integralNumber(t reflect.Type, raw []byte) []byte {
+	if swiftType(t) != "Int" || t.Kind() == reflect.Slice || !bytes.ContainsAny(raw, ".eE") {
+		return raw
+	}
+	r, ok := new(big.Rat).SetString(string(raw))
+	if !ok || !r.IsInt() {
+		return raw
+	}
+	return []byte(r.Num().String())
 }
 
 func mapErr(key string, err error) error {
@@ -222,6 +241,11 @@ func mapErr(key string, err error) error {
 	}
 	var typeErr *json.UnmarshalTypeError
 	if errors.As(err, &typeErr) {
+		// A number that is not an integer is dataCorrupted in Foundation, not a
+		// type mismatch (parity CI).
+		if strings.HasPrefix(typeErr.Value, "number") && swiftType(typeErr.Type) == "Int" {
+			return notJSON
+		}
 		return mismatch(key, swiftType(typeErr.Type))
 	}
 	return notJSON

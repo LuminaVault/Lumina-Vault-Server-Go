@@ -29,6 +29,15 @@ x-common-env: &common-env
   # plus one curated feed so the curated + user merge is exercised.
   FEEDS_BASE_URL: http://feeds:8080
   FEEDS_DEFAULT_FEEDS: "https://news.parity.test/world.json"
+  # Community board on (the other switch states: scripts/parity-switches.sh).
+  COMMUNITY_ENABLED: "true"
+  COMMUNITY_POSTING_ENABLED: "true"
+  ADMIN_TOKEN: parity-admin-token
+  # Marketplace: the stub also answers as the plugin runner.
+  PLUGIN_RUNNER_URL: http://feeds:8080
+  PLUGIN_RUNNER_TOKEN: parity-runner-token
+  PLUGIN_ARTIFACT_ROOT: /tmp/lv-plugin-artifacts
+  PLUGIN_ARTIFACT_SIGNING_KEY: parity-signing-key-parity-signing-key-0000
 
 services:
   pg:
@@ -69,6 +78,37 @@ services:
     ports: ["18081:8080"]
     depends_on: { pg: { condition: service_healthy }, feeds: { condition: service_started } }
     profiles: [servers]
+
+  # A second pair with the switches overridden, on their own databases
+  # (scripts/parity-switches.sh).
+  swift-switched:
+    image: ${PARITY_SWIFT_IMAGE:-lv-swift:fdbed9b0}
+    environment:
+      <<: *common-env
+      POSTGRES_DATABASE: parity_swift_switched
+      COMMUNITY_ENABLED: ${SWITCH_COMMUNITY_ENABLED:-true}
+      COMMUNITY_POSTING_ENABLED: ${SWITCH_COMMUNITY_POSTING_ENABLED:-true}
+      ADMIN_TOKEN: ${SWITCH_ADMIN_TOKEN-parity-admin-token}
+      PLUGIN_ARTIFACT_SIGNING_KEY: ${SWITCH_SIGNING_KEY-parity-signing-key-parity-signing-key-0000}
+      PLUGIN_RUNNER_TOKEN: ${SWITCH_RUNNER_TOKEN-parity-runner-token}
+    ports: ["18083:8080"]
+    depends_on: { pg: { condition: service_healthy }, feeds: { condition: service_started } }
+    profiles: [switched]
+
+  go-switched:
+    image: lvparity-go
+    pull_policy: never
+    environment:
+      <<: *common-env
+      POSTGRES_DATABASE: parity_go_switched
+      COMMUNITY_ENABLED: ${SWITCH_COMMUNITY_ENABLED:-true}
+      COMMUNITY_POSTING_ENABLED: ${SWITCH_COMMUNITY_POSTING_ENABLED:-true}
+      ADMIN_TOKEN: ${SWITCH_ADMIN_TOKEN-parity-admin-token}
+      PLUGIN_ARTIFACT_SIGNING_KEY: ${SWITCH_SIGNING_KEY-parity-signing-key-parity-signing-key-0000}
+      PLUGIN_RUNNER_TOKEN: ${SWITCH_RUNNER_TOKEN-parity-runner-token}
+    ports: ["18084:8080"]
+    depends_on: { pg: { condition: service_healthy }, feeds: { condition: service_started } }
+    profiles: [switched]
 
   # Stub feed aggregator for the news ticker; fixed answers, see main.go.
   feeds:

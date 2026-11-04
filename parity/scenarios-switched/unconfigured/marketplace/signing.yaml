@@ -1,0 +1,7 @@
+# PLUGIN_ARTIFACT_SIGNING_KEY too short, which needs no runner token or the server
+# refuses to boot: signing and verifying fail closed.
+module: marketplace
+steps:
+  - {"name": "upload without a usable signing key", "as": "mkt_pub", "request": {"method": "POST", "path": "/v1/marketplace/publisher/plugins/alpha-notes/artifacts", "json": {"fileName": "a.wasm", "bytesBase64": "AGFzbQEAAAA="}}}
+  - {"name": "version with a signature cannot verify", "as": "mkt_pub", "request": {"method": "POST", "path": "/v1/marketplace/publisher/plugins/alpha-notes/versions", "json": {"version": "7.0.0", "runtimeKind": "wasm", "permissions": [], "artifactKey": "k.wasm", "artifactSHA256": "0000000000000000000000000000000000000000000000000000000000000000", "artifactSignature": "0000000000000000000000000000000000000000000000000000000000000000"}}}
+  - {"name": "run with no artifact", "as": "mkt_run", "request": {"method": "POST", "path": "/v1/marketplace/plugins/lost-wasm/tools/echo/run", "json": {"input": {}}}}

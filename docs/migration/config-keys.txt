@@ -45,6 +45,8 @@ cerberus.studio.globalMonthlyUsdMicros
 cerberus.studio.workerCount
 chat.retrieval.maxDistance
 community.dailyPost.hourUtc
+community.enabled
+community.postingEnabled
 cors.allowedOrigins
 docker.binaryPath
 email.fromAddress
