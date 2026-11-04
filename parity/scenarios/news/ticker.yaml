@@ -16,4 +16,4 @@ steps:
   - {name: config sealed for another tenant reads as empty, as: news_eve, request: {method: GET, path: /v1/news/ticker}}
   - {name: config without feed_urls, as: news_nul, request: {method: GET, path: "/v1/news/ticker?limit=2"}}
   - {name: no _feeds extension, as: news_nox, request: {method: GET, path: /v1/news/ticker}}
-  - {name: _feeds without generated_at, as: news_nog, request: {method: GET, path: /v1/news/ticker}, snapshot: [plugin_installs]}
+  - {name: _feeds without generated_at, as: news_nog, request: {method: GET, path: /v1/news/ticker}, snapshot: [parity_plugin_installs]}

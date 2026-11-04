@@ -73,9 +73,11 @@ jobs:
             --swift http://localhost:18080 --swift-db postgres://lv:lv@localhost:15432/parity_swift \
             --go http://localhost:18081 --go-db postgres://lv:lv@localhost:15432/parity_go \
             --save-swift-transcripts swift-transcripts
+      - name: Compare the switch states
+        run: PARITY_SWIFT_IMAGE="$(cat parity/SWIFT_IMAGE)" scripts/parity-switches.sh
       - name: Server logs on failure
         if: failure()
-        run: docker compose -f docker-compose.parity.yml -p lvparity --profile servers logs --tail 200
+        run: docker compose -f docker-compose.parity.yml -p lvparity --profile servers --profile switched logs --tail 200
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -1,0 +1,28 @@
+# Publisher applications and what a publisher that is not approved may do.
+module: marketplace
+steps:
+  - {"name": "publisher before applying", "as": "mkt_app", "request": {"method": "GET", "path": "/v1/marketplace/publisher"}}
+  - {"name": "apply", "as": "mkt_app", "request": {"method": "POST", "path": "/v1/marketplace/publisher/apply", "json": {"handle": "  My Cool__Handle! ", "displayName": "  Cool Name  ", "bio": "  raw bio  ", "websiteURL": "https://cool.parity.test/x"}}, "snapshot": ["marketplace_publishers"]}
+  - {"name": "publisher after applying", "as": "mkt_app", "request": {"method": "GET", "path": "/v1/marketplace/publisher"}}
+  - {"name": "apply again returns the first", "as": "mkt_app", "request": {"method": "POST", "path": "/v1/marketplace/publisher/apply", "json": {"handle": "different-one", "displayName": "Different"}}, "snapshot": ["marketplace_publishers"]}
+  - {"name": "apply again with a bad url still returns the first", "as": "mkt_app", "request": {"method": "POST", "path": "/v1/marketplace/publisher/apply", "json": {"handle": "different-one", "displayName": "Different", "websiteURL": "http://x"}}}
+  - {"name": "apply again with a bad handle is 422", "as": "mkt_app", "request": {"method": "POST", "path": "/v1/marketplace/publisher/apply", "json": {"handle": "!", "displayName": "Different"}}}
+  - {"name": "handle too short", "as": "mkt_app2", "request": {"method": "POST", "path": "/v1/marketplace/publisher/apply", "json": {"handle": "a", "displayName": "Name"}}}
+  - {"name": "handle too long", "as": "mkt_app2", "request": {"method": "POST", "path": "/v1/marketplace/publisher/apply", "json": {"handle": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "displayName": "Name"}}}
+  - {"name": "handle unicode", "as": "mkt_app2", "request": {"method": "POST", "path": "/v1/marketplace/publisher/apply", "json": {"handle": "ñandú", "displayName": "Name"}}}
+  - {"name": "name too short", "as": "mkt_app2", "request": {"method": "POST", "path": "/v1/marketplace/publisher/apply", "json": {"handle": "good-handle", "displayName": " x "}}}
+  - {"name": "website http", "as": "mkt_app2", "request": {"method": "POST", "path": "/v1/marketplace/publisher/apply", "json": {"handle": "good-handle", "displayName": "Name", "websiteURL": "http://x.parity.test"}}}
+  - {"name": "website uppercase scheme", "as": "mkt_app2", "request": {"method": "POST", "path": "/v1/marketplace/publisher/apply", "json": {"handle": "good-handle", "displayName": "Name", "websiteURL": "HTTPS://x.parity.test"}}}
+  - {"name": "website no host", "as": "mkt_app2", "request": {"method": "POST", "path": "/v1/marketplace/publisher/apply", "json": {"handle": "good-handle", "displayName": "Name", "websiteURL": "https://"}}}
+  - {"name": "handle taken", "as": "mkt_app2", "request": {"method": "POST", "path": "/v1/marketplace/publisher/apply", "json": {"handle": "parity-pub", "displayName": "Name"}}, "snapshot": ["marketplace_publishers"]}
+  - {"name": "empty website is none", "as": "mkt_app2", "request": {"method": "POST", "path": "/v1/marketplace/publisher/apply", "json": {"handle": "good-handle", "displayName": "Name", "websiteURL": "", "bio": null}}, "snapshot": ["marketplace_publishers"]}
+  - {"name": "pending publisher reads itself", "as": "mkt_pend", "request": {"method": "GET", "path": "/v1/marketplace/publisher"}}
+  - {"name": "rejected publisher reads itself", "as": "mkt_rej", "request": {"method": "GET", "path": "/v1/marketplace/publisher"}}
+  - {"name": "pending publisher cannot list", "as": "mkt_pend", "request": {"method": "POST", "path": "/v1/marketplace/publisher/plugins", "raw": "{\"slug\":\"my-plugin\",\"name\":\"N\",\"summary\":\"S\",\"description\":\"D\",\"category\":\"skill\"}"}}
+  - {"name": "rejected publisher cannot list", "as": "mkt_rej", "request": {"method": "POST", "path": "/v1/marketplace/publisher/plugins", "raw": "{\"slug\":\"my-plugin\",\"name\":\"N\",\"summary\":\"S\",\"description\":\"D\",\"category\":\"skill\"}"}}
+  - {"name": "non publisher cannot list", "as": "mkt_none", "request": {"method": "POST", "path": "/v1/marketplace/publisher/plugins", "raw": "{\"slug\":\"my-plugin\",\"name\":\"N\",\"summary\":\"S\",\"description\":\"D\",\"category\":\"skill\"}"}}
+  - {"name": "non publisher cannot add a version", "as": "mkt_none", "request": {"method": "POST", "path": "/v1/marketplace/publisher/plugins/alpha-notes/versions", "raw": "{\"version\":\"1.0.0\",\"runtimeKind\":\"declarative\",\"permissions\":[]}"}}
+  - {"name": "non publisher cannot upload", "as": "mkt_none", "request": {"method": "POST", "path": "/v1/marketplace/publisher/plugins/alpha-notes/artifacts", "json": {"fileName": "a.wasm", "bytesBase64": "AGFzbQ=="}}}
+  - {"name": "non publisher cannot submit", "as": "mkt_none", "request": {"method": "POST", "path": "/v1/marketplace/publisher/plugins/alpha-notes/versions/AA7A0000-0000-4000-8000-000000000004/submit"}}
+  - {"name": "non publisher submissions are empty", "as": "mkt_none", "request": {"method": "GET", "path": "/v1/marketplace/publisher/submissions"}}
+  - {"name": "no application is 404", "as": "mkt_none", "request": {"method": "GET", "path": "/v1/marketplace/publisher"}}

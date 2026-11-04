@@ -1,0 +1,23 @@
+module: health
+# The billing gate on POST /v1/health. CI runs parity with enforcement off, where
+# every step here is a plain 200. To compare the gate itself against Swift, set
+# BILLING_ENFORCEMENT_ENABLED: "true" in docker-compose.parity.yml: a one-off run
+# did (see the health section of docs/migration/cutover-log.md).
+steps:
+  - {name: "lapsed", as: gate_lapsed, request: {method: POST, path: /v1/health, json: {events: [{type: steps, recordedAt: "2026-10-02T10:00:00Z", valueNumeric: 1}]}}}
+  - {name: "free", as: gate_free, request: {method: POST, path: /v1/health, json: {events: [{type: steps, recordedAt: "2026-10-02T10:00:00Z", valueNumeric: 1}]}}}
+  - {name: "pro", as: gate_pro, request: {method: POST, path: /v1/health, json: {events: [{type: steps, recordedAt: "2026-10-02T10:00:00Z", valueNumeric: 1}]}}}
+  - {name: "lapsed with a pro override", as: gate_override, request: {method: POST, path: /v1/health, json: {events: [{type: steps, recordedAt: "2026-10-02T10:00:00Z", valueNumeric: 1}]}}}
+  - {name: "pro past its expiry date", as: gate_expired, request: {method: POST, path: /v1/health, json: {events: [{type: steps, recordedAt: "2026-10-02T10:00:00Z", valueNumeric: 1}]}}}
+  - {name: "archived with a good key", as: gate_archived, request: {method: POST, path: /v1/health, json: {events: [{type: steps, recordedAt: "2026-10-02T10:00:00Z", valueNumeric: 1}]}}}
+  - {name: "lapsed with a good key", as: gate_key, request: {method: POST, path: /v1/health, json: {events: [{type: steps, recordedAt: "2026-10-02T10:00:00Z", valueNumeric: 1}]}}}
+  - {name: "free with a keyless provider", as: gate_ollama, request: {method: POST, path: /v1/health, json: {events: [{type: steps, recordedAt: "2026-10-02T10:00:00Z", valueNumeric: 1}]}}}
+  - {name: "lapsed with a base URL on a keyed provider", as: gate_urlonly, request: {method: POST, path: /v1/health, json: {events: [{type: steps, recordedAt: "2026-10-02T10:00:00Z", valueNumeric: 1}]}}}
+  - {name: "lapsed with an empty key", as: gate_empty, request: {method: POST, path: /v1/health, json: {events: [{type: steps, recordedAt: "2026-10-02T10:00:00Z", valueNumeric: 1}]}}}
+  - {name: "lapsed with one pool key", as: gate_pool, request: {method: POST, path: /v1/health, json: {events: [{type: steps, recordedAt: "2026-10-02T10:00:00Z", valueNumeric: 1}]}}}
+  - {name: "lapsed with a good key and a pool key that does not open", as: gate_badpool, request: {method: POST, path: /v1/health, json: {events: [{type: steps, recordedAt: "2026-10-02T10:00:00Z", valueNumeric: 1}]}}}
+  - {name: "xAI marker, linked container", as: gate_xlinked, request: {method: POST, path: /v1/health, json: {events: [{type: steps, recordedAt: "2026-10-02T10:00:00Z", valueNumeric: 1}]}}}
+  - {name: "xAI marker, unlinked container", as: gate_xunlinked, request: {method: POST, path: /v1/health, json: {events: [{type: steps, recordedAt: "2026-10-02T10:00:00Z", valueNumeric: 1}]}}}
+  - {name: "xAI marker, no container", as: gate_xnobox, request: {method: POST, path: /v1/health, json: {events: [{type: steps, recordedAt: "2026-10-02T10:00:00Z", valueNumeric: 1}]}}}
+  - {name: "xAI marker, server key does not open", as: gate_xbadkey, request: {method: POST, path: /v1/health, json: {events: [{type: steps, recordedAt: "2026-10-02T10:00:00Z", valueNumeric: 1}]}}}
+  - {name: "the gate runs before the body is read", as: gate_bad, request: {method: POST, path: /v1/health, raw: "not json"}, snapshot: [health_events]}

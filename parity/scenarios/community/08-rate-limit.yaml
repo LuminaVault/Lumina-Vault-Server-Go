@@ -1,0 +1,15 @@
+# communityWriteByUser: 10 writes a minute per user, rejected or not.
+module: community
+steps:
+  - {"name": "write 1", "as": "comm_lim", "request": {"method": "PUT", "path": "/v1/community/profile", "json": {"handle": "x", "displayName": "x", "acceptTerms": true, "termsVersion": 1}}}
+  - {"name": "write 2", "as": "comm_lim", "request": {"method": "PUT", "path": "/v1/community/profile", "json": {"handle": "x", "displayName": "x", "acceptTerms": true, "termsVersion": 1}}}
+  - {"name": "write 3", "as": "comm_lim", "request": {"method": "PUT", "path": "/v1/community/profile", "json": {"handle": "x", "displayName": "x", "acceptTerms": true, "termsVersion": 1}}}
+  - {"name": "write 4", "as": "comm_lim", "request": {"method": "PUT", "path": "/v1/community/profile", "json": {"handle": "x", "displayName": "x", "acceptTerms": true, "termsVersion": 1}}}
+  - {"name": "write 5", "as": "comm_lim", "request": {"method": "PUT", "path": "/v1/community/profile", "json": {"handle": "x", "displayName": "x", "acceptTerms": true, "termsVersion": 1}}}
+  - {"name": "write 6", "as": "comm_lim", "request": {"method": "PUT", "path": "/v1/community/profile", "json": {"handle": "x", "displayName": "x", "acceptTerms": true, "termsVersion": 1}}}
+  - {"name": "write 7", "as": "comm_lim", "request": {"method": "PUT", "path": "/v1/community/profile", "json": {"handle": "x", "displayName": "x", "acceptTerms": true, "termsVersion": 1}}}
+  - {"name": "write 8", "as": "comm_lim", "request": {"method": "PUT", "path": "/v1/community/profile", "json": {"handle": "x", "displayName": "x", "acceptTerms": true, "termsVersion": 1}}}
+  - {"name": "write 9", "as": "comm_lim", "request": {"method": "PUT", "path": "/v1/community/profile", "json": {"handle": "x", "displayName": "x", "acceptTerms": true, "termsVersion": 1}}}
+  - {"name": "write 10", "as": "comm_lim", "request": {"method": "PUT", "path": "/v1/community/profile", "json": {"handle": "x", "displayName": "x", "acceptTerms": true, "termsVersion": 1}}}
+  - {"name": "write 11", "as": "comm_lim", "request": {"method": "PUT", "path": "/v1/community/profile", "json": {"handle": "x", "displayName": "x", "acceptTerms": true, "termsVersion": 1}}, "headers": ["Retry-After"]}
+  - {"name": "reads have their own bucket", "as": "comm_lim", "request": {"method": "GET", "path": "/v1/community/me"}}

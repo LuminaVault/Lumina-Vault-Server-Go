@@ -1,0 +1,81 @@
+# Invitations: create, list, resend, revoke, accept. Alpha 7EA51000-...01
+# (olga owner, adam and zoe admins, mia member); Alpha Main vault 7EA53000-...01, Beta
+# Main ...04. Seeded invitations 7EA55000-...<n> carry token parity-invite-<n>
+# (parity/seed/teams.sql). Tokens are never returned, so snapshots go through
+# the parity_team_invitations view (hash shape, not value).
+module: teams
+steps:
+  - name: admin invites with a trimmed lowercased email
+    as: team_adam
+    request:
+      method: POST
+      path: /v1/teams/7EA51000-0000-4000-8000-000000000001/invitations
+      json: {email: "  New.Person@Parity.TEST \n", vaultGrants: {7EA53000-0000-4000-8000-000000000001: {role: editor, canUseAI: true}}}
+    snapshot: [parity_team_invitations]
+  - {name: a pending invitation already exists, as: team_adam, request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/invitations, json: {email: new.person@parity.test, vaultGrants: {7EA53000-0000-4000-8000-000000000001: {role: viewer, canUseAI: false}}}}}
+  - {name: email without at sign, as: team_adam, request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/invitations, json: {email: nobody, vaultGrants: {7EA53000-0000-4000-8000-000000000001: {role: viewer, canUseAI: false}}}}}
+  - {name: no grants, as: team_adam, request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/invitations, json: {email: g@parity.test, vaultGrants: {}}}}
+  - {name: grant on another team's vault, as: team_adam, request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/invitations, json: {email: g@parity.test, vaultGrants: {7EA53000-0000-4000-8000-000000000004: {role: viewer, canUseAI: false}}}}}
+  - {name: grant on a personal vault, as: team_zoe, request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/invitations, json: {email: g@parity.test, vaultGrants: {7EA50000-0000-4000-8000-0000000000A2: {role: viewer, canUseAI: false}}}}}
+  - {name: grant with an unknown role, as: team_zoe, request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/invitations, json: {email: g@parity.test, vaultGrants: {7EA53000-0000-4000-8000-000000000001: {role: owner, canUseAI: false}}}}}
+  - {name: grant key not a uuid, as: team_zoe, request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/invitations, json: {email: g@parity.test, vaultGrants: {nope: {role: viewer, canUseAI: false}}}}}
+  - {name: grant on an unknown vault, as: team_zoe, request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/invitations, json: {email: g@parity.test, vaultGrants: {00000000-0000-4000-8000-000000000000: {role: viewer, canUseAI: false}}}}}
+  - {name: missing vaultGrants, as: team_zoe, request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/invitations, json: {email: g@parity.test}}}
+  - {name: vaultGrants is an array, as: team_zoe, request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/invitations, json: {email: g@parity.test, vaultGrants: []}}}
+  - {name: grant missing canUseAI, as: team_zoe, request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/invitations, json: {email: g@parity.test, vaultGrants: {7EA53000-0000-4000-8000-000000000001: {role: viewer}}}}}
+  - {name: grant role wrong type, as: team_zoe, request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/invitations, json: {email: g@parity.test, vaultGrants: {7EA53000-0000-4000-8000-000000000001: {role: 3, canUseAI: false}}}}}
+  - {name: email wrong type, as: team_zoe, request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/invitations, json: {email: 5, vaultGrants: {}}}}
+  - {name: member cannot invite, as: team_mia, request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/invitations, raw: ""}}
+  - {name: invite bad team id, as: team_zoe, request: {method: POST, path: /v1/teams/nope/invitations, json: {}}}
+  - {name: archived team, as: team_tom, request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000004/invitations, raw: "{"}}
+  - {name: nothing else was stored, as: team_olga, request: {method: GET, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/invitations}, snapshot: [parity_team_invitations]}
+
+  - {name: member cannot list, as: team_mia, request: {method: GET, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/invitations}}
+  - {name: list bad team id, as: team_olga, request: {method: GET, path: /v1/teams/nope/invitations}}
+
+  - name: resend rotates the token and the expiry
+    as: team_zoe
+    request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/invitations/7EA55000-0000-4000-8000-000000000008/resend}
+    snapshot: [parity_team_invitations]
+  - {name: resend an expired invitation, as: team_zoe, request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/invitations/7ea55000-0000-4000-8000-000000000004/resend}}
+  - {name: resend an accepted invitation, as: team_zoe, request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/invitations/7EA55000-0000-4000-8000-000000000006/resend}}
+  - {name: resend a revoked invitation, as: team_zoe, request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/invitations/7EA55000-0000-4000-8000-000000000005/resend}}
+  - {name: resend another team's invitation, as: team_zoe, request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/invitations/7EA55000-0000-4000-8000-00000000000A/resend}}
+  - {name: resend bad invitation id, as: team_zoe, request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/invitations/nope/resend}}
+  - {name: resend on an archived team, as: team_tom, request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000004/invitations/7EA55000-0000-4000-8000-00000000000B/resend}}
+  - {name: member cannot resend, as: team_mia, request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/invitations/nope/resend}}
+
+  - {name: stranger cannot revoke, as: team_ned, request: {method: DELETE, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/invitations/7EA55000-0000-4000-8000-000000000009}}
+  - name: admin revokes
+    as: team_zoe
+    request: {method: DELETE, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/invitations/7EA55000-0000-4000-8000-000000000009}
+    snapshot: [parity_team_invitations]
+  - {name: member cannot revoke, as: team_mia, request: {method: DELETE, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/invitations/7EA55000-0000-4000-8000-000000000009}}
+  - name: owner revokes on an archived team
+    as: team_tom
+    request: {method: DELETE, path: /v1/teams/7EA51000-0000-4000-8000-000000000004/invitations/7EA55000-0000-4000-8000-00000000000B}
+    snapshot: [parity_team_invitations]
+  - {name: revoke again, as: team_tom, request: {method: DELETE, path: /v1/teams/7EA51000-0000-4000-8000-000000000004/invitations/7EA55000-0000-4000-8000-00000000000B}}
+  - {name: revoke another team's invitation, as: team_tom, request: {method: DELETE, path: /v1/teams/7EA51000-0000-4000-8000-000000000004/invitations/7EA55000-0000-4000-8000-000000000009}}
+  - {name: revoke bad invitation id, as: team_tom, request: {method: DELETE, path: /v1/teams/7EA51000-0000-4000-8000-000000000004/invitations/nope}}
+  - {name: the list after resend and revoke, as: team_zoe, request: {method: GET, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/invitations}}
+
+  - {name: unverified user, as: team_una, request: {method: POST, path: /v1/team-invitations/parity-invite-3/accept}}
+  - {name: unknown token, as: team_ivy, request: {method: POST, path: /v1/team-invitations/no-such-token/accept}}
+  - {name: someone else's invitation, as: team_mia, request: {method: POST, path: /v1/team-invitations/parity-invite-1/accept}}
+  - {name: rotated token of the resent expired invitation, as: team_ivy, request: {method: POST, path: /v1/team-invitations/parity-invite-4/accept}}
+  - {name: revoked, as: team_ivy, request: {method: POST, path: /v1/team-invitations/parity-invite-5/accept}}
+  - {name: already accepted, as: team_ivy, request: {method: POST, path: /v1/team-invitations/parity-invite-6/accept}}
+  - {name: archived team, as: team_ivy, request: {method: POST, path: /v1/team-invitations/parity-invite-7/accept}}
+  - name: ivy joins Alpha
+    as: team_ivy
+    request: {method: POST, path: /v1/team-invitations/parity-invite-1/accept}
+    snapshot: [team_memberships, vault_memberships, vault_activity_events, parity_team_invitations]
+  - {name: accepting twice, as: team_ivy, request: {method: POST, path: /v1/team-invitations/parity-invite-1/accept}}
+  - name: an existing member's seat is updated
+    as: team_ivy
+    request: {method: POST, path: /v1/team-invitations/parity-invite-2/accept}
+    snapshot: [team_memberships, vault_memberships]
+  - {name: ivy's teams, as: team_ivy, request: {method: GET, path: /v1/teams}}
+  - {name: ivy's vaults, as: team_ivy, request: {method: GET, path: /v1/vaults}}
+  - {name: the final Alpha list, as: team_adam, request: {method: GET, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/invitations}}

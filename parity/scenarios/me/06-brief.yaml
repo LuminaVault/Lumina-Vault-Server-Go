@@ -1,0 +1,57 @@
+# GET /v1/me/brief and POST /v1/me/brief/{briefId}/cards/{cardId}/feedback.
+# me_brf has today's brief (B1: openLoops, toRevisit, weather, an unknown
+# kind), a brief whose card lacks refs (2026-10-01) and one whose cards are not
+# an array (2026-09-30). A thumbs-down on toRevisit snoozes its memory refs.
+module: me
+steps:
+  - {name: brief today, as: me_brf, request: {method: GET, path: /v1/me/brief}}
+  - {name: brief empty date is today, as: me_brf, request: {method: GET, path: "/v1/me/brief?date="}}
+  - {name: brief whose card lacks refs, as: me_brf, request: {method: GET, path: "/v1/me/brief?date=2026-10-01"}}
+  - {name: brief whose cards are not an array, as: me_brf, request: {method: GET, path: "/v1/me/brief?date=2026-09-30"}}
+  - {name: no brief that day, as: me_brf, request: {method: GET, path: "/v1/me/brief?date=2026-09-29"}}
+  - {name: impossible date, as: me_brf, request: {method: GET, path: "/v1/me/brief?date=2026-02-30"}}
+  - {name: short date, as: me_brf, request: {method: GET, path: "/v1/me/brief?date=2026-1-01"}}
+  - {name: slashed date, as: me_brf, request: {method: GET, path: "/v1/me/brief?date=2026/10/01"}}
+  - {name: datetime, as: me_brf, request: {method: GET, path: "/v1/me/brief?date=2026-10-01T00:00:00Z"}}
+  - {name: brief isolation, as: bob, request: {method: GET, path: "/v1/me/brief?date=2026-10-01"}}
+  - {name: no brief today for a new user, as: me_new, request: {method: GET, path: /v1/me/brief}}
+  - {name: memory is due before the snooze, as: me_brf, request: {method: GET, path: "/v1/me/resurface?limit=10"}}
+  - name: thumbs up
+    as: me_brf
+    request: {method: POST, path: /v1/me/brief/AE0B71EF-0000-4000-8000-0000000000A1/cards/openLoops/feedback, json: {action: up}}
+    snapshot: [brief_feedback]
+  - name: thumbs down on toRevisit snoozes the memory
+    as: me_brf
+    request: {method: POST, path: /v1/me/brief/AE0B71EF-0000-4000-8000-0000000000A1/cards/toRevisit/feedback, json: {action: down}}
+    snapshot: [brief_feedback, memories]
+  - {name: memory is no longer due, as: me_brf, request: {method: GET, path: "/v1/me/resurface?limit=10"}}
+  - name: changing a vote replaces it
+    as: me_brf
+    request: {method: POST, path: /v1/me/brief/AE0B71EF-0000-4000-8000-0000000000A1/cards/weather/feedback, json: {action: up}}
+    snapshot: [brief_feedback]
+  - name: dismiss an unknown-kind card with a lowercase brief id
+    as: me_brf
+    request: {method: POST, path: /v1/me/brief/ae0b71ef-0000-4000-8000-0000000000a1/cards/horoscope/feedback, json: {action: dismiss, extra: true}}
+    snapshot: [brief_feedback]
+  - name: thumbs down on a card that is not toRevisit
+    as: me_brf
+    request: {method: POST, path: /v1/me/brief/AE0B71EF-0000-4000-8000-0000000000A1/cards/openLoops/feedback, json: {action: down}}
+    snapshot: [brief_feedback, memories]
+  - {name: unknown card, as: me_brf, request: {method: POST, path: /v1/me/brief/AE0B71EF-0000-4000-8000-0000000000A1/cards/nope/feedback, json: {action: up}}}
+  - {name: card of an undecodable brief, as: me_brf, request: {method: POST, path: /v1/me/brief/AE0B71EF-0000-4000-8000-0000000000A2/cards/weather/feedback, json: {action: up}}}
+  - {name: foreign brief, as: me_brf, request: {method: POST, path: /v1/me/brief/AE0B71EF-0000-4000-8000-0000000000B1/cards/weather/feedback, json: {action: up}}, snapshot: [brief_feedback]}
+  - {name: random brief, as: me_brf, request: {method: POST, path: /v1/me/brief/00000000-0000-4000-8000-000000000000/cards/weather/feedback, json: {action: up}}}
+  - {name: bad brief id, as: me_brf, request: {method: POST, path: /v1/me/brief/not-a-uuid/cards/weather/feedback, json: {action: up}}}
+  - {name: bad brief id beats a bad card id, as: me_brf, request: {method: POST, path: /v1/me/brief/not-a-uuid/cards/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/feedback, raw: "{"}}
+  - {name: card id of 65 characters, as: me_brf, request: {method: POST, path: /v1/me/brief/AE0B71EF-0000-4000-8000-0000000000A1/cards/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/feedback, json: {action: up}}}
+  - {name: card id of 64 characters, as: me_brf, request: {method: POST, path: /v1/me/brief/AE0B71EF-0000-4000-8000-0000000000A1/cards/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/feedback, json: {action: up}}}
+  - {name: bad card id beats a bad body, as: me_brf, request: {method: POST, path: /v1/me/brief/AE0B71EF-0000-4000-8000-0000000000A1/cards/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/feedback, raw: "{"}}
+  - {name: unknown action, as: me_brf, request: {method: POST, path: /v1/me/brief/AE0B71EF-0000-4000-8000-0000000000A1/cards/weather/feedback, json: {action: meh}}}
+  - {name: action wrong type, as: me_brf, request: {method: POST, path: /v1/me/brief/AE0B71EF-0000-4000-8000-0000000000A1/cards/weather/feedback, json: {action: 1}}}
+  - {name: action null, as: me_brf, request: {method: POST, path: /v1/me/brief/AE0B71EF-0000-4000-8000-0000000000A1/cards/weather/feedback, raw: "{\"action\":null}"}}
+  - {name: missing action, as: me_brf, request: {method: POST, path: /v1/me/brief/AE0B71EF-0000-4000-8000-0000000000A1/cards/weather/feedback, json: {}}}
+  - {name: malformed json, as: me_brf, request: {method: POST, path: /v1/me/brief/AE0B71EF-0000-4000-8000-0000000000A1/cards/weather/feedback, raw: "{\"action\":"}}
+  - {name: empty body, as: me_brf, request: {method: POST, path: /v1/me/brief/AE0B71EF-0000-4000-8000-0000000000A1/cards/weather/feedback, raw: ""}}
+  - {name: array body, as: me_brf, request: {method: POST, path: /v1/me/brief/AE0B71EF-0000-4000-8000-0000000000A1/cards/weather/feedback, raw: "[]"}}
+  - {name: a bad body beats an unknown card, as: me_brf, request: {method: POST, path: /v1/me/brief/AE0B71EF-0000-4000-8000-0000000000A1/cards/nope/feedback, raw: "[]"}}
+  - {name: feedback did not change the brief, as: me_brf, request: {method: GET, path: /v1/me/brief}, snapshot: [brief_feedback]}
