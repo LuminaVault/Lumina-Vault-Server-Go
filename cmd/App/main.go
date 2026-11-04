@@ -16,9 +16,11 @@ import (
 	"lumina/internal/modules/account"
 	"lumina/internal/modules/achievements"
 	"lumina/internal/modules/apple"
+	"lumina/internal/modules/community"
 	"lumina/internal/modules/devices"
 	"lumina/internal/modules/health"
 	"lumina/internal/modules/kanban"
+	"lumina/internal/modules/marketplace"
 	"lumina/internal/modules/me"
 	"lumina/internal/modules/news"
 	"lumina/internal/modules/onboarding"
@@ -151,6 +153,16 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 			health.New(pool, healthGate),
 		)
 		if m := news.New(pool, cfg, identify, limits); m != nil { // nil without LV_SECRET_MASTER_KEY, as in Swift
+			deps.Modules = append(deps.Modules, m)
+		}
+		deps.Modules = append(deps.Modules, community.New(pool, community.Config{
+			Enabled: community.ParseFlag(cfg.CommunityEnabled), PostingEnabled: community.ParseFlag(cfg.CommunityPostingEnabled),
+			AdminToken: cfg.AdminToken,
+		}, identify, limits, nil))
+		if m := marketplace.New(pool, cfg.LVSecretMasterKey, marketplace.Options{
+			RunnerURL: cfg.PluginRunnerURL, RunnerToken: cfg.PluginRunnerToken,
+			ArtifactRoot: cfg.PluginArtifactRoot, ArtifactSigningKey: cfg.PluginArtifactSigningKey,
+		}, identify, limits, paths); m != nil { // nil without LV_SECRET_MASTER_KEY, as in Swift
 			deps.Modules = append(deps.Modules, m)
 		}
 	}
