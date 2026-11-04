@@ -20,6 +20,9 @@ type Sender interface {
 	Send(ctx context.Context, to, teamName, inviterName, token string, expiresAt time.Time) error
 }
 
+// resendTimeout is URLSession.shared's default request timeout.
+const resendTimeout = 60 * time.Second
+
 // SenderConfig is what App+build.swift passes to makeTeamInvitationSender
 // (email.kind, email.resend.apiKey, email.fromAddress, email.replyTo,
 // team.invite.base.url).
@@ -37,7 +40,7 @@ func NewSender(cfg SenderConfig, log *slog.Logger) Sender {
 	if strings.EqualFold(cfg.Kind, "resend") {
 		return &ResendSender{
 			APIKey: cfg.APIKey, FromAddress: cfg.FromAddress, ReplyTo: cfg.ReplyTo, BaseURL: base,
-			Endpoint: "https://api.resend.com/emails", Client: http.DefaultClient, Log: log,
+			Endpoint: "https://api.resend.com/emails", Client: &http.Client{Timeout: resendTimeout}, Log: log,
 		}
 	}
 	return LoggingSender{BaseURL: base, Log: log}
