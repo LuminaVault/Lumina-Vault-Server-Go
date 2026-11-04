@@ -61,7 +61,8 @@ func Ingestion() Options {
 
 // Serve writes the stream until the source is terminal, MaxPolls is reached or
 // the client goes away. Check access before calling: once it starts, the
-// response is committed with a 200.
+// response is committed with a 200. Register the route with Router.Streaming as
+// well, or the gzip middleware holds frames back.
 //
 // A poll or encoding failure aborts the connection instead of ending the stream
 // cleanly, because in Swift a throw from the body writer does the same. A client

@@ -16,7 +16,7 @@ import (
 
 const insertTimeout = 10 * time.Second
 
-const upsertTokens = `INSERT INTO usage_meter (tenant_id, day, model, mtok_in, mtok_out)
+const upsertUsage = `INSERT INTO usage_meter (tenant_id, day, model, mtok_in, mtok_out)
 VALUES ($1, CURRENT_DATE, $2, $3, $4)
 ON CONFLICT (tenant_id, day, model) DO UPDATE
     SET mtok_in  = usage_meter.mtok_in  + EXCLUDED.mtok_in,
@@ -38,7 +38,7 @@ func (m *Meter) Record(ctx context.Context, tenant uuid.UUID, model string, toke
 	if m == nil || (tokensIn <= 0 && tokensOut <= 0) {
 		return
 	}
-	if _, err := m.pool.Exec(ctx, upsertTokens, tenant, model, tokensIn, tokensOut); err != nil {
+	if _, err := m.pool.Exec(ctx, upsertUsage, tenant, model, tokensIn, tokensOut); err != nil {
 		slog.ErrorContext(ctx, "usage_meter record failed", "tenant_id", ids.Upper(tenant), "error", err)
 	}
 }

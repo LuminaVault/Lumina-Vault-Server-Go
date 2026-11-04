@@ -41,7 +41,6 @@ type testModule struct {
 	status int
 	calls  int
 	err    error
-	raw    bool
 }
 
 func (m *testModule) Register(r httpserver.Router, _ echo.MiddlewareFunc) {

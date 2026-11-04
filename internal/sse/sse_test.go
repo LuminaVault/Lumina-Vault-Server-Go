@@ -47,7 +47,7 @@ func (s *script) Terminal(context.Context) (bool, error) {
 	return s.terminal(int(s.count.Load())), nil
 }
 
-func serve(t *testing.T, src Source, after int64, opts Options) (*http.Response, string) {
+func serve(t *testing.T, src Source, after int64, opts Options) (int, http.Header, string) {
 	t.Helper()
 	e := echo.New()
 	e.GET("/s", func(c *echo.Context) error { return Serve(c, src, after, opts) })
@@ -58,7 +58,7 @@ func serve(t *testing.T, src Source, after int64, opts Options) (*http.Response,
 	defer func() { _ = resp.Body.Close() }()
 	b, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
-	return resp, string(b)
+	return resp.StatusCode, resp.Header, string(b)
 }
 
 func fast(maxPolls int) Options {
@@ -74,11 +74,11 @@ func TestHeadersAndFrames(t *testing.T) {
 		polls:    [][]Event{{{ID: 7, Data: payload{"a/b<c>", "z"}}, {ID: 8, Data: payload{"x", "y"}}}},
 		terminal: func(int) bool { return true },
 	}
-	resp, body := serve(t, src, 0, fast(5))
-	require.Equal(t, http.StatusOK, resp.StatusCode)
-	require.Equal(t, "text/event-stream", resp.Header.Get("Content-Type"))
-	require.Equal(t, "no-cache", resp.Header.Get("Cache-Control"))
-	require.Equal(t, "no", resp.Header.Get("X-Accel-Buffering"))
+	status, header, body := serve(t, src, 0, fast(5))
+	require.Equal(t, http.StatusOK, status)
+	require.Equal(t, "text/event-stream", header.Get("Content-Type"))
+	require.Equal(t, "no-cache", header.Get("Cache-Control"))
+	require.Equal(t, "no", header.Get("X-Accel-Buffering"))
 	// Struct order, "/" escaped, "<" not.
 	require.Equal(t, "id: 7\nevent: ingestion\ndata: {\"zebra\":\"a\\/b<c>\",\"apple\":\"z\"}\n\n"+
 		"id: 8\nevent: ingestion\ndata: {\"zebra\":\"x\",\"apple\":\"y\"}\n\n", body)
@@ -87,7 +87,7 @@ func TestHeadersAndFrames(t *testing.T) {
 // Terminal is checked before the heartbeat, so a finished batch gets none.
 func TestTerminalEndsWithoutHeartbeat(t *testing.T) {
 	src := &script{terminal: func(int) bool { return true }}
-	_, body := serve(t, src, 0, fast(5))
+	_, _, body := serve(t, src, 0, fast(5))
 	require.Empty(t, body)
 	require.EqualValues(t, 1, src.count.Load())
 }
@@ -97,7 +97,7 @@ func TestHeartbeatOnlyOnEmptyPolls(t *testing.T) {
 		polls:    [][]Event{nil, {{ID: 1, Data: payload{}}}, nil},
 		terminal: func(poll int) bool { return poll == 3 },
 	}
-	_, body := serve(t, src, 0, fast(9))
+	_, _, body := serve(t, src, 0, fast(9))
 	require.Equal(t, ": heartbeat\n\nid: 1\nevent: ingestion\ndata: {\"zebra\":\"\",\"apple\":\"\"}\n\n", body)
 }
 
@@ -109,7 +109,7 @@ func TestCursorAdvances(t *testing.T) {
 
 func TestStopsAfterMaxPolls(t *testing.T) {
 	src := &script{}
-	_, body := serve(t, src, 0, fast(3))
+	_, _, body := serve(t, src, 0, fast(3))
 	require.EqualValues(t, 3, src.count.Load())
 	require.Equal(t, ": heartbeat\n\n: heartbeat\n\n: heartbeat\n\n", body)
 }
