@@ -74,7 +74,7 @@ modules:
   account:
     wave: 3
     swiftDir: Sources/App/Account
-    status: swift
+    status: parity
     prefixes: [/v1/account]
     jobs: []
   calendar:
@@ -98,7 +98,7 @@ modules:
   health:
     wave: 3
     swiftDir: Sources/App/Health
-    status: swift
+    status: parity
     prefixes: [/v1/health]
     jobs: []
   mail:
@@ -122,7 +122,7 @@ modules:
   onboarding:
     wave: 3
     swiftDir: Sources/App/Onboarding
-    status: swift
+    status: parity
     prefixes: [/v1/onboarding]
     jobs: []
   teams:

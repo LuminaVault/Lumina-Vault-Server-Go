@@ -482,3 +482,124 @@ Beyond the pilot gate (D-wave2-early):
   the wire as the literal `unknown`, outside the spec's enums, as in Swift.
 - CI: PR #16, run 41806060351. `parity`, `lint`, `test` and `vuln` pass
   (https://github.com/LuminaVault/Lumina-Vault-Server-Go/actions/runs/41806060351/job/126493247648).
+## account (wave 3)
+
+### G0 entry: met 2026-11-04
+
+- Routes: 1 in `docs/migration/routes.json` (`DELETE /v1/account`, `x-lv-module: account`).
+- Prefix: `/v1/account`, disjoint (`internal/manifest`).
+- Coupling: writes tables other modules own, through `TenantDataEraser`, ported
+  as `internal/modules/account/eraser.go`. Soft-renames the vault folder and the
+  Hermes profile for `DeletedDataPurgeService`.
+- Jobs: none move. `DeletedDataPurgeJob` stays in Swift and purges what Go renames.
+- Route middleware: `jwtAuthenticator`. Go uses `auth.Middleware`.
+- Swift tests: `AccountDeletionTests` 10 of 11; the other tests migration M150.
+  `DeletedDataPurgeJobTests` (6) stay with the job.
+
+### G1 parity: met 2026-11-04
+
+- Seed: `parity/seed/account.sql` has 9 `acct_*` users; alice and bob are never
+  deleted.
+- Parity: 4 scenarios, 28 steps. Snapshots cover every table the delete changes.
+  - 401 with no token, a bad token, a wrong password, stale, future and no-`iat`
+    tokens
+  - 204 by password and by fresh token, and the old session answering 401
+  - team owner: bare 500, with the eraser's deletes rolled back
+  - activity in the user's own personal vault: 204, row gone
+- FK trigger order differs between schemas. The parity database is built by
+  Swift `migrate`; Go tests use the goose baseline, where the `actor_user_id`
+  SET NULL trigger fires before the vault cascade. A row the eraser has already
+  updated gets its `vault_id` rechecked, which failed there with a 500 while
+  Swift's schema gave 204. The eraser now skips the rows that cascade anyway, so
+  the end state matches on both. Production's trigger order was not inspected.
+- Not observable in parity: the filesystem soft-rename. A Go test covers it, with
+  the name format read from Swift source.
+- Flip blocker: `apps/api-go` must mount the volume `apps/api` uses (`/app/data`,
+  with `VAULT_ROOT_PATH` and `HERMES_DATA_ROOT`). Otherwise `os.Stat` finds
+  nothing, the rename is skipped silently, and deleted users' folders stay under
+  live names and are never purged.
+- Self-test (Swift vs Swift) and Swift vs Go: **44 scenarios, 0 differences**
+  (whole suite).
+- Go tests: `internal/modules/account`, 15 test functions.
+- CI: PR #12, run 41811507269. `parity`, `lint`, `test` and `vuln` pass
+  (https://github.com/LuminaVault/Lumina-Vault-Server-Go/actions/runs/41811507269/job/126511630338).
+
+## onboarding (wave 3)
+
+### G0 entry: met 2026-11-04
+
+- Routes: 2 in `docs/migration/routes.json` (`GET` and `PATCH /v1/onboarding`).
+- Prefix: `/v1/onboarding`, disjoint (`internal/manifest`).
+- Coupling: `OnboardingLatches` is not ported. Swift's vault, capture, compile and
+  chat paths set these flags as a side effect, so those later waves must port it.
+- Jobs: none.
+- Route middleware: `jwtAuthenticator`. Go uses `auth.Middleware`.
+- Swift tests: `OnboardingTests` 9 of 9, `GuidedStartTests` 5 of 13. The other 8
+  exercise the latches above.
+
+### G1 parity: met 2026-11-04
+
+- Seed: `parity/seed/onboarding.sql` has `onb_ann` and `onb_bob`, with no state
+  rows until the scenarios create them.
+- Parity: 2 scenarios, 38 steps: 401s, 17 decode errors with Foundation's wording,
+  lazy creation on GET and on PATCH, one-way latches, two-way
+  `guidedStartDismissed`, and the kb/memory-compile dual write. PATCH writes only
+  the assigned columns plus `updated_at`, as Fluent does.
+- Spec drift: `OnboardingStateDTO` marks the flags optional, but Swift always
+  emits them, so Go uses a hand-written DTO.
+- Self-test (Swift vs Swift) and Swift vs Go: **44 scenarios, 0 differences**
+  (whole suite).
+- Go tests: `internal/modules/onboarding`, 12 test functions.
+- CI: PR #12, run 41811507269. `parity`, `lint`, `test` and `vuln` pass
+  (https://github.com/LuminaVault/Lumina-Vault-Server-Go/actions/runs/41811507269/job/126511630338).
+
+## health (wave 3)
+
+### G0 entry: met 2026-11-04
+
+- Routes: 3 in `docs/migration/routes.json` (`POST` and `GET /v1/health`,
+  `GET /v1/health/daily`). This is the HealthKit module, not the `/health` probe.
+- Prefix: `/v1/health`, disjoint (`internal/manifest`).
+- Coupling: none in the routes. Not ported: the log-only EventBus
+  `health_event_synced` and the PostHog `health_events_synced` capture.
+- Jobs: none in `jobs.md`. `HealthCorrelationService` runs from the admin route
+  `POST /v1/admin/health/correlate`, driven by host cron; it stays in Swift.
+- Route middleware: `jwtAuthenticator`; POST adds
+  `EntitlementMiddleware(.healthIngest)`. Go uses `auth.Middleware` and the new
+  `internal/entitlement`.
+- Swift tests: `HealthReadTests` 5 of 5, `HealthDailyAggregateTests` 7 of 7.
+  `HealthCorrelationServiceTests` (6) stay with the correlation service.
+
+### G1 parity: met 2026-11-04
+
+- Seed: `parity/seed/health.sql` has `hea_hal`, `hea_bea` and 17 `gate_*` users.
+- Parity: 5 scenarios, 94 steps: 401s, 28 decode and query errors, windows,
+  filters, clamps, daily sum and average with gap fill, per-row skip rules, and
+  the 1000-event cap (413).
+- Billing gate: CI runs parity with enforcement off, so the regular run does not
+  compare the 402 path. It was compared once, with
+  `BILLING_ENFORCEMENT_ENABLED: "true"` in `docker-compose.parity.yml` on a commit
+  reverted straight after: **44 scenarios, 0 differences**, run 41810757076
+  (https://github.com/LuminaVault/Lumina-Vault-Server-Go/actions/runs/41810757076/job/126509102071).
+  `05-gate.yaml` gave 402 for lapsed, free, archived with a good key, a base URL
+  on a keyed provider, an empty key, a good key with a pool key that does not
+  open, and an unlinked, missing or undecryptable xAI container. It gave 200 for
+  pro (also past its expiry date), a pro override, a good key, a keyless provider,
+  one pool key and a linked xAI container. The gate also answers 402 before the
+  body is read.
+- Known difference with enforcement on: Swift's credential store rotates one
+  candidate per call with a per-process cursor, so a provider with both spendable
+  and unspendable candidates alternates between 402 and 200. Go exempts whenever
+  any candidate is spendable. Its 600-second cache is not ported either.
+- Known gap in `wire.Bind` (shared): a body over 2 MiB gives 400 "not valid JSON"
+  where Hummingbird gives 413. Read from source, not compared. It also applies to
+  `PATCH /v1/onboarding`.
+- Spec drift: `HealthEventDTO`, `HealthEventInput` and `HealthIngestResponse` do
+  not match Swift (`type` vs `eventType`; `inserted`, `skipped`, `events` vs
+  `ingested`), so conformance tests validate only daily and an empty list.
+- Self-test (Swift vs Swift) and Swift vs Go: **44 scenarios, 0 differences**
+  (whole suite).
+- Go tests: `internal/modules/health` 17 and `internal/entitlement` 4 test
+  functions.
+- CI: PR #12, run 41811507269. `parity`, `lint`, `test` and `vuln` pass
+  (https://github.com/LuminaVault/Lumina-Vault-Server-Go/actions/runs/41811507269/job/126511630338).
