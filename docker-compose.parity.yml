@@ -19,6 +19,7 @@ x-common-env: &common-env
   # "test" keeps the schedulers and workers off so DB snapshots only change
   # because of the request under test (Swift App+build.swift `lvEnvironment != "test"`).
   LV_ENVIRONMENT: test
+  BILLING_ENFORCEMENT_ENABLED: "true"
   CORS_ALLOWED_ORIGINS: https://app.luminavault.fyi
   HERMES_API_KEY: parity-hermes-key-not-real-0000000000
   # Unroutable: no scenario may depend on an external service by accident.
