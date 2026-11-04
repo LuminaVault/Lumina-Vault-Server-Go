@@ -25,3 +25,5 @@ tmp/
 /sqlc
 /tailwindcss
 /templ
+swift-transcripts/
+__pycache__/

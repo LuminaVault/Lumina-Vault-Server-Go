@@ -38,13 +38,43 @@ evidence, not intent: commands, counts, links, numbers.
   (https://github.com/LuminaVault/Lumina-Vault-Server-Go/actions/runs/40874765801/job/123452432211).
   `lint`, `test` and `vuln` pass.
 
-### G2 staging deploy: not started
+### G2 staging deploy: met 2026-10-31
 
-Blocked on human steps:
-1. ~~Merge LuminaVaultInfra #486 (chart) and #487 (netpol).~~ Merged 2026-10-29.
-2. Merge PR #1 to `main`, which publishes the first image. `INFRA_REPO_TOKEN` must be set.
-3. Put that SHA into #488 and merge it.
-4. Provide a staging session token for `make parity-smoke MODULE=projects`.
+- Deploy: LuminaVaultInfra #488 merged 2026-10-30 19:38Z. `api-go-staging` ran
+  `4325ccaa` for 15 h with 0 ERROR log lines. Release run 41198570420 then moved
+  it to `dd434496` (wave 2 merged, projects code unchanged), rolled out
+  2026-10-31 11:54Z, healthy. At 12:02:58Z it moved to `d7297f97` (wave 3
+  prep, docs only). The smoke below was re-run on `d7297f97`, so that is the
+  SHA G3 pins.
+- Smoke user: `smoke+g2@facorreia.com` (`BA2E7201-987C-47F2-A0E3-2C232BC9C549`),
+  registered on Swift staging by the agent. Its password is a random secret,
+  kept only in the agent's session scratchpad.
+- `parity smoke --module projects` against `api-go-staging` (port-forward),
+  with Swift transcripts from main CI run 41198741960, on `d7297f97` with 0 ERROR logs: `crud.yaml` matches
+  except two steps, `patch seeded keeps todoCount` and `lowercase id accepted`
+  (404, transcript 200). Both PATCH the parity seed project
+  `5EED0000-…-0000000000A1`, which exists only in the parity DB.
+- Control: the same smoke against Swift `api-staging`, which shares the
+  `luminavault_staging` database, gives the same two 404s and matches on every
+  other step. So Go and Swift agree step for step on staging, and the
+  mismatches are a scenario artifact. Follow-up: smoke should skip steps that
+  address seed IDs, or compare against a live Swift target instead of CI
+  transcripts.
+
+### G3 production: routed 2026-10-31, watch running
+
+- LuminaVaultInfra #537 merged 2026-10-31 12:15Z: `/v1/projects` on
+  `api.luminavault.fyi` goes to `api-go-production` (`d7297f97`).
+- Swift baseline before the flip (`api-production` logs, 2026-10-29 06:27Z to
+  10-31 12:04Z): 33,981 requests, 0 on `/v1/projects*`, 0 5xx on any route.
+- Check on 2026-11-04 09:16Z: responses on the route lack Swift's `Server`
+  header, so Go is serving it. Pod has 0 restarts in 3d20h. Logs show 0 5xx and
+  0 ERROR, but only reach back about 12 h, and the 37 `/v1/projects` requests
+  in them are essentially the agent's probes.
+- So far the watch shows stability, not behaviour under real use: the route has
+  had almost no real traffic. The probes also found routing differences, see
+  decisions.md D-router-parity (PR #15).
+- 7 d mark: 2026-11-07 12:15Z. Then set `done` and write `pilot-retro.md`.
 
 ## kanban (wave 2)
 
