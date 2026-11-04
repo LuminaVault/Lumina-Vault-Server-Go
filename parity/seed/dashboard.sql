@@ -206,7 +206,8 @@ VALUES
   ('da5be000-0000-4000-8000-000000000022', 'da5bc000-0000-4000-8000-0000000000c1', 'Team capture two', now() - interval '2 days', 'auto', 'da5b0000-0000-4000-8000-0000000000a1'),
   ('da5be000-0000-4000-8000-000000000023', 'da5bc000-0000-4000-8000-0000000000c1', 'Eli capture', now() - interval '2 days', 'auto', 'da5b0000-0000-4000-8000-0000000000e5');
 
--- Live work for ann: 5 running or waiting runs, 3 gateway jobs, finished rows that
+-- Live work for ann: 5 running or waiting runs, 1 running gateway job (a unique index allows one per
+-- tenant), finished rows that
 -- never appear, and one run of ben's.
 INSERT INTO workflows (id, tenant_id, name, draft_definition)
 VALUES
@@ -228,9 +229,9 @@ VALUES
   ('da5bc300-0000-4000-8000-000000000008', 'da5b0000-0000-4000-8000-0000000000b2', 'da5bc100-0000-4000-8000-000000000002', 'da5bc200-0000-4000-8000-000000000002', 'running', 'manual', now() - interval '1 hour', NULL, now() - interval '1 hour');
 INSERT INTO hermes_gateway_apply_jobs (id, tenant_id, state, error_message, created_at)
 VALUES
-  ('da5bc400-0000-4000-8000-000000000001', 'da5b0000-0000-4000-8000-0000000000a1', 'running', NULL, now() - interval '10 minutes'),
-  ('da5bc400-0000-4000-8000-000000000002', 'da5b0000-0000-4000-8000-0000000000a1', 'running', 'retrying', now() - interval '4 hours'),
-  ('da5bc400-0000-4000-8000-000000000003', 'da5b0000-0000-4000-8000-0000000000a1', 'running', NULL, now() - interval '5 hours'),
+  ('da5bc400-0000-4000-8000-000000000001', 'da5b0000-0000-4000-8000-0000000000a1', 'running', 'retrying', now() - interval '10 minutes'),
+  ('da5bc400-0000-4000-8000-000000000002', 'da5b0000-0000-4000-8000-0000000000a1', 'failed', 'boom', now() - interval '4 hours'),
+  ('da5bc400-0000-4000-8000-000000000003', 'da5b0000-0000-4000-8000-0000000000a1', 'succeeded', NULL, now() - interval '5 hours'),
   ('da5bc400-0000-4000-8000-000000000004', 'da5b0000-0000-4000-8000-0000000000a1', 'succeeded', NULL, now() - interval '1 minute');
 
 -- dash_wri: six loose memories, enough to fire every memory recommendation, and
