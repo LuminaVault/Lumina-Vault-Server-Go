@@ -40,6 +40,11 @@ type Config struct {
 	EmbeddingProvider               string `env:"EMBEDDING_PROVIDER" envDefault:"deterministic"`
 	EmbeddingMonthlyTokenCapDefault int64  `env:"EMBEDDING_MONTHLY_TOKEN_CAP_DEFAULT" envDefault:"2000000"`
 	HermesDefaultModel              string `env:"HERMES_DEFAULT_MODEL" envDefault:"hermes-3"`
+	// Calendar and Gmail (calendar, mail modules): oauth.googleCalendar.* and meeting.brief.maxDistance.
+	GoogleCalendarClientID     string  `env:"OAUTH_GOOGLE_CALENDAR_CLIENT_ID"`
+	GoogleCalendarClientSecret string  `env:"OAUTH_GOOGLE_CALENDAR_CLIENT_SECRET"`
+	GoogleCalendarRedirectURI  string  `env:"OAUTH_GOOGLE_CALENDAR_REDIRECT_URI"`
+	MeetingBriefMaxDistance    float64 `env:"MEETING_BRIEF_MAX_DISTANCE" envDefault:"0.4"`
 	// Shared feed aggregator for the news ticker (news module). Raw strings:
 	// the module splits FEEDS_DEFAULT_FEEDS exactly as Swift does.
 	FeedsBaseURL      string `env:"FEEDS_BASE_URL"`
