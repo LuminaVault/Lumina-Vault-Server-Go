@@ -1,0 +1,36 @@
+# GET /v1/vaults/{vaultID}/activity and /activity/stream. kim ...AD is a
+# viewer of Alpha Main 7EA53000-...01 and alpha lab ...02 (101 seeded events,
+# newest 100 listed). The stream is in-process SSE with no initial frame, so
+# parity sees its status and headers; the frames are covered by Go tests.
+module: teams
+steps:
+  - {name: newest first with the scenario writes, as: team_kim, request: {method: GET, path: /v1/vaults/7EA53000-0000-4000-8000-000000000001/activity}}
+  - {name: at most 100 rows, as: team_kim, request: {method: GET, path: /v1/vaults/7EA53000-0000-4000-8000-000000000002/activity}}
+  - {name: personal vault has no activity, as: team_kim, request: {method: GET, path: /v1/vaults/7EA50000-0000-4000-8000-0000000000AD/activity}}
+  - {name: the path wins over X-Vault-ID, as: team_kim, request: {method: GET, path: /v1/vaults/7EA53000-0000-4000-8000-000000000001/activity, headers: {X-Vault-ID: nope}}}
+  - {name: bad vault id, as: team_kim, request: {method: GET, path: /v1/vaults/nope/activity}}
+  - {name: no seat, as: team_out, request: {method: GET, path: /v1/vaults/7EA53000-0000-4000-8000-000000000001/activity}}
+  - {name: unknown vault, as: team_kim, request: {method: GET, path: /v1/vaults/00000000-0000-4000-8000-000000000000/activity}}
+  - {name: archived vault, as: team_olga, request: {method: GET, path: /v1/vaults/7EA53000-0000-4000-8000-000000000003/activity}}
+
+  - name: stream opens
+    as: team_kim
+    request: {method: GET, path: /v1/vaults/7EA53000-0000-4000-8000-000000000001/activity/stream}
+    stream: true
+    headers: [Cache-Control, X-Accel-Buffering]
+  - name: stream of the personal vault
+    as: team_kim
+    request: {method: GET, path: /v1/vaults/7EA50000-0000-4000-8000-0000000000AD/activity/stream, headers: {Accept: text/event-stream}}
+    stream: true
+    headers: [Cache-Control, X-Accel-Buffering]
+  - {name: stream bad vault id, as: team_kim, request: {method: GET, path: /v1/vaults/nope/activity/stream}}
+  - {name: stream without a seat, as: team_out, request: {method: GET, path: /v1/vaults/7EA53000-0000-4000-8000-000000000001/activity/stream}}
+  - {name: stream of an unknown vault, as: team_kim, request: {method: GET, path: /v1/vaults/00000000-0000-4000-8000-000000000000/activity/stream}}
+  - {name: stream of an archived vault, as: team_olga, request: {method: GET, path: /v1/vaults/7EA53000-0000-4000-8000-000000000003/activity/stream}}
+
+  # Last, because 06 needs Epsilon archived.
+  - name: owner restores Epsilon, archived yesterday
+    as: team_tom
+    request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000004/restore}
+    snapshot: [teams, vaults]
+  - {name: restored vault is readable, as: team_tom, request: {method: GET, path: /v1/vaults/7EA53000-0000-4000-8000-000000000006/activity}}

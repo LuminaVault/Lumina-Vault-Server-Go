@@ -1,0 +1,35 @@
+# GET /v1/me/recap/period (PeriodRecapController). me_per lives in
+# America/Los_Angeles with fixed 2026 data and seeded recap_themes rows:
+# 2026-03 ready, 2026-02 a spent fallback, 2026-01 an exhausted pending claim.
+#
+# A period with no themes row is claimed on first read, and Swift then hands
+# the job to its in-process worker, which marks the row 'fallback'
+# asynchronously (no LLM here). So every claiming period is read exactly once
+# per user and recap_themes is never snapshotted.
+module: me
+steps:
+  - {name: year in progress claims themes, as: me_per, request: {method: GET, path: "/v1/me/recap/period?period=year&year=2026"}}
+  - {name: month with ready themes, as: me_per, request: {method: GET, path: "/v1/me/recap/period?period=month&month=3"}}
+  - {name: same month spelled out, as: me_per, request: {method: GET, path: "/v1/me/recap/period?period=month&year=2026&month=03"}}
+  - {name: month with spent fallback, as: me_per, request: {method: GET, path: "/v1/me/recap/period?period=month&year=2026&month=2"}}
+  - {name: month with exhausted claim, as: me_per, request: {method: GET, path: "/v1/me/recap/period?period=month&year=2026&month=1"}}
+  - {name: month without enough activity, as: me_per, request: {method: GET, path: "/v1/me/recap/period?period=month&year=2026&month=4"}}
+  - {name: current month, as: me_per, request: {method: GET, path: "/v1/me/recap/period?period=month"}}
+  - {name: future month, as: me_per, request: {method: GET, path: "/v1/me/recap/period?period=month&year=2026&month=12"}}
+  - {name: year without activity, as: me_per, request: {method: GET, path: "/v1/me/recap/period?year=2025"}}
+  - {name: year before the account, as: me_per, request: {method: GET, path: "/v1/me/recap/period?year=2024"}}
+  - {name: future year, as: me_per, request: {method: GET, path: "/v1/me/recap/period?period=year&year=2027"}}
+  - {name: default period for a new account, as: me_new, request: {method: GET, path: /v1/me/recap/period}}
+  - {name: empty params default too, as: me_new, request: {method: GET, path: "/v1/me/recap/period?period=&year=&month="}}
+  - {name: default period with invalid timezone and no created_at, as: me_bad, request: {method: GET, path: /v1/me/recap/period}}
+  - {name: default period isolation, as: bob, request: {method: GET, path: /v1/me/recap/period}}
+  - {name: unknown period, as: me_new, request: {method: GET, path: "/v1/me/recap/period?period=week"}}
+  - {name: year not a number, as: me_new, request: {method: GET, path: "/v1/me/recap/period?year=abc"}}
+  - {name: year too small, as: me_new, request: {method: GET, path: "/v1/me/recap/period?year=1999"}}
+  - {name: year too large, as: me_new, request: {method: GET, path: "/v1/me/recap/period?year=10000"}}
+  - {name: month on a year period, as: me_new, request: {method: GET, path: "/v1/me/recap/period?period=year&month=3"}}
+  - {name: month on the default period, as: me_new, request: {method: GET, path: "/v1/me/recap/period?month=3"}}
+  - {name: month 13, as: me_new, request: {method: GET, path: "/v1/me/recap/period?period=month&month=13"}}
+  - {name: month 0, as: me_new, request: {method: GET, path: "/v1/me/recap/period?period=month&month=0"}}
+  - {name: month not a number, as: me_new, request: {method: GET, path: "/v1/me/recap/period?period=month&month=x"}}
+  - {name: bad year beats bad month, as: me_new, request: {method: GET, path: "/v1/me/recap/period?period=month&year=x&month=x"}}

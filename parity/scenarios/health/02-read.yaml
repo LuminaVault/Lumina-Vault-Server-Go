@@ -1,0 +1,39 @@
+module: health
+# Seeded rows (parity/seed/health.sql), read before 03-ingest writes any.
+steps:
+  - {name: default window, as: hea_hal, request: {method: GET, path: /v1/health}}
+  - {name: type filter, as: hea_hal, request: {method: GET, path: "/v1/health?type=steps"}}
+  - {name: type trimmed and lowercased, as: hea_hal, request: {method: GET, path: "/v1/health?type=%20STEPS%20"}}
+  - {name: blank type is no filter, as: hea_hal, request: {method: GET, path: "/v1/health?type=%20"}}
+  - {name: unknown type, as: hea_hal, request: {method: GET, path: "/v1/health?type=nope"}}
+  - {name: first duplicate param wins, as: hea_hal, request: {method: GET, path: "/v1/health?type=hr_bpm&type=steps"}}
+  - {name: explicit window, as: hea_hal, request: {method: GET, path: "/v1/health?type=weight_kg&from=2026-09-01T00:00:00Z&to=2026-10-01T00:00:00Z"}}
+  - {name: from inclusive to exclusive, as: hea_hal, request: {method: GET, path: "/v1/health?from=2026-09-08T07:00:00Z&to=2026-09-22T07:00:00Z"}}
+  - {name: fractional from, as: hea_hal, request: {method: GET, path: "/v1/health?from=2026-09-08T07:00:00.001Z&to=2026-10-01T00:00:00Z"}}
+  - {name: encoded offset, as: hea_hal, request: {method: GET, path: "/v1/health?from=2026-09-08T09:00:00%2B02:00&to=2026-10-01T00:00:00Z"}}
+  - {name: raw plus offset, as: hea_hal, request: {method: GET, path: "/v1/health?from=2026-09-08T09:00:00+02:00&to=2026-10-01T00:00:00Z"}}
+  - {name: unparseable from falls back, as: hea_hal, request: {method: GET, path: "/v1/health?type=weight_kg&from=yesterday"}}
+  - {name: date-only from falls back, as: hea_hal, request: {method: GET, path: "/v1/health?type=weight_kg&from=2026-09-01&to=2026-10-01T00:00:00Z"}}
+  - {name: empty window, as: hea_hal, request: {method: GET, path: "/v1/health?from=2026-10-01T00:00:00Z&to=2026-09-01T00:00:00Z"}}
+  - {name: limit 2, as: hea_hal, request: {method: GET, path: "/v1/health?from=2026-09-01T00:00:00Z&to=2026-10-01T00:00:00Z&limit=2"}}
+  - {name: limit 2 offset 2, as: hea_hal, request: {method: GET, path: "/v1/health?from=2026-09-01T00:00:00Z&to=2026-10-01T00:00:00Z&limit=2&offset=2"}}
+  - {name: offset past end, as: hea_hal, request: {method: GET, path: "/v1/health?from=2026-09-01T00:00:00Z&to=2026-10-01T00:00:00Z&offset=9"}}
+  - {name: limit 0 clamps to 1, as: hea_hal, request: {method: GET, path: "/v1/health?limit=0"}}
+  - {name: limit negative clamps to 1, as: hea_hal, request: {method: GET, path: "/v1/health?limit=-5"}}
+  - {name: limit 10000 clamps to 200, as: hea_hal, request: {method: GET, path: "/v1/health?limit=10000"}}
+  - {name: limit not a number, as: hea_hal, request: {method: GET, path: "/v1/health?limit=abc"}}
+  - {name: limit with plus sign, as: hea_hal, request: {method: GET, path: "/v1/health?limit=+2"}}
+  - {name: negative offset is 0, as: hea_hal, request: {method: GET, path: "/v1/health?offset=-3"}}
+  - {name: offset not a number, as: hea_hal, request: {method: GET, path: "/v1/health?offset=abc"}}
+  - {name: other tenant sees nothing, as: hea_bea, request: {method: GET, path: "/v1/health?from=2000-01-01T00:00:00Z&to=2100-01-01T00:00:00Z"}}
+  - {name: daily sum default 7 days, as: hea_hal, request: {method: GET, path: "/v1/health/daily?type=steps"}}
+  - {name: daily average, as: hea_hal, request: {method: GET, path: "/v1/health/daily?type=hr_bpm"}}
+  - {name: daily text-only type is all zero, as: hea_hal, request: {method: GET, path: "/v1/health/daily?type=sleep_quality"}}
+  - {name: daily uppercase type, as: hea_hal, request: {method: GET, path: "/v1/health/daily?type=%20STEPS"}}
+  - {name: daily days 1, as: hea_hal, request: {method: GET, path: "/v1/health/daily?type=steps&days=1"}}
+  - {name: daily days 2, as: hea_hal, request: {method: GET, path: "/v1/health/daily?type=steps&days=2"}}
+  - {name: daily days 14 reaches older rows, as: hea_hal, request: {method: GET, path: "/v1/health/daily?type=steps&days=14"}}
+  - {name: daily days 90, as: hea_hal, request: {method: GET, path: "/v1/health/daily?type=steps&days=90"}}
+  - {name: daily days not a number, as: hea_hal, request: {method: GET, path: "/v1/health/daily?type=steps&days=abc"}}
+  - {name: daily days with plus sign, as: hea_hal, request: {method: GET, path: "/v1/health/daily?type=steps&days=+3"}}
+  - {name: daily other tenant, as: hea_bea, request: {method: GET, path: "/v1/health/daily?type=steps"}}

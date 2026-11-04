@@ -1,0 +1,20 @@
+# Unauthenticated requests. The rate-limited routes share Swift's
+# meTodayByUser bucket keyed by IP (60/min), so this file stays well under it.
+module: me
+steps:
+  - {name: today no token, request: {method: GET, path: /v1/me/today}}
+  - {name: today bad token, request: {method: GET, path: /v1/me/today, headers: {Authorization: "Bearer not.a.jwt"}}}
+  - {name: brief no token, request: {method: GET, path: /v1/me/brief}}
+  - {name: feedback no token, request: {method: POST, path: /v1/me/brief/AE0B71EF-0000-4000-8000-0000000000A1/cards/weather/feedback, json: {action: up}}}
+  - {name: feedback no token bad ids, request: {method: POST, path: /v1/me/brief/nope/cards/weather/feedback, raw: "{"}}
+  - {name: recap no token, request: {method: GET, path: "/v1/me/recap?range=bogus"}}
+  - {name: period no token, request: {method: GET, path: "/v1/me/recap/period?period=week"}}
+  - {name: resurface no token, request: {method: GET, path: /v1/me/resurface}}
+  - {name: learned no token, request: {method: GET, path: /v1/me/learned}}
+  - {name: commitments no token, request: {method: GET, path: /v1/me/commitments}}
+  - {name: patch commitment no token, request: {method: PATCH, path: /v1/me/commitments/not-a-uuid, json: {state: done}}}
+  - {name: location no token, request: {method: GET, path: /v1/me/location}}
+  - {name: forget location no token, request: {method: DELETE, path: /v1/me/location}, snapshot: [users]}
+  - {name: apns no token, request: {method: GET, path: /v1/me/apns-categories}}
+  - {name: apns put no token, request: {method: PUT, path: /v1/me/apns-categories, json: {chatEnabled: false}}, snapshot: [apns_category_prefs]}
+  - {name: apns bad token, request: {method: PUT, path: /v1/me/apns-categories, raw: "{", headers: {Authorization: "Bearer not.a.jwt"}}}

@@ -1,0 +1,16 @@
+module: account
+# The full erase: acct_del has rows in cascaded tables and in every table
+# TenantDataEraser handles by hand. Every table the delete changes is
+# snapshotted, before and after.
+steps:
+  - name: before
+    as: acct_del
+    request: {method: GET, path: /v1/onboarding}
+    snapshot: &tables [users, vaults, vault_files, projects, onboarding_state, health_events, device_tokens, hermes_profiles, agent_rooms, agent_room_messages, device_command_queue, idempotency_keys, embedding_usage, retrieval_telemetry_events, retrieval_leak_reports, workflow_spend_buckets, billing_event_logs, vault_activity_events, provider_failover_events, teams]
+  - name: delete with password
+    as: acct_del
+    request: {method: DELETE, path: /v1/account, json: {password: correct horse battery staple}}
+    snapshot: *tables
+  - {name: token of a deleted user, as: acct_del, request: {method: GET, path: /v1/onboarding}}
+  - {name: delete again, as: acct_del, request: {method: DELETE, path: /v1/account, json: {password: correct horse battery staple}}}
+  - {name: other users untouched, as: alice, request: {method: GET, path: /v1/projects}}

@@ -1,0 +1,30 @@
+# GET/POST /v1/teams. team_ned starts with no team.
+module: teams
+steps:
+  - {name: ned has no teams, as: team_ned, request: {method: GET, path: /v1/teams}}
+  - name: create trims the name and makes the creator owner
+    as: team_ned
+    request: {method: POST, path: /v1/teams, json: {name: "  Gamma Team \n"}}
+    snapshot: [teams, team_memberships]
+  - {name: ned lists the new team, as: team_ned, request: {method: GET, path: /v1/teams}}
+  - {name: two graphemes are enough, as: team_ned, request: {method: POST, path: /v1/teams, json: {name: "👍🏽!"}}}
+  - {name: one flag is one character, as: team_ned, request: {method: POST, path: /v1/teams, json: {name: "🇵🇹"}}}
+  - {name: one character, as: team_ned, request: {method: POST, path: /v1/teams, json: {name: " a "}}}
+  - {name: blank, as: team_ned, request: {method: POST, path: /v1/teams, json: {name: "   "}}}
+  - {name: 81 characters, as: team_ned, request: {method: POST, path: /v1/teams, json: {name: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}}}
+  - {name: 80 characters, as: team_ned, request: {method: POST, path: /v1/teams, json: {name: "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"}}}
+  - {name: malformed json, as: team_ned, request: {method: POST, path: /v1/teams, raw: "{\"name\":"}}
+  - {name: empty body, as: team_ned, request: {method: POST, path: /v1/teams, raw: ""}}
+  - {name: array body, as: team_ned, request: {method: POST, path: /v1/teams, raw: "[]"}}
+  - {name: missing name, as: team_ned, request: {method: POST, path: /v1/teams, json: {}}}
+  - {name: null name, as: team_ned, request: {method: POST, path: /v1/teams, raw: "{\"name\":null}"}}
+  - {name: name wrong type, as: team_ned, request: {method: POST, path: /v1/teams, json: {name: 42}}}
+  - name: unknown field ignored
+    as: team_ned
+    request: {method: POST, path: /v1/teams, json: {name: "Side Project", archived: true}}
+    snapshot: [teams, team_memberships]
+  - {name: ned lists every team he made, as: team_ned, request: {method: GET, path: /v1/teams}}
+  - {name: owner of Alpha, as: team_olga, request: {method: GET, path: /v1/teams}}
+  - {name: member of Alpha, as: team_mia, request: {method: GET, path: /v1/teams}}
+  - {name: outsider has none, as: team_out, request: {method: GET, path: /v1/teams}}
+  - {name: archived teams are listed, as: team_tom, request: {method: GET, path: /v1/teams}}

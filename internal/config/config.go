@@ -45,8 +45,24 @@ type Config struct {
 	FeedsBaseURL      string `env:"FEEDS_BASE_URL"`
 	FeedsDefaultFeeds string `env:"FEEDS_DEFAULT_FEEDS"`
 
+	// Team invitations (teams module): makeTeamInvitationSender's inputs.
+	EmailKind         string `env:"EMAIL_KIND" envDefault:"logging"`
+	EmailResendAPIKey string `env:"EMAIL_RESEND_API_KEY"`
+	EmailFromAddress  string `env:"EMAIL_FROM_ADDRESS"`
+	EmailReplyTo      string `env:"EMAIL_REPLY_TO"`
+	TeamInviteBaseURL string `env:"TEAM_INVITE_BASE_URL" envDefault:"http://localhost:5173"`
+	// RecapThemesEnabled is recap.themesEnabled: the model-written card of
+	// /v1/me/recap/period (me module). Off reports it as disabled.
+	RecapThemesEnabled bool `env:"RECAP_THEMES_ENABLED" envDefault:"true"`
+
 	// VaultRootPath holds tenants/<UUID>/{raw,wiki,memories} on the shared PVC.
 	VaultRootPath string `env:"VAULT_ROOT_PATH" envDefault:"/tmp/luminavault"`
+
+	// Wave 3 account/health. HermesDataRoot holds profiles/<id>/ (account
+	// deletion soft-renames it). BillingEnforcementEnabled stays a string:
+	// Swift enables it only when it lowercases to "true" (entitlement package).
+	HermesDataRoot            string `env:"HERMES_DATA_ROOT" envDefault:"/app/data/hermes"`
+	BillingEnforcementEnabled string `env:"BILLING_ENFORCEMENT_ENABLED" envDefault:"false"`
 
 	// LVGoJobs lists the background jobs this Go process runs. It is set only
 	// on api-go-* (extraEnv), so a Swift job flag inherited from api-* never

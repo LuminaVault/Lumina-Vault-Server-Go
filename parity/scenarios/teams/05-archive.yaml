@@ -1,0 +1,28 @@
+# POST /v1/teams/{teamID}/archive and /restore.
+# Delta 7EA51000-...03: tom ...AA owner, ada ...AB admin; Delta Main 7EA53000-...05.
+module: teams
+steps:
+  - {name: admin cannot archive, as: team_ada, request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000003/archive}}
+  - {name: stranger cannot archive, as: team_out, request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000003/archive}}
+  - {name: archive bad id, as: team_tom, request: {method: POST, path: /v1/teams/nope/archive}}
+  - {name: restore a live team, as: team_tom, request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000003/restore}}
+  - name: owner archives Delta and its vaults
+    as: team_tom
+    request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000003/archive}
+    snapshot: [teams, vaults]
+  - {name: archiving again is allowed, as: team_tom, request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000003/archive}}
+  - {name: archived team in the list, as: team_ada, request: {method: GET, path: /v1/teams}}
+  - {name: archived vault in the list, as: team_ada, request: {method: GET, path: /v1/vaults}}
+  - {name: archived vault cannot be read, as: team_ada, request: {method: GET, path: /v1/vaults/7EA53000-0000-4000-8000-000000000005/activity}}
+  - {name: no new vaults in an archived team, as: team_tom, request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000003/vaults, json: {name: Later}}}
+  - {name: no invitations in an archived team, as: team_ada, request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000003/invitations, json: {email: x@parity.test, vaultGrants: {}}}}
+  - {name: invitations of an archived team still list, as: team_ada, request: {method: GET, path: /v1/teams/7EA51000-0000-4000-8000-000000000003/invitations}}
+  - {name: admin cannot restore, as: team_ada, request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000003/restore}}
+  - {name: stranger cannot restore, as: team_out, request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000003/restore}}
+  - {name: restore bad id, as: team_tom, request: {method: POST, path: /v1/teams/nope/restore}}
+  - name: owner restores Delta and its vaults
+    as: team_tom
+    request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000003/restore}
+    snapshot: [teams, vaults]
+  - {name: restoring twice, as: team_tom, request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000003/restore}}
+  - {name: restored vault is readable, as: team_ada, request: {method: GET, path: /v1/vaults/7EA53000-0000-4000-8000-000000000005/activity}}

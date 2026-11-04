@@ -1,0 +1,48 @@
+# GET/PATCH /v1/me/commitments (CommitmentsService). me_cmt owns six rows;
+# "Renew passport." (done) clashes with the open "Renew passport".
+module: me
+steps:
+  - {name: list default is open, as: me_cmt, request: {method: GET, path: /v1/me/commitments}}
+  - {name: list all, as: me_cmt, request: {method: GET, path: "/v1/me/commitments?state=all"}}
+  - {name: list done, as: me_cmt, request: {method: GET, path: "/v1/me/commitments?state=done"}}
+  - {name: list dropped, as: me_cmt, request: {method: GET, path: "/v1/me/commitments?state=dropped"}}
+  - {name: list open, as: me_cmt, request: {method: GET, path: "/v1/me/commitments?state=open"}}
+  - {name: list empty state is open, as: me_cmt, request: {method: GET, path: "/v1/me/commitments?state="}}
+  - {name: list unknown state, as: me_cmt, request: {method: GET, path: "/v1/me/commitments?state=snoozed"}}
+  - {name: list isolation, as: bob, request: {method: GET, path: "/v1/me/commitments?state=all"}}
+  - {name: list without data, as: me_new, request: {method: GET, path: "/v1/me/commitments?state=all"}}
+  - name: mark done
+    as: me_cmt
+    request: {method: PATCH, path: /v1/me/commitments/AE0C0331-0000-4000-8000-0000000000A1, json: {state: done}}
+    snapshot: [commitments]
+  - name: mark done again keeps done_at
+    as: me_cmt
+    request: {method: PATCH, path: /v1/me/commitments/ae0c0331-0000-4000-8000-0000000000a1, json: {state: done}}
+    snapshot: [commitments]
+  - name: reopen a done commitment
+    as: me_cmt
+    request: {method: PATCH, path: /v1/me/commitments/AE0C0331-0000-4000-8000-0000000000A3, json: {state: open}}
+    snapshot: [commitments]
+  - name: reopen clashes with an open duplicate
+    as: me_cmt
+    request: {method: PATCH, path: /v1/me/commitments/AE0C0331-0000-4000-8000-0000000000A5, json: {state: open}}
+    snapshot: [commitments]
+  - {name: reopen an open commitment, as: me_cmt, request: {method: PATCH, path: /v1/me/commitments/AE0C0331-0000-4000-8000-0000000000A2, json: {state: open}}}
+  - {name: drop the duplicate, as: me_cmt, request: {method: PATCH, path: /v1/me/commitments/AE0C0331-0000-4000-8000-0000000000A2, json: {state: dropped}}}
+  - name: reopen once the duplicate is dropped
+    as: me_cmt
+    request: {method: PATCH, path: /v1/me/commitments/AE0C0331-0000-4000-8000-0000000000A5, json: {state: open, extra: 1}}
+    snapshot: [commitments]
+  - {name: patch a foreign commitment, as: me_cmt, request: {method: PATCH, path: /v1/me/commitments/AE0C0331-0000-4000-8000-0000000000B1, json: {state: done}}, snapshot: [commitments]}
+  - {name: patch a random commitment, as: me_cmt, request: {method: PATCH, path: /v1/me/commitments/00000000-0000-4000-8000-000000000000, json: {state: done}}}
+  - {name: reopen a random commitment, as: me_cmt, request: {method: PATCH, path: /v1/me/commitments/00000000-0000-4000-8000-000000000000, json: {state: open}}}
+  - {name: patch a bad id, as: me_cmt, request: {method: PATCH, path: /v1/me/commitments/not-a-uuid, json: {state: done}}}
+  - {name: bad id beats a bad body, as: me_cmt, request: {method: PATCH, path: /v1/me/commitments/not-a-uuid, raw: "{"}}
+  - {name: unknown state, as: me_cmt, request: {method: PATCH, path: /v1/me/commitments/AE0C0331-0000-4000-8000-0000000000A1, json: {state: snoozed}}}
+  - {name: state wrong type, as: me_cmt, request: {method: PATCH, path: /v1/me/commitments/AE0C0331-0000-4000-8000-0000000000A1, json: {state: 3}}}
+  - {name: state null, as: me_cmt, request: {method: PATCH, path: /v1/me/commitments/AE0C0331-0000-4000-8000-0000000000A1, raw: "{\"state\":null}"}}
+  - {name: missing state, as: me_cmt, request: {method: PATCH, path: /v1/me/commitments/AE0C0331-0000-4000-8000-0000000000A1, json: {}}}
+  - {name: malformed json, as: me_cmt, request: {method: PATCH, path: /v1/me/commitments/AE0C0331-0000-4000-8000-0000000000A1, raw: "{\"state\":"}}
+  - {name: empty body, as: me_cmt, request: {method: PATCH, path: /v1/me/commitments/AE0C0331-0000-4000-8000-0000000000A1, raw: ""}}
+  - {name: array body, as: me_cmt, request: {method: PATCH, path: /v1/me/commitments/AE0C0331-0000-4000-8000-0000000000A1, raw: "[]"}}
+  - {name: list all after the writes, as: me_cmt, request: {method: GET, path: "/v1/me/commitments?state=all"}, snapshot: [commitments]}

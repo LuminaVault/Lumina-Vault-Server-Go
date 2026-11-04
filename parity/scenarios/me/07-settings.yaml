@@ -1,0 +1,25 @@
+# /v1/me/location (last known weather location) and /v1/me/apns-categories
+# (JWT-only, no rate limit). alice has no apns_category_prefs row at the start.
+module: me
+steps:
+  - {name: location cached, as: me_ann, request: {method: GET, path: /v1/me/location}}
+  - {name: location without a place or a time, as: me_lia, request: {method: GET, path: /v1/me/location}}
+  - {name: no location, as: me_new, request: {method: GET, path: /v1/me/location}}
+  - {name: forget location, as: me_lia, request: {method: DELETE, path: /v1/me/location}, snapshot: [users]}
+  - {name: location forgotten, as: me_lia, request: {method: GET, path: /v1/me/location}}
+  - {name: forget a location that is not there, as: me_new, request: {method: DELETE, path: /v1/me/location}, snapshot: [users]}
+  - {name: other users keep theirs, as: me_ann, request: {method: GET, path: /v1/me/location}}
+  - {name: apns defaults without a row, as: alice, request: {method: GET, path: /v1/me/apns-categories}}
+  - {name: apns empty put inserts the defaults, as: alice, request: {method: PUT, path: /v1/me/apns-categories, json: {}}, snapshot: [apns_category_prefs]}
+  - {name: apns sparse update, as: alice, request: {method: PUT, path: /v1/me/apns-categories, json: {chatEnabled: false, meetingBriefEnabled: true}}, snapshot: [apns_category_prefs]}
+  - {name: apns null fields keep their values, as: alice, request: {method: PUT, path: /v1/me/apns-categories, raw: "{\"chatEnabled\":null,\"digestEnabled\":false}"}, snapshot: [apns_category_prefs]}
+  - {name: apns empty put on an existing row changes nothing, as: alice, request: {method: PUT, path: /v1/me/apns-categories, json: {unknown: 1}}, snapshot: [apns_category_prefs]}
+  - {name: apns read back, as: alice, request: {method: GET, path: /v1/me/apns-categories}}
+  - {name: apns first put with fields inserts them, as: bob, request: {method: PUT, path: /v1/me/apns-categories, json: {nudgeEnabled: false, approvalEnabled: false, runCompletedEnabled: false}}, snapshot: [apns_category_prefs]}
+  - {name: apns isolation, as: me_new, request: {method: GET, path: /v1/me/apns-categories}}
+  - {name: apns wrong type, as: alice, request: {method: PUT, path: /v1/me/apns-categories, json: {chatEnabled: "no"}}}
+  - {name: apns number for a bool, as: alice, request: {method: PUT, path: /v1/me/apns-categories, json: {nudgeEnabled: 1}}}
+  - {name: apns malformed json, as: alice, request: {method: PUT, path: /v1/me/apns-categories, raw: "{\"chatEnabled\":"}}
+  - {name: apns empty body, as: alice, request: {method: PUT, path: /v1/me/apns-categories, raw: ""}}
+  - {name: apns array body, as: alice, request: {method: PUT, path: /v1/me/apns-categories, raw: "[]"}}
+  - {name: apns failed writes changed nothing, as: alice, request: {method: GET, path: /v1/me/apns-categories}, snapshot: [apns_category_prefs]}

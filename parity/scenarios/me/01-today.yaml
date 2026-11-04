@@ -1,0 +1,12 @@
+# GET /v1/me/today (MeTodayController). Headers (ETag, Cache-Control, 304) are
+# not compared by the harness; the Go tests cover them.
+module: me
+smoke: true
+steps:
+  - {name: today with activity, as: me_ann, request: {method: GET, path: /v1/me/today}}
+  - {name: today again is served from the cache, as: me_ann, request: {method: GET, path: /v1/me/today}}
+  - {name: stale If-None-Match still gets the body, as: me_ann, request: {method: GET, path: /v1/me/today, headers: {If-None-Match: "\"0000000000000000\""}}}
+  - {name: today without data, as: me_new, request: {method: GET, path: /v1/me/today}}
+  - {name: today for a free user without created_at, as: me_bad, request: {method: GET, path: /v1/me/today}}
+  - {name: today in Los Angeles, as: me_lia, request: {method: GET, path: /v1/me/today}}
+  - {name: today isolation, as: bob, request: {method: GET, path: /v1/me/today}}

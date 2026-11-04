@@ -10,20 +10,27 @@ import (
 	"lumina/internal/auth"
 	"lumina/internal/config"
 	"lumina/internal/db"
+	"lumina/internal/entitlement"
 	"lumina/internal/httpserver"
 	"lumina/internal/migrations"
+	"lumina/internal/modules/account"
 	"lumina/internal/modules/achievements"
 	"lumina/internal/modules/apple"
 	"lumina/internal/modules/dashboard"
 	"lumina/internal/modules/devices"
+	"lumina/internal/modules/health"
 	"lumina/internal/modules/kanban"
+	"lumina/internal/modules/me"
 	"lumina/internal/modules/news"
+	"lumina/internal/modules/onboarding"
 	"lumina/internal/modules/profiles"
 	"lumina/internal/modules/projects"
 	"lumina/internal/modules/reminders"
 	"lumina/internal/modules/sessions"
 	"lumina/internal/modules/spaces"
+	"lumina/internal/modules/teams"
 	"lumina/internal/ratelimit"
+	"lumina/internal/secretbox"
 	"lumina/internal/telemetry"
 	"lumina/internal/vaultpaths"
 	"net"
@@ -127,8 +134,24 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 			devices.New(pool, cfg.APNSBundleID),
 			reminders.New(pool, nil, cfg.HermesDefaultModel),
 			achievements.New(pool, identify, limits),
+			teams.New(pool, identify, limits, paths, teams.NewSender(teams.SenderConfig{
+				Kind: cfg.EmailKind, APIKey: cfg.EmailResendAPIKey, FromAddress: cfg.EmailFromAddress,
+				ReplyTo: cfg.EmailReplyTo, BaseURL: cfg.TeamInviteBaseURL,
+			}, slog.Default().With("module", "teams"))),
+			me.New(pool, identify, limits, me.Options{RecapThemesEnabled: cfg.RecapThemesEnabled}),
 			dashboard.New(pool, identify),
 		}
+		// Wave 3: account, onboarding, health. Health ingest sits behind the
+		// billing gate; the BYO-key exemption needs the SecretBox (nil without
+		// LV_SECRET_MASTER_KEY, as Swift's UserCredentialStore).
+		box, _ := secretbox.New(cfg.LVSecretMasterKey)
+		healthGate := entitlement.Middleware(pool, entitlement.HealthIngest,
+			entitlement.EnforcementEnabled(cfg.BillingEnforcementEnabled), entitlement.PGCredentials(pool, box))
+		deps.Modules = append(deps.Modules,
+			account.New(pool, keys, paths, cfg.HermesDataRoot),
+			onboarding.New(pool),
+			health.New(pool, healthGate),
+		)
 		if m := news.New(pool, cfg, identify, limits); m != nil { // nil without LV_SECRET_MASTER_KEY, as in Swift
 			deps.Modules = append(deps.Modules, m)
 		}
