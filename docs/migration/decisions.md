@@ -413,6 +413,18 @@ Each item is a flip blocker or an open owner decision unless it says otherwise.
   Swift and 200 in Go. No writer can produce it.
 - Google paths are covered only by Go tests against a stub, not by parity.
 
+## D-flip-before-pilot: batch 1 flipped before the pilot finished
+
+D-wave2-early and D-wave3-early hold wave 2 and 3 modules at `parity` until `projects` is
+`done` and `pilot-retro.md` exists. On 2026-11-04 the owner said they want the app live
+and the Swift server archived as soon as possible, and merged infra #546, whose PR body
+stated that merging waives this gate. So later batches don't wait for the pilot either.
+G2 and G3 still apply per batch. The retro is still written after the pilot's watch, and
+anything it changes in the recipe applies to modules not yet flipped.
+
+The pilot's own watch was not restarted when production moved to `e948c69`, also at the
+owner's call, so its mark stays 2026-11-07 12:15Z.
+
 ## D-wave4-prep: facts from the wave 4 prep PRs (P1 #26, P2 #24, P4 #23 and #25)
 
 Reported by the prep agents. Items marked **[checked]** were confirmed by the

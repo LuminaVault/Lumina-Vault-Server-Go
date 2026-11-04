@@ -1,4 +1,5 @@
 module: profiles
+smoke: true
 steps:
   - {name: "list seeded", as: alice, request: {method: GET, path: "/v1/profiles"}}
   - {name: "get default", as: alice, request: {method: GET, path: "/v1/profiles/assistant"}}

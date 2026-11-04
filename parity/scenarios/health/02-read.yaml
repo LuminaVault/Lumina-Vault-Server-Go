@@ -1,4 +1,5 @@
 module: health
+smoke: true
 # Seeded rows (parity/seed/health.sql), read before 03-ingest writes any.
 steps:
   - {name: default window, as: hea_hal, request: {method: GET, path: /v1/health}}

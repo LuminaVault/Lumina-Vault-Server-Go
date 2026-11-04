@@ -33,6 +33,7 @@ import (
 	"lumina/internal/modules/sessions"
 	"lumina/internal/modules/spaces"
 	"lumina/internal/modules/teams"
+	"lumina/internal/posthog"
 	"lumina/internal/ratelimit"
 	"lumina/internal/secretbox"
 	"lumina/internal/telemetry"
@@ -115,6 +116,19 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 	if err := marketplace.CheckConfig(cfg.LVEnvironment, pluginOptions); err != nil {
 		return err
 	}
+	// Analytics outlive the HTTP server: the deferred cancel runs after Start
+	// returns, so requests finishing in graceful shutdown still get flushed.
+	analytics := posthog.New(cfg.PostHogProjectToken, cfg.PostHogHost, posthog.Options{})
+	analyticsCtx, stopAnalytics := context.WithCancel(context.WithoutCancel(ctx))
+	analyticsDone := make(chan struct{})
+	go func() {
+		defer close(analyticsDone)
+		analytics.Run(analyticsCtx)
+	}()
+	defer func() {
+		stopAnalytics()
+		<-analyticsDone
+	}()
 	deps := httpserver.Deps{}
 	if cfg.FluentEnabled {
 		pool, err := db.Open(ctx, db.DSN(cfg))
@@ -162,7 +176,7 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		deps.Modules = append(deps.Modules,
 			account.New(pool, keys, paths, cfg.HermesDataRoot),
 			onboarding.New(pool),
-			health.New(pool, healthGate),
+			health.New(pool, healthGate, analytics),
 		)
 		deps.Modules = append(deps.Modules, calendarModules(pool, cfg, identify, limits)...)
 		if m := news.New(pool, cfg, identify, limits); m != nil { // nil without LV_SECRET_MASTER_KEY, as in Swift
