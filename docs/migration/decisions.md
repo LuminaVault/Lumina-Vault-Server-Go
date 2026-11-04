@@ -425,3 +425,87 @@ anything it changes in the recipe applies to modules not yet flipped.
 The pilot's own watch was not restarted when production moved to `e948c69`, also at the
 owner's call, so its mark stays 2026-11-07 12:15Z.
 
+## D-wave4-prep: facts from the wave 4 prep PRs (P1 #26, P2 #24, P4 #23 and #25)
+
+Reported by the prep agents. Items marked **[checked]** were confirmed by the
+integrator; the rest are the agents' readings of the Swift code.
+
+**Reading parity counts.** A parity job prints `92 scenarios, 0 differences`
+twice, once for the Swift-vs-Swift self-test and once for Swift-vs-Go, then five
+switch-state compares (six scenarios). The 92 equals the number of YAML files under
+`parity/scenarios` **[checked]**. Quote 92, not the sum of the lines. These PRs add
+no routes, so parity only shows that existing modules didn't change. It says
+nothing about the new packages, which are covered by Go tests against stubs.
+
+**P1, embedding**
+
+- Corrects the calendar note in D-wave3-notes: with a real `EMBEDDING_PROVIDER` and
+  no key, Go now returns deterministic vectors and a warning, as Swift does, instead
+  of 500. A brief with no stored match therefore no longer fails on this path.
+- Once this reaches the staging image, `api-go-staging` makes real paid OpenRouter
+  calls. Nothing has called real OpenRouter from Go yet, so smoke it after merge.
+- Secret spelling: Swift and Go read only `LLM_PROVIDER_OPENAI_API_KEY` for
+  embeddings. The sealed `LLM_PROVIDER_OPENAI_APIKEY` is ignored, so
+  `EMBEDDING_PROVIDER=openai` on current secrets lands on deterministic in both
+  servers. OpenRouter accepts its legacy spelling. Existing behaviour, not new.
+- `EstimateTokens` now counts grapheme clusters, not runes, so `tokens_used` matches
+  Swift. Vectors don't change.
+- Plan correction: `Memory/EmbeddingDegradationTests` (7) can't land in P1. 2 drive
+  routes (4C), 2 need the memory repository (P3), 3 test the heal pass, which stays
+  in Swift. Rows stored with a NULL vector heal only while the Swift worker runs, so
+  the heal pass is a decommission blocker.
+- Plan correction: `hermesLocal` isn't a no-op in Swift. `App+build.swift`:957 wires
+  it to the container manager when the master key is set, and the comment at :1969
+  is stale. Go has no container manager, so it answers `endpointMissing`.
+- Quirks kept: `endpointMissing` stops the chain; BYOK embeds skip the cap, usage
+  rows and the fallback chain; a failed install read counts as no BYOK and is cached
+  5 minutes; Nomic truncates oversize vectors; the usage increment is a read then a
+  write, so concurrent embeds can lose an update; a cancelled request can still get
+  a deterministic vector from the chain.
+
+**P2, vault files and disk guard**
+
+- Upload's write flow (temp file, remove, move, `.atomic`) isn't in P2. 4A and 4B
+  both need it, so whichever lands first puts it in `internal/vaultfiles`.
+- 4A must check that its catch-all route decodes percent-escapes as Hummingbird's
+  does. Not yet checked.
+- "Soft delete" is only a rename on disk: the row is hard-deleted.
+- Go's Unicode 17 tables accept 6,227 code points that Foundation on Darwin refuses,
+  all letters, marks or numbers. Linux's tables weren't measured. Swift comparisons
+  ran on Darwin with Swift 6.4.1, as no Linux Swift image is available locally.
+- 2 of the 11 `DiskSpaceGuardTests` are route tests and go to 4A, 4B and 4E.
+- **Security, owner decision open.** Carried over from Swift and pinned by
+  `TestSwiftWeakness*`: a symlink inside the vault reads outside it, and
+  `link/../nope.md` passes when the final file doesn't exist, so a write through it
+  lands outside `raw` for a caller that skips `SanitizePath`. Whether Hermes can
+  plant a symlink hasn't been checked.
+
+**P4, side effects**
+
+- `sideshow/apns2` can't send `apns-expiration: 0`, which Swift sends, so it needs a
+  small `RoundTripper`. Open option: drop the dependency for `net/http` plus the
+  `jwt/v5` already in `go.mod`, estimated at 90 lines, not built.
+- Swift's idempotency header comment is wrong: a thrown `HTTPError` skips storage,
+  so only responses a handler returned are stored. Go does the same.
+- Deliberate differences: `dominant_type` ties are random per process in Swift and
+  first-seen in Go. Idempotency keys are parsed strictly. A body over 32 MiB with a
+  key passes through whole in Go, while Swift reads part of the stream first; this
+  was never run on Swift, so 4A should check it if it matters. Bounds Swift doesn't
+  have: 10 s final drain for PostHog and the sink, 5 s on a latch and on the
+  idempotency insert, 30 s per sink job. Go's and Foundation's URL parsers can word
+  a rejection differently on malformed URLs.
+- Quirks kept: a full achievement inbox drops the oldest job, though Swift's log
+  line reads as if the new one was dropped. The Hermes 502 text is Swift's
+  `String(describing:)`, for example `privateAddress("10.0.0.1")`.
+- `calendar`, `mail` and `apple` capture PostHog events in Swift but not in Go. The
+  client is ready; wiring is still to do, and it matters before those modules flip.
+- `health_events_synced` has been lost in production since the 15:53Z flip and
+  stays lost until #23's image is promoted. Nothing backfills the gap.
+- #23 and #25 add config fields at the same spot, just above `LVGoJobs`. The second
+  to merge will conflict, and CI won't run until that is resolved keeping both.
+- Nothing has reached real PostHog or APNs, only stubs.
+
+**Dependencies to add to D-deps when #25 merges:** `sideshow/apns2` v0.25.0 and the
+indirect `golang-jwt/jwt/v4` v4.5.2. The Sonatype check hasn't been run. `govulncheck`
+lists `x/net` v0.61.0 (GO-2026-6866, GO-2026-6860) and `x/crypto` v0.58.0
+(GO-2026-5932) as uncalled; bump them separately.
