@@ -333,3 +333,82 @@ All four are fixed in `internal/httpserver` and covered in
 `parity/scenarios/base/health.yaml`. Not copied on purpose: Swift's
 `Server: ObsidianClaudeBrainServer` header, a stale name that no client reads.
 It is also how to tell which server answered a request.
+
+## D-wave3-notes: facts recorded while integrating wave 3
+
+Each item is a flip blocker or an open owner decision unless it says otherwise.
+
+**Shared code**
+
+- A known path with the wrong method answers 404, as Hummingbird does (parity CI).
+  D-router-parity covers the remaining router edges.
+- Hummingbird keeps a literal `+` in a query value; Go's `c.QueryParam` decodes it
+  to a space. `calendar`, `health`, `community` and `dashboard` read the raw query,
+  each with its own copy of the parser. `achievements`, `me`, `news`, `projects`,
+  `reminders` and `sessions` still differ. Open gap: move the parser to one shared
+  helper.
+- `ids.Parse` claims strictness it doesn't have: `uuid.Parse` also accepts bare
+  hex, braces and `urn:`. The calendar brief route works around it. Other callers
+  are unchecked.
+- `wire.Bind` answers 400 on a body over 2 MiB, where Swift answers 413.
+- Harness additions: `stream` and `headers` step options, `CheckRedirect` so
+  redirects aren't followed, `scripts/parity-switches.sh` for switch-state runs.
+- `gen-modules.py` has `COUPLED` for modules that must flip together without
+  sharing a prefix.
+
+**teams**
+
+- `parity_team_invitations` is a parity-only view. Grants are compared sorted.
+- A slow subscriber's stream drops events past 256.
+- Lowercase comparison approximates Swift's. It isn't byte-for-byte for non-ASCII.
+
+**me**
+
+- `meTodayByUser` lives in the module. `/v1/me/suggestions` must share its
+  rate-limit policy name.
+- `MeTodayCache` invalidation doesn't cross processes, and
+  `PeriodRecapThemesWorker` stays in Swift.
+
+**account, onboarding, health**
+
+- goose FK trigger order matters: see the account seed.
+- `OnboardingLatches` must be ported when vault, capture, compile and chat move.
+- `POST /v1/admin/health/correlate` has no owner in `jobs.md`. Owner decision.
+
+**marketplace**
+
+- At `fdbed9b0` the Swift `marketplace_versions` INSERT fails every time. Go
+  reproduces this behind `versionInserts`. Production's row count is unverified.
+  Owner decision: fix it in Swift, or flip `versionInserts` after cutover.
+- The flip needs the `PLUGIN_*` env and `PLUGIN_ARTIFACT_ROOT` on `api-go`.
+  `marketplace.CheckConfig` refuses to boot on a bad configuration.
+
+**community**
+
+- Stays `swift`: moderation and the daily run need LLM routing (wave 5).
+- Owner decision: accept hold-then-sweep and leave `/v1/admin/community` on
+  Swift, or wait for wave 5.
+
+**dashboard**
+
+- `cronJobs` on `/v1/dashboard/home` comes from `CronBridgeService`, which needs
+  Hermes. The module stays `swift` for that reason.
+- Owner decision: accept an empty preview at flip, or keep the route on Swift
+  until wave 6.
+
+**calendar, mail**
+
+- They flip together: Gmail connect finishes at `/v1/calendar/oauth/callback`,
+  which only finds sessions from its own process.
+- `CalendarOAuthSessionStore` stays in memory. A consent in flight at a flip gets
+  `session_not_found` and the user retries. More than one Go replica breaks the
+  flow; the cheap fix then is a sealed stateless `state`, which loses one-shot.
+- A brief with no stored match needs an embedding call. With a real
+  `EMBEDDING_PROVIDER`, Go answers 500. Check the production value before flipping.
+  Prefix routing can't split the brief from `/v1/calendar/events`.
+- Swift bug, reproduced on purpose: in `CalendarSyncService.sync`, `continue` on a
+  410 skips the full resync and stores the expired token again, so that account
+  gets 410 forever.
+- Fluent eagerly decodes `attendees` and `recurrence`: malformed JSON gives 500 in
+  Swift and 200 in Go. No writer can produce it.
+- Google paths are covered only by Go tests against a stub, not by parity.
