@@ -1007,8 +1007,10 @@ func testCalendarKeepsGmail(t *testing.T, v env) {
 func testGmailPurpose(t *testing.T, v env) {
 	u := v.user("trial")
 	authorize := v.connect(u, "/v1/mail/gmail/connect")
-	require.Contains(t, authorize.RawQuery, "gmail.readonly")
-	require.Contains(t, authorize.RawQuery, "include_granted_scopes=true")
+	require.Equal(t, scopeGmail, authorize.Query().Get("scope"), "asks only for gmail.readonly")
+	require.Equal(t, "true", authorize.Query().Get("include_granted_scopes"), "and keeps earlier grants")
+	require.Equal(t, "offline", authorize.Query().Get("access_type"))
+	require.Equal(t, "https://api.test/v1/calendar/oauth/callback", authorize.Query().Get("redirect_uri"))
 	// Declining lands the iOS app on the Gmail deep link, not Calendar's.
 	require.Equal(t, "luminavault://oauth/google-gmail?status=error&reason=access_denied",
 		v.callback(url.Values{"state": {authorize.Query().Get("state")}, "error": {"access_denied"}}))

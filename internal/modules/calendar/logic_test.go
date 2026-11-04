@@ -114,6 +114,7 @@ func TestFloorKeepsTheNearestFiveWithinTheDistanceOnePerMemory(t *testing.T) {
 	kept := floorHits(hits, DefaultBriefMaxDistance)
 	require.Len(t, kept, 5)
 	require.Equal(t, briefMatch{ids[2], 1 - float64(float32(0.05))}, kept[0])
+	require.Less(t, float32(DefaultBriefMaxDistance), float32(0.45), "tighter than MemoryController.defaultRelatedMaxDistance")
 	for _, m := range kept {
 		require.NotEqual(t, ids[1], m.id)
 	}
