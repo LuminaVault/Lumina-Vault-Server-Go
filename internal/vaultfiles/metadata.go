@@ -36,15 +36,15 @@ type Metadata struct {
 }
 
 type metadataJSON struct {
-	EnrichmentStatus *string     `json:"enrichmentStatus,omitempty"`
-	Title            *string     `json:"title,omitempty"`
-	Tags             *[]string   `json:"tags,omitempty"`
-	IsTodo           *bool       `json:"isTodo,omitempty"`
-	Done             *bool       `json:"done,omitempty"`
-	DueAt            *float64    `json:"dueAt,omitempty"`
-	ProjectID        *wire.UUID  `json:"projectID,omitempty"`
-	Provenance       *string     `json:"provenance,omitempty"`
-	SuggestedSpaceID *wire.UUID  `json:"suggestedSpaceID,omitempty"`
+	EnrichmentStatus *string    `json:"enrichmentStatus,omitempty"`
+	Title            *string    `json:"title,omitempty"`
+	Tags             *[]string  `json:"tags,omitempty"`
+	IsTodo           *bool      `json:"isTodo,omitempty"`
+	Done             *bool      `json:"done,omitempty"`
+	DueAt            *float64   `json:"dueAt,omitempty"`
+	ProjectID        *wire.UUID `json:"projectID,omitempty"`
+	Provenance       *string    `json:"provenance,omitempty"`
+	SuggestedSpaceID *wire.UUID `json:"suggestedSpaceID,omitempty"`
 }
 
 // MarshalJSON writes what Swift's JSONEncoder writes, up to key order and

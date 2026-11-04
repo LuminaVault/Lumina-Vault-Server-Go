@@ -312,4 +312,3 @@ func encodeColumn(m *Metadata) (*string, error) {
 	s := string(b)
 	return &s, nil
 }
-
