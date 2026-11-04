@@ -40,6 +40,20 @@ type Config struct {
 	EmbeddingProvider               string `env:"EMBEDDING_PROVIDER" envDefault:"deterministic"`
 	EmbeddingMonthlyTokenCapDefault int64  `env:"EMBEDDING_MONTHLY_TOKEN_CAP_DEFAULT" envDefault:"2000000"`
 	HermesDefaultModel              string `env:"HERMES_DEFAULT_MODEL" envDefault:"hermes-3"`
+	// Embedding chain (internal/embedding). The OpenAI and OpenRouter keys are the
+	// LLM routing's own, so there is no second secret to seal. Note the sealed
+	// LLM_PROVIDER_OPENAI_APIKEY is not LLM_PROVIDER_OPENAI_API_KEY: Swift's registry
+	// reads only the latter for embeddings, so Go does too.
+	EmbeddingFallbackChain     string `env:"EMBEDDING_FALLBACK_CHAIN"`
+	EmbeddingNomicAPIKey       string `env:"EMBEDDING_NOMIC_API_KEY"`
+	EmbeddingOpenRouterBaseURL string `env:"EMBEDDING_OPEN_ROUTER_BASE_URL"`
+	EmbeddingOpenRouterModel   string `env:"EMBEDDING_OPEN_ROUTER_MODEL"`
+	LLMOpenAIAPIKey            string `env:"LLM_PROVIDER_OPENAI_API_KEY"`
+	LLMOpenAIBaseURL           string `env:"LLM_PROVIDER_OPENAI_BASE_URL"`
+	LLMOpenRouterAPIKey        string `env:"LLM_PROVIDER_OPEN_ROUTER_API_KEY"`
+	LLMOpenRouterAPIKeyLegacy  string `env:"LLM_PROVIDER_OPENROUTER_APIKEY"`
+	OpenRouterAPIKey           string `env:"OPENROUTER_API_KEY"`
+	OpenRouterFallbackAPIKey   string `env:"OPENROUTER_FALLBACK_API_KEY"`
 	// Calendar and Gmail (calendar, mail modules): oauth.googleCalendar.* and meeting.brief.maxDistance.
 	GoogleCalendarClientID     string  `env:"OAUTH_GOOGLE_CALENDAR_CLIENT_ID"`
 	GoogleCalendarClientSecret string  `env:"OAUTH_GOOGLE_CALENDAR_CLIENT_SECRET"`
@@ -74,6 +88,10 @@ type Config struct {
 
 	// VaultRootPath holds tenants/<UUID>/{raw,wiki,memories} on the shared PVC.
 	VaultRootPath string `env:"VAULT_ROOT_PATH" envDefault:"/tmp/luminavault"`
+	// storage.minFreeBytes and storage.minFreeRatio: internal/diskguard's floors
+	// and Swift's defaults (3 GiB, 10%). Zero switches a floor off.
+	StorageMinFreeBytes int64   `env:"STORAGE_MIN_FREE_BYTES" envDefault:"3221225472"`
+	StorageMinFreeRatio float64 `env:"STORAGE_MIN_FREE_RATIO" envDefault:"0.10"`
 
 	// Wave 3 account/health. HermesDataRoot holds profiles/<id>/ (account
 	// deletion soft-renames it). BillingEnforcementEnabled stays a string:
@@ -96,6 +114,10 @@ type Config struct {
 	BYOHermesAllowPrivate    string `env:"BYO_HERMES_ALLOW_PRIVATE" envDefault:"false"`
 	BYOHermesRequireHTTPSRaw string `env:"BYO_HERMES_REQUIRE_HTTPS"`
 	BYOHermesAllowTailnet    string `env:"BYO_HERMES_ALLOW_TAILNET_HTTP" envDefault:"true"`
+
+	// Product analytics (posthog package). Off unless both are set, as in Swift.
+	PostHogProjectToken string `env:"POSTHOG_PROJECT_TOKEN"`
+	PostHogHost         string `env:"POSTHOG_HOST"`
 
 	// LVGoJobs lists the background jobs this Go process runs. It is set only
 	// on api-go-* (extraEnv), so a Swift job flag inherited from api-* never

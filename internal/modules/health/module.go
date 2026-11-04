@@ -2,9 +2,8 @@
 // LuminaVaultServer Sources/App/Health/HealthIngestController.swift (HealthKit
 // ingest and reads). Not the liveness probe (/health).
 //
-// Swift side effects not ported: PostHogAnalytics.capture("health_events_synced")
-// (product analytics, no Go client yet) and the EventBus `health_event_synced`
-// publish, whose only subscriber (SkillRunner) just logs it (coupling.md).
+// Swift side effect not ported: the EventBus `health_event_synced` publish,
+// whose only subscriber (SkillRunner) just logs it (coupling.md).
 package health
 
 //go:generate sh -c "cd ../../.. && go tool oapi-codegen -config internal/modules/health/oapi-codegen.yaml api/openapi.yaml"
@@ -16,6 +15,7 @@ import (
 	"lumina/internal/httpserver"
 	"lumina/internal/ids"
 	"lumina/internal/modules/health/db"
+	"lumina/internal/posthog"
 	"lumina/internal/swiftstr"
 	"lumina/internal/wire"
 	"net/http"
@@ -55,15 +55,17 @@ var (
 )
 
 type Module struct {
-	q    *db.Queries
-	gate echo.MiddlewareFunc
-	now  func() time.Time
+	q         *db.Queries
+	gate      echo.MiddlewareFunc
+	analytics *posthog.Client
+	now       func() time.Time
 }
 
 // New wires the module. gate is the ingest-only EntitlementMiddleware
-// (.healthIngest); reads are never gated (HER-202).
-func New(pool *pgxpool.Pool, gate echo.MiddlewareFunc) *Module {
-	return &Module{q: db.New(pool), gate: gate, now: time.Now}
+// (.healthIngest); reads are never gated (HER-202). A nil analytics client
+// captures nothing.
+func New(pool *pgxpool.Pool, gate echo.MiddlewareFunc, analytics *posthog.Client) *Module {
+	return &Module{q: db.New(pool), gate: gate, analytics: analytics, now: time.Now}
 }
 
 func (m *Module) Register(r httpserver.Router, authMW echo.MiddlewareFunc) {
@@ -159,7 +161,31 @@ func (m *Module) ingest(c *echo.Context) error {
 		refs = append(refs, ingestedRef{ID: wire.UUID{UUID: id}, Type: eventType, RecordedAt: in.RecordedAt})
 	}
 	slog.InfoContext(ctx, "health ingest", "tenant", ids.Upper(tenant), "inserted", len(refs), "skipped", skipped)
+	if len(refs) > 0 {
+		m.analytics.Capture("health_events_synced", ids.Upper(tenant), map[string]any{
+			"inserted_count": len(refs),
+			"skipped_count":  skipped,
+			"dominant_type":  dominantSampleType(refs),
+		})
+	}
 	return wire.JSON(c, http.StatusOK, ingestResponse{Inserted: len(refs), Skipped: skipped, Events: refs})
+}
+
+// dominantSampleType is the most frequent type in the batch. On a tie Swift's
+// answer depends on dictionary order, which is random per process; here the
+// type seen first wins, which is one of the answers Swift could give.
+func dominantSampleType(refs []ingestedRef) string {
+	counts := make(map[string]int, 8)
+	for _, r := range refs {
+		counts[r.Type]++
+	}
+	dominant, best := "unknown", 0
+	for _, r := range refs {
+		if n := counts[r.Type]; n > best {
+			dominant, best = r.Type, n
+		}
+	}
+	return dominant
 }
 
 func (m *Module) list(c *echo.Context) error {

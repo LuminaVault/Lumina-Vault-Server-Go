@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"lumina/internal/auth"
+	"lumina/internal/embedding"
 	"lumina/internal/httpserver"
 	"lumina/internal/modules/apple/db"
 	"lumina/internal/wire"
@@ -35,23 +36,18 @@ var (
 
 type Module struct {
 	q        *db.Queries
-	embedder Embedder
+	embedder embedding.Service
 	now      func() time.Time
 }
 
-// Options carries the configuration Swift reads for these routes.
+// Options carries the services Swift injects into these controllers.
 type Options struct {
-	// EmbeddingProvider is `embedding.provider` (EMBEDDING_PROVIDER).
-	EmbeddingProvider string
-	// EmbeddingMonthlyCap is `embedding.monthlyTokenCapDefault`.
-	EmbeddingMonthlyCap int64
+	// Embedder is PhotoIndexController's text embedder.
+	Embedder embedding.Service
 }
 
 func New(pool *pgxpool.Pool, opts Options) *Module {
-	q := db.New(pool)
-	m := &Module{q: q, now: time.Now}
-	m.embedder = newEmbedder(q, opts, func() time.Time { return m.now() })
-	return m
+	return &Module{q: db.New(pool), embedder: opts.Embedder, now: time.Now}
 }
 
 func (m *Module) Register(r httpserver.Router, authMW echo.MiddlewareFunc) {
@@ -229,7 +225,7 @@ func (m *Module) indexPhotos(c *echo.Context) error {
 			if err != nil {
 				return err
 			}
-			lit := FormatVector(vec)
+			lit := embedding.FormatVector(vec)
 			vector = &lit
 		}
 		var tagParam []string

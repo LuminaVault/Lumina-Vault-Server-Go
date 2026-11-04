@@ -86,53 +86,6 @@ func (q *Queries) ConsentRows(ctx context.Context, tenantID uuid.UUID) ([]Consen
 	return items, nil
 }
 
-const embeddingUsageFor = `-- name: EmbeddingUsageFor :one
-SELECT id, tokens_used FROM embedding_usage
-WHERE tenant_id = $1 AND year_month = $2
-LIMIT 1
-`
-
-type EmbeddingUsageForParams struct {
-	TenantID  uuid.UUID
-	YearMonth string
-}
-
-type EmbeddingUsageForRow struct {
-	ID         uuid.UUID
-	TokensUsed int64
-}
-
-func (q *Queries) EmbeddingUsageFor(ctx context.Context, arg EmbeddingUsageForParams) (EmbeddingUsageForRow, error) {
-	row := q.db.QueryRow(ctx, embeddingUsageFor, arg.TenantID, arg.YearMonth)
-	var i EmbeddingUsageForRow
-	err := row.Scan(&i.ID, &i.TokensUsed)
-	return i, err
-}
-
-const insertEmbeddingUsage = `-- name: InsertEmbeddingUsage :exec
-INSERT INTO embedding_usage (id, tenant_id, year_month, tokens_used, created_at, updated_at)
-VALUES ($1, $2, $3, $4, $5, $5)
-`
-
-type InsertEmbeddingUsageParams struct {
-	ID         uuid.UUID
-	TenantID   uuid.UUID
-	YearMonth  string
-	TokensUsed int64
-	CreatedAt  *time.Time
-}
-
-func (q *Queries) InsertEmbeddingUsage(ctx context.Context, arg InsertEmbeddingUsageParams) error {
-	_, err := q.db.Exec(ctx, insertEmbeddingUsage,
-		arg.ID,
-		arg.TenantID,
-		arg.YearMonth,
-		arg.TokensUsed,
-		arg.CreatedAt,
-	)
-	return err
-}
-
 const markDelivered = `-- name: MarkDelivered :exec
 UPDATE device_command_queue
 SET delivered_at = $1, result_ok = $2, result_error = $3
@@ -210,21 +163,6 @@ DELETE FROM photo_index WHERE tenant_id = $1
 
 func (q *Queries) PurgePhotoIndex(ctx context.Context, tenantID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, purgePhotoIndex, tenantID)
-	return err
-}
-
-const setEmbeddingUsage = `-- name: SetEmbeddingUsage :exec
-UPDATE embedding_usage SET tokens_used = $2, updated_at = $3 WHERE id = $1
-`
-
-type SetEmbeddingUsageParams struct {
-	ID         uuid.UUID
-	TokensUsed int64
-	UpdatedAt  *time.Time
-}
-
-func (q *Queries) SetEmbeddingUsage(ctx context.Context, arg SetEmbeddingUsageParams) error {
-	_, err := q.db.Exec(ctx, setEmbeddingUsage, arg.ID, arg.TokensUsed, arg.UpdatedAt)
 	return err
 }
 

@@ -28,6 +28,14 @@ func NewError(status int, message string) *Error {
 	return &Error{Status: status, Message: message}
 }
 
+// ResponseError is an error that writes its own response, for a body that isn't
+// the {"error":{"message":...}} envelope. A plain status error would lose it:
+// HTTPErrorHandler writes unknown errors with an empty body.
+type ResponseError interface {
+	error
+	WriteResponse(c *echo.Context) error
+}
+
 type errorBody struct {
 	Error struct {
 		Message string `json:"message"`
@@ -41,6 +49,13 @@ type errorBody struct {
 // and logged, never echoed to the client.
 func HTTPErrorHandler(c *echo.Context, err error) {
 	if resp, unwrapErr := echo.UnwrapResponse(c.Response()); unwrapErr == nil && resp.Committed {
+		return
+	}
+	var re ResponseError
+	if errors.As(err, &re) {
+		if writeErr := re.WriteResponse(c); writeErr != nil {
+			slog.ErrorContext(c.Request().Context(), "error response failed", "error", writeErr, "path", c.Path())
+		}
 		return
 	}
 	var we *Error
