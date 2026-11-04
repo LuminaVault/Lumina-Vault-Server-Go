@@ -27,6 +27,8 @@ steps:
     trigger:
       as: team_adam
       request: {method: POST, path: /v1/spaces, json: {name: Streamed}, headers: {X-Vault-ID: 7EA53000-0000-4000-8000-000000000001}}
+  # The trigger's space is a folder under the team vault, not under the user.
+  - {name: team vault tree after the trigger, request: {method: GET, path: /health}, files: [7EA53000-0000-4000-8000-000000000001]}
   - name: stream of the personal vault
     as: team_kim
     request: {method: GET, path: /v1/vaults/7EA50000-0000-4000-8000-0000000000AD/activity/stream, headers: {Accept: text/event-stream}}
