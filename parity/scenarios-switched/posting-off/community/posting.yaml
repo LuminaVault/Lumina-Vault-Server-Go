@@ -1,0 +1,21 @@
+# COMMUNITY_POSTING_ENABLED=false, with today's daily post already published
+# (parity/seed-switched/posting-off.sql).
+module: community
+steps:
+  - {"name": "me says posting is off", "as": "comm_read", "request": {"method": "GET", "path": "/v1/community/me"}}
+  - {"name": "thread is 503", "as": "comm_ben", "request": {"method": "POST", "path": "/v1/community/posts", "json": {"title": "A good title", "body": "A good body"}}}
+  - {"name": "thread bad body is still 400", "as": "comm_ben", "request": {"method": "POST", "path": "/v1/community/posts", "raw": "{bad"}}
+  - {"name": "thread bad title is still 422", "as": "comm_ben", "request": {"method": "POST", "path": "/v1/community/posts", "json": {"title": "x", "body": "y"}}}
+  - {"name": "reply is 503", "as": "comm_ben", "request": {"method": "POST", "path": "/v1/community/posts/C0AC0000-0000-4000-8000-000000000001/replies", "json": {"body": "Hello"}}}
+  - {"name": "reply empty body is still 422", "as": "comm_ben", "request": {"method": "POST", "path": "/v1/community/posts/C0AC0000-0000-4000-8000-000000000001/replies", "json": {"body": "  "}}}
+  - {"name": "thread no profile is 503 first", "as": "comm_dee", "request": {"method": "POST", "path": "/v1/community/posts", "json": {"title": "A good title", "body": "A good body"}}}
+  - {"name": "board reads", "as": "comm_read", "request": {"method": "GET", "path": "/v1/community/posts?limit=2"}}
+  - {"name": "profile still writes", "as": "comm_new", "request": {"method": "PUT", "path": "/v1/community/profile", "json": {"handle": "nice_handle", "displayName": "Nice Name", "acceptTerms": true, "termsVersion": 1}}, "snapshot": ["community_profiles"]}
+  - {"name": "report still writes", "as": "comm_rep1", "request": {"method": "POST", "path": "/v1/community/posts/C0AC0000-0000-4000-8000-000000000002/report", "json": {"reason": "spam"}}, "snapshot": ["community_reports"]}
+  - {"name": "delete still writes", "as": "comm_post", "request": {"method": "DELETE", "path": "/v1/community/posts/C0AC0000-0000-4000-8000-000000000011"}, "snapshot": ["community_posts"]}
+  - {"name": "block still writes", "as": "comm_blk", "request": {"method": "POST", "path": "/v1/community/blocks", "json": {"profileId": "C0AB0000-0000-4000-8000-0000000000a2"}}}
+  - {"name": "moderation still writes", "as": "comm_mod", "request": {"method": "POST", "path": "/v1/community/admin/posts/C0AC0000-0000-4000-8000-00000000000b/decision", "json": {"action": "hide"}}}
+  - {"name": "todays daily post", "as": "comm_read", "request": {"method": "GET", "path": "/v1/community/daily/today"}}
+  - {"name": "todays daily post with no profile", "as": "comm_dee", "request": {"method": "GET", "path": "/v1/community/daily/today"}}
+  - {"name": "admin run reports the published day", "request": {"method": "POST", "path": "/v1/admin/community/daily/run", "headers": {"X-Admin-Token": "parity-admin-token"}}, "snapshot": ["parity_community_daily"]}
+  - {"name": "it is on the board", "as": "comm_page", "request": {"method": "GET", "path": "/v1/community/posts?limit=1"}}

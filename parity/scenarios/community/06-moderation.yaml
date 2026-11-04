@@ -1,0 +1,38 @@
+# Moderators are users.is_admin. Moderator routes check the role before the body.
+module: community
+steps:
+  - {"name": "queue not a moderator", "as": "comm_read", "request": {"method": "GET", "path": "/v1/community/admin/queue"}}
+  - {"name": "decision not a moderator", "as": "comm_read", "request": {"method": "POST", "path": "/v1/community/admin/posts/C0AC0000-0000-4000-8000-00000000000b/decision", "json": {"action": "hide"}}}
+  - {"name": "decision not a moderator and bad body is 403 first", "as": "comm_read", "request": {"method": "POST", "path": "/v1/community/admin/posts/nope/decision", "raw": "{bad"}}
+  - {"name": "suspend not a moderator", "as": "comm_read", "request": {"method": "POST", "path": "/v1/community/admin/profiles/C0AB0000-0000-4000-8000-0000000000a1/suspend", "json": {"until": null}}}
+  - {"name": "queue", "as": "comm_mod", "request": {"method": "GET", "path": "/v1/community/admin/queue"}}
+  - {"name": "queue open", "as": "comm_mod", "request": {"method": "GET", "path": "/v1/community/admin/queue?status=open"}}
+  - {"name": "queue pending", "as": "comm_mod", "request": {"method": "GET", "path": "/v1/community/admin/queue?status=pending"}}
+  - {"name": "queue hidden", "as": "comm_mod", "request": {"method": "GET", "path": "/v1/community/admin/queue?status=hidden"}}
+  - {"name": "queue unknown filter is all", "as": "comm_mod", "request": {"method": "GET", "path": "/v1/community/admin/queue?status=bogus"}}
+  - {"name": "hide with a reason", "as": "comm_mod", "request": {"method": "POST", "path": "/v1/community/admin/posts/C0AC0000-0000-4000-8000-00000000000b/decision", "json": {"action": "hide", "reason": "Off topic"}}, "snapshot": ["community_posts", "community_reports"]}
+  - {"name": "restore clears reports", "as": "comm_mod", "request": {"method": "POST", "path": "/v1/community/admin/posts/C0AC0000-0000-4000-8000-00000000000c/decision", "json": {"action": "restore", "reason": "ignored"}}, "snapshot": ["community_posts", "community_reports"]}
+  - {"name": "remove replaces the body", "as": "comm_mod", "request": {"method": "POST", "path": "/v1/community/admin/posts/C0AC0000-0000-4000-8000-00000000000d/decision", "json": {"action": "remove"}}, "snapshot": ["community_posts"]}
+  - {"name": "remove a reply recounts the thread", "as": "comm_mod", "request": {"method": "POST", "path": "/v1/community/admin/posts/C0AC0000-0000-4000-8000-00000000000e/decision", "json": {"action": "remove", "reason": "rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr"}}, "snapshot": ["community_posts"]}
+  - {"name": "decision on unknown", "as": "comm_mod", "request": {"method": "POST", "path": "/v1/community/admin/posts/00000000-0000-4000-8000-000000000000/decision", "json": {"action": "hide"}}}
+  - {"name": "suspend until", "as": "comm_mod", "request": {"method": "POST", "path": "/v1/community/admin/profiles/C0AB0000-0000-4000-8000-0000000000a2/suspend", "json": {"until": "2099-06-01T00:00:00Z"}}, "snapshot": ["community_profiles"]}
+  - {"name": "suspended author sees it", "as": "comm_ben", "request": {"method": "GET", "path": "/v1/community/me"}}
+  - {"name": "lift suspension", "as": "comm_mod", "request": {"method": "POST", "path": "/v1/community/admin/profiles/C0AB0000-0000-4000-8000-0000000000a2/suspend", "json": {"until": null}}, "snapshot": ["community_profiles"]}
+  - {"name": "lift with empty object", "as": "comm_mod", "request": {"method": "POST", "path": "/v1/community/admin/profiles/C0AB0000-0000-4000-8000-0000000000a2/suspend", "json": {}}}
+  - {"name": "suspend unknown", "as": "comm_mod", "request": {"method": "POST", "path": "/v1/community/admin/profiles/00000000-0000-4000-8000-000000000000/suspend", "json": {"until": null}}}
+  - {"name": "decision malformed", "as": "comm_mod2", "request": {"method": "POST", "path": "/v1/community/admin/posts/nope/decision", "raw": "{bad"}}
+  - {"name": "decision empty", "as": "comm_mod2", "request": {"method": "POST", "path": "/v1/community/admin/posts/nope/decision", "raw": ""}}
+  - {"name": "decision array", "as": "comm_mod2", "request": {"method": "POST", "path": "/v1/community/admin/posts/nope/decision", "raw": "[]"}}
+  - {"name": "decision empty object", "as": "comm_mod2", "request": {"method": "POST", "path": "/v1/community/admin/posts/nope/decision", "raw": "{}"}}
+  - {"name": "decision action unknown", "as": "comm_mod2", "request": {"method": "POST", "path": "/v1/community/admin/posts/nope/decision", "raw": "{\"action\":\"burn\"}"}}
+  - {"name": "decision action number", "as": "comm_mod2", "request": {"method": "POST", "path": "/v1/community/admin/posts/nope/decision", "raw": "{\"action\":5}"}}
+  - {"name": "decision reason number", "as": "comm_mod2", "request": {"method": "POST", "path": "/v1/community/admin/posts/nope/decision", "raw": "{\"action\":\"hide\",\"reason\":5}"}}
+  - {"name": "decision bad id", "as": "comm_mod2", "request": {"method": "POST", "path": "/v1/community/admin/posts/nope/decision", "json": {"action": "hide"}}}
+  - {"name": "moderator with no profile sees the queue", "as": "comm_mod2", "request": {"method": "GET", "path": "/v1/community/admin/queue"}}
+  - {"name": "suspend malformed", "as": "comm_mod3", "request": {"method": "POST", "path": "/v1/community/admin/profiles/00000000-0000-4000-8000-000000000000/suspend", "raw": "{bad"}}
+  - {"name": "suspend empty", "as": "comm_mod3", "request": {"method": "POST", "path": "/v1/community/admin/profiles/00000000-0000-4000-8000-000000000000/suspend", "raw": ""}}
+  - {"name": "suspend array", "as": "comm_mod3", "request": {"method": "POST", "path": "/v1/community/admin/profiles/00000000-0000-4000-8000-000000000000/suspend", "raw": "[]"}}
+  - {"name": "suspend until not a date", "as": "comm_mod3", "request": {"method": "POST", "path": "/v1/community/admin/profiles/00000000-0000-4000-8000-000000000000/suspend", "raw": "{\"until\":\"not-a-date\"}"}}
+  - {"name": "suspend until number", "as": "comm_mod3", "request": {"method": "POST", "path": "/v1/community/admin/profiles/00000000-0000-4000-8000-000000000000/suspend", "raw": "{\"until\":5}"}}
+  - {"name": "suspend until fractional", "as": "comm_mod3", "request": {"method": "POST", "path": "/v1/community/admin/profiles/00000000-0000-4000-8000-000000000000/suspend", "raw": "{\"until\":\"2099-06-01T00:00:00.500Z\"}"}}
+  - {"name": "suspend bad id", "as": "comm_mod3", "request": {"method": "POST", "path": "/v1/community/admin/profiles/nope/suspend", "json": {"until": null}}}
