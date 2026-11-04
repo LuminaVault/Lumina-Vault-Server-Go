@@ -9,9 +9,9 @@ import (
 	"lumina/internal/auth"
 	"lumina/internal/config"
 	"lumina/internal/dbtest"
+	"lumina/internal/embedding"
 	"lumina/internal/httpserver"
 	"lumina/internal/migrations"
-	"lumina/internal/modules/apple"
 	"lumina/internal/modules/calendar"
 	"lumina/internal/modules/mail"
 	"lumina/internal/ratelimit"
@@ -167,7 +167,7 @@ func newEnv(t *testing.T, pool *pgxpool.Pool, o opts) env {
 		Modules: []httpserver.Module{
 			calendar.New(pool, identify, ratelimit.NewStore(), calendar.Options{
 				Google: g, MaxDistance: calendar.DefaultBriefMaxDistance,
-				Embeddings: apple.NewEmbedder(pool, apple.Options{EmbeddingProvider: "deterministic", EmbeddingMonthlyCap: 2_000_000}),
+				Embeddings: embedding.New(pool, embedding.Config{Provider: "deterministic", MonthlyCap: 2_000_000}, nil),
 			}),
 			mail.New(g),
 		},

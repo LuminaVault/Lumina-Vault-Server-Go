@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"lumina/internal/auth"
 	"lumina/internal/config"
 	"lumina/internal/dbtest"
+	"lumina/internal/embedding"
 	"lumina/internal/httpserver"
 	"lumina/internal/migrations"
 	"lumina/internal/modules/apple"
@@ -41,7 +43,7 @@ type env struct {
 
 // setup migrates a fresh database and loads base.sql plus, with fixtures,
 // the module's parity seed.
-func setup(t *testing.T, fixtures bool, opts apple.Options) env {
+func setup(t *testing.T, fixtures bool, cfg embedding.Config) env {
 	t.Helper()
 	ctx := context.Background()
 	pool := dbtest.Postgres(t)
@@ -58,12 +60,12 @@ func setup(t *testing.T, fixtures bool, opts apple.Options) env {
 	}
 	e := httpserver.New(config.Config{}, httpserver.Deps{
 		Auth:    auth.Middleware(keys, auth.PGUsers(pool)),
-		Modules: []httpserver.Module{apple.New(pool, opts)},
+		Modules: []httpserver.Module{apple.New(pool, apple.Options{Embedder: embedding.New(pool, cfg, nil)})},
 	})
 	return env{t: t, e: e, pool: pool}
 }
 
-var defaultOpts = apple.Options{EmbeddingProvider: "deterministic", EmbeddingMonthlyCap: 2_000_000}
+var defaultOpts = embedding.Config{Provider: "deterministic", MonthlyCap: 2_000_000}
 
 type resp struct {
 	code int
@@ -287,7 +289,7 @@ func TestPhotosDeterministicVectorAndUsage(t *testing.T) {
 	require.InDelta(t, float32('B')/127.5-1, second, 1e-7)
 	var tokens int64
 	require.NoError(t, v.pool.QueryRow(context.Background(), `SELECT tokens_used FROM embedding_usage WHERE tenant_id = $1`, alice).Scan(&tokens))
-	require.Equal(t, apple.EstimateTokens("AB")+apple.EstimateTokens("Scene: x"), tokens)
+	require.Equal(t, embedding.EstimateTokens("AB")+embedding.EstimateTokens("Scene: x"), tokens)
 }
 
 func TestPhotosCapExceededKeepsEarlierRows(t *testing.T) {
@@ -301,11 +303,50 @@ func TestPhotosCapExceededKeepsEarlierRows(t *testing.T) {
 	require.Equal(t, 1, n, "b-1 was written before b-2's embed failed")
 }
 
-func TestPhotosRealProviderIsRefused(t *testing.T) {
-	v := setup(t, false, apple.Options{EmbeddingProvider: "openrouter", EmbeddingMonthlyCap: 2_000_000})
+// A real provider with no key boots on deterministic vectors, as Swift's registry
+// does, so the write succeeds.
+func TestPhotosProviderWithoutKeyFallsBackToDeterministic(t *testing.T) {
+	v := setup(t, false, embedding.Config{Provider: "openrouter", MonthlyCap: 2_000_000})
+	v.setConsent(alice, "photos", true)
+	r := v.do(alice, http.MethodPost, "/v1/photos/index", `{"items":[{"assetLocalID":"a","isScreenshot":true,"ocrText":"AB"}]}`)
+	require.Equal(t, http.StatusOK, r.code, string(r.body))
+	var first float32
+	require.NoError(t, v.pool.QueryRow(context.Background(), `SELECT (embedding::real[])[1] FROM photo_index WHERE asset_local_id = 'a'`).Scan(&first))
+	require.InDelta(t, float32(65)/127.5-1, first, 1e-6)
+}
+
+func openRouterStub(t *testing.T, status int, body string) embedding.Config {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(status)
+		_, _ = io.WriteString(w, body)
+	}))
+	t.Cleanup(srv.Close)
+	return embedding.Config{
+		Provider: "openrouter", MonthlyCap: 2_000_000,
+		OpenRouterAPIKeys: []string{"or-test-key"}, OpenRouterBaseURL: srv.URL,
+	}
+}
+
+func TestPhotosStoresTheProvidersVector(t *testing.T) {
+	vec := "0.25" + strings.Repeat(",0.25", embedding.Dimensions-1)
+	v := setup(t, false, openRouterStub(t, http.StatusOK, `{"data":[{"embedding":[`+vec+`]}]}`))
 	v.setConsent(alice, "photos", true)
 	r := v.do(alice, http.MethodPost, "/v1/photos/index", `{"items":[{"assetLocalID":"a","isScreenshot":true,"ocrText":"x"}]}`)
-	require.Equal(t, http.StatusInternalServerError, r.code, "no fake vectors when a real provider is configured")
+	require.Equal(t, http.StatusOK, r.code, string(r.body))
+	var first float32
+	require.NoError(t, v.pool.QueryRow(context.Background(), `SELECT (embedding::real[])[1] FROM photo_index WHERE asset_local_id = 'a'`).Scan(&first))
+	require.InDelta(t, 0.25, first, 1e-6)
+}
+
+// PhotoIndexController calls embed, not embedForWrite, so a provider failure is a
+// 500 here rather than a NULL vector.
+func TestPhotosProviderFailureIs500(t *testing.T) {
+	v := setup(t, false, openRouterStub(t, http.StatusPaymentRequired, `{"error":{"message":"Insufficient credits"}}`))
+	v.setConsent(alice, "photos", true)
+	r := v.do(alice, http.MethodPost, "/v1/photos/index", `{"items":[{"assetLocalID":"a","isScreenshot":true,"ocrText":"x"}]}`)
+	require.Equal(t, http.StatusInternalServerError, r.code)
+	require.Empty(t, r.body)
 }
 
 // MARK: consent
@@ -438,10 +479,6 @@ func TestResponsesConformToSpec(t *testing.T) {
 		out.SetBodyBytes(r.body)
 		require.NoError(t, openapi3filter.ValidateResponse(ctx, out), "%s %s: %s", c.method, c.path, r.body)
 	}
-}
-
-func TestFormatVectorMatchesSwiftFloatDescription(t *testing.T) {
-	require.Equal(t, "[0.0,-1.0,0.5,0.003921628,1e-05]", apple.FormatVector([]float32{0, -1, 0.5, 0.003921628, 1e-05}))
 }
 
 func mustJSON(s string) string {
