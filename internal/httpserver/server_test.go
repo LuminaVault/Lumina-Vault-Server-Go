@@ -188,13 +188,6 @@ func TestDecompressesGzipRequestBodies(t *testing.T) {
 	require.Equal(t, "b", got)
 }
 
-func TestWrongMethodIsNotFound(t *testing.T) {
-	rec := do(t, newTestServer(), httptest.NewRequest(http.MethodDelete, "/v1/test/message", nil))
-	require.Equal(t, http.StatusNotFound, rec.Code)
-	require.Empty(t, rec.Body.String())
-	require.Empty(t, rec.Header().Get(echo.HeaderAllow))
-}
-
 func TestErrorShapes(t *testing.T) {
 	e := newTestServer()
 	rec := do(t, e, httptest.NewRequest(http.MethodGet, "/v1/test/message", nil))

@@ -57,6 +57,9 @@ SPLITS = {
 }
 # Routes registered in App+build.swift that belong to a split module.
 SPLIT_PATHS = {"/v1/gateways/photon/inbound": "MeGateways"}
+# Must flip together though no prefix is shared: Gmail connect finishes at
+# /v1/calendar/oauth/callback, which only finds OAuth sessions from its own process.
+COUPLED = {"Calendar": {"Mail"}}
 SWIFT_DIRS = {"App": "Sources/App/App+build.swift", "MeGateways": "Sources/App/Me", "MeProviders": "Sources/App/Me"}
 
 
@@ -118,6 +121,8 @@ def main() -> int:
         prefixes -= shared
         plan[module] = (sorted(prefixes), sorted(exact), sorted(shared), sorted(partners))
 
+    for module, others in COUPLED.items():
+        plan[module][3].extend(others)
     # Flip partnership is mutual: if A's shared prefix covers B's routes, B
     # must flip with A as well.
     for module, (_, _, _, partners) in list(plan.items()):
