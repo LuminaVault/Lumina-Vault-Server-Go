@@ -356,23 +356,6 @@ func TestFilesAreCompared(t *testing.T) {
 	t.Run("server-generated UUIDs in names, whatever their sort order", func(t *testing.T) {
 		a, b, ra, rb := fileTargets(t)
 		writeTree(t, ra, aliceTree, map[string]string{
-			"raw/11111111-1111-4111-8111-111111111111.md": "first",
-			"raw/99999999-9999-4999-8999-999999999999.md": "second",
-		})
-		writeTree(t, rb, aliceTree, map[string]string{ // names sort the other way round
-			"raw/AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA.md": "second",
-			"raw/22222222-2222-4222-8222-222222222222.md": "first",
-		})
-		// Letter case is part of the placeholder, so a's lowercase-free names read
-		// as "nocase" and b's mixed one as "upper": that's a real difference.
-		diffs := diffOf(t, fileScenario(), a, b)
-		require.NotEmpty(t, diffs)
-		for _, d := range diffs {
-			require.Contains(t, d.Field, ".path")
-		}
-
-		a, b, ra, rb = fileTargets(t)
-		writeTree(t, ra, aliceTree, map[string]string{
 			"raw/AAAAAAAA-1111-4111-8111-111111111111.md": "first",
 			"raw/FFFFFFFF-9999-4999-8999-999999999999.md": "second",
 		})

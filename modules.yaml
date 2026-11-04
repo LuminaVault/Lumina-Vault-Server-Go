@@ -155,19 +155,44 @@ modules:
     wave: 4
     swiftDir: Sources/App/KB
     status: swift
-    prefixes: [/v1/memory-compile]
+    prefixes: [/v1/memory-compile/pending]
+    jobs: []
+  kb-compile:
+    wave: 4
+    swiftDir: Sources/App/KB
+    status: swift
+    prefixes: []
+    exactPaths: [/v1/memory-compile]
+    heldPaths:
+      - {path: /v1/memory-compile, reason: "must stay on the same server as /v1/ws: the iOS review sheet fills only from its .memorySaved frames", releasedBy: "end of wave 5, with /v1/ws, /v1/devices/command, mcp and skills"}
     jobs: []
   knowledge:
     wave: 4
     swiftDir: Sources/App/Knowledge
     status: swift
-    prefixes: [/v1/knowledge]
+    prefixes: [/v1/knowledge/connections, /v1/knowledge/edges, /v1/knowledge/graph]
+    jobs: []
+  knowledge-reason:
+    wave: 4
+    swiftDir: Sources/App/Knowledge
+    status: swift
+    prefixes: [/v1/knowledge/reason]
     jobs: []
   memory:
     wave: 4
     swiftDir: Sources/App/Memory
     status: swift
-    prefixes: [/v1/me/suggestions, /v1/memory, /v1/memos, /v1/query]
+    prefixes: [/v1/me/suggestions, /v1/memory]
+    stringPrefixCatches: [/v1/memory-compile, /v1/memory-compile/pending]
+    heldPaths:
+      - {path: /v1/memory/search, reason: "runs the agent loop (HermesMemoryService.search), which needs internal/llm; owned by memory-agent", releasedBy: "wave-4-agent"}
+    jobs: []
+  memory-agent:
+    wave: 4
+    swiftDir: Sources/App/Memory
+    status: swift
+    prefixes: [/v1/memos, /v1/query]
+    exactPaths: [/v1/memory/search]
     jobs: []
   todos:
     wave: 4
@@ -180,6 +205,7 @@ modules:
     swiftDir: Sources/App/Vault
     status: swift
     prefixes: [/v1/vault]
+    stringPrefixCatches: [/v1/vaults]
     jobs: []
   vision:
     wave: 4
