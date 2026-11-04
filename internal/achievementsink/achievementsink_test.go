@@ -48,15 +48,17 @@ func (r *stubRecorder) events() []achievements.Event {
 }
 
 type stubPusher struct {
-	mu   sync.Mutex
-	keys []string
-	fail string
+	mu      sync.Mutex
+	keys    []string
+	tenants []uuid.UUID
+	fail    string
 }
 
-func (p *stubPusher) NotifyAchievement(_ context.Context, _ uuid.UUID, key, _ string) error {
+func (p *stubPusher) NotifyAchievement(_ context.Context, tenant uuid.UUID, key, _ string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.keys = append(p.keys, key)
+	p.tenants = append(p.tenants, tenant)
 	if key == p.fail {
 		return errors.New("push failed")
 	}
@@ -235,8 +237,8 @@ func TestRecordsIntoPostgres(t *testing.T) {
 	require.Equal(t, first.Target+1, count)
 	require.NotNil(t, unlocked)
 	occurrences := 0
-	for _, k := range push.keys {
-		if k == first.Key {
+	for i, k := range push.keys {
+		if k == first.Key && push.tenants[i] == tenant {
 			occurrences++
 		}
 	}
