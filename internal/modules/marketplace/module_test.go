@@ -588,3 +588,13 @@ func TestResponsesConformToSpec(t *testing.T) {
 	check(runr, http.MethodPost, "/v1/marketplace/plugins/spec-plugin/tools/echo/run", `{"input":{"x":"y"}}`)
 	v.errIs(v.do(pub, http.MethodPost, "/v1/marketplace/publisher/plugins/nope/versions", `{"version":"1.0.0","runtimeKind":"declarative","permissions":[]}`), http.StatusNotFound, "marketplace_plugin_not_found")
 }
+
+func TestCheckConfigMatchesSwiftsBootGuard(t *testing.T) {
+	short := marketplace.Options{RunnerToken: "token", ArtifactSigningKey: "too-short"}
+	require.ErrorContains(t, marketplace.CheckConfig("production", short), "PLUGIN_ARTIFACT_SIGNING_KEY must contain at least 32 bytes")
+	require.ErrorContains(t, marketplace.CheckConfig("test", short), "PLUGIN_ARTIFACT_SIGNING_KEY")
+	require.NoError(t, marketplace.CheckConfig("dev", short))
+	require.NoError(t, marketplace.CheckConfig("", short))
+	require.NoError(t, marketplace.CheckConfig("production", marketplace.Options{ArtifactSigningKey: "too-short"}))
+	require.NoError(t, marketplace.CheckConfig("production", marketplace.Options{RunnerToken: "token", ArtifactSigningKey: strings.Repeat("k", 32)}))
+}
