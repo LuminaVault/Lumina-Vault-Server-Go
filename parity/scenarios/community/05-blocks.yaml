@@ -1,0 +1,20 @@
+# Blocks hide a profile for the blocker only.
+module: community
+steps:
+  - {"name": "list the seeded block", "as": "comm_blk", "request": {"method": "GET", "path": "/v1/community/blocks"}}
+  - {"name": "blocked author is off the board", "as": "comm_blk", "request": {"method": "GET", "path": "/v1/community/posts"}}
+  - {"name": "blocked authors post is 404", "as": "comm_blk", "request": {"method": "GET", "path": "/v1/community/posts/C0AC0000-0000-4000-8000-000000000005"}}
+  - {"name": "blocked authors reply is off the list", "as": "comm_blk", "request": {"method": "GET", "path": "/v1/community/posts/C0AC0000-0000-4000-8000-000000000001/replies"}}
+  - {"name": "block another", "as": "comm_blk", "request": {"method": "POST", "path": "/v1/community/blocks", "json": {"profileId": "C0AB0000-0000-4000-8000-0000000000a2"}}, "snapshot": ["community_blocks"]}
+  - {"name": "block twice is a no-op", "as": "comm_blk", "request": {"method": "POST", "path": "/v1/community/blocks", "json": {"profileId": "C0AB0000-0000-4000-8000-0000000000a2"}}, "snapshot": ["community_blocks"]}
+  - {"name": "block lowercase id", "as": "comm_blk", "request": {"method": "POST", "path": "/v1/community/blocks", "json": {"profileId": "c0ab0000-0000-4000-8000-0000000000a2"}}}
+  - {"name": "board without both", "as": "comm_blk", "request": {"method": "GET", "path": "/v1/community/posts"}}
+  - {"name": "other viewers still see them", "as": "comm_read", "request": {"method": "GET", "path": "/v1/community/posts/C0AC0000-0000-4000-8000-000000000005"}}
+  - {"name": "block self", "as": "comm_blk", "request": {"method": "POST", "path": "/v1/community/blocks", "json": {"profileId": "C0AB0000-0000-4000-8000-0000000000af"}}}
+  - {"name": "block unknown", "as": "comm_blk", "request": {"method": "POST", "path": "/v1/community/blocks", "json": {"profileId": "00000000-0000-4000-8000-000000000000"}}}
+  - {"name": "unblock", "as": "comm_blk", "request": {"method": "DELETE", "path": "/v1/community/blocks/C0AB0000-0000-4000-8000-0000000000a2"}, "snapshot": ["community_blocks"]}
+  - {"name": "unblock again", "as": "comm_blk", "request": {"method": "DELETE", "path": "/v1/community/blocks/C0AB0000-0000-4000-8000-0000000000a2"}}
+  - {"name": "unblock bad id", "as": "comm_blk", "request": {"method": "DELETE", "path": "/v1/community/blocks/nope"}}
+  - {"name": "list after", "as": "comm_blk", "request": {"method": "GET", "path": "/v1/community/blocks"}}
+  - {"name": "block with no profile", "as": "comm_dee", "request": {"method": "POST", "path": "/v1/community/blocks", "json": {"profileId": "C0AB0000-0000-4000-8000-0000000000a1"}}}
+  - {"name": "unblock with no profile", "as": "comm_dee", "request": {"method": "DELETE", "path": "/v1/community/blocks/C0AB0000-0000-4000-8000-0000000000a1"}}

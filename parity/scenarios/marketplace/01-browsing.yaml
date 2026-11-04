@@ -1,0 +1,34 @@
+# Lists, detail, reviews. mkt_admin (or any admin in the seed) makes the first read
+# seed the first-party catalog. Its random ids are normalized; rows are compared.
+module: marketplace
+steps:
+  - {"name": "catalog is unseeded until the first read", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/publisher/submissions"}, "snapshot": ["marketplace_publishers", "marketplace_listings", "marketplace_versions"]}
+  - {"name": "first list seeds the catalog", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins"}, "snapshot": ["marketplace_publishers", "marketplace_listings", "marketplace_versions"]}
+  - {"name": "second list seeds nothing", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins"}, "snapshot": ["marketplace_publishers"]}
+  - {"name": "category filter", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins?category=capture"}}
+  - {"name": "unknown category is no filter", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins?category=nope"}}
+  - {"name": "featured true", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins?featured=true"}}
+  - {"name": "featured 1", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins?featured=1"}}
+  - {"name": "featured FALSE", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins?featured=FALSE"}}
+  - {"name": "featured 0", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins?featured=0"}}
+  - {"name": "featured garbage is no filter", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins?featured=maybe"}}
+  - {"name": "limit 2", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins?limit=2"}, "capture": {"c1": "$.nextCursor"}}
+  - {"name": "next page", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins?limit=2&cursor={{c1}}"}}
+  - {"name": "limit 0 is 1", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins?limit=0"}}
+  - {"name": "limit 999 is 50", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins?limit=999"}}
+  - {"name": "limit garbage is 24", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins?limit=abc"}}
+  - {"name": "cursor garbage is 0", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins?cursor=abc"}}
+  - {"name": "cursor negative", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins?limit=2&cursor=-1"}}
+  - {"name": "cursor past the end", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins?cursor=500"}}
+  - {"name": "query matches name", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins?query=ALPHA"}}
+  - {"name": "query matches summary", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins?query=export%20things"}}
+  - {"name": "query blank is no filter", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins?query=%20%20&limit=1"}}
+  - {"name": "query no match", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins?query=zzzzzz"}}
+  - {"name": "category and query", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins?category=export&query=alpha"}}
+  - {"name": "detail", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins/alpha-notes"}}
+  - {"name": "detail first party", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins/readwise"}}
+  - {"name": "detail draft is 404", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins/draft-thing"}}
+  - {"name": "detail unknown", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins/nope"}}
+  - {"name": "reviews", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins/alpha-notes/reviews"}}
+  - {"name": "reviews of a draft listing", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins/draft-thing/reviews"}}
+  - {"name": "reviews unknown", "as": "mkt_read", "request": {"method": "GET", "path": "/v1/marketplace/plugins/nope/reviews"}}

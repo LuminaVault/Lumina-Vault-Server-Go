@@ -1,0 +1,58 @@
+# Every route without a token, and the bodies Swift rejects before identity.
+# Anonymous steps send their own X-Forwarded-For so each batch gets an "ip:"
+# bucket (communityWriteByUser is 10/min).
+module: community
+steps:
+  - {"name": "me no token", "request": {"method": "GET", "path": "/v1/community/me", "headers": {"X-Forwarded-For": "10.76.0.1"}}}
+  - {"name": "threads no token", "request": {"method": "GET", "path": "/v1/community/posts", "headers": {"X-Forwarded-For": "10.76.0.1"}}}
+  - {"name": "post no token", "request": {"method": "GET", "path": "/v1/community/posts/C0AC0000-0000-4000-8000-000000000001", "headers": {"X-Forwarded-For": "10.76.0.1"}}}
+  - {"name": "post bad id without token is 401 first", "request": {"method": "GET", "path": "/v1/community/posts/nope", "headers": {"X-Forwarded-For": "10.76.0.1"}}}
+  - {"name": "replies no token", "request": {"method": "GET", "path": "/v1/community/posts/C0AC0000-0000-4000-8000-000000000001/replies", "headers": {"X-Forwarded-For": "10.76.0.1"}}}
+  - {"name": "today no token", "request": {"method": "GET", "path": "/v1/community/daily/today", "headers": {"X-Forwarded-For": "10.76.0.1"}}}
+  - {"name": "blocks no token", "request": {"method": "GET", "path": "/v1/community/blocks", "headers": {"X-Forwarded-For": "10.76.0.1"}}}
+  - {"name": "queue no token", "request": {"method": "GET", "path": "/v1/community/admin/queue", "headers": {"X-Forwarded-For": "10.76.0.1"}}}
+  - {"name": "me bad token", "request": {"method": "GET", "path": "/v1/community/me", "headers": {"Authorization": "Bearer not.a.jwt", "X-Forwarded-For": "10.76.0.1"}}}
+  - {"name": "threads bad token", "request": {"method": "GET", "path": "/v1/community/posts", "headers": {"Authorization": "Bearer not.a.jwt", "X-Forwarded-For": "10.76.0.1"}}}
+  - {"name": "profile no token", "request": {"method": "PUT", "path": "/v1/community/profile", "json": {"handle": "nice_handle", "displayName": "Nice Name", "acceptTerms": true, "termsVersion": 1}, "headers": {"X-Forwarded-For": "10.76.0.2"}}}
+  - {"name": "profile no token and bad body is 401 first", "request": {"method": "PUT", "path": "/v1/community/profile", "raw": "{bad", "headers": {"X-Forwarded-For": "10.76.0.2"}}}
+  - {"name": "thread no token", "request": {"method": "POST", "path": "/v1/community/posts", "json": {"title": "A good title", "body": "A good body"}, "headers": {"X-Forwarded-For": "10.76.0.2"}}}
+  - {"name": "reply no token", "request": {"method": "POST", "path": "/v1/community/posts/C0AC0000-0000-4000-8000-000000000001/replies", "json": {"body": "x"}, "headers": {"X-Forwarded-For": "10.76.0.2"}}}
+  - {"name": "reply no token and bad id is 401 first", "request": {"method": "POST", "path": "/v1/community/posts/nope/replies", "json": {"body": "x"}, "headers": {"X-Forwarded-For": "10.76.0.2"}}}
+  - {"name": "delete no token", "request": {"method": "DELETE", "path": "/v1/community/posts/C0AC0000-0000-4000-8000-000000000001", "headers": {"X-Forwarded-For": "10.76.0.2"}}}
+  - {"name": "report no token", "request": {"method": "POST", "path": "/v1/community/posts/C0AC0000-0000-4000-8000-000000000001/report", "json": {"reason": "spam"}, "headers": {"X-Forwarded-For": "10.76.0.2"}}}
+  - {"name": "block no token", "request": {"method": "POST", "path": "/v1/community/blocks", "json": {"profileId": "C0AB0000-0000-4000-8000-0000000000a1"}, "headers": {"X-Forwarded-For": "10.76.0.2"}}}
+  - {"name": "unblock no token", "request": {"method": "DELETE", "path": "/v1/community/blocks/C0AB0000-0000-4000-8000-0000000000a1", "headers": {"X-Forwarded-For": "10.76.0.2"}}}
+  - {"name": "decision no token", "request": {"method": "POST", "path": "/v1/community/admin/posts/C0AC0000-0000-4000-8000-000000000001/decision", "json": {"action": "hide"}, "headers": {"X-Forwarded-For": "10.76.0.2"}}}
+  - {"name": "suspend no token", "request": {"method": "POST", "path": "/v1/community/admin/profiles/C0AB0000-0000-4000-8000-0000000000a1/suspend", "json": {"until": null}, "headers": {"X-Forwarded-For": "10.76.0.7"}}}
+  - {"name": "decision malformed without token is 401 first", "request": {"method": "POST", "path": "/v1/community/admin/posts/C0AC0000-0000-4000-8000-000000000001/decision", "raw": "{bad", "headers": {"X-Forwarded-For": "10.76.0.7"}}}
+  - {"name": "thread malformed is 400 before auth", "request": {"method": "POST", "path": "/v1/community/posts", "raw": "{bad", "headers": {"X-Forwarded-For": "10.76.0.3"}}}
+  - {"name": "thread empty is 400 before auth", "request": {"method": "POST", "path": "/v1/community/posts", "raw": "", "headers": {"X-Forwarded-For": "10.76.0.3"}}}
+  - {"name": "thread array is 400 before auth", "request": {"method": "POST", "path": "/v1/community/posts", "raw": "[]", "headers": {"X-Forwarded-For": "10.76.0.3"}}}
+  - {"name": "thread null is 400 before auth", "request": {"method": "POST", "path": "/v1/community/posts", "raw": "null", "headers": {"X-Forwarded-For": "10.76.0.3"}}}
+  - {"name": "thread empty object is 400 before auth", "request": {"method": "POST", "path": "/v1/community/posts", "raw": "{}", "headers": {"X-Forwarded-For": "10.76.0.3"}}}
+  - {"name": "thread missing body is 400 before auth", "request": {"method": "POST", "path": "/v1/community/posts", "raw": "{\"title\":\"A title\"}", "headers": {"X-Forwarded-For": "10.76.0.3"}}}
+  - {"name": "thread missing title is 400 before auth", "request": {"method": "POST", "path": "/v1/community/posts", "raw": "{\"body\":\"b\"}", "headers": {"X-Forwarded-For": "10.76.0.3"}}}
+  - {"name": "thread title number is 400 before auth", "request": {"method": "POST", "path": "/v1/community/posts", "raw": "{\"title\":5,\"body\":\"b\"}", "headers": {"X-Forwarded-For": "10.76.0.3"}}}
+  - {"name": "thread body null is 400 before auth", "request": {"method": "POST", "path": "/v1/community/posts", "raw": "{\"title\":\"A title\",\"body\":null}", "headers": {"X-Forwarded-For": "10.76.0.3"}}}
+  - {"name": "reply malformed is 400 before auth", "request": {"method": "POST", "path": "/v1/community/posts/nope/replies", "raw": "{bad", "headers": {"X-Forwarded-For": "10.76.0.4"}}}
+  - {"name": "reply empty is 400 before auth", "request": {"method": "POST", "path": "/v1/community/posts/nope/replies", "raw": "", "headers": {"X-Forwarded-For": "10.76.0.4"}}}
+  - {"name": "reply array is 400 before auth", "request": {"method": "POST", "path": "/v1/community/posts/nope/replies", "raw": "[]", "headers": {"X-Forwarded-For": "10.76.0.4"}}}
+  - {"name": "reply null is 400 before auth", "request": {"method": "POST", "path": "/v1/community/posts/nope/replies", "raw": "null", "headers": {"X-Forwarded-For": "10.76.0.4"}}}
+  - {"name": "reply empty object is 400 before auth", "request": {"method": "POST", "path": "/v1/community/posts/nope/replies", "raw": "{}", "headers": {"X-Forwarded-For": "10.76.0.4"}}}
+  - {"name": "reply body number is 400 before auth", "request": {"method": "POST", "path": "/v1/community/posts/nope/replies", "raw": "{\"body\":3}", "headers": {"X-Forwarded-For": "10.76.0.4"}}}
+  - {"name": "reply body null is 400 before auth", "request": {"method": "POST", "path": "/v1/community/posts/nope/replies", "raw": "{\"body\":null}", "headers": {"X-Forwarded-For": "10.76.0.4"}}}
+  - {"name": "report malformed is 400 before auth", "request": {"method": "POST", "path": "/v1/community/posts/nope/report", "raw": "{bad", "headers": {"X-Forwarded-For": "10.76.0.5"}}}
+  - {"name": "report empty is 400 before auth", "request": {"method": "POST", "path": "/v1/community/posts/nope/report", "raw": "", "headers": {"X-Forwarded-For": "10.76.0.5"}}}
+  - {"name": "report array is 400 before auth", "request": {"method": "POST", "path": "/v1/community/posts/nope/report", "raw": "[]", "headers": {"X-Forwarded-For": "10.76.0.5"}}}
+  - {"name": "report null is 400 before auth", "request": {"method": "POST", "path": "/v1/community/posts/nope/report", "raw": "null", "headers": {"X-Forwarded-For": "10.76.0.5"}}}
+  - {"name": "report empty object is 400 before auth", "request": {"method": "POST", "path": "/v1/community/posts/nope/report", "raw": "{}", "headers": {"X-Forwarded-For": "10.76.0.5"}}}
+  - {"name": "report reason number is 400 before auth", "request": {"method": "POST", "path": "/v1/community/posts/nope/report", "raw": "{\"reason\":5}", "headers": {"X-Forwarded-For": "10.76.0.5"}}}
+  - {"name": "report note number is 400 before auth", "request": {"method": "POST", "path": "/v1/community/posts/nope/report", "raw": "{\"reason\":\"spam\",\"note\":5}", "headers": {"X-Forwarded-For": "10.76.0.5"}}}
+  - {"name": "block malformed is 400 before auth", "request": {"method": "POST", "path": "/v1/community/blocks", "raw": "{bad", "headers": {"X-Forwarded-For": "10.76.0.6"}}}
+  - {"name": "block empty is 400 before auth", "request": {"method": "POST", "path": "/v1/community/blocks", "raw": "", "headers": {"X-Forwarded-For": "10.76.0.6"}}}
+  - {"name": "block array is 400 before auth", "request": {"method": "POST", "path": "/v1/community/blocks", "raw": "[]", "headers": {"X-Forwarded-For": "10.76.0.6"}}}
+  - {"name": "block null is 400 before auth", "request": {"method": "POST", "path": "/v1/community/blocks", "raw": "null", "headers": {"X-Forwarded-For": "10.76.0.6"}}}
+  - {"name": "block empty object is 400 before auth", "request": {"method": "POST", "path": "/v1/community/blocks", "raw": "{}", "headers": {"X-Forwarded-For": "10.76.0.6"}}}
+  - {"name": "block id not a uuid is 400 before auth", "request": {"method": "POST", "path": "/v1/community/blocks", "raw": "{\"profileId\":\"nope\"}", "headers": {"X-Forwarded-For": "10.76.0.6"}}}
+  - {"name": "block id number is 400 before auth", "request": {"method": "POST", "path": "/v1/community/blocks", "raw": "{\"profileId\":5}", "headers": {"X-Forwarded-For": "10.76.0.6"}}}
+  - {"name": "block id null is 400 before auth", "request": {"method": "POST", "path": "/v1/community/blocks", "raw": "{\"profileId\":null}", "headers": {"X-Forwarded-For": "10.76.0.6"}}}

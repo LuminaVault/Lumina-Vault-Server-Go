@@ -1,0 +1,12 @@
+# POST /v1/admin/community/daily/run with no LLM reachable: every attempt fails.
+# parity_community_daily hides last_error (each server's own failure text).
+module: community
+steps:
+  - {"name": "run no token", "request": {"method": "POST", "path": "/v1/admin/community/daily/run"}}
+  - {"name": "run wrong token", "request": {"method": "POST", "path": "/v1/admin/community/daily/run", "headers": {"X-Admin-Token": "wrong"}}}
+  - {"name": "first run fails to generate", "request": {"method": "POST", "path": "/v1/admin/community/daily/run", "headers": {"X-Admin-Token": "parity-admin-token"}}, "snapshot": ["parity_community_daily"]}
+  - {"name": "second run fails", "request": {"method": "POST", "path": "/v1/admin/community/daily/run", "headers": {"X-Admin-Token": "parity-admin-token"}}, "snapshot": ["parity_community_daily"]}
+  - {"name": "third run is skipped", "request": {"method": "POST", "path": "/v1/admin/community/daily/run", "headers": {"X-Admin-Token": "parity-admin-token"}}, "snapshot": ["parity_community_daily"]}
+  - {"name": "after that a no-op", "request": {"method": "POST", "path": "/v1/admin/community/daily/run", "headers": {"X-Admin-Token": "parity-admin-token"}}, "snapshot": ["parity_community_daily"]}
+  - {"name": "today still has no post", "as": "comm_mod3", "request": {"method": "GET", "path": "/v1/community/daily/today"}}
+  - {"name": "run with a get", "request": {"method": "GET", "path": "/v1/admin/community/daily/run", "headers": {"X-Admin-Token": "parity-admin-token"}}}

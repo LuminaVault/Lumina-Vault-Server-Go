@@ -1,0 +1,34 @@
+# COMMUNITY_ENABLED=false: /me answers, every other route is 503, the admin route is absent.
+module: community
+steps:
+  - {"name": "me says disabled", "as": "comm_read", "request": {"method": "GET", "path": "/v1/community/me"}}
+  - {"name": "me no token is still 401", "request": {"method": "GET", "path": "/v1/community/me", "headers": {"X-Forwarded-For": "10.76.1.1"}}}
+  - {"name": "board no token is 503", "request": {"method": "GET", "path": "/v1/community/posts", "headers": {"X-Forwarded-For": "10.76.1.2"}}}
+  - {"name": "board with a token is 503", "as": "comm_read", "request": {"method": "GET", "path": "/v1/community/posts"}}
+  - {"name": "post no token is 503", "request": {"method": "GET", "path": "/v1/community/posts/C0AC0000-0000-4000-8000-000000000001", "headers": {"X-Forwarded-For": "10.76.1.2"}}}
+  - {"name": "post with a token is 503", "as": "comm_read", "request": {"method": "GET", "path": "/v1/community/posts/C0AC0000-0000-4000-8000-000000000001"}}
+  - {"name": "bad post id no token is 503", "request": {"method": "GET", "path": "/v1/community/posts/nope", "headers": {"X-Forwarded-For": "10.76.1.2"}}}
+  - {"name": "bad post id with a token is 503", "as": "comm_read", "request": {"method": "GET", "path": "/v1/community/posts/nope"}}
+  - {"name": "replies no token is 503", "request": {"method": "GET", "path": "/v1/community/posts/C0AC0000-0000-4000-8000-000000000001/replies", "headers": {"X-Forwarded-For": "10.76.1.2"}}}
+  - {"name": "replies with a token is 503", "as": "comm_read", "request": {"method": "GET", "path": "/v1/community/posts/C0AC0000-0000-4000-8000-000000000001/replies"}}
+  - {"name": "today no token is 503", "request": {"method": "GET", "path": "/v1/community/daily/today", "headers": {"X-Forwarded-For": "10.76.1.2"}}}
+  - {"name": "today with a token is 503", "as": "comm_read", "request": {"method": "GET", "path": "/v1/community/daily/today"}}
+  - {"name": "blocks no token is 503", "request": {"method": "GET", "path": "/v1/community/blocks", "headers": {"X-Forwarded-For": "10.76.1.2"}}}
+  - {"name": "blocks with a token is 503", "as": "comm_read", "request": {"method": "GET", "path": "/v1/community/blocks"}}
+  - {"name": "queue no token is 503", "request": {"method": "GET", "path": "/v1/community/admin/queue", "headers": {"X-Forwarded-For": "10.76.1.2"}}}
+  - {"name": "queue with a token is 503", "as": "comm_read", "request": {"method": "GET", "path": "/v1/community/admin/queue"}}
+  - {"name": "profile no token is 503", "request": {"method": "PUT", "path": "/v1/community/profile", "json": {"handle": "nice_handle", "displayName": "Nice Name", "acceptTerms": true, "termsVersion": 1}, "headers": {"X-Forwarded-For": "10.76.1.3"}}}
+  - {"name": "thread no token is 503", "request": {"method": "POST", "path": "/v1/community/posts", "json": {"title": "A good title", "body": "A good body"}, "headers": {"X-Forwarded-For": "10.76.1.3"}}}
+  - {"name": "thread bad body no token is 503", "request": {"method": "POST", "path": "/v1/community/posts", "raw": "{bad", "headers": {"X-Forwarded-For": "10.76.1.3"}}}
+  - {"name": "reply no token is 503", "request": {"method": "POST", "path": "/v1/community/posts/C0AC0000-0000-4000-8000-000000000001/replies", "json": {"body": "x"}, "headers": {"X-Forwarded-For": "10.76.1.3"}}}
+  - {"name": "delete no token is 503", "request": {"method": "DELETE", "path": "/v1/community/posts/C0AC0000-0000-4000-8000-000000000001", "headers": {"X-Forwarded-For": "10.76.1.3"}}}
+  - {"name": "report no token is 503", "request": {"method": "POST", "path": "/v1/community/posts/C0AC0000-0000-4000-8000-000000000001/report", "json": {"reason": "spam"}, "headers": {"X-Forwarded-For": "10.76.1.3"}}}
+  - {"name": "block no token is 503", "request": {"method": "POST", "path": "/v1/community/blocks", "json": {"profileId": "C0AB0000-0000-4000-8000-0000000000a1"}, "headers": {"X-Forwarded-For": "10.76.1.3"}}}
+  - {"name": "unblock no token is 503", "request": {"method": "DELETE", "path": "/v1/community/blocks/C0AB0000-0000-4000-8000-0000000000a1", "headers": {"X-Forwarded-For": "10.76.1.3"}}}
+  - {"name": "decision no token is 503", "request": {"method": "POST", "path": "/v1/community/admin/posts/C0AC0000-0000-4000-8000-000000000001/decision", "json": {"action": "hide"}, "headers": {"X-Forwarded-For": "10.76.1.3"}}}
+  - {"name": "suspend no token is 503", "request": {"method": "POST", "path": "/v1/community/admin/profiles/C0AB0000-0000-4000-8000-0000000000a1/suspend", "json": {"until": null}, "headers": {"X-Forwarded-For": "10.76.1.3"}}}
+  - {"name": "profile with a token is 503", "as": "comm_post", "request": {"method": "PUT", "path": "/v1/community/profile", "json": {"handle": "nice_handle", "displayName": "Nice Name", "acceptTerms": true, "termsVersion": 1}}}
+  - {"name": "thread with a token is 503", "as": "comm_post", "request": {"method": "POST", "path": "/v1/community/posts", "json": {"title": "A good title", "body": "A good body"}}}
+  - {"name": "decision with a token is 503", "as": "comm_post", "request": {"method": "POST", "path": "/v1/community/admin/posts/C0AC0000-0000-4000-8000-000000000001/decision", "json": {"action": "hide"}}}
+  - {"name": "admin route does not exist", "request": {"method": "POST", "path": "/v1/admin/community/daily/run"}}
+  - {"name": "admin route does not exist with the token", "request": {"method": "POST", "path": "/v1/admin/community/daily/run", "headers": {"X-Admin-Token": "parity-admin-token"}}, "snapshot": ["community_posts", "community_profiles", "community_blocks", "community_reports", "parity_community_daily"]}

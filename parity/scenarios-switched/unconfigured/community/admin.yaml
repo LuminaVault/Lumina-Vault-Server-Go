@@ -1,0 +1,5 @@
+# ADMIN_TOKEN empty: the route exists and rejects everything.
+module: community
+steps:
+  - {"name": "admin route with no token configured", "request": {"method": "POST", "path": "/v1/admin/community/daily/run"}}
+  - {"name": "admin route with a header", "request": {"method": "POST", "path": "/v1/admin/community/daily/run", "headers": {"X-Admin-Token": "parity-admin-token"}}, "snapshot": ["parity_community_daily"]}
