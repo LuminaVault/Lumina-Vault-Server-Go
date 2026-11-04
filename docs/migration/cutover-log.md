@@ -61,6 +61,21 @@ evidence, not intent: commands, counts, links, numbers.
   address seed IDs, or compare against a live Swift target instead of CI
   transcripts.
 
+### G3 production: routed 2026-10-31, watch running
+
+- LuminaVaultInfra #537 merged 2026-10-31 12:15Z: `/v1/projects` on
+  `api.luminavault.fyi` goes to `api-go-production` (`d7297f97`).
+- Swift baseline before the flip (`api-production` logs, 2026-10-29 06:27Z to
+  10-31 12:04Z): 33,981 requests, 0 on `/v1/projects*`, 0 5xx on any route.
+- Check on 2026-11-04 09:16Z: responses on the route lack Swift's `Server`
+  header, so Go is serving it. Pod has 0 restarts in 3d20h. Logs show 0 5xx and
+  0 ERROR, but only reach back about 12 h, and the 37 `/v1/projects` requests
+  in them are essentially the agent's probes.
+- So far the watch shows stability, not behaviour under real use: the route has
+  had almost no real traffic. The probes also found routing differences, see
+  decisions.md D-router-parity (PR #15).
+- 7 d mark: 2026-11-07 12:15Z. Then set `done` and write `pilot-retro.md`.
+
 ## kanban (wave 2)
 
 ### G0 entry: met 2026-10-31
