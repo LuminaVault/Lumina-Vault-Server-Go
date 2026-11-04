@@ -1,0 +1,43 @@
+# GET /v1/calendar/events/{id}/brief. EMBEDDING_PROVIDER is unset in the parity
+# env, so both servers embed with the deterministic stub and the live match is
+# really compared. In production Go only serves this path with that stub.
+module: calendar
+steps:
+  - {name: brief no token, request: {method: GET, path: /v1/calendar/events/CA1C0000-0000-4000-8000-000000000001/brief}}
+  - {name: brief bad token, request: {method: GET, path: /v1/calendar/events/CA1C0000-0000-4000-8000-000000000001/brief, headers: {Authorization: Bearer nope}}}
+  - {name: brief no token bad id, request: {method: GET, path: /v1/calendar/events/nope/brief}}
+  - {name: brief bad id, as: cal_bri, request: {method: GET, path: /v1/calendar/events/not-a-uuid/brief}}
+  - {name: brief bare hex id, as: cal_bri, request: {method: GET, path: /v1/calendar/events/ca1c0000000040008000000000000001/brief}}
+  - {name: brief braced id, as: cal_bri, request: {method: GET, path: "/v1/calendar/events/%7Bca1c0000-0000-4000-8000-000000000001%7D/brief"}}
+  - {name: brief unknown event, as: cal_bri, request: {method: GET, path: /v1/calendar/events/CA1C0000-0000-4000-8000-0000000000FF/brief}}
+  - {name: brief foreign event, as: cal_ben, request: {method: GET, path: /v1/calendar/events/CA1C0000-0000-4000-8000-000000000001/brief}}
+  - {name: brief post not routed, as: cal_bri, request: {method: POST, path: /v1/calendar/events/CA1C0000-0000-4000-8000-000000000001/brief}}
+  - name: brief live match, attendee named, rejected note left out
+    as: cal_bri
+    request: {method: GET, path: /v1/calendar/events/CA1C0000-0000-4000-8000-000000000001/brief}
+    snapshot: [embedding_usage]
+  - {name: brief lowercase id, as: cal_bri, request: {method: GET, path: /v1/calendar/events/ca1c0000-0000-4000-8000-000000000001/brief}}
+  - name: brief stored, no embed
+    as: cal_bri
+    request: {method: GET, path: /v1/calendar/events/CA1C0000-0000-4000-8000-000000000002/brief}
+    snapshot: [embedding_usage]
+  - {name: brief stored without rejected foreign and unknown notes, as: cal_bri, request: {method: GET, path: /v1/calendar/events/CA1C0000-0000-4000-8000-000000000003/brief}}
+  - name: brief stored object falls back to a live match
+    as: cal_bri
+    request: {method: GET, path: /v1/calendar/events/CA1C0000-0000-4000-8000-000000000004/brief}
+    snapshot: [embedding_usage]
+  - {name: brief stored bad id falls back to a live match, as: cal_bri, request: {method: GET, path: /v1/calendar/events/CA1C0000-0000-4000-8000-000000000005/brief}}
+  - {name: brief stored empty falls back to a live match, as: cal_bri, request: {method: GET, path: /v1/calendar/events/CA1C0000-0000-4000-8000-000000000006/brief}}
+  - name: brief blank event never embeds
+    as: cal_bri
+    request: {method: GET, path: /v1/calendar/events/CA1C0000-0000-4000-8000-000000000007/brief}
+    snapshot: [embedding_usage]
+  - {name: brief undecodable attendees, as: cal_bri, request: {method: GET, path: /v1/calendar/events/CA1C0000-0000-4000-8000-000000000008/brief}}
+  - {name: brief search arms quota and floor, as: cal_bal, request: {method: GET, path: /v1/calendar/events/CA1C0000-0000-4000-8000-000000000011/brief}}
+  - {name: brief names counted with accents folded, as: cal_bal, request: {method: GET, path: /v1/calendar/events/CA1C0000-0000-4000-8000-000000000012/brief}}
+  - {name: brief quota on model answers, as: cal_quo, request: {method: GET, path: /v1/calendar/events/CA1C0000-0000-4000-8000-000000000031/brief}}
+  - {name: brief nothing past the floor, as: cal_off, request: {method: GET, path: /v1/calendar/events/CA1C0000-0000-4000-8000-000000000041/brief}}
+  - {name: brief over the embedding cap, as: cal_cap, request: {method: GET, path: /v1/calendar/events/CA1C0000-0000-4000-8000-000000000021/brief}}
+  - {name: brief stored under the cap, as: cal_cap, request: {method: GET, path: /v1/calendar/events/CA1C0000-0000-4000-8000-000000000022/brief}}
+  - {name: brief blank under the cap, as: cal_cap, request: {method: GET, path: /v1/calendar/events/CA1C0000-0000-4000-8000-000000000023/brief}}
+  - {name: brief reads the same twice, as: cal_bal, request: {method: GET, path: /v1/calendar/events/CA1C0000-0000-4000-8000-000000000011/brief}}

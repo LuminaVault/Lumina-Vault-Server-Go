@@ -1,0 +1,33 @@
+# POST /v1/calendar/events: validation, then 409 without a usable grant. A
+# connected grant would call Google, so the success path is Go-tests only.
+module: calendar
+steps:
+  - {name: create no token, request: {method: POST, path: /v1/calendar/events, json: {title: x}}}
+  - {name: create empty body, as: cal_ben, request: {method: POST, path: /v1/calendar/events}}
+  - {name: create not json, as: cal_ben, request: {method: POST, path: /v1/calendar/events, raw: "not json"}}
+  - {name: create array body, as: cal_ben, request: {method: POST, path: /v1/calendar/events, raw: "[]"}}
+  - {name: create empty object, as: cal_ben, request: {method: POST, path: /v1/calendar/events, raw: "{}"}}
+  - {name: create title null, as: cal_ben, request: {method: POST, path: /v1/calendar/events, raw: "{\"title\":null,\"startsAt\":\"2099-01-01T10:00:00Z\",\"endsAt\":\"2099-01-01T11:00:00Z\"}"}}
+  - {name: create title wrong type, as: cal_ben, request: {method: POST, path: /v1/calendar/events, json: {title: 1, startsAt: "2099-01-01T10:00:00Z", endsAt: "2099-01-01T11:00:00Z"}}}
+  - {name: create missing start, as: cal_ben, request: {method: POST, path: /v1/calendar/events, json: {title: x, endsAt: "2099-01-01T11:00:00Z"}}}
+  - {name: create missing end, as: cal_ben, request: {method: POST, path: /v1/calendar/events, json: {title: x, startsAt: "2099-01-01T11:00:00Z"}}}
+  - {name: create bad start, as: cal_ben, request: {method: POST, path: /v1/calendar/events, json: {title: x, startsAt: tomorrow, endsAt: "2099-01-01T11:00:00Z"}}}
+  - {name: create numeric start, as: cal_ben, request: {method: POST, path: /v1/calendar/events, json: {title: x, startsAt: 5, endsAt: "2099-01-01T11:00:00Z"}}}
+  - {name: create location wrong type, as: cal_ben, request: {method: POST, path: /v1/calendar/events, json: {title: x, startsAt: "2099-01-01T10:00:00Z", endsAt: "2099-01-01T11:00:00Z", location: 1}}}
+  - {name: create attendees wrong type, as: cal_ben, request: {method: POST, path: /v1/calendar/events, json: {title: x, startsAt: "2099-01-01T10:00:00Z", endsAt: "2099-01-01T11:00:00Z", attendees: "a@x.test"}}}
+  - {name: create attendee wrong type, as: cal_ben, request: {method: POST, path: /v1/calendar/events, json: {title: x, startsAt: "2099-01-01T10:00:00Z", endsAt: "2099-01-01T11:00:00Z", attendees: ["a@x.test", 1]}}}
+  - {name: create attendee null, as: cal_ben, request: {method: POST, path: /v1/calendar/events, raw: "{\"title\":\"x\",\"startsAt\":\"2099-01-01T10:00:00Z\",\"endsAt\":\"2099-01-01T11:00:00Z\",\"attendees\":[null]}"}}
+  - {name: create blank title, as: cal_ben, request: {method: POST, path: /v1/calendar/events, json: {title: "  \n ", startsAt: "2099-01-01T10:00:00Z", endsAt: "2099-01-01T11:00:00Z"}}}
+  - {name: create end before start, as: cal_ben, request: {method: POST, path: /v1/calendar/events, json: {title: x, startsAt: "2099-01-01T11:00:00Z", endsAt: "2099-01-01T10:00:00Z"}}}
+  - {name: create end equals start, as: cal_ben, request: {method: POST, path: /v1/calendar/events, json: {title: x, startsAt: "2099-01-01T11:00:00Z", endsAt: "2099-01-01T11:00:00Z"}}}
+  - {name: create end equals start across offsets, as: cal_ben, request: {method: POST, path: /v1/calendar/events, json: {title: x, startsAt: "2099-01-01T11:00:00Z", endsAt: "2099-01-01T13:00:00+02:00"}}}
+  - name: create without an account
+    as: cal_ben
+    request: {method: POST, path: /v1/calendar/events, json: {title: " Lunch ", startsAt: "2099-01-01T10:00:00.500Z", endsAt: "2099-01-01T11:00:00Z", location: Cafe, notes: n, attendees: [a@x.test]}}
+    snapshot: [calendar_events]
+  - name: create needing reauth
+    as: cal_rea
+    request: {method: POST, path: /v1/calendar/events, json: {title: Lunch, startsAt: "2099-01-01T10:00:00Z", endsAt: "2099-01-01T11:00:00Z"}}
+  - name: create with a gmail grant needing reauth
+    as: cal_gre
+    request: {method: POST, path: /v1/calendar/events, json: {title: Lunch, startsAt: "2099-01-01T10:00:00Z", endsAt: "2099-01-01T11:00:00Z"}}

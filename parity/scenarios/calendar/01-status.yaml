@@ -1,0 +1,13 @@
+# GET /v1/calendar/status: the row is the Google grant, shared with Gmail.
+module: calendar
+steps:
+  - {name: status no token, request: {method: GET, path: /v1/calendar/status}}
+  - {name: status bad token, request: {method: GET, path: /v1/calendar/status, headers: {Authorization: Bearer nope}}}
+  - {name: status connected, as: cal_ann, request: {method: GET, path: /v1/calendar/status}}
+  - {name: status no account, as: cal_ben, request: {method: GET, path: /v1/calendar/status}}
+  - {name: status through the broader scope, as: cal_wid, request: {method: GET, path: /v1/calendar/status}}
+  - {name: status both scopes, as: cal_two, request: {method: GET, path: /v1/calendar/status}}
+  - {name: status needs reauth, as: cal_rea, request: {method: GET, path: /v1/calendar/status}}
+  - {name: status gmail only needs reauth is not calendar, as: cal_gre, request: {method: GET, path: /v1/calendar/status}}
+  - {name: status gmail only is not calendar, as: cal_gmo, request: {method: GET, path: /v1/calendar/status}}
+  - {name: status ignores a query string, as: cal_ann, request: {method: GET, path: "/v1/calendar/status?x=1"}}
