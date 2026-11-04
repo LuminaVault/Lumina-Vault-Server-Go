@@ -43,9 +43,9 @@ func TestOpenAIInputOverCapIsTruncated(t *testing.T) {
 	require.Equal(t, strings.Repeat("a", 10), c.body["input"])
 
 	// The cap counts characters: a combining sequence stays whole.
-	_, err = svc.Embed(context.Background(), strings.Repeat("é", 11), uuid.New())
+	_, err = svc.Embed(context.Background(), strings.Repeat("e\u0301", 11), uuid.New())
 	require.NoError(t, err)
-	require.Equal(t, strings.Repeat("é", 10), c.body["input"])
+	require.Equal(t, strings.Repeat("e\u0301", 10), c.body["input"])
 }
 
 func TestOpenAIMissingKey(t *testing.T) {

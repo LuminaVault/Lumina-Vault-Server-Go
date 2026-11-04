@@ -33,8 +33,8 @@ func TestEstimateTokensCountsCharactersLikeSwift(t *testing.T) {
 	require.Equal(t, int64(1), EstimateTokens("AB"))
 	require.Equal(t, int64(3), EstimateTokens("twelve chars"))
 	// Swift's text.count: e + U+0301 is one Character, a ZWJ family is one.
-	require.Equal(t, int64(1), EstimateTokens("é"))
-	require.Equal(t, int64(2), EstimateTokens(strings.Repeat("\U0001F468‍\U0001F469‍\U0001F467", 5)))
+	require.Equal(t, int64(1), EstimateTokens("e\u0301"))
+	require.Equal(t, int64(2), EstimateTokens(strings.Repeat("\U0001F468\u200D\U0001F469\u200D\U0001F467", 5)))
 }
 
 // tracing answers each text with one float holding its index, slowly enough to
