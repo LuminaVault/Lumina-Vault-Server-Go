@@ -75,3 +75,24 @@ func TestLoadEmptyOriginsMeansNone(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, cfg.CORSAllowedOrigins)
 }
+
+func TestBYOHermesRequireHTTPS(t *testing.T) {
+	cases := []struct {
+		env, raw string
+		want     bool
+	}{
+		{"", "", false}, // LV_ENVIRONMENT defaults to dev in Swift
+		{"dev", "", false},
+		{"production", "", true},
+		{"staging", "", true},
+		{"production", "false", false},
+		{"dev", "TRUE", true},
+		{"dev", "1", false},
+	}
+	for _, tc := range cases {
+		c := Config{LVEnvironment: tc.env, BYOHermesRequireHTTPSRaw: tc.raw}
+		if got := c.BYOHermesRequireHTTPS(); got != tc.want {
+			t.Errorf("env %q raw %q: got %v", tc.env, tc.raw, got)
+		}
+	}
+}
