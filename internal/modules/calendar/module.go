@@ -36,6 +36,7 @@ import (
 	"lumina/internal/swiftstr"
 	"lumina/internal/wire"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -150,13 +151,25 @@ func ReturnToParam(c *echo.Context) *string {
 	return queryParam(c, "returnTo")
 }
 
+// queryParam is the first `name=` of the query, percent-decoded and nil when
+// absent. It reads the raw query as Hummingbird does: a `+` stays a `+`, where
+// c.QueryParam would hand back a space.
 func queryParam(c *echo.Context, name string) *string {
-	q := c.QueryParams()
-	if !q.Has(name) {
-		return nil
+	for pair := range strings.SplitSeq(c.Request().URL.RawQuery, "&") {
+		key, value, _ := strings.Cut(pair, "=")
+		if unescaped(key) == name {
+			v := unescaped(value)
+			return &v
+		}
 	}
-	v := q.Get(name)
-	return &v
+	return nil
+}
+
+func unescaped(s string) string {
+	if out, err := url.PathUnescape(s); err == nil {
+		return out
+	}
+	return s
 }
 
 func (m *Module) disconnect(c *echo.Context) error {
@@ -176,7 +189,7 @@ func (m *Module) events(c *echo.Context) error {
 		return err
 	}
 	rows, err := m.q.UpcomingEvents(c.Request().Context(), db.UpcomingEventsParams{
-		TenantID: tenant, Now: m.now(), Lim: parseLimit(c.QueryParam("limit")),
+		TenantID: tenant, Now: m.now(), Lim: parseLimit(queryParam(c, "limit")),
 	})
 	if err != nil {
 		return err
@@ -195,8 +208,11 @@ func (m *Module) events(c *echo.Context) error {
 
 // parseLimit is CalendarController.parseLimit: no value or a non-integer is the
 // maximum, anything else is clamped to 1…50.
-func parseLimit(raw string) int32 {
-	n, err := strconv.Atoi(raw)
+func parseLimit(raw *string) int32 {
+	if raw == nil {
+		return maxEvents
+	}
+	n, err := strconv.Atoi(*raw)
 	if err != nil {
 		return maxEvents
 	}

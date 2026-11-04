@@ -58,6 +58,11 @@ func New(cfg config.Config, deps Deps) *echo.Echo {
 		AllowOverwritingRoute:   true,
 		MethodNotAllowedHandler: notFound,
 		OptionsMethodHandler:    notFound,
+		AllowOverwritingRoute:   true, // Echo's own default router sets it
+	s := &server{Echo: echo.NewWithConfig(echo.Config{Router: echo.NewRouter(echo.RouterConfig{
+		AllowOverwritingRoute: true, // echo.New's default
+		// A known path with the wrong method is a plain 404 in Hummingbird.
+		MethodNotAllowedHandler: func(*echo.Context) error { return echo.ErrNotFound },
 	})}), streaming: map[string]bool{}}
 	e := s.Echo
 	e.HTTPErrorHandler = wire.HTTPErrorHandler

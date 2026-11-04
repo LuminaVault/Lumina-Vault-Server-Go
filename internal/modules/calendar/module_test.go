@@ -322,6 +322,7 @@ func TestAgainstPostgres(t *testing.T) {
 		{"CallbackExchangesStoresAndSyncs", testCallbackHappy},
 		{"CallbackKeepsAnEmailWhenTheTokenHasNone", testCallbackRelink},
 		{"CallbackDeclineGoesBackToTheWebPage", testCallbackDecline},
+		{"QueryPlusStaysAPlus", testQueryPlusStaysAPlus},
 		{"CallbackMissingCode", testCallbackMissingCode},
 		{"CallbackExchangeFailures", testCallbackExchangeFails},
 		{"CallbackInitialSyncFailureStillConnects", testCallbackSyncFails},
@@ -643,9 +644,9 @@ func testCallbackHappy(t *testing.T, v env) {
 		}
 	})
 	state := v.connect(u, "/v1/calendar/connect").Query().Get("state")
-	loc := v.callback(url.Values{"state": {state}, "code": {"auth code/1"}})
+	loc := v.callback(url.Values{"state": {state}, "code": {"auth/code"}})
 	require.Equal(t, "luminavault://oauth/google-calendar?status=ok", loc)
-	require.Equal(t, "auth code/1", form.Get("code"))
+	require.Equal(t, "auth/code", form.Get("code"))
 	require.Equal(t, "authorization_code", form.Get("grant_type"))
 	require.Equal(t, "client-id", form.Get("client_id"))
 	require.Equal(t, "not-a-secret", form.Get("client_secret"))
@@ -698,6 +699,14 @@ func testCallbackRelink(t *testing.T, v env) {
 	require.Equal(t, scopeCalendar, a.scope, "no scope in the answer: old plus requested, unique")
 	require.Equal(t, "new", a.syncToken)
 	require.WithinDuration(t, time.Now().Add(time.Hour), *a.expires, time.Minute, "expires_in defaults to 3600")
+}
+
+// Hummingbird keeps a `+` in a query value, so a page's own query survives.
+func testQueryPlusStaysAPlus(t *testing.T, v env) {
+	u := v.user("trial")
+	page := "https://app.luminavault.fyi/settings?tab=a+b"
+	state := v.connect(u, "/v1/calendar/connect?returnTo=https://app.luminavault.fyi/settings%3Ftab=a+b").Query().Get("state")
+	require.Equal(t, page+"&status=error&reason=access_denied", v.callback(url.Values{"state": {state}, "error": {"access_denied"}}))
 }
 
 func testCallbackDecline(t *testing.T, v env) {
@@ -903,13 +912,14 @@ func testRefreshSingleFlight(t *testing.T, v env) {
 	u := v.user("trial")
 	v.account(u, scopeCalendar, "connected", "rt", "old", time.Now().Add(-time.Hour))
 	release := make(chan struct{})
-	var got map[string]any
 	v.google.set(func(s *stubGoogle) {
 		s.token = func(url.Values) (int, string) {
 			<-release
 			return http.StatusOK, `{"access_token":"fresh"}`
 		}
-		s.insert = insertOK(t, &got)
+		s.insert = func(map[string]any) (int, string) {
+			return http.StatusOK, `{"id":"g-flight","summary":"Lunch","start":{"dateTime":"2099-01-01T10:00:00Z"},"end":{"dateTime":"2099-01-01T11:00:00Z"}}`
+		}
 	})
 	var wg sync.WaitGroup
 	codes := make([]int, 8)
