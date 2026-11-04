@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // Embedder is Swift's EmbeddingService as PhotoIndexController uses it.
@@ -38,6 +39,12 @@ func newEmbedder(q *db.Queries, opts Options, now func() time.Time) Embedder {
 		inner = notPorted{}
 	}
 	return &usageTracker{inner: inner, q: q, cap: opts.EmbeddingMonthlyCap, now: now}
+}
+
+// NewEmbedder is the same service for other modules (calendar's meeting brief),
+// sharing the usage rows and the cap.
+func NewEmbedder(pool *pgxpool.Pool, opts Options) Embedder {
+	return newEmbedder(db.New(pool), opts, time.Now)
 }
 
 // deterministic is DeterministicEmbeddingService: 1536 dims, byte i%len

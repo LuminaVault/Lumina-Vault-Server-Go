@@ -1,0 +1,17 @@
+# POST /v1/calendar/connect is the disabled path: the parity env has no Google
+# client, so 503 comes before returnTo is looked at. Go tests cover the rest.
+# GET /v1/calendar/oauth/callback: without a session every answer is the same 303.
+module: calendar
+steps:
+  - {name: connect no token, request: {method: POST, path: /v1/calendar/connect}}
+  - {name: connect not configured, as: cal_ann, request: {method: POST, path: /v1/calendar/connect}}
+  - {name: connect ignores a body, as: cal_ann, request: {method: POST, path: /v1/calendar/connect, raw: "not json"}}
+  - {name: connect not configured beats a bad returnTo, as: cal_ann, request: {method: POST, path: "/v1/calendar/connect?returnTo=https://evil.example/"}}
+  - {name: connect not configured with a good returnTo, as: cal_ben, request: {method: POST, path: "/v1/calendar/connect?returnTo=https://app.luminavault.fyi/settings"}}
+  - {name: callback bare, headers: [Location], request: {method: GET, path: /v1/calendar/oauth/callback}}
+  - {name: callback unknown state and code, headers: [Location], request: {method: GET, path: "/v1/calendar/oauth/callback?state=nope&code=abc"}}
+  - {name: callback unknown state and error, headers: [Location], request: {method: GET, path: "/v1/calendar/oauth/callback?state=nope&error=access_denied"}}
+  - {name: callback empty state, headers: [Location], request: {method: GET, path: "/v1/calendar/oauth/callback?state=&code="}}
+  - {name: callback ignores a token, as: cal_ann, headers: [Location], request: {method: GET, path: "/v1/calendar/oauth/callback?state=A.B"}}
+  - {name: callback post is not routed, request: {method: POST, path: /v1/calendar/oauth/callback}}
+  - {name: connect get is not routed, as: cal_ann, request: {method: GET, path: /v1/calendar/connect}}

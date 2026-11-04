@@ -1,0 +1,30 @@
+# POST /v1/calendar/disconnect. Paths reaching Google (a connected grant with
+# no Gmail scope) are Go-tests only; needs_reauth takes the same delete branch
+# with no network call.
+module: calendar
+steps:
+  - {name: disconnect no token, request: {method: POST, path: /v1/calendar/disconnect}}
+  - name: disconnect with no account is a no-op
+    as: cal_ben
+    request: {method: POST, path: /v1/calendar/disconnect}
+    snapshot: [calendar_accounts, calendar_events]
+  - name: disconnect keeps the grant when it also serves gmail
+    as: cal_two
+    request: {method: POST, path: /v1/calendar/disconnect}
+    snapshot: [calendar_accounts, calendar_events]
+  - {name: calendar status after, as: cal_two, request: {method: GET, path: /v1/calendar/status}}
+  - {name: gmail status after, as: cal_two, request: {method: GET, path: /v1/mail/gmail/status}}
+  - {name: events after, as: cal_two, request: {method: GET, path: /v1/calendar/events}}
+  - name: disconnect again drops what is left of nothing
+    as: cal_two
+    request: {method: POST, path: /v1/calendar/disconnect}
+    snapshot: [calendar_accounts]
+  - name: disconnect a dead calendar grant deletes the row and google events
+    as: cal_rea
+    request: {method: POST, path: /v1/calendar/disconnect}
+    snapshot: [calendar_accounts, calendar_events]
+  - {name: status after delete, as: cal_rea, request: {method: GET, path: /v1/calendar/status}}
+  - name: disconnect a gmail only grant keeps the row and purges google events
+    as: cal_gmo
+    request: {method: POST, path: /v1/calendar/disconnect}
+    snapshot: [calendar_accounts, calendar_events]
