@@ -128,7 +128,7 @@ modules:
   teams:
     wave: 3
     swiftDir: Sources/App/Teams
-    status: swift
+    status: parity
     prefixes: [/v1/team-invitations, /v1/teams, /v1/vaults]
     jobs: []
   capture:

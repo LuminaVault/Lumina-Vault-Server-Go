@@ -363,3 +363,60 @@ Beyond the pilot gate (D-wave2-early):
   401), and the spec conformance of the 200.
 - CI: PR #3, run 41196472076. `parity`, `lint`, `test` and `vuln` pass
   (https://github.com/LuminaVault/Lumina-Vault-Server-Go/actions/runs/41196472076/job/124523530129).
+
+## teams (wave 3)
+
+### G0 entry: met 2026-10-31
+
+- Routes: 19 in `docs/migration/routes.json` (12 under `/v1/teams`, 6 under `/v1/vaults`,
+  1 under `/v1/team-invitations`), all tagged `x-lv-module: teams` in the spec.
+- Prefixes: `/v1/team-invitations`, `/v1/teams`, `/v1/vaults`, disjoint (`internal/manifest`).
+- Coupling: vault activity SSE (coupling.md row "Vault activity → SSE"). The publisher is
+  in-process in both servers, so this is a flip blocker for Spaces, Kanban and Teams.
+- Jobs: none. Expired archives are purged inline by `GET /v1/teams`.
+- Route middleware: `jwtAuthenticator` (identify, never rejects), then
+  `RateLimitMiddleware(.settingsByUser)`, then the handler, which parses path ids before it
+  requires identity. Go uses `auth.Identify`, then `internal/ratelimit` with the process-wide
+  store.
+- Swift tests: no Teams directory. The `createTeamVault` helpers in
+  `Ingestion/MultimodalIngestionAPIIntegrationTests` and
+  `Knowledge/KnowledgeVaultScopeIntegrationTests` are the only tests that call these routes;
+  their two assertions are ported.
+
+### G1 parity: met 2026-11-04
+
+- Seed: `parity/seed/teams.sql` adds 14 `team_*` users (at most 26 requests each, 27 for the
+  anonymous `X-Forwarded-For` bucket, so no `settingsByUser` bucket fills), 5 teams, 7 team
+  vaults and 11 invitations. Accept scenarios use seeded tokens because Swift never returns
+  one. The `parity_team_invitations` view makes the table comparable: it shows the shape of
+  `token_hash`, whether the token is still a seeded one, and `vault_grants` as jsonb.
+- Parity: 8 scenarios, 209 steps, covering every route:
+  - no token, bad token, and path ids checked before identity
+  - malformed, empty, array, missing, null and wrong-type bodies, including nested
+    `vaultGrants` errors
+  - bad, unknown and foreign ids, and cross-team isolation
+  - the purge before the 401, name limits counted in graphemes, heap-order lists
+  - archive, restore, transfer and leave
+  - invite, list, resend, revoke and accept
+  - snapshots of `teams`, `team_memberships`, `vaults`, `vault_memberships`,
+    `vault_activity_events` and the invitations view
+- Harness: a step can set `stream: true` (status and headers only, for a body that never
+  ends) and `headers: [...]` (compare response headers). Both stream success steps match
+  Swift on status, `Content-Type`, `Cache-Control` and `X-Accel-Buffering`.
+- Not compared with Swift, covered only by Go tests:
+  - SSE frame bytes. Swift sends no initial frame, so parity has no body to read. The format
+    comes from reading `VaultActivitySSEResponse`.
+  - `ResendTeamInvitationSender`. Swift hard-codes `api.resend.com`, so the parity
+    environment runs the logging sender and cannot reach the Resend path or its 500, 502 and
+    503 errors. Check the Resend path on staging before this module goes to production.
+- Self-test (Swift vs Swift) and Swift vs Go: **41 scenarios, 0 differences** (whole suite).
+- Go tests: `internal/modules/teams` (14 tests: routes, rate limit, stream frames, a Spaces
+  write reaching the stream, Resend against a stub server, spec conformance) and
+  `internal/vaultactivity` (2 hub tests).
+- CI: PR #13, run 41804872584. `parity`, `lint`, `test` and `vuln` pass
+  (https://github.com/LuminaVault/Lumina-Vault-Server-Go/actions/runs/41804872584/job/126489291749).
+
+### G2 staging deploy: blocked
+
+- Waits for the pilot (decisions.md D-wave3-early) and for a cross-process vault activity
+  bridge (proposal in PR #13).
