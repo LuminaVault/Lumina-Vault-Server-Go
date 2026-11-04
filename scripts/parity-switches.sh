@@ -37,14 +37,17 @@ run_state() {
     curl -fsS "http://localhost:$port/health" >/dev/null || { echo "server on :$port did not become healthy"; "${COMPOSE[@]}" logs --tail 40 swift-switched go-switched; exit 1; }
   done
   echo "==> state $state"
+  # A difference fails the script at the end, so one run reports every state.
   go run ./parity/cmd/parity compare \
     --swift http://localhost:18083 --swift-db postgres://lv:lv@localhost:15432/parity_swift_switched \
     --go http://localhost:18084 --go-db postgres://lv:lv@localhost:15432/parity_go_switched \
-    --scenarios "parity/scenarios-switched/$state"
+    --scenarios "parity/scenarios-switched/$state" || failed=1
 }
 
+failed=0
 run_state community-off SWITCH_COMMUNITY_ENABLED=false
 run_state posting-off SWITCH_COMMUNITY_POSTING_ENABLED=false
 run_state unconfigured SWITCH_ADMIN_TOKEN= SWITCH_SIGNING_KEY=too-short
 run_state catalog-unseeded SWITCH_NONE=
 "${COMPOSE[@]}" stop swift-switched go-switched >/dev/null 2>&1 || true
+exit "$failed"
