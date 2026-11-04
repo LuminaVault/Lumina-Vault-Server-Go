@@ -6,6 +6,7 @@ import (
 	"lumina/internal/migrations"
 	"lumina/internal/secretbox"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -117,6 +118,55 @@ func TestPGCredentials(t *testing.T) {
 		VALUES (gen_random_uuid(), $1, 'anthropic', 'apiKey', $2, $3)`, foreign, sealed.Ciphertext, sealed.Nonce)
 	require.NoError(t, err)
 	require.False(t, has(ctx, foreign))
+
+	// A pool key that does not open drops the whole provider, good primary or not.
+	badPool := newUser()
+	primary(badPool, "anthropic", str("sk-good"), nil)
+	_, err = pool.Exec(ctx, `INSERT INTO user_provider_credential_pool_keys (id, tenant_id, provider, ciphertext, nonce, created_at)
+		VALUES (gen_random_uuid(), $1, 'anthropic', $2, $3, now())`, badPool, sealed.Ciphertext, sealed.Nonce)
+	require.NoError(t, err)
+	require.False(t, has(ctx, badPool))
+
+	// The xAI SuperGrok marker resolves through the tenant's Hermes container.
+	marker := func(tenant uuid.UUID) {
+		_, err := pool.Exec(ctx, `INSERT INTO user_provider_credentials (id, tenant_id, provider, credential_kind)
+			VALUES (gen_random_uuid(), $1, 'xai', 'oauth')`, tenant)
+		require.NoError(t, err)
+	}
+	container := func(tenant uuid.UUID, s secretbox.Sealed, connected bool) {
+		var at *time.Time
+		if connected {
+			now := time.Now()
+			at = &now
+		}
+		_, err := pool.Exec(ctx, `INSERT INTO hermes_tenant_containers
+			(id, tenant_id, container_name, port, api_server_key_ciphertext, api_server_key_nonce, xai_connected_at)
+			VALUES (gen_random_uuid(), $1, $2, floor(random() * 1000000)::int, $3, $4, $5)`, tenant, tenant.String(), s.Ciphertext, s.Nonce, at)
+		require.NoError(t, err)
+	}
+
+	noContainer := newUser()
+	marker(noContainer)
+	require.False(t, has(ctx, noContainer))
+
+	unlinked := newUser()
+	marker(unlinked)
+	k, err := box.Seal("server-key", unlinked)
+	require.NoError(t, err)
+	container(unlinked, k, false)
+	require.False(t, has(ctx, unlinked))
+
+	linked := newUser()
+	marker(linked)
+	k, err = box.Seal("server-key", linked)
+	require.NoError(t, err)
+	container(linked, k, true)
+	require.True(t, has(ctx, linked))
+
+	linkedBadKey := newUser()
+	marker(linkedBadKey)
+	container(linkedBadKey, sealed, true) // sealed for another tenant: no handle
+	require.False(t, has(ctx, linkedBadKey))
 
 	require.False(t, PGCredentials(pool, nil)(ctx, withKey), "no master key, no store")
 }
