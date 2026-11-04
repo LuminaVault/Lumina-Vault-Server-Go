@@ -66,6 +66,10 @@ func decode(raw []byte, dst any) error {
 	if len(trimmed) == 0 || !json.Valid(trimmed) {
 		return notJSON
 	}
+	// A null root is valueNotFound with an empty coding path (parity CI).
+	if bytes.Equal(trimmed, []byte("null")) {
+		return NewError(http.StatusBadRequest, "Value not found for `` key.")
+	}
 	rv := reflect.ValueOf(dst).Elem()
 	if rv.Kind() != reflect.Struct {
 		if err := json.Unmarshal(trimmed, dst); err != nil {
@@ -222,6 +226,11 @@ func mapErr(key string, err error) error {
 	}
 	var typeErr *json.UnmarshalTypeError
 	if errors.As(err, &typeErr) {
+		// A number that is not an integer is dataCorrupted in Foundation, not a
+		// type mismatch (parity CI).
+		if strings.HasPrefix(typeErr.Value, "number") && swiftType(typeErr.Type) == "Int" {
+			return notJSON
+		}
 		return mismatch(key, swiftType(typeErr.Type))
 	}
 	return notJSON
