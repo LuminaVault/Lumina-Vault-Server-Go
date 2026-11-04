@@ -891,3 +891,25 @@ Beyond the pilot gate (D-wave2-early):
 - Limit of this evidence: these routes see almost no traffic, so a clean watch shows
   the deploy is healthy, not that real clients behave the same.
 
+## Flip batch 2: spaces, kanban, teams
+
+### G2 staging deploy: smoke met 2026-11-04, on `f31b21f`
+
+- Image: `api-go-staging` ran `f31b21f` from 2026-11-04 16:22:07Z, with 0 ERROR lines in
+  the 70 minutes before the smoke.
+- Smoke: throwaway staging users, one per server, against Swift transcripts from CI run
+  41862034099, with Swift staging as the control.
+
+| Scenario | Go mismatches | Swift control | Same set |
+|---|---|---|---|
+| spaces/crud | 4 | 4 | yes |
+| kanban/01-crud | 0 | 0 | yes |
+| teams/01-teams | 0 | 0 | yes |
+| teams/07-activity | 10 | 10 | yes |
+
+- Mismatches are 403 and 404 on seed-only IDs.
+- Run `teams` scenarios one at a time: run together they exceed the 30/min limit, and all
+  32 mismatches were 429s that proved only that the limiter matches.
+- Not observed on a deployed server: a real invitation email, and a pushed activity event.
+- Infra PR: LuminaVaultInfra #547, for the owner to merge.
+
