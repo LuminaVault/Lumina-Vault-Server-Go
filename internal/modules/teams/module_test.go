@@ -128,6 +128,7 @@ type resp struct {
 	code int
 	ct   string
 	body []byte
+	hdr  http.Header
 }
 
 func (r resp) json(t *testing.T) any {
@@ -153,7 +154,7 @@ func (v env) do(user uuid.UUID, method, path, body string, hdr ...string) resp {
 	}
 	rec := httptest.NewRecorder()
 	v.e.ServeHTTP(rec, req)
-	return resp{rec.Code, rec.Header().Get("Content-Type"), rec.Body.Bytes()}
+	return resp{rec.Code, rec.Header().Get("Content-Type"), rec.Body.Bytes(), rec.Header()}
 }
 
 func (v env) ok(user uuid.UUID, method, path, body string) map[string]any {
@@ -595,6 +596,34 @@ func TestActivityStream(t *testing.T) {
 	r = v.do(adam, http.MethodDelete, "/v1/vaults/"+alphaMain+"/members/"+mia.String(), "")
 	require.Equal(t, 204, r.code)
 	require.Contains(t, frame()[2], `"action":"membership.removed"`)
+}
+
+// All three route groups use settingsByUser: one bucket per caller, 30 a
+// minute, checked after identify and before the handler's own checks.
+func TestSettingsByUserRateLimit(t *testing.T) {
+	v := setup(t)
+	paths := []struct{ method, path string }{
+		{http.MethodGet, "/v1/teams"},
+		{http.MethodGet, "/v1/vaults"},
+		{http.MethodPost, "/v1/team-invitations/x/accept"},
+	}
+	for i := range 30 {
+		p := paths[i%len(paths)]
+		require.NotEqual(t, http.StatusTooManyRequests, v.do(out, p.method, p.path, "").code, "request %d", i+1)
+	}
+	for _, p := range paths {
+		r := v.do(out, p.method, p.path, "")
+		v.errIs(r, http.StatusTooManyRequests, "rate limit exceeded")
+		require.NotEmpty(t, r.hdr.Get("Retry-After"))
+	}
+	require.Equal(t, http.StatusOK, v.do(kim, http.MethodGet, "/v1/vaults", "").code, "another caller has its own bucket")
+
+	// Anonymous callers share "ip:anon", and the 429 comes before the 400 and the 401.
+	for range 30 {
+		require.Equal(t, http.StatusBadRequest, v.do(uuid.Nil, http.MethodGet, "/v1/vaults/nope/members", "").code)
+	}
+	v.errIs(v.do(uuid.Nil, http.MethodGet, "/v1/vaults/nope/members", ""), http.StatusTooManyRequests, "rate limit exceeded")
+	require.Equal(t, http.StatusBadRequest, v.do(uuid.Nil, http.MethodGet, "/v1/vaults/nope/members", "", "X-Forwarded-For", "10.75.0.9").code, "X-Forwarded-For picks the bucket")
 }
 
 // Every success body must validate against api/openapi.yaml (decisions.md D2).
