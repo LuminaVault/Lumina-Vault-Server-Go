@@ -40,8 +40,11 @@ func write(t *testing.T, path, content string) {
 	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 }
 
-// The expected results are what Swift printed for the same tree, running
+// Every expectation in this file about what passes, what is refused and the
+// returned path was checked against Swift for the same tree, running
 // rawRoot.appendingPathComponent(relative) and the standardizedFileURL check.
+// That run was on Darwin (Swift 6.4.1). Production's Linux code path was read in
+// swift-foundation at swift-6.3-RELEASE, not run.
 func TestResolveInsideMatchesSwift(t *testing.T) {
 	_, raw := tree(t)
 	passes := map[string]string{
@@ -73,7 +76,7 @@ func TestResolveInsideMatchesSwift(t *testing.T) {
 	for _, relative := range []string{
 		"", ".", "./", "/", "..", "../", "../x.md", "../../../../etc/passwd", "a/../../x.md", "a/b/../../../x.md",
 		"real/..", "real/../",
-		"́x.md", // the root's last "/" joins the mark, so the Character prefix fails
+		"\u0301x.md", // the root's last "/" joins the mark, so the Character prefix fails
 	} {
 		_, err := vaultfiles.ResolveInside(raw, relative)
 		requireWireError(t, err, http.StatusBadRequest, escapes)

@@ -6,7 +6,9 @@ import (
 	"strings"
 )
 
-// Foundation's limits on Linux: MAXSYMLINKS from glibc, and PATH_MAX + 128.
+// Assumed Foundation limits on Linux, not confirmed in its source: MAXSYMLINKS
+// from glibc, and PATH_MAX + 128. They only matter for link chains and paths
+// long enough to fail resolution, which then falls back to the lexical check.
 const (
 	maxSymlinks = 20
 	maxPathSize = 4096 + 128

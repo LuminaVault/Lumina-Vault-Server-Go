@@ -26,15 +26,15 @@ func TestSanitizePathAccepts(t *testing.T) {
 		{"a-b_c.d.md", "a-b_c.d.md"},
 		{"a.MD", "a.MD"},                       // the extension check lowercases, the result keeps its case
 		{"  a.md\n", "a.md"},                   // whitespace is trimmed, not rejected
-		{"​a.md　", "a.md"},                     // Foundation counts U+200B as whitespace
+		{"\u200ba.md\u3000", "a.md"},           // Foundation counts U+200B as whitespace
 		{"日本語/ノート.md", "日本語/ノート.md"},           // alphanumerics is Unicode letters...
-		{"١٢.md", "١٢.md"},                     // ...numbers...
-		{"é.md", "é.md"},                     // ...and marks
-		{"́x.md", "́x.md"},                     // a leading mark passes here; ResolveInside refuses it
+		{"\u0661\u0662.md", "\u0661\u0662.md"}, // ...numbers...
+		{"e\u0301.md", "e\u0301.md"},           // ...and marks
+		{"\u0301x.md", "\u0301x.md"},           // a leading mark passes here; ResolveInside refuses it
 		{"..md", "..md"},                       // a plain name on Linux (Darwin sees no extension)
 		{"a..md", "a..md"},                     //
 		{"...md", "...md"},                     // not a dot segment
-		{"a.marKdown", "a.marKdown"},           // the Kelvin sign lowercases to k
+		{"a.mar\u212adown", "a.mar\u212adown"}, // the Kelvin sign lowercases to k
 		{"_deleted_1_a.md", "_deleted_1_a.md"}, // the trash prefix isn't reserved
 	}
 	for _, c := range cases {
@@ -65,7 +65,7 @@ func TestSanitizePathLengthCountsCharacters(t *testing.T) {
 	requireWireError(t, err, http.StatusBadRequest, "path empty or too long")
 
 	// 509 Characters of two scalars each: 1018 code points, still 512 Characters.
-	marks := strings.Repeat("é", 509) + ext
+	marks := strings.Repeat("e\u0301", 509) + ext
 	_, err = vaultfiles.SanitizePath(marks)
 	require.NoError(t, err)
 
@@ -86,7 +86,7 @@ func TestSanitizePathRejects(t *testing.T) {
 	}{
 		{"empty", "", tooLong},
 		{"only spaces", " \t\n", tooLong},
-		{"only ZWSP", "​", tooLong},
+		{"only ZWSP", "\u200b", tooLong},
 
 		{"absolute", "/etc/passwd.md", rel},
 		{"absolute double", "//etc/passwd.md", rel},
@@ -117,11 +117,11 @@ func TestSanitizePathRejects(t *testing.T) {
 		{"nul", "a\x00.md", chars},
 		{"backslash", "..\\x.md", chars},
 		{"backslash separator", "a\\b.md", chars},
-		{"fullwidth", "．．／x.md", chars},
-		{"fullwidth slash", "a／b.md", chars},
-		{"division slash", "a∕b.md", chars},
-		{"fraction slash", "a⁄b.md", chars},
-		{"one dot leader", "․․/x.md", chars},
+		{"fullwidth", "\uff0e\uff0e\uff0fx.md", chars},
+		{"fullwidth slash", "a\uff0fb.md", chars},
+		{"division slash", "a\u2215b.md", chars},
+		{"fraction slash", "a\u2044b.md", chars},
+		{"one dot leader", "\u2024\u2024/x.md", chars},
 		{"tilde", "~/x.md", chars},
 		{"space", "a b.md", chars},
 		{"newline inside", "a\nb.md", chars},
@@ -130,8 +130,8 @@ func TestSanitizePathRejects(t *testing.T) {
 		{"overlong slash", "a\xc0\xafb.md", chars},
 		// A slash that a combining mark joins isn't Swift's "/" Character: no
 		// "must be relative" and no split, but the scalar itself is still illegal.
-		{"slash with a mark, leading", "/́x.md", chars},
-		{"slash with a mark, middle", "a/́b.md", chars},
+		{"slash with a mark, leading", "/\u0301x.md", chars},
+		{"slash with a mark, middle", "a/\u0301b.md", chars},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -153,9 +153,9 @@ func TestSanitizePathRejectsExtensions(t *testing.T) {
 		{"a.EXE", "exe"}, // the message has it lowercased
 		{"a.md.exe", "exe"},
 		{"a.tar.gz", "gz"},
-		{"x.ḿd", "ḿd"},
-		{"x.́md", ""},     // that dot is part of a larger Character
-		{"a.gİf", "gi̇f"}, // full case mapping: not "gif"
+		{"x.m\u0301d", "m\u0301d"},
+		{"x.\u0301md", ""},          // that dot is part of a larger Character
+		{"a.g\u0130f", "gi\u0307f"}, // full case mapping: not "gif"
 	}
 	for _, c := range cases {
 		_, err := vaultfiles.SanitizePath(c.raw)
@@ -182,7 +182,7 @@ func TestPathExtensionAndLastComponent(t *testing.T) {
 		{"a.md/", "md", "a.md"},
 		{"a//b.md", "md", "b.md"},
 		{"/a/b.png", "png", "b.png"},
-		{"x.́md", "", "x.́md"}, // corelibs compares Characters; Darwin says "́md"
+		{"x.\u0301md", "", "x.\u0301md"}, // corelibs compares Characters; Darwin says "\u0301md"
 	}
 	for _, c := range cases {
 		require.Equal(t, c.ext, vaultfiles.PathExtension(c.path), "extension of %+q", c.path)
@@ -226,10 +226,10 @@ func TestValidateContentTypeForms(t *testing.T) {
 		"TEXT/Markdown",
 		"  text/markdown  ",
 		"\ttext/markdown\t;x",
-		";text/markdown",   // Swift's split drops the empty piece
-		";;text/markdown;", //
-		";text/markdown",   // U+037E is canonically ";"
-		"​text/markdown ",  // CharacterSet.whitespaces has both
+		";text/markdown",            // Swift's split drops the empty piece
+		";;text/markdown;",          //
+		"\u037etext/markdown",       // U+037E is canonically ";"
+		"\u200btext/markdown\u00a0", // CharacterSet.whitespaces has both
 	} {
 		require.NoError(t, vaultfiles.ValidateContentType(ct, "md"), "%+q", ct)
 	}
@@ -245,7 +245,7 @@ func TestValidateContentTypeRejects(t *testing.T) {
 		{";", "md", ";"},                       // no first piece: the whole value, lowercased
 		{" ;text/plain", "md", ""},             // the first piece is " ", which trims to nothing
 		{"\ntext/plain", "md", "\ntext/plain"}, // .whitespaces has no newlines
-		{"applİcation/pdf", "pdf", "appli̇cation/pdf"},
+		{"appl\u0130cation/pdf", "pdf", "appli\u0307cation/pdf"},
 	}
 	for _, c := range cases {
 		err := vaultfiles.ValidateContentType(c.contentType, c.ext)

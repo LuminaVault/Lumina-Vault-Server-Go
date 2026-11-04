@@ -12,8 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// swiftJSON is what Swift's JSONEncoder wrote for these fields (Swift 6, default
-// date strategy, as Fluent stores the column).
+// swiftJSON is what Swift's JSONEncoder wrote for these fields (Swift 6.4.1 on
+// Darwin, default date strategy, the encoder Fluent stores the column with).
 const swiftJSON = `{"dueAt":784000000.123456,"tags":[],"title":"a\/b'é<","isTodo":true,"projectID":"AAAAAAAA-0000-4000-8000-00000000ABCD"}`
 
 var project = uuid.MustParse("aaaaaaaa-0000-4000-8000-00000000abcd")
@@ -93,7 +93,8 @@ func TestMetadataDateRoundTripsTheDouble(t *testing.T) {
 	}
 }
 
-// Each expectation is what Swift's JSONDecoder did with the same text.
+// Each expectation is what Swift's JSONDecoder did with the same text (Swift
+// 6.4.1 on Darwin), decoding a struct with these fields.
 func TestMetadataDecodeIsAsStrictAsSwift(t *testing.T) {
 	for _, ok := range []string{
 		`{}`,
@@ -141,7 +142,7 @@ func TestParseSidecar(t *testing.T) {
 		require.NoError(t, err)
 		return string(out)
 	}
-	// The doubles are what Swift's .iso8601 strategy produced.
+	// The doubles are what Swift's .iso8601 strategy produced, on Darwin.
 	require.Equal(t, `{"dueAt":815486400}`, seconds(vaultfiles.ParseSidecar(`{"dueAt":"2026-11-04T12:00:00Z"}`)))
 	require.Equal(t, `{"dueAt":815486400.123}`, seconds(vaultfiles.ParseSidecar(`{"dueAt":"2026-11-04T12:00:00.123Z"}`)))
 	require.Equal(t, `{"dueAt":815482800}`, seconds(vaultfiles.ParseSidecar(`{"dueAt":"2026-11-04T12:00:00+01:00"}`)))

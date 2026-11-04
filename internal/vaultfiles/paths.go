@@ -90,7 +90,7 @@ func ValidateContentType(contentType, ext string) error {
 	mime := Lowercased(contentType)
 	// Swift's split drops empty pieces, so ";text/plain" is text/plain and ";"
 	// has no first piece and stays as it is.
-	for _, piece := range splitCharacter(contentType, ";", ";") {
+	for _, piece := range splitCharacter(contentType, ";", "\u037e") {
 		if piece != "" {
 			mime = Lowercased(strings.TrimFunc(piece, isWhitespace))
 			break
@@ -137,10 +137,10 @@ func LastPathComponent(path string) string {
 
 // Lowercased is Swift's String.lowercased(): the standard library maps each
 // scalar with its full lowercase mapping and no context. Go's strings.ToLower
-// uses the simple mapping, which differs only for U+0130: "gİf" must not
+// uses the simple mapping, which differs only for U+0130: "g\u0130f" must not
 // become the allowed extension "gif".
 func Lowercased(s string) string {
-	return strings.ToLower(strings.ReplaceAll(s, "İ", "i̇"))
+	return strings.ToLower(strings.ReplaceAll(s, "\u0130", "i\u0307"))
 }
 
 func badRequest(message string) *wire.Error {
@@ -153,9 +153,13 @@ func unsupportedExtension(ext string) *wire.Error {
 
 // notAllowedInSegment is the complement of CharacterSet.alphanumerics plus
 // "._-". Foundation documents alphanumerics as the General Categories L*, M*
-// and N*, so non-ASCII letters and combining marks are legal. Foundation and
-// Go may differ on code points that are new in recent Unicode versions; those
-// are all letters, marks or numbers, never separators or dots.
+// and N*, so non-ASCII letters and combining marks are legal.
+//
+// Measured against Foundation on Darwin (Swift 6.4.1) with Go's Unicode 17
+// tables: Foundation's set is a subset of this one, and 6,227 code points are
+// only here, all letters, marks or numbers by Go's tables. So this can accept a
+// name in a recent script that Swift refuses, but no dot or separator. Linux's
+// CoreFoundation tables, the ones production uses, were not measured.
 func notAllowedInSegment(r rune) bool {
 	if r == '.' || r == '_' || r == '-' {
 		return false
@@ -185,7 +189,7 @@ func graphemes(s string) []string {
 	return out
 }
 
-// hasPrefix is Swift's String.hasPrefix, which compares Characters: "/́a"
+// hasPrefix is Swift's String.hasPrefix, which compares Characters: "/\u0301a"
 // does not start with "/", because that slash is part of a larger Character.
 func hasPrefix(s, prefix string) bool {
 	if !strings.HasPrefix(s, prefix) {
