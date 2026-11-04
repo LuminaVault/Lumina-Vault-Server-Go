@@ -40,6 +40,20 @@ type Config struct {
 	EmbeddingProvider               string `env:"EMBEDDING_PROVIDER" envDefault:"deterministic"`
 	EmbeddingMonthlyTokenCapDefault int64  `env:"EMBEDDING_MONTHLY_TOKEN_CAP_DEFAULT" envDefault:"2000000"`
 	HermesDefaultModel              string `env:"HERMES_DEFAULT_MODEL" envDefault:"hermes-3"`
+	// Embedding chain (internal/embedding). The OpenAI and OpenRouter keys are the
+	// LLM routing's own, so there is no second secret to seal. Note the sealed
+	// LLM_PROVIDER_OPENAI_APIKEY is not LLM_PROVIDER_OPENAI_API_KEY: Swift's registry
+	// reads only the latter for embeddings, so Go does too.
+	EmbeddingFallbackChain     string `env:"EMBEDDING_FALLBACK_CHAIN"`
+	EmbeddingNomicAPIKey       string `env:"EMBEDDING_NOMIC_API_KEY"`
+	EmbeddingOpenRouterBaseURL string `env:"EMBEDDING_OPEN_ROUTER_BASE_URL"`
+	EmbeddingOpenRouterModel   string `env:"EMBEDDING_OPEN_ROUTER_MODEL"`
+	LLMOpenAIAPIKey            string `env:"LLM_PROVIDER_OPENAI_API_KEY"`
+	LLMOpenAIBaseURL           string `env:"LLM_PROVIDER_OPENAI_BASE_URL"`
+	LLMOpenRouterAPIKey        string `env:"LLM_PROVIDER_OPEN_ROUTER_API_KEY"`
+	LLMOpenRouterAPIKeyLegacy  string `env:"LLM_PROVIDER_OPENROUTER_APIKEY"`
+	OpenRouterAPIKey           string `env:"OPENROUTER_API_KEY"`
+	OpenRouterFallbackAPIKey   string `env:"OPENROUTER_FALLBACK_API_KEY"`
 	// Calendar and Gmail (calendar, mail modules): oauth.googleCalendar.* and meeting.brief.maxDistance.
 	GoogleCalendarClientID     string  `env:"OAUTH_GOOGLE_CALENDAR_CLIENT_ID"`
 	GoogleCalendarClientSecret string  `env:"OAUTH_GOOGLE_CALENDAR_CLIENT_SECRET"`
