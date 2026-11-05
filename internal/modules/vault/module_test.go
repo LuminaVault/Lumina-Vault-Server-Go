@@ -1017,14 +1017,6 @@ func TestIndexRoutes(t *testing.T) {
 	})
 }
 
-func TestDecodeUTF8(t *testing.T) {
-	got, ok := decodeUTF8([]byte("\xef\xbb\xbf\xef\xbb\xbfx"))
-	require.True(t, ok)
-	require.Equal(t, "\ufeffx", got)
-	_, ok = decodeUTF8([]byte{0xff, 0xff})
-	require.False(t, ok)
-}
-
 func TestRawPathHelpers(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/x/y", nil)
 	req.RequestURI = "/v1/vault/files//a%20b.md/?q=1"

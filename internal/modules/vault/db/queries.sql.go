@@ -37,22 +37,6 @@ func (q *Queries) AllPaths(ctx context.Context, tenantID uuid.UUID) ([]string, e
 	return items, nil
 }
 
-const chunkCount = `-- name: ChunkCount :one
-SELECT COUNT(*) FROM memory_chunks WHERE tenant_id = $1 AND vault_file_id = $2
-`
-
-type ChunkCountParams struct {
-	TenantID    uuid.UUID
-	VaultFileID *uuid.UUID
-}
-
-func (q *Queries) ChunkCount(ctx context.Context, arg ChunkCountParams) (int64, error) {
-	row := q.db.QueryRow(ctx, chunkCount, arg.TenantID, arg.VaultFileID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
 const danglingLinks = `-- name: DanglingLinks :many
 SELECT source_path, source_line, raw_target, resolution_state
 FROM vault_links
@@ -143,75 +127,6 @@ func (q *Queries) ExportMemories(ctx context.Context, arg ExportMemoriesParams) 
 	return items, nil
 }
 
-const headingRows = `-- name: HeadingRows :many
-SELECT heading_path::text AS heading_path_json, MIN(start_line)::int AS start_line
-FROM memory_chunks
-WHERE tenant_id = $1 AND vault_file_id = $2
-GROUP BY heading_path::text
-ORDER BY MIN(start_line)
-`
-
-type HeadingRowsParams struct {
-	TenantID    uuid.UUID
-	VaultFileID *uuid.UUID
-}
-
-type HeadingRowsRow struct {
-	HeadingPathJson string
-	StartLine       int32
-}
-
-func (q *Queries) HeadingRows(ctx context.Context, arg HeadingRowsParams) ([]HeadingRowsRow, error) {
-	rows, err := q.db.Query(ctx, headingRows, arg.TenantID, arg.VaultFileID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []HeadingRowsRow
-	for rows.Next() {
-		var i HeadingRowsRow
-		if err := rows.Scan(&i.HeadingPathJson, &i.StartLine); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const indexCounts = `-- name: IndexCounts :one
-SELECT
-    (SELECT COUNT(*) FROM vault_files v WHERE v.tenant_id = $1)::bigint AS documents,
-    (SELECT COUNT(*) FROM memory_chunks c WHERE c.tenant_id = $1)::bigint AS chunks,
-    (SELECT COUNT(*) FROM memories m WHERE m.tenant_id = $1)::bigint AS memories
-`
-
-type IndexCountsRow struct {
-	Documents int64
-	Chunks    int64
-	Memories  int64
-}
-
-func (q *Queries) IndexCounts(ctx context.Context, tenantID uuid.UUID) (IndexCountsRow, error) {
-	row := q.db.QueryRow(ctx, indexCounts, tenantID)
-	var i IndexCountsRow
-	err := row.Scan(&i.Documents, &i.Chunks, &i.Memories)
-	return i, err
-}
-
-const lastIndexedAt = `-- name: LastIndexedAt :one
-SELECT MAX(created_at)::timestamptz FROM memory_chunks WHERE tenant_id = $1
-`
-
-func (q *Queries) LastIndexedAt(ctx context.Context, tenantID uuid.UUID) (pgtype.Timestamptz, error) {
-	row := q.db.QueryRow(ctx, lastIndexedAt, tenantID)
-	var column_1 pgtype.Timestamptz
-	err := row.Scan(&column_1)
-	return column_1, err
-}
-
 const lintFiles = `-- name: LintFiles :many
 SELECT path, size_bytes FROM vault_files
 WHERE tenant_id = $1
@@ -265,86 +180,6 @@ func (q *Queries) MarkInitialized(ctx context.Context, arg MarkInitializedParams
 	return updated_at, err
 }
 
-const neighboursByPath = `-- name: NeighboursByPath :many
-SELECT id, path FROM vault_files
-WHERE tenant_id = $1 AND path = ANY($2::text[])
-ORDER BY path
-`
-
-type NeighboursByPathParams struct {
-	TenantID uuid.UUID
-	Column2  []string
-}
-
-type NeighboursByPathRow struct {
-	ID   uuid.UUID
-	Path string
-}
-
-func (q *Queries) NeighboursByPath(ctx context.Context, arg NeighboursByPathParams) ([]NeighboursByPathRow, error) {
-	rows, err := q.db.Query(ctx, neighboursByPath, arg.TenantID, arg.Column2)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []NeighboursByPathRow
-	for rows.Next() {
-		var i NeighboursByPathRow
-		if err := rows.Scan(&i.ID, &i.Path); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const siblings = `-- name: Siblings :many
-SELECT id, path FROM vault_files
-WHERE tenant_id = $1 AND space_id = $2 AND id <> $3
-ORDER BY path
-LIMIT $4
-`
-
-type SiblingsParams struct {
-	TenantID uuid.UUID
-	SpaceID  *uuid.UUID
-	ID       uuid.UUID
-	Limit    int32
-}
-
-type SiblingsRow struct {
-	ID   uuid.UUID
-	Path string
-}
-
-func (q *Queries) Siblings(ctx context.Context, arg SiblingsParams) ([]SiblingsRow, error) {
-	rows, err := q.db.Query(ctx, siblings,
-		arg.TenantID,
-		arg.SpaceID,
-		arg.ID,
-		arg.Limit,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []SiblingsRow
-	for rows.Next() {
-		var i SiblingsRow
-		if err := rows.Scan(&i.ID, &i.Path); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const spaceIDBySlug = `-- name: SpaceIDBySlug :one
 SELECT id FROM spaces WHERE tenant_id = $1 AND slug = $2 LIMIT 1
 `
@@ -375,72 +210,6 @@ func (q *Queries) SpaceSlug(ctx context.Context, arg SpaceSlugParams) (string, e
 	var slug string
 	err := row.Scan(&slug)
 	return slug, err
-}
-
-const stalePaths = `-- name: StalePaths :many
-SELECT v.path
-FROM vault_files v
-JOIN (
-    SELECT c.vault_file_id, MAX(c.created_at) AS indexed_at
-    FROM memory_chunks c
-    WHERE c.tenant_id = $1 AND c.vault_file_id IS NOT NULL
-    GROUP BY c.vault_file_id
-) c ON c.vault_file_id = v.id
-WHERE v.tenant_id = $1
-  AND v.processed_at IS NOT NULL
-  AND v.processed_at > c.indexed_at
-ORDER BY v.path
-`
-
-func (q *Queries) StalePaths(ctx context.Context, tenantID uuid.UUID) ([]string, error) {
-	rows, err := q.db.Query(ctx, stalePaths, tenantID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []string
-	for rows.Next() {
-		var path string
-		if err := rows.Scan(&path); err != nil {
-			return nil, err
-		}
-		items = append(items, path)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const unindexedPaths = `-- name: UnindexedPaths :many
-SELECT v.path
-FROM vault_files v
-WHERE v.tenant_id = $1
-  AND NOT EXISTS (
-      SELECT 1 FROM memory_chunks c
-      WHERE c.tenant_id = v.tenant_id AND c.vault_file_id = v.id
-  )
-ORDER BY v.path
-`
-
-func (q *Queries) UnindexedPaths(ctx context.Context, tenantID uuid.UUID) ([]string, error) {
-	rows, err := q.db.Query(ctx, unindexedPaths, tenantID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []string
-	for rows.Next() {
-		var path string
-		if err := rows.Scan(&path); err != nil {
-			return nil, err
-		}
-		items = append(items, path)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const user = `-- name: User :one

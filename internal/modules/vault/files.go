@@ -21,7 +21,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -259,7 +258,7 @@ func (m *Module) readFile(r *http.Request) ([]byte, error) {
 // no vault route writes memory_chunks, and a re-upload's UpdateContent deletes the
 // note's chunks until something rebuilds them.
 func (m *Module) upsertNoteMemory(ctx context.Context, tenant, fileID uuid.UUID, spaceID *uuid.UUID, path string, data []byte, sidecar *vaultfiles.Metadata) *wire.UUID {
-	content, ok := decodeUTF8(data)
+	content, ok := vaultfiles.DecodeUTF8(data)
 	if m.embeddings == nil || !ok || content == "" {
 		return nil
 	}
@@ -269,16 +268,6 @@ func (m *Module) upsertNoteMemory(ctx context.Context, tenant, fileID uuid.UUID,
 		return nil
 	}
 	return &wire.UUID{UUID: id}
-}
-
-// decodeUTF8 is `String(data:encoding: .utf8)` and `String(contentsOf:encoding:
-// .utf8)`, which on Linux drop one leading byte order mark (parity: vault/05-notes,
-// vault/07-index).
-func decodeUTF8(data []byte) (string, bool) {
-	if !utf8.Valid(data) {
-		return "", false
-	}
-	return strings.TrimPrefix(string(data), "\ufeff"), true
 }
 
 func (m *Module) writeNoteMemory(ctx context.Context, tenant, fileID uuid.UUID, spaceID *uuid.UUID, content string, sidecar *vaultfiles.Metadata) (uuid.UUID, error) {
