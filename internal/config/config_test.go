@@ -76,6 +76,15 @@ func TestLoadCSVAndDefaults(t *testing.T) {
 	require.False(t, cfg.JobEnabled("calendar-sync"))
 }
 
+func TestLoadUsageAndSelfImprovementDefaults(t *testing.T) {
+	cfg, err := config.LoadFrom(map[string]string{})
+	require.NoError(t, err)
+	require.InDelta(t, 1.0, cfg.UsageFreeMtokDaily, 0)
+	require.InDelta(t, 0.2, cfg.UsagePerSkillMtokDaily, 0)
+	require.Equal(t, "hermes-3-small", cfg.UsageDegradeModel)
+	require.True(t, cfg.SelfImprovementEnabled)
+}
+
 func TestLoadEmptyOriginsMeansNone(t *testing.T) {
 	cfg, err := config.LoadFrom(map[string]string{})
 	require.NoError(t, err)
