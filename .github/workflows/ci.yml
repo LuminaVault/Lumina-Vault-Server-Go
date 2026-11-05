@@ -48,7 +48,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - id: swift
-        run: echo "sha=$(cut -d: -f2 parity/SWIFT_IMAGE)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "sha=$(cut -d: -f2 parity/SWIFT_IMAGE)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
         with:
           repository: LuminaVault/LuminaVaultServer
