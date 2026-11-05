@@ -202,7 +202,7 @@ func TestSSEFramesAreCompared(t *testing.T) {
 
 func TestReadFramesParsing(t *testing.T) {
 	in := "event: x\r\ndata: line1\r\ndata: line2\r\n\r\nretry: 10\n\nno-colon\n\ndata: unterminated"
-	v, err := readFrames(bytes.NewBufferString(in), 10, normalize.New(), nil)
+	v, err := readFrames(bytes.NewBufferString(in), 10, nil, normalize.New(), nil)
 	require.NoError(t, err)
 	require.Equal(t, []any{
 		map[string]any{"fields": "event: ,data: ,data: ", "event": "x", "data": "line1\nline2"},

@@ -106,7 +106,16 @@ func runStep(ctx context.Context, sc Scenario, st Step, t Target, client *http.C
 	if err != nil {
 		return res, err
 	}
-	resp, err := client.Do(req)
+	var key string
+	doer := client
+	if st.WS != nil {
+		key, err = prepareUpgrade(req)
+		if err != nil {
+			return res, err
+		}
+		doer = upgradeClient(client)
+	}
+	resp, err := doer.Do(req)
 	if err != nil {
 		return res, err
 	}
@@ -118,6 +127,19 @@ func runStep(ctx context.Context, sc Scenario, st Step, t Target, client *http.C
 		triggerRes int
 	)
 	switch {
+	case st.WS != nil && resp.StatusCode == http.StatusSwitchingProtocols:
+		body, triggerRes, err = runSocket(reqCtx, ctx, st, t, client, resp, key, vars, norm, ignore)
+		if err != nil {
+			return res, err
+		}
+	case st.WS != nil:
+		// Refused: compare the answer like any other.
+		if raw, err = io.ReadAll(resp.Body); err != nil {
+			return res, err
+		}
+		if body, err = norm.Body(raw, ignore); err != nil {
+			return res, err
+		}
 	case st.Frames > 0:
 		// Smoke checks statuses on a deployed server, so it doesn't need the write.
 		if st.Trigger != nil && t.Token == "" {
@@ -125,7 +147,7 @@ func runStep(ctx context.Context, sc Scenario, st Step, t Target, client *http.C
 				return res, fmt.Errorf("trigger: %w", err)
 			}
 		}
-		if body, err = readFrames(resp.Body, st.Frames, norm, ignore); err != nil {
+		if body, err = readFrames(resp.Body, st.Frames, st.Coalesce, norm, ignore); err != nil {
 			return res, err
 		}
 	case st.Stream:

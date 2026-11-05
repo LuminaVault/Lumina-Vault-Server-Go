@@ -1,0 +1,18 @@
+# Self-test of the ws step on Swift (scripts/parity-switches.sh, llm_selftest). Lives
+# here because Go has no /v1/ws until group 5J, which moves it to parity/scenarios.
+module: ws
+steps:
+  - name: no token, no socket
+    request: {method: GET, path: /v1/ws}
+    ws: {}
+  - name: the guard drops what it refuses and relays the rest
+    as: alice
+    request: {method: GET, path: /v1/ws}
+    headers: [Upgrade]
+    ws:
+      send:
+        - not json
+        - '{"no":"type"}'
+        - '{"type":"hello","n":1}'
+    frames: 1
+    framesTimeout: 5s
