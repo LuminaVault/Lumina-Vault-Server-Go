@@ -123,3 +123,33 @@ func TestBYOHermesRequireHTTPS(t *testing.T) {
 		}
 	}
 }
+
+// Ports the env half of LLM/Transcribe/TranscribeProviderConfigTests.swift.
+func TestTranscribeEnvSpellings(t *testing.T) {
+	cfg, err := config.LoadFrom(map[string]string{
+		"TRANSCRIBE_PROVIDER_OPENAI_BASE_URL":                     "https://api.example.com/v1",
+		"TRANSCRIBE_PROVIDER_OPENAI_API_KEY":                      "sk-test",
+		"TRANSCRIBE_PROVIDER_OPENAI_MODEL":                        "whisper-1",
+		"TRANSCRIBE_RATECARD_OPENAI_IMPUTED_USD_PER_AUDIO_MINUTE": "0.006",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.TranscribeOpenAIBaseURL != "https://api.example.com/v1" || cfg.TranscribeOpenAIAPIKey != "sk-test" ||
+		cfg.TranscribeOpenAIModel != "whisper-1" || cfg.TranscribeOpenAIImputedPerMin != 0.006 {
+		t.Errorf("canonical spellings didn't load: %+v", cfg)
+	}
+
+	// Silent if it breaks: the variable is set, nothing reads it, and the
+	// deployment keeps using the in-cluster default while its .env says otherwise.
+	cfg, err = config.LoadFrom(map[string]string{
+		"TRANSCRIBE_PROVIDER_OPENAI_BASEURL": "https://api.example.com/v1",
+		"TRANSCRIBE_PROVIDER_OPENAI_APIKEY":  "sk-test",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.TranscribeOpenAIBaseURL != "" || cfg.TranscribeOpenAIAPIKey != "" {
+		t.Errorf("flattened spellings loaded: %q %q", cfg.TranscribeOpenAIBaseURL, cfg.TranscribeOpenAIAPIKey)
+	}
+}
