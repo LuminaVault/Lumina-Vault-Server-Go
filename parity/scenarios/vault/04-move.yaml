@@ -1,0 +1,78 @@
+# Move: bodies first, then a file with a memory, a chunk and a link that follow it.
+module: vault
+steps:
+  - name: no token
+    request: {method: POST, path: /v1/vault/files/move, json: {path: inbox/chunky.md, newPath: x/y.md}}
+  - name: bad token
+    request: {method: POST, path: /v1/vault/files/move, json: {path: inbox/chunky.md, newPath: x/y.md}, headers: {Authorization: Bearer not-a-token}}
+  - name: malformed json
+    as: vault_move
+    request: {method: POST, path: /v1/vault/files/move, raw: "{"}
+  - name: empty body
+    as: vault_move
+    request: {method: POST, path: /v1/vault/files/move, raw: ""}
+  - name: array body
+    as: vault_move
+    request: {method: POST, path: /v1/vault/files/move, raw: "[]"}
+  - name: null body
+    as: vault_move
+    request: {method: POST, path: /v1/vault/files/move, raw: "null"}
+  - name: missing newPath
+    as: vault_move
+    request: {method: POST, path: /v1/vault/files/move, json: {path: inbox/chunky.md}}
+  - name: missing path
+    as: vault_move
+    request: {method: POST, path: /v1/vault/files/move, json: {newPath: x/y.md}}
+  - name: null path
+    as: vault_move
+    request: {method: POST, path: /v1/vault/files/move, raw: '{"path":null,"newPath":"x/y.md"}'}
+  - name: wrong type
+    as: vault_move
+    request: {method: POST, path: /v1/vault/files/move, raw: '{"path":1,"newPath":"x/y.md"}'}
+  - name: the spec's field names
+    as: vault_move
+    request: {method: POST, path: /v1/vault/files/move, json: {from: inbox/chunky.md, to: x/y.md}}
+  - name: traversal in path
+    as: vault_move
+    request: {method: POST, path: /v1/vault/files/move, json: {path: ../a.md, newPath: x/y.md}}
+  - name: traversal in newPath
+    as: vault_move
+    request: {method: POST, path: /v1/vault/files/move, json: {path: inbox/chunky.md, newPath: ../y.md}}
+  - name: identical
+    as: vault_move
+    request: {method: POST, path: /v1/vault/files/move, json: {path: inbox/chunky.md, newPath: inbox/chunky.md}}
+  - name: absent
+    as: vault_move
+    request: {method: POST, path: /v1/vault/files/move, json: {path: inbox/none.md, newPath: x/y.md}}
+  - name: as another tenant
+    as: vault_out
+    request: {method: POST, path: /v1/vault/files/move, json: {path: inbox/chunky.md, newPath: x/y.md}}
+  - name: give the seeded row a file, keeping its id
+    as: vault_move
+    request: {method: POST, path: "/v1/vault/files?path=chunky.md", raw: "chunky file", headers: {Content-Type: text/markdown}}
+  - name: and the other
+    as: vault_move
+    request: {method: POST, path: "/v1/vault/files?path=gone.md", raw: "gone file", headers: {Content-Type: text/markdown}}
+    snapshot: [vault_files, memory_chunks, memories, vault_links]
+    files: [vault_move]
+  - name: move a row with no file
+    as: vault_move
+    request: {method: POST, path: /v1/vault/files/move, json: {path: inbox/ghost.md, newPath: x/ghost.md}}
+    snapshot: [vault_files]
+    files: [vault_move]
+  - name: move
+    as: vault_move
+    request: {method: POST, path: /v1/vault/files/move, json: {path: inbox/chunky.md, newPath: deep/er/moved.md}}
+    snapshot: [vault_files, memory_chunks, memories, vault_links]
+    files: [vault_move]
+  - name: moved onto an existing file
+    as: vault_move
+    request: {method: POST, path: /v1/vault/files/move, json: {path: deep/er/moved.md, newPath: inbox/gone.md}}
+    snapshot: [vault_files, memory_chunks]
+    files: [vault_move]
+  - name: delete cascades to its chunk and link, and takes its memory
+    as: vault_move
+    request: {method: DELETE, path: /v1/vault/files/inbox/gone.md}
+    snapshot: [vault_files, memory_chunks, memories, vault_links]
+    files: [vault_move]
+    filesMask: ['_deleted_\d+_']

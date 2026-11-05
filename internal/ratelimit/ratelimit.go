@@ -79,6 +79,14 @@ var CaptureByUser = Policy{Name: "captureByUser", Max: 60, Window: 60 * time.Sec
 // IP. `me` and /v1/me/suggestions share it.
 var MeTodayByUser = Policy{Name: "meTodayByUser", Max: 60, Window: 60 * time.Second}
 
+// VaultUploadByUser is RateLimitPolicy.vaultUploadByUser: 30 per 60 s, keyed by
+// user or IP, on every route of the /v1/vault/files group.
+var VaultUploadByUser = Policy{Name: "vaultUploadByUser", Max: 30, Window: 60 * time.Second}
+
+// VaultExportByUser is RateLimitPolicy.vaultExportByUser: 3 per 300 s on the
+// standard tier scale, keyed by user or IP.
+var VaultExportByUser = Policy{Name: "vaultExportByUser", Max: 3, Window: 300 * time.Second, TierScale: StandardTierScale}
+
 // QueryByUser is RateLimitPolicy.queryByUser: 30 per 60 s on the standard tier
 // scale. The calendar brief and /v1/query share it.
 var QueryByUser = Policy{Name: "queryByUser", Max: 30, Window: 60 * time.Second, TierScale: StandardTierScale}

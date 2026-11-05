@@ -1,0 +1,37 @@
+# Staging smoke: a fresh user's whole cycle, with no seed ids, no second user and no
+# provider (no note=true, so nothing embeds). Paths are unique to this file, so a
+# repeat on the same user overwrites and still returns the same statuses.
+module: vault
+smoke: true
+steps:
+  - name: status
+    as: vault_smoke
+    request: {method: GET, path: /v1/vault/status}
+    ignore: [$.createdAt, $.initialized, $.defaultSpaceSlugs]
+  - name: create
+    as: vault_smoke
+    request: {method: POST, path: /v1/vault/create}
+  - name: upload
+    as: vault_smoke
+    request: {method: POST, path: "/v1/vault/files?path=smoke-file.md", raw: "# smoke\n", headers: {Content-Type: text/markdown}}
+  - name: list
+    as: vault_smoke
+    request: {method: GET, path: "/v1/vault/files?q=smoke-file&limit=1"}
+  - name: read
+    as: vault_smoke
+    request: {method: GET, path: /v1/vault/files/inbox/smoke-file.md}
+  - name: index
+    as: vault_smoke
+    request: {method: GET, path: /v1/vault/index}
+  - name: lint
+    as: vault_smoke
+    request: {method: GET, path: /v1/vault/lint}
+  - name: move
+    as: vault_smoke
+    request: {method: POST, path: /v1/vault/files/move, json: {path: inbox/smoke-file.md, newPath: smoke/moved.md}}
+  - name: delete
+    as: vault_smoke
+    request: {method: DELETE, path: /v1/vault/files/smoke/moved.md}
+  - name: read after delete
+    as: vault_smoke
+    request: {method: GET, path: /v1/vault/files/smoke/moved.md}

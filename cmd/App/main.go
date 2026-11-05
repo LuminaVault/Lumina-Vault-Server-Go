@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"lumina/internal/achievementsink"
+	"lumina/internal/apns"
 	"lumina/internal/auth"
 	"lumina/internal/config"
 	"lumina/internal/db"
@@ -39,7 +41,9 @@ import (
 	"lumina/internal/modules/sessions"
 	"lumina/internal/modules/spaces"
 	"lumina/internal/modules/teams"
+	"lumina/internal/modules/vault"
 	"lumina/internal/modules/vision"
+	"lumina/internal/onboardlatch"
 	"lumina/internal/posthog"
 	"lumina/internal/ratelimit"
 	"lumina/internal/secretbox"
@@ -211,6 +215,15 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		if m := marketplace.New(pool, cfg.LVSecretMasterKey, pluginOptions, identify, limits, paths); m != nil { // nil without LV_SECRET_MASTER_KEY, as in Swift
 			deps.Modules = append(deps.Modules, m)
 		}
+		sink, stopSink := startAchievementSink(ctx, pool, cfg)
+		defer stopSink()
+		deps.Modules = append(deps.Modules, vault.New(pool, vault.Options{
+			Paths: paths, HermesDataRoot: cfg.HermesDataRoot, Identify: identify, Limits: limits,
+			Spaces: spaces.New(pool, paths, identify), Embeddings: embeddings,
+			Guard:   diskguard.New(paths.Root, cfg.StorageMinFreeBytes, cfg.StorageMinFreeRatio, diskguard.Options{}),
+			Sink:    sink,
+			Latches: onboardlatch.New(pool), Analytics: analytics,
+		}))
 	}
 	e := httpserver.New(cfg, deps)
 	sc := echo.StartConfig{
@@ -224,6 +237,27 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		return err
 	}
 	return nil
+}
+
+// startAchievementSink starts the sink that records achievements after a response.
+// The returned stop drains it: the caller defers it inside the pool's lifetime,
+// so it runs after the HTTP server stops and before the pool closes.
+func startAchievementSink(ctx context.Context, pool *pgxpool.Pool, cfg config.Config) (sink *achievementsink.Sink, stop func()) {
+	pusher := apns.New(pool, apns.Config{
+		Enabled: cfg.APNSEnabled, BundleID: cfg.APNSBundleID, TeamID: cfg.APNSTeamID, KeyID: cfg.APNSKeyID,
+		PrivateKeyPath: cfg.APNSPrivateKeyPath, Environment: cfg.APNSEnvironment,
+	})
+	sink = achievementsink.New(achievements.NewRecorder(pool), pusher, achievementsink.Options{})
+	sinkCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		sink.Run(sinkCtx)
+	}()
+	return sink, func() {
+		cancel()
+		<-done
+	}
 }
 
 // calendarModules builds calendar and mail, which share the Google grant and
