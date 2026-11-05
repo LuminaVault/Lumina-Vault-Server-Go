@@ -148,7 +148,7 @@ modules:
   ingestion:
     wave: 4
     swiftDir: Sources/App/Ingestion
-    status: swift
+    status: parity
     prefixes: [/v1/ingestion-sources, /v1/ingestions]
     jobs: []
   kb:
