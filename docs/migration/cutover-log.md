@@ -1078,6 +1078,54 @@ Beyond the pilot gate (D-wave2-early):
 - Path check: `CaptureLink` and `enrichAndRewrite` use `ResolveInside` without `SanitizePath`,
   as Swift does.
 
+## vault (wave 4)
+
+### G0 entry: met 2026-11-05
+
+- Routes: 12 under `/v1/vault`. The prefix is a string prefix of `/v1/vaults`, already on Go
+  in production, so the flip's ingress entry must name `/v1/vault` and `/v1/vaults` both.
+- Coupling: `SOUL.md` and the default Spaces are written by `create`. `vault_file_created`
+  has one log-only subscriber and is dropped. No route writes `memory_chunks`: move updates
+  them, a re-upload's memory update deletes them, a file delete cascades.
+- Jobs: none move. `DiskSpaceMonitorService` stays in Swift. `VaultNoteMemoryUpsertQueue` has
+  no caller in the controller, whose note upload is inline, so it isn't ported.
+- Swift tests: 32 in scope, 31 ported.
+  - In scope: `VaultCRUDTests` 13, `VaultUploadSpaceTests` 6, `VaultInitTests` 3,
+    `VaultExportTests` 3, `VaultLargePayloadTests` 2, `TenantVectorIndexServiceTests` 4, and
+    the vault half of the `DiskSpaceGuardTests` route case.
+  - Not ported: `dropIndex removes it`. `dropIndex` has no caller in Swift, despite a comment
+    in `App+build.swift` saying it's wired to account deletion.
+- DTOs: `VaultFileDTO` and `VaultMoveRequest` are hand-written, because the spec has drifted
+  (no `spaceId`, `updatedAt` or actor fields; `{from, to}` where the server takes
+  `{path, newPath}`). Spec conformance tests skip list and move for that reason, and read,
+  delete and export, which have no JSON body to check.
+
+### G1 parity: met 2026-11-05
+
+- CI run 41971535305 on head 89ce369: self-test (Swift vs Swift) and Swift vs Go give
+  **112 scenarios, 0 differences** (whole suite). `parity/scenarios/vault` has 13 files and
+  258 steps, 39 with snapshots and 32 with vault-tree checks. `parity`, `lint`, `test` and
+  `vuln` pass (https://github.com/LuminaVault/Lumina-Vault-Server-Go/actions/runs/41971535305/job/127060707141).
+- Export needed a new harness step, `zip: true`: entry names, flags, sizes and normalized
+  contents, plus the archive's total size. Entry times are not compared.
+- The oracle settled four behaviours:
+  - Hummingbird never decodes a path, so `/v1/vault/files/inbox/caf%C3%A9.md` is a 400 even
+    though upload can store `inbox/café.md`.
+  - Over 32 MiB with an Idempotency-Key, the handler sees an empty body: upload answers 400
+    `empty body`, not 413. `internal/idempotency` now does the same for every module.
+  - GET and DELETE `/v1/vault/files/move` are a bare 404, with no auth.
+  - `String(data:encoding:)` and `String(contentsOf:encoding:)` drop one leading byte order
+    mark, in note memories and in lint's empty-document check.
+- Not visible to parity, covered by Go tests: the Hermes profile copy of `SOUL.md`, the 507
+  from a full disk, the achievement sink and PostHog captures, and a connection cut when an
+  export fails mid-stream.
+- Gaps:
+  - The note upload's Space suggestion (`CAPTURE_AUTOFILE_ENABLED`) isn't ported. The switch is
+    off in production, and the suggestion arrives with group 4F. Turning it on before then has
+    no effect on Go.
+  - A vault over 65,535 entries traps the whole Swift process. In Go only that export fails.
+  - `SOUL.md` covers the default template only. `/v1/soul` stays in wave 8 and moves the rest.
+
 ## ingestion (wave 4)
 
 ### G0 entry: met 2026-11-05

@@ -137,6 +137,8 @@ func runStep(ctx context.Context, sc Scenario, st Step, t Target, client *http.C
 		}
 		if st.Binary {
 			body = binaryBody(raw)
+		} else if st.Zip && resp.StatusCode == http.StatusOK {
+			body = zipBody(raw, norm)
 		} else if body, err = norm.Body(raw, ignore); err != nil {
 			return res, err
 		}

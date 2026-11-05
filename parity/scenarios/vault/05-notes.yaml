@@ -1,0 +1,54 @@
+# note=true: the memory written with the file.
+module: vault
+steps:
+  - name: note
+    as: vault_note
+    request: {method: POST, path: "/v1/vault/files?path=n1.md&note=true", raw: "A note worth keeping", headers: {Content-Type: text/markdown}}
+    snapshot: [memories, vault_files]
+    files: [vault_note]
+  - name: note with tags in a space
+    as: vault_note
+    request: {method: POST, path: "/v1/vault/files?path=n2.md&note=true&space_id=5a017000-0000-4000-8000-0000000001a4", raw: "Another note", headers: {Content-Type: text/markdown, X-Vault-Metadata: '{"tags":["t1","t2"],"title":"Two"}'}}
+    snapshot: [memories, vault_files]
+  - name: note re-uploaded updates its memory
+    as: vault_note
+    request: {method: POST, path: "/v1/vault/files?path=n1.md&note=true", raw: "A note rewritten", headers: {Content-Type: text/markdown}}
+    snapshot: [memories, vault_files]
+  - name: re-upload without the flag leaves the memory alone
+    as: vault_note
+    request: {method: POST, path: "/v1/vault/files?path=n1.md", raw: "A note, not noted", headers: {Content-Type: text/markdown}}
+    snapshot: [memories]
+  - name: note flag only as the exact word
+    as: vault_note
+    request: {method: POST, path: "/v1/vault/files?path=n3.md&note=TRUE", raw: "Not a note", headers: {Content-Type: text/markdown}}
+    snapshot: [memories]
+  - name: note that is not utf-8 has no memory
+    as: vault_note
+    request: {method: POST, path: "/v1/vault/files?path=n4.md&note=true", base64: "/////w==", headers: {Content-Type: text/markdown}}
+    snapshot: [memories]
+  - name: note with a byte order mark
+    as: vault_note
+    request: {method: POST, path: "/v1/vault/files?path=n5.md&note=true", base64: "77u/Qk9NIG5vdGU=", headers: {Content-Type: text/markdown}}
+    snapshot: [memories]
+  - name: note with two byte order marks
+    as: vault_note
+    request: {method: POST, path: "/v1/vault/files?path=n7.md&note=true", base64: "77u/77u/eA==", headers: {Content-Type: text/markdown}}
+    snapshot: [memories]
+  - name: note of only a byte order mark
+    as: vault_note
+    request: {method: POST, path: "/v1/vault/files?path=n8.md&note=true", base64: "77u/", headers: {Content-Type: text/markdown}}
+    snapshot: [memories]
+  - name: note of only white space
+    as: vault_note
+    request: {method: POST, path: "/v1/vault/files?path=n6.md&note=true", raw: "  \n", headers: {Content-Type: text/markdown}}
+    snapshot: [memories]
+  - name: deleting a note removes its memory
+    as: vault_note
+    request: {method: DELETE, path: /v1/vault/files/inbox/n1.md}
+    snapshot: [memories, vault_files]
+    filesMask: ['_deleted_\d+_']
+    files: [vault_note]
+  - name: progress, after the sink has had time
+    as: vault_note
+    request: {method: GET, path: /v1/vault/files}
+    snapshot: [onboarding_state]

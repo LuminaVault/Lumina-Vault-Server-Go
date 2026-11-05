@@ -1,0 +1,49 @@
+# Upload, move and create sit behind the idempotency middleware; export, index and
+# lint don't. Over 32 MiB the middleware bypasses and the handler sees no body.
+module: vault
+steps:
+  - name: key with no token
+    request: {method: POST, path: "/v1/vault/files?path=i.md", raw: "x", headers: {Content-Type: text/markdown, Idempotency-Key: 5a017000-0000-4000-8000-00000000a001}}
+  - name: upload with a key
+    as: vault_idem
+    request: {method: POST, path: "/v1/vault/files?path=i.md", raw: "first", headers: {Content-Type: text/markdown, Idempotency-Key: 5a017000-0000-4000-8000-00000000a002}}
+    snapshot: [vault_files]
+    files: [vault_idem]
+  - name: replay
+    as: vault_idem
+    request: {method: POST, path: "/v1/vault/files?path=i.md", raw: "first", headers: {Content-Type: text/markdown, Idempotency-Key: 5a017000-0000-4000-8000-00000000a002}}
+    snapshot: [vault_files]
+    files: [vault_idem]
+    headers: [Idempotent-Replayed]
+  - name: the same key with another body
+    as: vault_idem
+    request: {method: POST, path: "/v1/vault/files?path=i.md", raw: "second", headers: {Content-Type: text/markdown, Idempotency-Key: 5a017000-0000-4000-8000-00000000a002}}
+  - name: move with a key
+    as: vault_idem
+    request: {method: POST, path: /v1/vault/files/move, json: {path: inbox/i.md, newPath: x/i.md}, headers: {Idempotency-Key: 5a017000-0000-4000-8000-00000000a003}}
+  - name: move replayed
+    as: vault_idem
+    request: {method: POST, path: /v1/vault/files/move, json: {path: inbox/i.md, newPath: x/i.md}, headers: {Idempotency-Key: 5a017000-0000-4000-8000-00000000a003}}
+    files: [vault_idem]
+  - name: create with a key
+    as: vault_idem
+    request: {method: POST, path: /v1/vault/create, headers: {Idempotency-Key: 5a017000-0000-4000-8000-00000000a004}}
+  - name: create replayed
+    as: vault_idem
+    request: {method: POST, path: /v1/vault/create, headers: {Idempotency-Key: 5a017000-0000-4000-8000-00000000a004}}
+  - name: a body over 32 MiB with a key reaches the handler empty
+    as: vault_big
+    request:
+      method: POST
+      path: "/v1/vault/files?path=huge.md"
+      fill: {text: "x", size: 33555456}
+      headers: {Content-Type: text/markdown, Idempotency-Key: 5a017000-0000-4000-8000-00000000a005}
+    snapshot: [vault_files]
+    files: [vault_big]
+  - name: a move body over 32 MiB with a key
+    as: vault_big
+    request:
+      method: POST
+      path: /v1/vault/files/move
+      fill: {text: "x", size: 33555456}
+      headers: {Content-Type: application/json, Idempotency-Key: 5a017000-0000-4000-8000-00000000a006}

@@ -38,6 +38,10 @@ type Step struct {
 	// Binary compares the response body by size and sha256 rather than as text
 	// (downloads, exports).
 	Binary bool `yaml:"binary"`
+	// Zip compares a zip body entry by entry (see zip.go): names, flags, sizes and
+	// normalized contents, and the archive's size. Entry times are left out, and
+	// so is the raw sha `binary` compares, because an archive embeds both.
+	Zip bool `yaml:"zip"`
 	// Stream reads only the status and headers: the body is an open event
 	// stream (SSE) that never ends, so it is closed unread, unless Frames is set.
 	Stream bool `yaml:"stream"`

@@ -17,6 +17,15 @@ var defaultSpaces = []struct{ slug, name, icon string }{
 	{"ideas", "Ideas", "lightbulb.fill"},
 }
 
+// DefaultSlugs is SpaceDefaults.entries.map(\.slug), which vault status reports.
+func DefaultSlugs() []string {
+	out := make([]string, 0, len(defaultSpaces))
+	for _, d := range defaultSpaces {
+		out = append(out, d.slug)
+	}
+	return out
+}
+
 // SeedDefaults is SpacesService.seedDefaults: it creates every default space
 // the vault does not already own (category = slug) and returns the slugs it
 // created. Swift's service create leaves created_by/updated_by unset here.

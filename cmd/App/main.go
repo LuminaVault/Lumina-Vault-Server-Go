@@ -44,6 +44,7 @@ import (
 	"lumina/internal/modules/spaces"
 	"lumina/internal/modules/teams"
 	"lumina/internal/modules/todos"
+	"lumina/internal/modules/vault"
 	"lumina/internal/modules/vision"
 	"lumina/internal/onboardlatch"
 	"lumina/internal/posthog"
@@ -220,27 +221,22 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		if m := marketplace.New(pool, cfg.LVSecretMasterKey, pluginOptions, identify, limits, paths); m != nil { // nil without LV_SECRET_MASTER_KEY, as in Swift
 			deps.Modules = append(deps.Modules, m)
 		}
-		// Wave 4: todos and capture. The sink stops after the HTTP server, so a
-		// request finishing in graceful shutdown can still enqueue its event.
-		disk := diskguard.New(cfg.VaultRootPath, cfg.StorageMinFreeBytes, cfg.StorageMinFreeRatio, diskguard.Options{})
+		// One sink and one disk guard for wave 4's writers. The sink stops after the
+		// HTTP server, so a request finishing in graceful shutdown can still enqueue.
+		sink, stopSink := startAchievementSink(ctx, pool, cfg, func(tenant uuid.UUID, _ achievements.Sub) { meModule.InvalidateToday(tenant) })
+		defer stopSink()
+		disk := diskguard.New(paths.Root, cfg.StorageMinFreeBytes, cfg.StorageMinFreeRatio, diskguard.Options{})
 		memories := memorystore.New(pool, nil)
-		unlocks := achievementsink.New(achievements.NewRecorder(pool), apns.New(pool, apns.Config{
-			Enabled: cfg.APNSEnabled, BundleID: cfg.APNSBundleID, TeamID: cfg.APNSTeamID, KeyID: cfg.APNSKeyID,
-			PrivateKeyPath: cfg.APNSPrivateKeyPath, Environment: cfg.APNSEnvironment,
-		}), achievementsink.Options{OnUnlock: func(tenant uuid.UUID, _ achievements.Sub) { meModule.InvalidateToday(tenant) }})
-		unlocksCtx, stopUnlocks := context.WithCancel(context.WithoutCancel(ctx))
-		unlocksDone := make(chan struct{})
-		go func() {
-			defer close(unlocksDone)
-			unlocks.Run(unlocksCtx)
-		}()
-		defer func() {
-			stopUnlocks()
-			<-unlocksDone
-		}()
 		deps.Modules = append(deps.Modules,
+			vault.New(pool, vault.Options{
+				Paths: paths, HermesDataRoot: cfg.HermesDataRoot, Identify: identify, Limits: limits,
+				Spaces: spaces.New(pool, paths, identify), Embeddings: embeddings,
+				Guard:   disk,
+				Sink:    sink,
+				Latches: onboardlatch.New(pool), Analytics: analytics,
+			}),
 			todos.New(pool, paths, todos.Options{Disk: disk, Memories: memories, Embeddings: embeddings}),
-			captureModule(pool, cfg, paths, box, limits, embeddings, memories, disk, unlocks, analytics),
+			captureModule(pool, cfg, paths, box, limits, embeddings, memories, disk, sink, analytics),
 		)
 	}
 	e := httpserver.New(cfg, deps)
@@ -277,6 +273,27 @@ func captureModule(pool *pgxpool.Pool, cfg config.Config, paths vaultpaths.Paths
 	gate := entitlement.Middleware(pool, entitlement.Capture,
 		entitlement.EnforcementEnabled(cfg.BillingEnforcementEnabled), entitlement.PGCredentials(pool, box))
 	return capture.New(pool, service, gate, limits, analytics)
+}
+
+// startAchievementSink starts the sink that records achievements after a response.
+// The returned stop drains it: the caller defers it inside the pool's lifetime,
+// so it runs after the HTTP server stops and before the pool closes.
+func startAchievementSink(ctx context.Context, pool *pgxpool.Pool, cfg config.Config, onUnlock func(uuid.UUID, achievements.Sub)) (sink *achievementsink.Sink, stop func()) {
+	pusher := apns.New(pool, apns.Config{
+		Enabled: cfg.APNSEnabled, BundleID: cfg.APNSBundleID, TeamID: cfg.APNSTeamID, KeyID: cfg.APNSKeyID,
+		PrivateKeyPath: cfg.APNSPrivateKeyPath, Environment: cfg.APNSEnvironment,
+	})
+	sink = achievementsink.New(achievements.NewRecorder(pool), pusher, achievementsink.Options{OnUnlock: onUnlock})
+	sinkCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		sink.Run(sinkCtx)
+	}()
+	return sink, func() {
+		cancel()
+		<-done
+	}
 }
 
 // calendarModules builds calendar and mail, which share the Google grant and

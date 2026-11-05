@@ -2,6 +2,7 @@ package scenario
 
 import (
 	"archive/tar"
+	"archive/zip"
 	"bytes"
 	"context"
 	"encoding/base64"
@@ -553,4 +554,34 @@ func TestValidateWaitEmpty(t *testing.T) {
 		require.ErrorContains(t, scenarioOf(c.step).validate(), c.want)
 	}
 	require.NoError(t, scenarioOf(Step{Name: "a", Request: req, WaitEmpty: "x", WaitTimeout: time.Second}).validate())
+}
+
+func TestZipBodiesCompareByEntry(t *testing.T) {
+	archive := func(content string) []byte {
+		var b bytes.Buffer
+		w := zip.NewWriter(&b)
+		f, err := w.Create("a.txt")
+		require.NoError(t, err)
+		_, err = f.Write([]byte(content))
+		require.NoError(t, err)
+		require.NoError(t, w.Close())
+		return b.Bytes()
+	}
+	id := func(s string) []byte { return archive("id " + s) }
+
+	// The same text but for a server-generated id, so their CRCs differ too.
+	a := zipBody(id("A11CE000-0000-4000-8000-000000000001"), normalize.New()).(map[string]any)
+	b := zipBody(id("B0B00000-0000-4000-8000-000000000002"), normalize.New()).(map[string]any)
+	ae, be := a["entries"].([]any)[0].(map[string]any), b["entries"].([]any)[0].(map[string]any)
+	require.Equal(t, ae["content"], be["content"], "ids normalize away")
+	require.Equal(t, ae["name"], be["name"])
+	require.Equal(t, a["size"], b["size"])
+
+	// Different text is a difference.
+	c := zipBody(archive("something else entirely"), normalize.New()).(map[string]any)
+	require.NotEqual(t, ae["content"], c["entries"].([]any)[0].(map[string]any)["content"])
+
+	// Garbage reports an error instead of aborting the run.
+	bad := zipBody([]byte("not a zip"), normalize.New()).(map[string]any)
+	require.Contains(t, bad, "error")
 }

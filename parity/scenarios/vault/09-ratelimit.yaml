@@ -1,0 +1,103 @@
+# /v1/vault/files shares one bucket: 30 per minute per user, then 429 on any route.
+module: vault
+steps:
+  - name: request 1
+    as: vault_lim
+    request: {method: GET, path: /v1/vault/files}
+  - name: request 2
+    as: vault_lim
+    request: {method: GET, path: /v1/vault/files}
+  - name: request 3
+    as: vault_lim
+    request: {method: GET, path: /v1/vault/files}
+  - name: request 4
+    as: vault_lim
+    request: {method: GET, path: /v1/vault/files}
+  - name: request 5
+    as: vault_lim
+    request: {method: GET, path: /v1/vault/files}
+  - name: request 6
+    as: vault_lim
+    request: {method: GET, path: /v1/vault/files}
+  - name: request 7
+    as: vault_lim
+    request: {method: GET, path: /v1/vault/files}
+  - name: request 8
+    as: vault_lim
+    request: {method: GET, path: /v1/vault/files}
+  - name: request 9
+    as: vault_lim
+    request: {method: GET, path: /v1/vault/files}
+  - name: request 10
+    as: vault_lim
+    request: {method: GET, path: /v1/vault/files}
+  - name: request 11
+    as: vault_lim
+    request: {method: GET, path: /v1/vault/files}
+  - name: request 12
+    as: vault_lim
+    request: {method: GET, path: /v1/vault/files}
+  - name: request 13
+    as: vault_lim
+    request: {method: GET, path: /v1/vault/files}
+  - name: request 14
+    as: vault_lim
+    request: {method: GET, path: /v1/vault/files}
+  - name: request 15
+    as: vault_lim
+    request: {method: GET, path: /v1/vault/files}
+  - name: request 16
+    as: vault_lim
+    request: {method: GET, path: /v1/vault/files}
+  - name: request 17
+    as: vault_lim
+    request: {method: GET, path: /v1/vault/files}
+  - name: request 18
+    as: vault_lim
+    request: {method: GET, path: /v1/vault/files}
+  - name: request 19
+    as: vault_lim
+    request: {method: GET, path: /v1/vault/files}
+  - name: request 20
+    as: vault_lim
+    request: {method: GET, path: /v1/vault/files}
+  - name: request 21
+    as: vault_lim
+    request: {method: GET, path: /v1/vault/files}
+  - name: request 22
+    as: vault_lim
+    request: {method: GET, path: /v1/vault/files}
+  - name: request 23
+    as: vault_lim
+    request: {method: GET, path: /v1/vault/files}
+  - name: request 24
+    as: vault_lim
+    request: {method: GET, path: /v1/vault/files}
+  - name: request 25
+    as: vault_lim
+    request: {method: GET, path: /v1/vault/files}
+  - name: request 26
+    as: vault_lim
+    request: {method: GET, path: /v1/vault/files}
+  - name: request 27
+    as: vault_lim
+    request: {method: GET, path: /v1/vault/files}
+  - name: request 28
+    as: vault_lim
+    request: {method: GET, path: /v1/vault/files}
+  - name: request 29
+    as: vault_lim
+    request: {method: GET, path: /v1/vault/files}
+  - name: request 30
+    as: vault_lim
+    request: {method: GET, path: /v1/vault/files}
+  - name: request 31 is over
+    as: vault_lim
+    request: {method: GET, path: /v1/vault/files}
+    headers: [Retry-After]
+  - name: another route in the group is over too
+    as: vault_lim
+    request: {method: POST, path: "/v1/vault/files?path=a.md", raw: "x", headers: {Content-Type: text/markdown}}
+  - name: a route outside the group is not
+    as: vault_lim
+    request: {method: GET, path: /v1/vault/status}

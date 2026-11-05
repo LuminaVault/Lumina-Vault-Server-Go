@@ -1,0 +1,78 @@
+# List over seeded rows: filters, paging, dto shapes.
+module: vault
+steps:
+  - name: no token
+    request: {method: GET, path: /v1/vault/files}
+  - name: bad token
+    request: {method: GET, path: /v1/vault/files, headers: {Authorization: Bearer not-a-token}}
+  - name: malformed vault id with no token, access comes first
+    request: {method: GET, path: /v1/vault/files, headers: {X-Vault-ID: nope}}
+  - name: default
+    as: vault_list
+    request: {method: GET, path: /v1/vault/files}
+  - name: trailing slash is the same route
+    as: vault_list
+    request: {method: GET, path: /v1/vault/files/}
+  - name: limit one gives nextBefore
+    as: vault_list
+    request: {method: GET, path: "/v1/vault/files?limit=1"}
+  - name: limit four gives nextBefore too
+    as: vault_list
+    request: {method: GET, path: "/v1/vault/files?limit=4"}
+  - name: limit five does not
+    as: vault_list
+    request: {method: GET, path: "/v1/vault/files?limit=5"}
+  - name: limit zero clamps
+    as: vault_list
+    request: {method: GET, path: "/v1/vault/files?limit=0"}
+  - name: limit over the top clamps
+    as: vault_list
+    request: {method: GET, path: "/v1/vault/files?limit=9999"}
+  - name: limit negative clamps
+    as: vault_list
+    request: {method: GET, path: "/v1/vault/files?limit=-3"}
+  - name: limit not a number is the default
+    as: vault_list
+    request: {method: GET, path: "/v1/vault/files?limit=abc"}
+  - name: before
+    as: vault_list
+    request: {method: GET, path: "/v1/vault/files?before=2026-01-03T00:00:00Z"}
+  - name: after
+    as: vault_list
+    request: {method: GET, path: "/v1/vault/files?after=2026-01-02T00:00:00Z"}
+  - name: fractional seconds
+    as: vault_list
+    request: {method: GET, path: "/v1/vault/files?before=2026-01-03T00:00:00.500Z"}
+  - name: before malformed is ignored
+    as: vault_list
+    request: {method: GET, path: "/v1/vault/files?before=yesterday"}
+  - name: space
+    as: vault_list
+    request: {method: GET, path: "/v1/vault/files?space=notes"}
+  - name: space unknown
+    as: vault_list
+    request: {method: GET, path: "/v1/vault/files?space=nope"}
+  - name: inbox word
+    as: vault_list
+    request: {method: GET, path: "/v1/vault/files?space=inbox"}
+  - name: unfiled
+    as: vault_list
+    request: {method: GET, path: "/v1/vault/files?unfiled=true"}
+  - name: unfiled only as the exact word
+    as: vault_list
+    request: {method: GET, path: "/v1/vault/files?unfiled=1"}
+  - name: search
+    as: vault_list
+    request: {method: GET, path: "/v1/vault/files?q=B_C"}
+  - name: search percent is literal
+    as: vault_list
+    request: {method: GET, path: "/v1/vault/files?q=%25"}
+  - name: search underscore is literal
+    as: vault_list
+    request: {method: GET, path: "/v1/vault/files?q=_"}
+  - name: search and space together
+    as: vault_list
+    request: {method: GET, path: "/v1/vault/files?q=x&space=notes"}
+  - name: another user sees none of it
+    as: vault_out
+    request: {method: GET, path: /v1/vault/files}

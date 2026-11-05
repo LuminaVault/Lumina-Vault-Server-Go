@@ -1,0 +1,72 @@
+# X-Vault-ID: a team vault, an editor who writes, a viewer who reads, an outsider.
+module: vault
+steps:
+  - name: editor uploads
+    as: vault_ed
+    request: {method: POST, path: "/v1/vault/files?path=t.md", raw: "team", headers: {Content-Type: text/markdown, X-Vault-ID: 5a017000-0000-4000-8000-0000000007c1}}
+    snapshot: [vault_files]
+    files: ["5a017000-0000-4000-8000-0000000007c1"]
+  - name: editor uploads into the team's space
+    as: vault_ed
+    request: {method: POST, path: "/v1/vault/files?path=t2.md&note=true&space_id=5a017000-0000-4000-8000-0000000007a1", raw: "team note", headers: {Content-Type: text/markdown, X-Vault-ID: 5a017000-0000-4000-8000-0000000007c1}}
+    snapshot: [vault_files, memories]
+  - name: editor can't use the space from the personal vault
+    as: vault_ed
+    request: {method: POST, path: "/v1/vault/files?path=t3.md&space_id=5a017000-0000-4000-8000-0000000007a1", raw: "x", headers: {Content-Type: text/markdown}}
+  - name: viewer lists
+    as: vault_view
+    request: {method: GET, path: /v1/vault/files, headers: {X-Vault-ID: 5a017000-0000-4000-8000-0000000007c1}}
+  - name: viewer reads
+    as: vault_view
+    request: {method: GET, path: /v1/vault/files/inbox/t.md, headers: {X-Vault-ID: 5a017000-0000-4000-8000-0000000007c1}}
+  - name: viewer's index
+    as: vault_view
+    request: {method: GET, path: /v1/vault/index, headers: {X-Vault-ID: 5a017000-0000-4000-8000-0000000007c1}}
+  - name: viewer's lint
+    as: vault_view
+    request: {method: GET, path: /v1/vault/lint, headers: {X-Vault-ID: 5a017000-0000-4000-8000-0000000007c1}}
+  - name: viewer can't upload
+    as: vault_view
+    request: {method: POST, path: "/v1/vault/files?path=v.md", raw: "x", headers: {Content-Type: text/markdown, X-Vault-ID: 5a017000-0000-4000-8000-0000000007c1}}
+  - name: viewer can't move
+    as: vault_view
+    request: {method: POST, path: /v1/vault/files/move, json: {path: inbox/t.md, newPath: x/t.md}, headers: {X-Vault-ID: 5a017000-0000-4000-8000-0000000007c1}}
+  - name: viewer can't delete
+    as: vault_view
+    request: {method: DELETE, path: /v1/vault/files/inbox/t.md, headers: {X-Vault-ID: 5a017000-0000-4000-8000-0000000007c1}}
+  - name: outsider can't list
+    as: vault_out
+    request: {method: GET, path: /v1/vault/files, headers: {X-Vault-ID: 5a017000-0000-4000-8000-0000000007c1}}
+  - name: outsider can't upload
+    as: vault_out
+    request: {method: POST, path: "/v1/vault/files?path=o.md", raw: "x", headers: {Content-Type: text/markdown, X-Vault-ID: 5a017000-0000-4000-8000-0000000007c1}}
+  - name: outsider can't read the index
+    as: vault_out
+    request: {method: GET, path: /v1/vault/index, headers: {X-Vault-ID: 5a017000-0000-4000-8000-0000000007c1}}
+  - name: malformed vault id
+    as: vault_ed
+    request: {method: GET, path: /v1/vault/files, headers: {X-Vault-ID: nope}}
+  - name: malformed vault id on upload
+    as: vault_ed
+    request: {method: POST, path: "/v1/vault/files?path=o.md", raw: "x", headers: {Content-Type: text/markdown, X-Vault-ID: nope}}
+  - name: unknown vault id
+    as: vault_ed
+    request: {method: GET, path: /v1/vault/files, headers: {X-Vault-ID: 5a017000-0000-4000-8000-00000000ffff}}
+  - name: another user's personal vault
+    as: vault_ed
+    request: {method: GET, path: /v1/vault/files, headers: {X-Vault-ID: 5a017000-0000-4000-8000-000000000002}}
+  - name: editor moves
+    as: vault_ed
+    request: {method: POST, path: /v1/vault/files/move, json: {path: inbox/t.md, newPath: x/t.md}, headers: {X-Vault-ID: 5a017000-0000-4000-8000-0000000007c1}}
+    snapshot: [vault_files]
+    files: ["5a017000-0000-4000-8000-0000000007c1"]
+  - name: editor deletes
+    as: vault_ed
+    request: {method: DELETE, path: /v1/vault/files/x/t.md, headers: {X-Vault-ID: 5a017000-0000-4000-8000-0000000007c1}}
+    snapshot: [vault_files]
+    files: ["5a017000-0000-4000-8000-0000000007c1"]
+    filesMask: ['_deleted_\d+_']
+  - name: export is always the personal vault
+    as: vault_ed
+    request: {method: GET, path: /v1/vault/export, headers: {X-Vault-ID: 5a017000-0000-4000-8000-0000000007c1}}
+    zip: true

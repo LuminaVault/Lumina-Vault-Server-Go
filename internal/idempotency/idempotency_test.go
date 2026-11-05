@@ -259,12 +259,13 @@ func TestIdempotency(t *testing.T) {
 		require.Equal(t, 24*time.Hour, ttl)
 	})
 
-	// Too large to hash: the handler runs on every byte, and nothing is stored.
-	t.Run("oversized request bypasses with its whole body", func(t *testing.T) {
+	// Too large to hash: the handler runs on an empty body, as in Swift, where the
+	// stream is already consumed. Nothing is stored.
+	t.Run("oversized request bypasses with an empty body", func(t *testing.T) {
 		v, user, key := setup(t, pool, Options{MaxRequestBody: 4}), uuid.New(), uuid.NewString()
 		r := v.post("/idem", user, key, "123456789")
 		require.Equal(t, http.StatusOK, r.Code)
-		require.Equal(t, "1:9", r.Body.String())
+		require.Equal(t, "1:0", r.Body.String())
 		require.Zero(t, count(t, user))
 	})
 

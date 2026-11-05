@@ -1,0 +1,46 @@
+# create and status. pg_indexes shows the per-tenant HNSW index by its exact name.
+module: vault
+steps:
+  - name: status with no token
+    request: {method: GET, path: /v1/vault/status}
+  - name: create with no token
+    request: {method: POST, path: /v1/vault/create}
+  - name: status with a bad token
+    request: {method: GET, path: /v1/vault/status, headers: {Authorization: Bearer not-a-token}}
+  - name: create with a bad token
+    request: {method: POST, path: /v1/vault/create, headers: {Authorization: Bearer not-a-token}}
+  - name: create with a malformed vault id is not read
+    as: vault_empty
+    request: {method: GET, path: /v1/vault/status, headers: {X-Vault-ID: nope}}
+  - name: status before
+    as: vault_new
+    request: {method: GET, path: /v1/vault/status}
+  - name: create
+    as: vault_new
+    request: {method: POST, path: /v1/vault/create}
+    snapshot: [spaces, pg_indexes]
+    files: [vault_new]
+    filesNormalizeContent: true
+  - name: status after
+    as: vault_new
+    request: {method: GET, path: /v1/vault/status}
+    snapshot: [spaces]
+  - name: create again changes nothing
+    as: vault_new
+    request: {method: POST, path: /v1/vault/create}
+    snapshot: [spaces, pg_indexes]
+    files: [vault_new]
+    filesNormalizeContent: true
+  - name: status when seeded initialized
+    as: vault_init
+    request: {method: GET, path: /v1/vault/status}
+  - name: create when seeded initialized does nothing
+    as: vault_init
+    request: {method: POST, path: /v1/vault/create}
+    snapshot: [pg_indexes]
+    files: [vault_init]
+  - name: create ignores a body
+    as: vault_soul
+    request: {method: POST, path: /v1/vault/create, raw: "not json"}
+    files: [vault_soul]
+    filesNormalizeContent: true
