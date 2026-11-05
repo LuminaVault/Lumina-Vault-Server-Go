@@ -113,7 +113,8 @@ func TestDoubleMarshalsLikeFoundation(t *testing.T) {
 		{-122.4194, "-122.4194"},
 		{0.0001, "0.0001"},
 		{0.00001, "1e-05"},
-		{9007199254740993, "9.007199254740992e+15"},
+		{9007199254740992, "9007199254740992"},
+		{1e16, "1e+16"},
 	} {
 		got, err := json.Marshal(wire.Double(c.in))
 		if err != nil {
