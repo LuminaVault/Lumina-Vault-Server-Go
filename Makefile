@@ -52,3 +52,12 @@ gen: ## Regenerate module models (oapi-codegen) and queries (sqlc)
 
 schema-parity: ## goose builds exactly the Swift (Fluent) schema
 	scripts/schema-parity.sh
+
+.PHONY: swift-test-coverage
+
+# The Swift repo's Tests/AppTests, at the commit in parity/SWIFT_IMAGE. CI can't run this
+# as a gate yet: it fails until the end of the migration, so CI only prints the count.
+SWIFT_TESTS ?= $(HOME)/Work/production/apps/lumina/LuminaVaultServer/Tests/AppTests
+
+swift-test-coverage: ## List Swift test files with no Go test, scenario or waiver (SWIFT_TESTS=<dir>)
+	python3 scripts/swift-test-coverage.py --swift-tests "$(SWIFT_TESTS)"
