@@ -577,4 +577,6 @@ func TestSourceLengthUnderGzip(t *testing.T) {
 	_, head := get(http.MethodHead)
 	require.Empty(t, head.Get("Content-Encoding"))
 	require.Equal(t, "1024", head.Get("Content-Length"))
+	_, plain := get(http.MethodHead, "Accept-Encoding", "identity")
+	require.Equal(t, "1024", plain.Get("Content-Length"))
 }

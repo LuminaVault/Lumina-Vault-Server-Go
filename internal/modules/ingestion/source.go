@@ -87,10 +87,13 @@ func (m *Module) source(c *echo.Context) error {
 	h.Set("Content-Disposition", `attachment; filename="`+strings.ReplaceAll(name, `"`, "")+`"`)
 	switch {
 	case head:
-		// Gzip's WriteHeader drops the length and holds the status until the
-		// handler returns. A HEAD has no body to compress, so it stays, as in Swift.
+		// Without gzip WriteHeader sends the length. With it, gzip's WriteHeader
+		// drops the length and holds the status until the handler returns; a HEAD
+		// has no body to compress, so it goes back, as in Swift.
+		length := strconv.FormatInt(size, 10)
+		h.Set("Content-Length", length)
 		c.Response().WriteHeader(http.StatusOK)
-		h.Set("Content-Length", strconv.FormatInt(size, 10))
+		h.Set("Content-Length", length)
 		return nil
 	case ranged:
 		h.Set("Content-Length", strconv.FormatInt(last-first+1, 10))
