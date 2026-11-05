@@ -14,7 +14,9 @@ import (
 	"errors"
 	"lumina/internal/auth"
 	"lumina/internal/httpserver"
+	"lumina/internal/ids"
 	"lumina/internal/modules/calendar"
+	"lumina/internal/posthog"
 	"lumina/internal/wire"
 	"net/http"
 
@@ -23,12 +25,15 @@ import (
 )
 
 type Module struct {
-	google *calendar.Google
+	google    *calendar.Google
+	analytics *posthog.Client
 }
 
 // New builds the module. A nil google (no LV_SECRET_MASTER_KEY) registers
 // nothing, as in Swift.
-func New(google *calendar.Google) *Module { return &Module{google: google} }
+func New(google *calendar.Google, analytics *posthog.Client) *Module {
+	return &Module{google: google, analytics: analytics}
+}
 
 func (m *Module) Register(r httpserver.Router, authMW echo.MiddlewareFunc) {
 	if m.google == nil {
@@ -75,6 +80,7 @@ func (m *Module) connect(c *echo.Context) error {
 	case err != nil:
 		return err
 	}
+	m.analytics.Capture("gmail_connect_started", ids.Upper(tenant), nil)
 	return wire.JSON(c, http.StatusOK, CalendarConnectStartResponse{AuthorizeURL: url})
 }
 

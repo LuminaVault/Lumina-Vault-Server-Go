@@ -1,0 +1,18 @@
+# The G2 smoke for insights and analytics, next to 02-dashboard and 03-tasks, for a
+# user with a personal vault and no data. The other files here need seeded vaults,
+# or a user without a vault, so they can't run on staging.
+module: dashboard
+smoke: true
+steps:
+  - {name: insights, as: dash_cat, request: {method: GET, path: /v1/insights}}
+  - {name: no synthesis yet, as: dash_cat, request: {method: GET, path: /v1/insights/synthesis/latest}}
+  - {name: dismiss an unknown insight, as: dash_cat, request: {method: POST, path: /v1/insights/DA5B9999-0000-4000-8000-000000000000/dismiss}}
+  - {name: usage summary, as: dash_cat, request: {method: GET, path: /v1/analytics/usage-summary}}
+  - {name: retrieval health, as: dash_cat, request: {method: GET, path: /v1/analytics/retrieval-health}}
+  - {name: overview, as: dash_cat, request: {method: GET, path: /v1/analytics/overview}}
+  - {name: models, as: dash_cat, request: {method: GET, path: /v1/analytics/models}}
+  - {name: team on a personal vault, as: dash_cat, request: {method: GET, path: /v1/analytics/team}}
+  - {name: event, as: dash_cat, request: {method: POST, path: /v1/analytics/events, json: {name: analytics_dashboard_viewed, source: web, range: 7d, idempotencyKey: smoke-event}}}
+  - {name: model feedback, as: dash_cat, request: {method: POST, path: /v1/analytics/model-feedback, json: {provider: openai, model: gpt-test, rating: positive, idempotencyKey: smoke-feedback}}}
+  - {name: recommendation, as: dash_cat, request: {method: PATCH, path: /v1/analytics/recommendations, json: {recommendationId: memory-review-overdue, disposition: dismiss}}}
+  - {name: overview after, as: dash_cat, request: {method: GET, path: /v1/analytics/overview}}
