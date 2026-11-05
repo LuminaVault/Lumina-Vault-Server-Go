@@ -2,7 +2,7 @@ package llm
 
 import (
 	"context"
-	"net/url"
+	"lumina/internal/hermesresolve"
 
 	"github.com/google/uuid"
 )
@@ -15,13 +15,9 @@ type User struct {
 	PrivacyNoCNOrigin bool
 }
 
-// Resolution is the part of HermesEndpointResolver.Resolution the gateway
-// adapter reads. Only an override changes where a call goes.
-type Resolution struct {
-	BaseURL        *url.URL
-	AuthHeader     string
-	IsUserOverride bool
-}
+// Resolution is what hermesresolve.Resolver returns for a tenant. Only an override
+// changes where a gateway call goes.
+type Resolution = hermesresolve.Resolution
 
 // WireRoute is RouterModelRouteDTO: a route as clients and Cerberus name it.
 // The rates are optional, and win over the catalogue when present.

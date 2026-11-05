@@ -31,7 +31,11 @@ func TestHermesDispatch(t *testing.T) {
 	}
 	withOverride := func(u *url.URL, auth string, override bool) context.Context {
 		return WithValues(context.Background(), func(v *Values) {
-			v.CurrentResolution = &Resolution{BaseURL: u, AuthHeader: auth, IsUserOverride: override}
+			r := &Resolution{BaseURL: u, IsUserOverride: override}
+			if auth != "" {
+				r.AuthHeader = &auth
+			}
+			v.CurrentResolution = r
 		})
 	}
 	t.Run("no resolution dispatches to managed baseURL without authorization", func(t *testing.T) {
@@ -69,11 +73,19 @@ func TestHermesDispatch(t *testing.T) {
 		assert.Zero(t, other.count())
 		assert.Empty(t, managed.last(t).header.Get("Authorization"))
 	})
-	t.Run("user override with an empty authHeader skips the header", func(t *testing.T) {
+	t.Run("user override with no authHeader skips the header", func(t *testing.T) {
 		managed, vps := newWireStub(t, 200, completionOK), newWireStub(t, 200, completionOK)
 		_, err := adapter(managed, "Bearer central-key").ChatCompletions(withOverride(vps.url(t), "", true), []byte(chatPayload), "d", "")
 		require.NoError(t, err)
 		assert.Empty(t, vps.last(t).header.Values("Authorization"))
+
+		empty := ""
+		ctx := WithValues(context.Background(), func(v *Values) {
+			v.CurrentResolution = &Resolution{BaseURL: vps.url(t), AuthHeader: &empty, IsUserOverride: true}
+		})
+		_, err = adapter(managed, "Bearer central-key").ChatCompletions(ctx, []byte(chatPayload), "d", "")
+		require.NoError(t, err)
+		assert.Empty(t, vps.last(t).header.Values("Authorization"), "an empty header is skipped too")
 	})
 	t.Run("sessionID sets X-Hermes-Session-Id", func(t *testing.T) {
 		managed := newWireStub(t, 200, completionOK)

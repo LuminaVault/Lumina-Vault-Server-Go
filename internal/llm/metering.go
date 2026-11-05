@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"lumina/internal/usagemeter"
 	"time"
 
 	"github.com/google/uuid"
@@ -116,7 +117,7 @@ type EnsembleExecutor interface {
 type PGMeters struct{ Pool *pgxpool.Pool }
 
 // UsageMeter returns the usage_meter writer.
-func (m PGMeters) UsageMeter() UsageMeter { return pgUsageMeter(m) }
+func (m PGMeters) UsageMeter() UsageMeter { return pgUsageMeter{usagemeter.New(m.Pool)} }
 
 // CostLedger returns the cost_ledger writer.
 func (m PGMeters) CostLedger() CostLedger { return pgCostLedger(m) }
@@ -128,25 +129,14 @@ func (m PGMeters) TraceRecorder() TraceRecorder { return pgTraceRecorder(m) }
 func (m PGMeters) FailoverLogger() FailoverLogger { return pgFailoverLogger(m) }
 
 type (
-	pgUsageMeter     PGMeters
+	pgUsageMeter     struct{ meter *usagemeter.Meter }
 	pgCostLedger     PGMeters
 	pgTraceRecorder  PGMeters
 	pgFailoverLogger PGMeters
 )
 
 func (m pgUsageMeter) Record(ctx context.Context, tenant uuid.UUID, model string, tokensIn, tokensOut int) {
-	if tokensIn <= 0 && tokensOut <= 0 {
-		return
-	}
-	_, err := m.Pool.Exec(ctx, `INSERT INTO usage_meter (tenant_id, day, model, mtok_in, mtok_out)
-		VALUES ($1, CURRENT_DATE, $2, $3, $4)
-		ON CONFLICT (tenant_id, day, model) DO UPDATE
-			SET mtok_in  = usage_meter.mtok_in  + EXCLUDED.mtok_in,
-			    mtok_out = usage_meter.mtok_out + EXCLUDED.mtok_out`,
-		tenant, model, int64(tokensIn), int64(tokensOut))
-	if err != nil {
-		slog.ErrorContext(ctx, "usage_meter record failed", "tenant_id", tenant, "error", err)
-	}
+	m.meter.Record(ctx, tenant, model, int64(tokensIn), int64(tokensOut))
 }
 
 func (m pgCostLedger) Record(ctx context.Context, tenant uuid.UUID, provider ProviderID, usdMicros int64) {

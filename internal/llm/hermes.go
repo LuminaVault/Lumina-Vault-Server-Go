@@ -47,7 +47,10 @@ func (a *HermesGatewayAdapter) AcceptsUserCredentials() bool { return false }
 
 func (a *HermesGatewayAdapter) dispatchTarget(ctx context.Context) (*url.URL, string) {
 	if r := RoutingValues(ctx).CurrentResolution; r != nil && r.IsUserOverride {
-		return r.BaseURL, r.AuthHeader
+		if r.AuthHeader == nil {
+			return r.BaseURL, ""
+		}
+		return r.BaseURL, *r.AuthHeader
 	}
 	return a.BaseURL, a.DefaultAuthHeader
 }
