@@ -1,0 +1,121 @@
+# The whole pipeline against the feeds stub. Enrichment runs after the response, so
+# only a step behind `waitEmpty: parity_capture_pending` compares what it writes.
+# capture_amy stays under captureByUser's 60 requests per 60 s.
+module: capture
+steps:
+  - name: capture a page with open graph tags
+    as: capture_amy
+    request: {method: POST, path: /v1/capture/safari, json: {url: "http://feeds:8080/capture/article"}}
+    ignore: ["$.path"]
+    capture: {article: $.id}
+    headers: [Content-Type]
+    snapshot: [parity_capture_onboarding]
+  - name: enriched row, file, memory, latch and achievement
+    request: {method: GET, path: /health}
+    waitEmpty: parity_capture_pending
+    snapshot: [parity_capture_files, parity_capture_memories, parity_capture_contributions, parity_capture_onboarding, parity_capture_achievements]
+    files: [capture_amy]
+    filesMask: &masks ['\d{4}-\d{2}-\d{2}-\d{6}', '-[0-9a-f]{8}\.md', '_deleted_\d+_']
+
+  - name: the reading-time hook writes frontmatter
+    as: capture_hal
+    request: {method: POST, path: /v1/capture/safari, json: {url: "http://feeds:8080/capture/article"}}
+    ignore: ["$.path"]
+    capture: {hooked: $.id}
+  - name: hooked file
+    request: {method: GET, path: /health}
+    waitEmpty: parity_capture_pending
+    snapshot: [parity_capture_files]
+    files: [capture_hal]
+    filesMask: *masks
+
+  - {name: title tag and description meta, as: capture_amy, request: {method: POST, path: /v1/capture/safari, json: {url: "http://feeds:8080/capture/plain"}}, ignore: ["$.path"], capture: {plain: $.id}}
+  - {name: entities are decoded in order, as: capture_amy, request: {method: POST, path: /v1/capture/safari, json: {url: "http://feeds:8080/capture/entities"}}, ignore: ["$.path"], capture: {entities: $.id}}
+  - {name: bytes that are not utf-8 read as latin-1, as: capture_amy, request: {method: POST, path: /v1/capture/safari, json: {url: "http://feeds:8080/capture/latin1"}}, ignore: ["$.path"], capture: {latin1: $.id}}
+  - {name: redirects are followed, as: capture_amy, request: {method: POST, path: /v1/capture/safari, json: {url: "http://feeds:8080/capture/redirect"}}, ignore: ["$.path"], capture: {redirect: $.id}}
+  - {name: an error page still counts, as: capture_amy, request: {method: POST, path: /v1/capture/safari, json: {url: "http://feeds:8080/capture/error-page"}}, ignore: ["$.path"], capture: {errorpage: $.id}}
+  - {name: a page with no tags, as: capture_amy, request: {method: POST, path: /v1/capture/safari, json: {url: "http://feeds:8080/capture/empty"}}, ignore: ["$.path"], capture: {empty: $.id}}
+  - {name: a refused connection is an empty result, as: capture_amy, request: {method: POST, path: /v1/capture/safari, json: {url: "http://feeds:1/x"}}, ignore: ["$.path"], capture: {refused: $.id}}
+  - {name: a 404 page, as: capture_amy, request: {method: POST, path: /v1/capture/safari, json: {url: "http://feeds:8080/nope"}}, ignore: ["$.path"], capture: {notfound: $.id}}
+  - name: every page enriched
+    request: {method: GET, path: /health}
+    waitEmpty: parity_capture_pending
+    snapshot: [parity_capture_files, parity_capture_memories, parity_capture_achievements]
+    files: [capture_amy]
+    filesMask: *masks
+
+  # The stub holds this page for 6 s, so the placeholder and "pending" are readable.
+  - {name: capture with a note, as: capture_amy, request: {method: POST, path: /v1/capture/safari, json: {url: "http://feeds:8080/capture/slow", notes: "  my note\nsecond line "}}, ignore: ["$.path"], capture: {note: $.id}}
+  - {name: capture with an empty note, as: capture_amy, request: {method: POST, path: /v1/capture/safari, json: {url: "http://feeds:8080/capture/slow?empty", notes: ""}}, ignore: ["$.path"], capture: {emptynote: $.id}}
+  - {name: capture with a null note and an unknown key, as: capture_amy, request: {method: POST, path: /v1/capture/safari, raw: "{\"url\":\"http://feeds:8080/capture/slow?null\",\"notes\":null,\"note\":\"old key\",\"extra\":[1]}"}, ignore: ["$.path"], capture: {nullnote: $.id}}
+  - name: placeholders before enrichment
+    request: {method: GET, path: /health}
+    snapshot: [parity_capture_files]
+    files: [capture_amy]
+    filesMask: *masks
+  - name: enrichment drops the note
+    request: {method: GET, path: /health}
+    waitEmpty: parity_capture_pending
+    snapshot: [parity_capture_files]
+    files: [capture_amy]
+    filesMask: *masks
+
+  - {name: filed into a space, as: capture_amy, request: {method: POST, path: /v1/capture/safari, json: {url: "http://feeds:8080/capture/article?space", space_id: CA97E000-0000-4000-8000-0000000005A1}}, ignore: ["$.path"], capture: {spaced: $.id}}
+  - {name: a lowercase space id, as: capture_amy, request: {method: POST, path: /v1/capture/safari, json: {url: "http://feeds:8080/capture/article?lower", space_id: ca97e000-0000-4000-8000-0000000005a1}}, ignore: ["$.path"], capture: {lower: $.id}}
+  - {name: camelCase spaceId is ignored, as: capture_amy, request: {method: POST, path: /v1/capture/safari, json: {url: "http://feeds:8080/capture/article?camel", spaceId: CA97E000-0000-4000-8000-0000000005A1}}, ignore: ["$.path"], capture: {camel: $.id}}
+  - {name: null space id, as: capture_amy, request: {method: POST, path: /v1/capture/safari, raw: "{\"url\":\"http://feeds:8080/capture/article?nullspace\",\"space_id\":null}"}, ignore: ["$.path"], capture: {nullspace: $.id}}
+  - name: spaces on rows, memories and folders
+    request: {method: GET, path: /health}
+    waitEmpty: parity_capture_pending
+    snapshot: [parity_capture_files, parity_capture_memories]
+    files: [capture_amy]
+    filesMask: *masks
+
+  # The URL's text goes in the file as sent, and its host in the file name.
+  - {name: uppercase host, as: capture_amy, request: {method: POST, path: /v1/capture/safari, json: {url: "http://FEEDS:8080/capture/empty"}}, ignore: ["$.path"], capture: {upper: $.id}}
+  - {name: spaces and quotes in the path, as: capture_amy, request: {method: POST, path: /v1/capture/safari, json: {url: "http://feeds:8080/a b\"c"}}, ignore: ["$.path"], capture: {quoted: $.id}}
+  - {name: an escape and an invalid character in one path, as: capture_amy, request: {method: POST, path: /v1/capture/safari, json: {url: "http://feeds:8080/a%20b c"}}, ignore: ["$.path"], capture: {mixed: $.id}}
+  - {name: non-ascii path, as: capture_amy, request: {method: POST, path: /v1/capture/safari, json: {url: "http://feeds:8080/é?ü#ñ"}}, ignore: ["$.path"], capture: {accented: $.id}}
+  - {name: an encoded slash in the host makes folders, as: capture_amy, request: {method: POST, path: /v1/capture/safari, json: {url: "http://a%2Fb.parity.test/x"}}, ignore: ["$.path"], capture: {slash: $.id}}
+  - {name: dots in a decoded host become dashes, as: capture_amy, request: {method: POST, path: /v1/capture/safari, json: {url: "http://..%2F..%2Fup.parity.test/x"}}, ignore: ["$.path"], capture: {climb: $.id}}
+  - {name: an idna host, as: capture_amy, request: {method: POST, path: /v1/capture/safari, json: {url: "http://münchen.parity.test/x"}}, ignore: ["$.path"], capture: {idna: $.id}}
+  - {name: userinfo and an empty port, as: capture_amy, request: {method: POST, path: /v1/capture/safari, json: {url: "http://u:p@feeds:/x"}}, ignore: ["$.path"], capture: {userinfo: $.id}}
+  - name: odd urls settled
+    request: {method: GET, path: /health}
+    waitEmpty: parity_capture_pending
+    snapshot: [parity_capture_files]
+    files: [capture_amy]
+    filesMask: *masks
+
+  # DELETE /v1/todos takes any vault file, and leaves the table with no path holding
+  # the time for other modules' whole-table snapshots.
+  - {name: delete article, as: capture_amy, request: {method: DELETE, path: "/v1/todos/{{article}}"}}
+  - {name: delete hooked, as: capture_hal, request: {method: DELETE, path: "/v1/todos/{{hooked}}"}}
+  - {name: delete plain, as: capture_amy, request: {method: DELETE, path: "/v1/todos/{{plain}}"}}
+  - {name: delete entities, as: capture_amy, request: {method: DELETE, path: "/v1/todos/{{entities}}"}}
+  - {name: delete latin1, as: capture_amy, request: {method: DELETE, path: "/v1/todos/{{latin1}}"}}
+  - {name: delete redirect, as: capture_amy, request: {method: DELETE, path: "/v1/todos/{{redirect}}"}}
+  - {name: delete error page, as: capture_amy, request: {method: DELETE, path: "/v1/todos/{{errorpage}}"}}
+  - {name: delete empty, as: capture_amy, request: {method: DELETE, path: "/v1/todos/{{empty}}"}}
+  - {name: delete refused, as: capture_amy, request: {method: DELETE, path: "/v1/todos/{{refused}}"}}
+  - {name: delete notfound, as: capture_amy, request: {method: DELETE, path: "/v1/todos/{{notfound}}"}}
+  - {name: delete note, as: capture_amy, request: {method: DELETE, path: "/v1/todos/{{note}}"}}
+  - {name: delete emptynote, as: capture_amy, request: {method: DELETE, path: "/v1/todos/{{emptynote}}"}}
+  - {name: delete nullnote, as: capture_amy, request: {method: DELETE, path: "/v1/todos/{{nullnote}}"}}
+  - {name: delete spaced, as: capture_amy, request: {method: DELETE, path: "/v1/todos/{{spaced}}"}}
+  - {name: delete lower, as: capture_amy, request: {method: DELETE, path: "/v1/todos/{{lower}}"}}
+  - {name: delete camel, as: capture_amy, request: {method: DELETE, path: "/v1/todos/{{camel}}"}}
+  - {name: delete nullspace, as: capture_amy, request: {method: DELETE, path: "/v1/todos/{{nullspace}}"}}
+  - {name: delete upper, as: capture_amy, request: {method: DELETE, path: "/v1/todos/{{upper}}"}}
+  - {name: delete quoted, as: capture_amy, request: {method: DELETE, path: "/v1/todos/{{quoted}}"}}
+  - {name: delete mixed, as: capture_amy, request: {method: DELETE, path: "/v1/todos/{{mixed}}"}}
+  - {name: delete accented, as: capture_amy, request: {method: DELETE, path: "/v1/todos/{{accented}}"}}
+  - {name: delete slash, as: capture_amy, request: {method: DELETE, path: "/v1/todos/{{slash}}"}}
+  - {name: delete climb, as: capture_amy, request: {method: DELETE, path: "/v1/todos/{{climb}}"}}
+  - {name: delete idna, as: capture_amy, request: {method: DELETE, path: "/v1/todos/{{idna}}"}}
+  - {name: delete userinfo, as: capture_amy, request: {method: DELETE, path: "/v1/todos/{{userinfo}}"}}
+  - name: nothing left but the trash
+    request: {method: GET, path: /health}
+    snapshot: [parity_capture_files, parity_capture_memories, parity_capture_contributions]
+    files: [capture_amy, capture_hal]
+    filesMask: *masks

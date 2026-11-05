@@ -10,6 +10,7 @@ import (
 	"lumina/internal/achievementsink"
 	"lumina/internal/apns"
 	"lumina/internal/auth"
+	linkcapture "lumina/internal/capture"
 	"lumina/internal/config"
 	"lumina/internal/db"
 	"lumina/internal/diskguard"
@@ -22,6 +23,7 @@ import (
 	"lumina/internal/modules/achievements"
 	"lumina/internal/modules/apple"
 	"lumina/internal/modules/calendar"
+	"lumina/internal/modules/capture"
 	"lumina/internal/modules/community"
 	"lumina/internal/modules/dashboard"
 	"lumina/internal/modules/devices"
@@ -41,6 +43,7 @@ import (
 	"lumina/internal/modules/sessions"
 	"lumina/internal/modules/spaces"
 	"lumina/internal/modules/teams"
+	"lumina/internal/modules/todos"
 	"lumina/internal/modules/vault"
 	"lumina/internal/modules/vision"
 	"lumina/internal/onboardlatch"
@@ -49,6 +52,7 @@ import (
 	"lumina/internal/secretbox"
 	"lumina/internal/telemetry"
 	"lumina/internal/usagemeter"
+	"lumina/internal/vaultfiles"
 	"lumina/internal/vaultpaths"
 	"net"
 	"os"
@@ -57,6 +61,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/labstack/echo/v5"
 )
@@ -164,6 +169,7 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		embeddings := embedding.New(pool, embeddingConfig(cfg), box)
 		// Migrated modules (modules.yaml status ≥ parity). Traffic only reaches
 		// them through the api ingress.extraPaths that name them.
+		meModule := me.New(pool, identify, limits, me.Options{RecapThemesEnabled: cfg.RecapThemesEnabled})
 		deps.Modules = []httpserver.Module{
 			projects.New(pool),
 			kanban.New(pool, identify, limits, paths),
@@ -179,7 +185,7 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 				Kind: cfg.EmailKind, APIKey: cfg.EmailResendAPIKey, FromAddress: cfg.EmailFromAddress,
 				ReplyTo: cfg.EmailReplyTo, BaseURL: cfg.TeamInviteBaseURL,
 			}, slog.Default().With("module", "teams"))),
-			me.New(pool, identify, limits, me.Options{RecapThemesEnabled: cfg.RecapThemesEnabled}),
+			meModule,
 			dashboard.New(pool, identify),
 			ingestion.New(pool, identify, limits, paths,
 				diskguard.New(cfg.VaultRootPath, cfg.StorageMinFreeBytes, cfg.StorageMinFreeRatio, diskguard.Options{}),
@@ -215,15 +221,23 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		if m := marketplace.New(pool, cfg.LVSecretMasterKey, pluginOptions, identify, limits, paths); m != nil { // nil without LV_SECRET_MASTER_KEY, as in Swift
 			deps.Modules = append(deps.Modules, m)
 		}
-		sink, stopSink := startAchievementSink(ctx, pool, cfg)
+		// One sink and one disk guard for wave 4's writers. The sink stops after the
+		// HTTP server, so a request finishing in graceful shutdown can still enqueue.
+		sink, stopSink := startAchievementSink(ctx, pool, cfg, func(tenant uuid.UUID, _ achievements.Sub) { meModule.InvalidateToday(tenant) })
 		defer stopSink()
-		deps.Modules = append(deps.Modules, vault.New(pool, vault.Options{
-			Paths: paths, HermesDataRoot: cfg.HermesDataRoot, Identify: identify, Limits: limits,
-			Spaces: spaces.New(pool, paths, identify), Embeddings: embeddings,
-			Guard:   diskguard.New(paths.Root, cfg.StorageMinFreeBytes, cfg.StorageMinFreeRatio, diskguard.Options{}),
-			Sink:    sink,
-			Latches: onboardlatch.New(pool), Analytics: analytics,
-		}))
+		disk := diskguard.New(paths.Root, cfg.StorageMinFreeBytes, cfg.StorageMinFreeRatio, diskguard.Options{})
+		memories := memorystore.New(pool, nil)
+		deps.Modules = append(deps.Modules,
+			vault.New(pool, vault.Options{
+				Paths: paths, HermesDataRoot: cfg.HermesDataRoot, Identify: identify, Limits: limits,
+				Spaces: spaces.New(pool, paths, identify), Embeddings: embeddings,
+				Guard:   disk,
+				Sink:    sink,
+				Latches: onboardlatch.New(pool), Analytics: analytics,
+			}),
+			todos.New(pool, paths, todos.Options{Disk: disk, Memories: memories, Embeddings: embeddings}),
+			captureModule(pool, cfg, paths, box, limits, embeddings, memories, disk, sink, analytics),
+		)
 	}
 	e := httpserver.New(cfg, deps)
 	sc := echo.StartConfig{
@@ -239,15 +253,37 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 	return nil
 }
 
+// captureModule builds POST /v1/capture/safari. internal/capture holds the service
+// because wave 4F's vault import uses it too.
+func captureModule(pool *pgxpool.Pool, cfg config.Config, paths vaultpaths.Paths, box *secretbox.Box, limits *ratelimit.Store,
+	embeddings embedding.Service, memories *memorystore.Repository, disk *diskguard.Guard, unlocks *achievementsink.Sink, analytics *posthog.Client,
+) httpserver.Module {
+	store := vaultfiles.NewStore(pool, paths)
+	service := linkcapture.New(pool, linkcapture.Options{
+		Paths: paths, Store: store, Disk: disk, Achievements: unlocks, Latches: onboardlatch.New(pool),
+		Enrichment: linkcapture.NewEnrichmentService(linkcapture.EnrichmentOptions{
+			Paths: paths, Store: store, Embeddings: embeddings, Memories: memories,
+			Jina: &linkcapture.JinaEnricher{APIKey: cfg.JinaAPIKey},
+			Hooks: &linkcapture.HookDispatcher{
+				Registry:  linkcapture.NewHookRegistry(linkcapture.ReadingTimeHook{}),
+				Installed: linkcapture.InstalledSlugsFrom(pool),
+			},
+		}),
+	})
+	gate := entitlement.Middleware(pool, entitlement.Capture,
+		entitlement.EnforcementEnabled(cfg.BillingEnforcementEnabled), entitlement.PGCredentials(pool, box))
+	return capture.New(pool, service, gate, limits, analytics)
+}
+
 // startAchievementSink starts the sink that records achievements after a response.
 // The returned stop drains it: the caller defers it inside the pool's lifetime,
 // so it runs after the HTTP server stops and before the pool closes.
-func startAchievementSink(ctx context.Context, pool *pgxpool.Pool, cfg config.Config) (sink *achievementsink.Sink, stop func()) {
+func startAchievementSink(ctx context.Context, pool *pgxpool.Pool, cfg config.Config, onUnlock func(uuid.UUID, achievements.Sub)) (sink *achievementsink.Sink, stop func()) {
 	pusher := apns.New(pool, apns.Config{
 		Enabled: cfg.APNSEnabled, BundleID: cfg.APNSBundleID, TeamID: cfg.APNSTeamID, KeyID: cfg.APNSKeyID,
 		PrivateKeyPath: cfg.APNSPrivateKeyPath, Environment: cfg.APNSEnvironment,
 	})
-	sink = achievementsink.New(achievements.NewRecorder(pool), pusher, achievementsink.Options{})
+	sink = achievementsink.New(achievements.NewRecorder(pool), pusher, achievementsink.Options{OnUnlock: onUnlock})
 	sinkCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	done := make(chan struct{})
 	go func() {

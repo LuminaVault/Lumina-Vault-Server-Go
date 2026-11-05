@@ -151,6 +151,17 @@ dash_ovf: DA5B0000-0000-4000-8000-0000000000B8
 strict_ann: 57C70000-0000-4000-8000-0000000000A1
 limit_ann: 57C70000-0000-4000-8000-0000000000A2
 query_ann: 57C70000-0000-4000-8000-0000000000A3
+# capture (parity/seed/capture.sql): own users, so a filled captureByUser bucket or
+# a vault tree can't touch other scenarios.
+capture_amy: CA97E000-0000-4000-8000-0000000000A1
+capture_ben: CA97E000-0000-4000-8000-0000000000B2
+capture_cid: CA97E000-0000-4000-8000-0000000000C3
+capture_hal: CA97E000-0000-4000-8000-0000000000D4
+capture_arc: CA97E000-0000-4000-8000-0000000000E5
+capture_lap: CA97E000-0000-4000-8000-0000000000F6
+# todos (parity/seed/todos.sql)
+todo_tia: 70D00000-0000-4000-8000-0000000000A1
+todo_tom: 70D00000-0000-4000-8000-0000000000B2
 # knowledge (parity/seed/knowledge.sql): own users so no captureByUser bucket fills.
 kg_kim: 6B000000-0000-4000-8000-0000000000A1
 kg_nia: 6B000000-0000-4000-8000-0000000000A2

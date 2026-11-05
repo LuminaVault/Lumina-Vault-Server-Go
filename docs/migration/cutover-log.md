@@ -1010,6 +1010,74 @@ Beyond the pilot gate (D-wave2-early):
   `billing-on`. `parity`, `lint`, `test` and `vuln` pass (https://github.com/LuminaVault/Lumina-Vault-Server-Go/actions/runs/41947259214/job/126982428061).
 - Go tests: `internal/modules/kb` has 6 tests on Postgres, including spec conformance.
 
+## todos (wave 4)
+
+### G0 entry: met 2026-11-05
+
+- Routes: 4 in `docs/migration/routes.json` (`GET` and `POST /v1/todos`, `PATCH` and
+  `DELETE /v1/todos/{id}`).
+- Prefix: `/v1/todos`, disjoint (`internal/manifest`).
+- Coupling: a todo is a vault file, so it uses `internal/vaultfiles` and
+  `internal/memorystore`. Swift publishes nothing from the controller.
+- Jobs: none.
+- Route middleware: `jwtAuthenticator`. Go uses `auth.Middleware`.
+- Swift tests: no suite of their own. The todo half of `DiskSpaceGuardHTTPTests` is ported.
+
+### G1 parity: met 2026-11-05
+
+- Seed: `parity/seed/todos.sql` has `todo_tia` and `todo_tom`, with views that mask the
+  random file name. Swift's list has no `ORDER BY`, so the seeds and scenarios keep each
+  `done` and `dueAt` position unique: a tie comes back in whichever order Postgres scans.
+- Parity: `parity/scenarios/todos` has 5 files and 109 steps: order, filters, create,
+  patch, promotion of any vault file, delete with the memory cascade, decode errors and
+  isolation. `disk-full` proves the 507 with nothing written.
+- CI run 41972727611 on head 5d5df73: self-test and Swift vs Go both give **123 scenarios, 0
+  differences**, and every switch state gives 0. `parity`, `lint`, `test` and `vuln` pass
+  (https://github.com/LuminaVault/Lumina-Vault-Server-Go/actions/runs/41972727611/job/127064448711).
+- Go tests: `internal/modules/todos` has 13 tests on Postgres, including spec conformance.
+- Quirks kept: `PATCH` and `DELETE` take any vault file of the tenant, and `PATCH` makes it
+  a todo. A due date or project can't be cleared. The file name's UUID isn't the row's id.
+- Path check: `delete` passes `row.Path` to `ResolveInside` without `SanitizePath`, as Swift does.
+
+## capture (wave 4)
+
+### G0 entry: met 2026-11-05
+
+- Routes: 1 in `docs/migration/routes.json` (`POST /v1/capture/safari`).
+- Prefix: `/v1/capture`, disjoint (`internal/manifest`).
+- Coupling: `AchievementsWorker` inbox through `internal/achievementsink`,
+  `OnboardingLatches` through `internal/onboardlatch`. EventBus `vault_file_created` is
+  dropped because its only subscriber logs.
+- Jobs: link enrichment is a detached task in both servers, lost if the process stops.
+- Route middleware: `jwtAuthenticator`, `EntitlementMiddleware(.capture)`, then
+  `captureByUser`, in that order.
+- Swift tests: `URLExtractionServiceTests` 11, `URLEnricherGuardTests` 5,
+  `CaptureHookDispatcherTests` 6, `JinaEnricherTests` 7 and the capture half of
+  `DiskSpaceGuardHTTPTests` are ported. `CaptureFilingServiceTests` 3 go to 4F.
+
+### G1 parity: met 2026-11-05
+
+- Seed: `parity/seed/capture.sql` has six users, spaces, plugin installs and views that
+  mask the time and random suffix in the path.
+- Enrichment race: both servers enrich for real against the feeds stub, with `r.jina.ai`
+  refused in compose. Steps that compare the result wait on `parity_capture_pending`
+  (`waitEmpty`). `/capture/slow` holds a page so the placeholder is compared too.
+- Parity: `parity/scenarios/capture` has 3 files and 117 steps. `disk-full` proves the 507
+  and `billing-on` the gate.
+- Spec drift: `api/openapi.yaml` answers 200 where Swift answers 202. The DTOs are
+  hand-written, and the spec test validates the body against the 200 schema.
+- CI run 41972727611 on head 5d5df73: **123 scenarios, 0 differences** in both comparisons, and
+  every switch state gives 0. `parity`, `lint`, `test` and `vuln` pass
+  (https://github.com/LuminaVault/Lumina-Vault-Server-Go/actions/runs/41972727611/job/127064448711).
+- Go tests: `internal/capture` has 48 tests, including 1143 `URL(string:)` cases captured
+  from Swift. `internal/modules/capture` has 15 on Postgres.
+- Differences kept on purpose: the fetch timeout covers the whole request, pages are capped
+  at 32 MiB, and oEmbed requests carry Go's default User-Agent.
+- Open for the owner: `URLEnricherGuard` has no DNS or redirect check, and it passes `127.1`,
+  `2130706433`, `0x7f.0.0.1` and `[::ffff:127.0.0.1]`. Go keeps this for parity.
+- Path check: `CaptureLink` and `enrichAndRewrite` use `ResolveInside` without `SanitizePath`,
+  as Swift does.
+
 ## vault (wave 4)
 
 ### G0 entry: met 2026-11-05

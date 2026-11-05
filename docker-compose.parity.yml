@@ -5,6 +5,12 @@
 #
 # The Swift image defaults to the one apps/api/values-staging.yaml pins. A
 # locally built image works too: PARITY_SWIFT_IMAGE=lv-swift:<sha>.
+# Capture's enrichment always tries Jina's reader after the page itself, at a URL
+# Swift hard-codes. Refusing the connection keeps real traffic out of a run and
+# makes that step fail the same way on every server.
+x-no-external: &no-external
+  - "r.jina.ai:127.0.0.1"
+
 x-common-env: &common-env
   POSTGRES_HOST: pg
   POSTGRES_PORT: "5432"
@@ -59,6 +65,7 @@ services:
 
   swift:
     image: ${PARITY_SWIFT_IMAGE:-lv-swift:fdbed9b0}
+    extra_hosts: *no-external
     environment:
       <<: *common-env
       POSTGRES_DATABASE: ${SWIFT_DB:-parity_swift}
@@ -68,6 +75,7 @@ services:
 
   swift2:
     image: ${PARITY_SWIFT_IMAGE:-lv-swift:fdbed9b0}
+    extra_hosts: *no-external
     environment:
       <<: *common-env
       POSTGRES_DATABASE: parity_swift2
@@ -77,6 +85,7 @@ services:
 
   go:
     build: .
+    extra_hosts: *no-external
     environment:
       <<: *common-env
       POSTGRES_DATABASE: parity_go
@@ -88,6 +97,7 @@ services:
   # (scripts/parity-switches.sh).
   swift-switched:
     image: ${PARITY_SWIFT_IMAGE:-lv-swift:fdbed9b0}
+    extra_hosts: *no-external
     environment:
       <<: *common-env
       POSTGRES_DATABASE: parity_swift_switched
@@ -97,6 +107,7 @@ services:
       ADMIN_TOKEN: ${SWITCH_ADMIN_TOKEN-parity-admin-token}
       PLUGIN_ARTIFACT_SIGNING_KEY: ${SWITCH_SIGNING_KEY-parity-signing-key-parity-signing-key-0000}
       PLUGIN_RUNNER_TOKEN: ${SWITCH_RUNNER_TOKEN-parity-runner-token}
+      STORAGE_MIN_FREE_BYTES: ${SWITCH_STORAGE_MIN_FREE_BYTES:-3221225472}
       BILLING_ENFORCEMENT_ENABLED: ${SWITCH_BILLING_ENFORCEMENT_ENABLED:-false}
       VISION_EMBED_PROVIDER: ${SWITCH_VISION_EMBED_PROVIDER:-cohere}
       VISION_EMBED_PROVIDER_COHERE_API_KEY: ${SWITCH_VISION_COHERE_API_KEY-}
@@ -108,6 +119,7 @@ services:
   go-switched:
     image: lvparity-go
     pull_policy: never
+    extra_hosts: *no-external
     environment:
       <<: *common-env
       POSTGRES_DATABASE: parity_go_switched
@@ -117,6 +129,7 @@ services:
       ADMIN_TOKEN: ${SWITCH_ADMIN_TOKEN-parity-admin-token}
       PLUGIN_ARTIFACT_SIGNING_KEY: ${SWITCH_SIGNING_KEY-parity-signing-key-parity-signing-key-0000}
       PLUGIN_RUNNER_TOKEN: ${SWITCH_RUNNER_TOKEN-parity-runner-token}
+      STORAGE_MIN_FREE_BYTES: ${SWITCH_STORAGE_MIN_FREE_BYTES:-3221225472}
       BILLING_ENFORCEMENT_ENABLED: ${SWITCH_BILLING_ENFORCEMENT_ENABLED:-false}
       VISION_EMBED_PROVIDER: ${SWITCH_VISION_EMBED_PROVIDER:-cohere}
       VISION_EMBED_PROVIDER_COHERE_API_KEY: ${SWITCH_VISION_COHERE_API_KEY-}
@@ -128,6 +141,7 @@ services:
   # A second Swift for the LLM stub self-test (scripts/parity-switches.sh).
   swift2-switched:
     image: ${PARITY_SWIFT_IMAGE:-lv-swift:fdbed9b0}
+    extra_hosts: *no-external
     environment:
       <<: *common-env
       POSTGRES_DATABASE: parity_swift2_switched

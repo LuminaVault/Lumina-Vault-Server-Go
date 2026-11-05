@@ -10,6 +10,7 @@
 #                   (a short key with a runner token refuses to boot, in both servers)
 #   runner-off      no runner token
 #   catalog-unseeded  no "luminavault" publisher: the first read tries to seed the catalog
+#   disk-full       a free-space floor no disk meets: every user-file write answers 507
 #   vision-stub     VISION_EMBED_PROVIDER=stub: Swift's test adapter answers
 #   vision-cohere   a Cohere key, with the base URL on the feeds stub (POST /v2/embed)
 #   billing-on      BILLING_ENFORCEMENT_ENABLED=true: the /v1/knowledge and /v1/vision paywalls
@@ -95,6 +96,7 @@ run_state posting-off SWITCH_COMMUNITY_POSTING_ENABLED=false
 run_state unconfigured SWITCH_ADMIN_TOKEN= SWITCH_SIGNING_KEY=too-short SWITCH_RUNNER_TOKEN=
 run_state runner-off SWITCH_RUNNER_TOKEN=
 run_state catalog-unseeded SWITCH_NONE=
+run_state disk-full SWITCH_STORAGE_MIN_FREE_BYTES=4611686018427387903
 run_state vision-stub SWITCH_VISION_EMBED_PROVIDER=stub
 run_state vision-cohere SWITCH_VISION_COHERE_API_KEY=parity-cohere-key SWITCH_VISION_COHERE_BASE_URL=http://feeds:8080
 run_state vision-cohere-down SWITCH_VISION_COHERE_API_KEY=parity-cohere-key SWITCH_VISION_COHERE_BASE_URL=http://feeds:9

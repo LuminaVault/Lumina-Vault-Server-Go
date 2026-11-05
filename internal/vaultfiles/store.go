@@ -184,6 +184,18 @@ func (s *Store) UpdateMetadata(ctx context.Context, id uuid.UUID, m *Metadata) e
 	return err
 }
 
+// UpdateContent stores a rewritten file's size and hash and its metadata whole, as
+// URLEnrichmentService's `row.save` does. It does not merge.
+func (s *Store) UpdateContent(ctx context.Context, id uuid.UUID, sizeBytes int64, sha256 string, m *Metadata) error {
+	metadata, err := encodeColumn(m)
+	if err != nil {
+		return err
+	}
+	_, err = s.pool.Exec(ctx, `UPDATE vault_files SET size_bytes = $2, sha256 = $3, metadata = $4::jsonb, updated_at = $5 WHERE id = $1`,
+		id, sizeBytes, sha256, metadata, time.Now())
+	return err
+}
+
 // DeleteRow removes the row for good. vault_files has no soft delete of its
 // own: the `_deleted_*` name is the only trace of a deleted file, and that's on
 // disk. Cascade the note's memory first, because the foreign key would only

@@ -1,0 +1,59 @@
+module: capture
+steps:
+  - {name: no token, request: {method: POST, path: /v1/capture/safari, json: {url: "https://example.com/"}}}
+  - {name: bad token, request: {method: POST, path: /v1/capture/safari, json: {url: "https://example.com/"}, headers: {Authorization: "Bearer not.a.jwt"}}}
+  - {name: malformed json, as: capture_ben, request: {method: POST, path: /v1/capture/safari, raw: "{\"url\":"}}
+  - {name: empty body, as: capture_ben, request: {method: POST, path: /v1/capture/safari, raw: ""}}
+  - {name: array body, as: capture_ben, request: {method: POST, path: /v1/capture/safari, raw: "[]"}}
+  - {name: missing url, as: capture_ben, request: {method: POST, path: /v1/capture/safari, json: {}}}
+  - {name: null url, as: capture_ben, request: {method: POST, path: /v1/capture/safari, raw: "{\"url\":null}"}}
+  - {name: url wrong type, as: capture_ben, request: {method: POST, path: /v1/capture/safari, json: {url: 42}}}
+  - {name: notes wrong type, as: capture_ben, request: {method: POST, path: /v1/capture/safari, json: {url: "http://feeds:8080/capture/empty", notes: 7}}}
+  - {name: space id wrong type, as: capture_ben, request: {method: POST, path: /v1/capture/safari, json: {url: "http://feeds:8080/capture/empty", space_id: 7}}}
+  - {name: space id not a uuid, as: capture_ben, request: {method: POST, path: /v1/capture/safari, json: {url: "http://feeds:8080/capture/empty", space_id: nope}}}
+  - {name: unknown space, as: capture_ben, request: {method: POST, path: /v1/capture/safari, json: {url: "http://feeds:8080/capture/empty", space_id: CA97E000-0000-4000-8000-00000000FFFF}}}
+  - {name: another user's space, as: capture_ben, request: {method: POST, path: /v1/capture/safari, json: {url: "http://feeds:8080/capture/empty", space_id: CA97E000-0000-4000-8000-0000000005A1}}}
+  - {name: the host check comes before the space check, as: capture_ben, request: {method: POST, path: /v1/capture/safari, json: {url: "http://localhost/", space_id: CA97E000-0000-4000-8000-00000000FFFF}}}
+  - {name: empty url, as: capture_ben, request: {method: POST, path: /v1/capture/safari, json: {url: ""}}}
+  - {name: trailing space, as: capture_ben, request: {method: POST, path: /v1/capture/safari, json: {url: "https://example.com "}}}
+  - {name: leading space, as: capture_ben, request: {method: POST, path: /v1/capture/safari, json: {url: " https://example.com"}}}
+  - {name: space in the host, as: capture_ben, request: {method: POST, path: /v1/capture/safari, json: {url: "https://exa mple.com/"}}}
+  - {name: bad port, as: capture_ben, request: {method: POST, path: /v1/capture/safari, json: {url: "http://example.com:abc/"}}}
+  - {name: open bracket, as: capture_ben, request: {method: POST, path: /v1/capture/safari, json: {url: "http://[::1"}}}
+  - {name: bad escape in the host, as: capture_ben, request: {method: POST, path: /v1/capture/safari, json: {url: "http://%zz/"}}}
+  - {name: bad scheme, as: capture_ben, request: {method: POST, path: /v1/capture/safari, json: {url: "1http://a/"}}}
+  - {name: relative with an at sign, as: capture_ben, request: {method: POST, path: /v1/capture/safari, json: {url: "@a:b"}}}
+  - {name: not a url at all, as: capture_ben, request: {method: POST, path: /v1/capture/safari, json: {url: "not a url"}}}
+  - {name: no scheme, as: capture_ben, request: {method: POST, path: /v1/capture/safari, json: {url: "example.com/path"}}}
+  - {name: scheme only, as: capture_ben, request: {method: POST, path: /v1/capture/safari, json: {url: "https:"}}}
+  - {name: no host, as: capture_ben, request: {method: POST, path: /v1/capture/safari, json: {url: "http:///path"}}}
+  - {name: empty host with a port, as: capture_ben, request: {method: POST, path: /v1/capture/safari, json: {url: "http://:80/"}}}
+  - {name: ftp, as: capture_ben, request: {method: POST, path: /v1/capture/safari, json: {url: "ftp://example.com/"}}}
+  - {name: file, as: capture_ben, request: {method: POST, path: /v1/capture/safari, json: {url: "file:///etc/passwd"}}}
+  - {name: javascript, as: capture_ben, request: {method: POST, path: /v1/capture/safari, json: {url: "javascript:alert(1)"}}}
+  - {name: mailto, as: capture_ben, request: {method: POST, path: /v1/capture/safari, json: {url: "mailto:a@b.com"}}}
+  - {name: wrong method, as: capture_ben, request: {method: GET, path: /v1/capture/safari}}
+  - {name: unknown path, as: capture_ben, request: {method: POST, path: /v1/capture/other, json: {url: "http://feeds:8080/capture/empty"}}}
+  - {name: bare prefix, as: capture_ben, request: {method: POST, path: /v1/capture, json: {url: "http://feeds:8080/capture/empty"}}}
+
+  # URLEnricherGuard, including what it gets wrong in both directions.
+  - {name: localhost, as: capture_cid, request: {method: POST, path: /v1/capture/safari, json: {url: "http://localhost/admin"}}}
+  - {name: LOCALHOST, as: capture_cid, request: {method: POST, path: /v1/capture/safari, json: {url: "HTTP://LOCALHOST/"}}}
+  - {name: loopback, as: capture_cid, request: {method: POST, path: /v1/capture/safari, json: {url: "http://127.0.0.1:5432"}}}
+  - {name: rfc1918 10, as: capture_cid, request: {method: POST, path: /v1/capture/safari, json: {url: "http://10.0.0.1/"}}}
+  - {name: rfc1918 172, as: capture_cid, request: {method: POST, path: /v1/capture/safari, json: {url: "http://172.31.255.255/"}}}
+  - {name: rfc1918 192, as: capture_cid, request: {method: POST, path: /v1/capture/safari, json: {url: "http://192.168.1.10/api"}}}
+  - {name: metadata address, as: capture_cid, request: {method: POST, path: /v1/capture/safari, json: {url: "http://169.254.169.254/latest/meta-data/"}}}
+  - {name: cgnat, as: capture_cid, request: {method: POST, path: /v1/capture/safari, json: {url: "http://100.64.0.1/"}}}
+  - {name: zero, as: capture_cid, request: {method: POST, path: /v1/capture/safari, json: {url: "http://0.0.0.0/"}}}
+  - {name: ipv6 loopback, as: capture_cid, request: {method: POST, path: /v1/capture/safari, json: {url: "http://[::1]/"}}}
+  - {name: ipv6 unique local, as: capture_cid, request: {method: POST, path: /v1/capture/safari, json: {url: "http://[fc00::1]/"}}}
+  - {name: ipv6 link local, as: capture_cid, request: {method: POST, path: /v1/capture/safari, json: {url: "http://[FE80::1]/"}}}
+  - {name: metadata name, as: capture_cid, request: {method: POST, path: /v1/capture/safari, json: {url: "http://metadata.google.internal/"}}}
+  - {name: internal suffix, as: capture_cid, request: {method: POST, path: /v1/capture/safari, json: {url: "http://server.INTERNAL/"}}}
+  - {name: local suffix, as: capture_cid, request: {method: POST, path: /v1/capture/safari, json: {url: "http://printer.local/"}}}
+  - {name: an encoded private host, as: capture_cid, request: {method: POST, path: /v1/capture/safari, json: {url: "http://%31%30.0.0.1/"}}}
+  - {name: quirk a public name starting with fc, as: capture_cid, request: {method: POST, path: /v1/capture/safari, json: {url: "https://fcbarcelona.com/"}}}
+  - {name: quirk a public name starting with fd, as: capture_cid, request: {method: POST, path: /v1/capture/safari, json: {url: "https://fdroid.org/"}}}
+  - {name: quirk non-numeric labels are dropped, as: capture_cid, request: {method: POST, path: /v1/capture/safari, json: {url: "http://10.0.0.1.example.com/"}}}
+  - {name: nothing was written, as: capture_cid, request: {method: GET, path: /health}, snapshot: [parity_capture_files], files: [capture_ben, capture_cid]}

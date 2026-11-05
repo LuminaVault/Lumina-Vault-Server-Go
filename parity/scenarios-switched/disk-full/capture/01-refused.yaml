@@ -1,0 +1,6 @@
+# DiskSpaceGuardHTTPTests: a floor larger than any disk. Refused with the coded
+# envelope, and neither a row nor a file appears.
+module: capture
+steps:
+  - {name: capture refused, as: capture_amy, request: {method: POST, path: /v1/capture/safari, json: {url: "http://feeds:8080/capture/article"}}, snapshot: [parity_capture_files, parity_capture_onboarding, parity_capture_achievements], files: [capture_amy]}
+  - {name: refusals before the guard still win, as: capture_amy, request: {method: POST, path: /v1/capture/safari, json: {url: "http://localhost/"}}}
