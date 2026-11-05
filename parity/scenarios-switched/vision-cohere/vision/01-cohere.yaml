@@ -1,0 +1,34 @@
+# VISION_EMBED_PROVIDER_COHERE_API_KEY set and the base URL on the stub, which checks the request shape.
+module: vision
+steps:
+  - name: "embed through the adapter"
+    as: vis_coh
+    request: {method: POST, path: "/v1/vision/embed", base64: "iVBORw0KGgo=", headers: {"Content-Type": "image/png"}}
+  - name: "search through the adapter"
+    as: vis_oth
+    request: {method: POST, path: "/v1/vision/search", base64: "iVBORw0KGgo=", headers: {"Content-Type": "image/png"}}
+  - name: "index through the adapter"
+    as: vis_coh
+    request: {method: POST, path: "/v1/vision/embed?indexAs=memory&memoryId=6B0E0000-0000-4000-8000-0000000000E9", base64: "iVBORw0KGgo=", headers: {"Content-Type": "image/png"}}
+    snapshot: ["memories"]
+  - name: "wider than the column is truncated"
+    as: vis_coh
+    request: {method: POST, path: "/v1/vision/embed", base64: "Y29oZXJlLWxvbmc=", headers: {"Content-Type": "image/png"}}
+  - name: "upstream 400 is rejected"
+    as: vis_coh
+    request: {method: POST, path: "/v1/vision/embed", base64: "Y29oZXJlLTQwMA==", headers: {"Content-Type": "image/png"}}
+  - name: "upstream 429 is unavailable"
+    as: vis_coh
+    request: {method: POST, path: "/v1/vision/embed", base64: "Y29oZXJlLTQyOQ==", headers: {"Content-Type": "image/png"}}
+  - name: "upstream 500 is unavailable"
+    as: vis_coh
+    request: {method: POST, path: "/v1/vision/search", base64: "Y29oZXJlLTUwMA==", headers: {"Content-Type": "image/png"}}
+  - name: "not json"
+    as: vis_coh
+    request: {method: POST, path: "/v1/vision/embed", base64: "Y29oZXJlLWdhcmJhZ2U=", headers: {"Content-Type": "image/png"}}
+  - name: "no vectors"
+    as: vis_coh
+    request: {method: POST, path: "/v1/vision/embed", base64: "Y29oZXJlLWVtcHR5", headers: {"Content-Type": "image/png"}}
+  - name: "a null in the vector"
+    as: vis_coh
+    request: {method: POST, path: "/v1/vision/embed", base64: "Y29oZXJlLW51bGw=", headers: {"Content-Type": "image/png"}}

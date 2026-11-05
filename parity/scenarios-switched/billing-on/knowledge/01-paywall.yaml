@@ -1,0 +1,26 @@
+module: knowledge
+steps:
+  - name: "no token: the gate asks for identity first"
+    request: {method: GET, path: "/v1/knowledge/graph", headers: {"X-Forwarded-For": "10.76.0.4", "X-Vault-ID": "nope"}}
+  - name: "no token, bad body: the gate wins"
+    request: {method: POST, path: "/v1/knowledge/connections/explain", raw: "{", headers: {"X-Forwarded-For": "10.76.0.4"}}
+  - name: "no token, bad edge id: the gate wins"
+    request: {method: POST, path: "/v1/knowledge/edges/nope/confirm", raw: "{", headers: {"X-Forwarded-For": "10.76.0.4"}}
+  - name: "trial passes"
+    as: kg_empty
+    request: {method: GET, path: "/v1/knowledge/graph"}
+  - name: "free passes"
+    as: kg_free
+    request: {method: GET, path: "/v1/knowledge/graph"}
+  - name: "lapsed passes"
+    as: kg_lapsed
+    request: {method: GET, path: "/v1/knowledge/graph"}
+  - name: "archived is a paywall"
+    as: kg_arch
+    request: {method: GET, path: "/v1/knowledge/graph"}
+  - name: "archived explain is a paywall before the body"
+    as: kg_arch
+    request: {method: POST, path: "/v1/knowledge/connections/explain", raw: "{"}
+  - name: "archived review is a paywall before the id"
+    as: kg_arch
+    request: {method: POST, path: "/v1/knowledge/edges/nope/confirm", raw: "{"}

@@ -126,6 +126,8 @@ func TestPolicyNamesMatchSwift(t *testing.T) {
 	require.Equal(t, "queryByUser", ratelimit.QueryByUser.Name)
 	require.Equal(t, "captureByUser", ratelimit.CaptureByUser.Name)
 	require.Equal(t, "meTodayByUser", ratelimit.MeTodayByUser.Name)
+	require.Equal(t, "visionEmbedByUserPerMinute", ratelimit.VisionEmbedByUserPerMinute.Name)
+	require.Equal(t, "visionEmbedByUserDaily", ratelimit.VisionEmbedByUserDaily.Name)
 }
 
 func TestTieredMiddleware(t *testing.T) {

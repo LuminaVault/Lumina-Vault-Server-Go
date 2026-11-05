@@ -154,7 +154,7 @@ modules:
   kb:
     wave: 4
     swiftDir: Sources/App/KB
-    status: swift
+    status: parity
     prefixes: [/v1/memory-compile/pending]
     jobs: []
   kb-compile:
@@ -169,7 +169,7 @@ modules:
   knowledge:
     wave: 4
     swiftDir: Sources/App/Knowledge
-    status: swift
+    status: parity
     prefixes: [/v1/knowledge/connections, /v1/knowledge/edges, /v1/knowledge/graph]
     jobs: []
   knowledge-reason:
@@ -210,7 +210,7 @@ modules:
   vision:
     wave: 4
     swiftDir: Sources/App/Vision
-    status: swift
+    status: parity
     prefixes: [/v1/vision]
     jobs: []
   agents:

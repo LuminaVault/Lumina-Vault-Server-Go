@@ -1,0 +1,16 @@
+module: vision
+steps:
+  - name: "embed no token"
+    request: {method: POST, path: "/v1/vision/embed", base64: "iVBORw0KGgo=", headers: {"Content-Type": "image/png", "X-Forwarded-For": "10.76.0.3"}}
+  - name: "search no token"
+    request: {method: POST, path: "/v1/vision/search", base64: "iVBORw0KGgo=", headers: {"Content-Type": "image/png", "X-Forwarded-For": "10.76.0.3"}}
+  - name: "embed bad token"
+    request: {method: POST, path: "/v1/vision/embed", base64: "iVBORw0KGgo=", headers: {"Content-Type": "image/png", "X-Forwarded-For": "10.76.0.3", "Authorization": "Bearer not.a.jwt"}}
+  - name: "no token beats a bad type"
+    request: {method: POST, path: "/v1/vision/embed", base64: "iVBORw0KGgo=", headers: {"Content-Type": "text/plain", "X-Forwarded-For": "10.76.0.3"}}
+  - name: "no token beats a bad limit"
+    request: {method: POST, path: "/v1/vision/search?limit=0", base64: "iVBORw0KGgo=", headers: {"Content-Type": "image/png", "X-Forwarded-For": "10.76.0.3"}}
+  - name: "no token, oversize declared"
+    request: {method: POST, path: "/v1/vision/embed", fill: {"text": "x", "size": 8388609}, headers: {"X-Forwarded-For": "10.76.0.3", "Content-Type": "image/png"}}
+  - name: "the vault header is not read"
+    request: {method: POST, path: "/v1/vision/embed", base64: "iVBORw0KGgo=", headers: {"Content-Type": "text/plain", "X-Forwarded-For": "10.76.0.3", "X-Vault-ID": "nope"}}

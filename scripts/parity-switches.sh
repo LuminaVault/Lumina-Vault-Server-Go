@@ -10,6 +10,9 @@
 #                   (a short key with a runner token refuses to boot, in both servers)
 #   runner-off      no runner token
 #   catalog-unseeded  no "luminavault" publisher: the first read tries to seed the catalog
+#   vision-stub     VISION_EMBED_PROVIDER=stub: Swift's test adapter answers
+#   vision-cohere   a Cohere key, with the base URL on the feeds stub (POST /v2/embed)
+#   billing-on      BILLING_ENFORCEMENT_ENABLED=true: the /v1/knowledge and /v1/vision paywalls
 #
 # A state for LLM success paths, once Go serves them (group 4F), is one more
 # run_state with SWITCH_HERMES_GATEWAY_URL=http://llmstub:8080 and the stub up.
@@ -92,6 +95,10 @@ run_state posting-off SWITCH_COMMUNITY_POSTING_ENABLED=false
 run_state unconfigured SWITCH_ADMIN_TOKEN= SWITCH_SIGNING_KEY=too-short SWITCH_RUNNER_TOKEN=
 run_state runner-off SWITCH_RUNNER_TOKEN=
 run_state catalog-unseeded SWITCH_NONE=
+run_state vision-stub SWITCH_VISION_EMBED_PROVIDER=stub
+run_state vision-cohere SWITCH_VISION_COHERE_API_KEY=parity-cohere-key SWITCH_VISION_COHERE_BASE_URL=http://feeds:8080
+run_state vision-cohere-down SWITCH_VISION_COHERE_API_KEY=parity-cohere-key SWITCH_VISION_COHERE_BASE_URL=http://feeds:9
+run_state billing-on SWITCH_BILLING_ENFORCEMENT_ENABLED=true
 llm_selftest
 "${COMPOSE[@]}" stop swift-switched go-switched >/dev/null 2>&1 || true
 exit "$failed"
