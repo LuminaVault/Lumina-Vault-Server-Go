@@ -1,5 +1,7 @@
 package memoryagent
 
+// Ports Tests/AppTests/Memory/HermesMemoryServiceTests.swift
+
 import (
 	"context"
 	"encoding/json"

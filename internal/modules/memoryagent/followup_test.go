@@ -1,5 +1,7 @@
 package memoryagent
 
+// Ports Tests/AppTests/Memory/FollowUpGeneratorTests.swift
+
 import (
 	"context"
 	"errors"

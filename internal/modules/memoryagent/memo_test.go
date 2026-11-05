@@ -1,5 +1,8 @@
 package memoryagent
 
+// Ports Tests/AppTests/Memory/MemoGeneratorTests.swift
+// Ports Tests/AppTests/Memory/MemoControllerTitleTests.swift
+
 import (
 	"context"
 	"lumina/internal/embedding"

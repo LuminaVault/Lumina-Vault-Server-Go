@@ -1,5 +1,7 @@
 package memoryagent
 
+// Ports Tests/AppTests/Memory/QueryStreamTests.swift
+
 import (
 	"encoding/json"
 	"lumina/internal/memorystore"

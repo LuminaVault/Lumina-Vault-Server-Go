@@ -1,5 +1,7 @@
 package knowledge
 
+// Ports Tests/AppTests/Knowledge/KnowledgeReasoningPathTests.swift
+
 import (
 	"lumina/internal/wire"
 	"testing"

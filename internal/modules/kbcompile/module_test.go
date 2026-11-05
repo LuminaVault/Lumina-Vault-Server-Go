@@ -1,5 +1,8 @@
 package kbcompile_test
 
+// Ports Tests/AppTests/KB/KBCompileControllerTests.swift
+// Ports Tests/AppTests/KB/MemoryCompileControllerTests.swift
+
 import (
 	"context"
 	"encoding/json"

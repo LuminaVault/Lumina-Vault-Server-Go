@@ -1,5 +1,11 @@
 package memorycompile
 
+// Ports Tests/AppTests/KB/MemoryCompileHappyPathTests.swift
+// Ports Tests/AppTests/KB/MemoryCompileMemoryUpsertTests.swift
+// Ports Tests/AppTests/KB/MemoryCompileProgressPublisherTests.swift
+// Ports Tests/AppTests/KB/MemoryCompileProgressServiceTests.swift
+// Ports Tests/AppTests/KB/MemoryCompileSpaceCountersTests.swift
+
 import (
 	"context"
 	"encoding/json"
