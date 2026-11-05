@@ -269,3 +269,24 @@ func TestMoveDestination(t *testing.T) {
 	_, err = vaultfiles.MoveDestination("a.md", &bad)
 	requireWireError(t, err, http.StatusBadRequest, "path contains illegal segment")
 }
+
+func TestSafeFileName(t *testing.T) {
+	for in, want := range map[string]string{
+		"report.pdf":              "report.pdf",
+		"a b  c.txt":              "a-b-c.txt",
+		`so"urce "name.txt`:       "so-urce-name.txt",
+		"résumé final (1)!!.MD":   "résumé-final-1-.MD",
+		"!!!.txt":                 ".txt",
+		"---":                     "",
+		"":                        "",
+		"under_score-dash.v2.tar": "under_score-dash.v2.tar",
+		" leading":                "leading",
+		"trailing ":               "trailing",
+	} {
+		require.Equal(t, want, vaultfiles.SafeFileName(in), in)
+	}
+	long := strings.Repeat("a", 300)
+	require.Equal(t, strings.Repeat("a", 180), vaultfiles.SafeFileName(long))
+	// The cut comes first, so a dash at position 180 goes too.
+	require.Equal(t, strings.Repeat("a", 179), vaultfiles.SafeFileName(strings.Repeat("a", 179)+"!"+strings.Repeat("b", 50)))
+}

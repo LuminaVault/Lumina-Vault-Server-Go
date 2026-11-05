@@ -11,6 +11,7 @@ import (
 	"errors"
 	"io"
 	"lumina/internal/dbtest"
+	"lumina/internal/ids"
 	"lumina/internal/migrations"
 	"net/http"
 	"net/http/httptest"
@@ -91,6 +92,34 @@ func TestService(t *testing.T) {
 		var seen *string
 		require.NoError(t, pool.QueryRow(ctx, `SELECT last_seen_at::text FROM device_tokens WHERE token = $1`, a).Scan(&seen))
 		require.NotNil(t, seen)
+	})
+
+	// Swift "ingestion notifications include terminal state and batch deep link payload".
+	t.Run("ingestion notifications carry the state and the batch deep link", func(t *testing.T) {
+		tenant := newTenant(t)
+		addToken(t, tenant, unique("ingest"), nil)
+		sender := &stubSender{}
+		s := NewWithSender(pool, bundle, sender)
+		batchID, itemID := uuid.New(), uuid.New()
+		name := "source.pdf"
+
+		require.NoError(t, s.NotifyIngestion(ctx, tenant, batchID, itemID, true, &name))
+		require.Len(t, sender.sent, 1)
+		m := sender.sent[0].Message
+		require.Equal(t, CategoryIngestion, m.Category)
+		require.Equal(t, "Capture ready", m.Title)
+		require.Equal(t, "source.pdf", *m.Subtitle)
+		require.Equal(t, "Hermes finished processing and linked the new memory.", m.Body)
+		require.Equal(t, ids.Upper(batchID), m.Payload["batchID"])
+		require.Equal(t, ids.Upper(itemID), m.Payload["itemID"])
+		require.Equal(t, "completed", m.Payload["state"])
+
+		require.NoError(t, s.NotifyIngestion(ctx, tenant, batchID, itemID, false, &name))
+		require.Len(t, sender.sent, 2)
+		failure := sender.sent[1].Message
+		require.Equal(t, "Capture needs attention", failure.Title)
+		require.Equal(t, "Open LuminaVault to review the ingestion status.", failure.Body)
+		require.Equal(t, "failed", failure.Payload["state"])
 	})
 
 	// Swift "dead tokens are reaped on bad device token error".

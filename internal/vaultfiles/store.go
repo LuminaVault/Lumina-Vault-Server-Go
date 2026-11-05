@@ -115,17 +115,7 @@ func (s *Store) Upsert(ctx context.Context, p UpsertParams) (uuid.UUID, error) {
 		return uuid.Nil, err
 	}
 	if existing == nil {
-		id := uuid.New()
-		metadata, err := encodeColumn(p.Metadata)
-		if err != nil {
-			return uuid.Nil, err
-		}
-		_, err = s.pool.Exec(ctx, `
-			INSERT INTO vault_files (id, tenant_id, space_id, path, content_type, size_bytes, sha256,
-				processed_at, metadata, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $10)`,
-			id, p.TenantID, p.SpaceID, p.Path, p.ContentType, p.SizeBytes, p.SHA256, processedAt, metadata, now)
-		return id, err
+		return s.insert(ctx, p, processedAt, now)
 	}
 	var merged *Metadata
 	if p.Metadata != nil {
@@ -143,6 +133,31 @@ func (s *Store) Upsert(ctx context.Context, p UpsertParams) (uuid.UUID, error) {
 		WHERE id = $1`,
 		existing.ID, p.ContentType, p.SizeBytes, p.SHA256, processedAt, p.SpaceID, metadata, now)
 	return existing.ID, err
+}
+
+// Insert is `VaultFile(...).save`: a new row, with no read before it, so a path the
+// tenant already has is a unique violation.
+func (s *Store) Insert(ctx context.Context, p UpsertParams) (uuid.UUID, error) {
+	now := time.Now()
+	var processedAt *time.Time
+	if p.Processed {
+		processedAt = &now
+	}
+	return s.insert(ctx, p, processedAt, now)
+}
+
+func (s *Store) insert(ctx context.Context, p UpsertParams, processedAt *time.Time, now time.Time) (uuid.UUID, error) {
+	id := uuid.New()
+	metadata, err := encodeColumn(p.Metadata)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	_, err = s.pool.Exec(ctx, `
+		INSERT INTO vault_files (id, tenant_id, space_id, path, content_type, size_bytes, sha256,
+			processed_at, metadata, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $10)`,
+		id, p.TenantID, p.SpaceID, p.Path, p.ContentType, p.SizeBytes, p.SHA256, processedAt, metadata, now)
+	return id, err
 }
 
 // StampActors is the step after the upsert in VaultController.upload: the first

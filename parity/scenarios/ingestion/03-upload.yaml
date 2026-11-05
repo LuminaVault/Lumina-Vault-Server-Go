@@ -1,0 +1,112 @@
+# PUT chunks and POST complete on seeded items (b1, ann). Chunks live in
+# tmp/ingestion/<ITEM> under the tenant root, the assembled file in raw/.
+module: ingestion
+steps:
+  # Bad requests, in the order Swift checks them.
+  - {name: bad batch id, as: ing_ann, request: {method: PUT, path: /v1/ingestions/nope/items/1A6E4000-0000-4000-8000-000000000001/chunks/0, raw: x}}
+  - {name: bad item id, as: ing_ann, request: {method: PUT, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000001/items/nope/chunks/0, raw: x}}
+  - {name: bad index has no message, as: ing_ann, request: {method: PUT, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000001/items/1A6E4000-0000-4000-8000-000000000001/chunks/x, raw: x}}
+  - {name: fractional index, as: ing_ann, request: {method: PUT, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000001/items/1A6E4000-0000-4000-8000-000000000001/chunks/1.5, raw: x}}
+  - {name: bad index beats a missing batch, as: ing_ann, request: {method: PUT, path: /v1/ingestions/00000000-0000-4000-8000-000000000000/items/1A6E4000-0000-4000-8000-000000000001/chunks/x, raw: x}}
+  - {name: negative index, as: ing_ann, request: {method: PUT, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000001/items/1A6E4000-0000-4000-8000-000000000001/chunks/-1, raw: x}}
+  - {name: empty body, as: ing_ann, request: {method: PUT, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000001/items/1A6E4000-0000-4000-8000-000000000001/chunks/0}}
+  - {name: an empty body beats an unknown item, as: ing_ann, request: {method: PUT, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000001/items/00000000-0000-4000-8000-000000000000/chunks/0}}
+  - {name: over 8 MiB, as: ing_ann, request: {method: PUT, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000001/items/1A6E4000-0000-4000-8000-000000000008/chunks/0, fill: {text: a, size: 8388609}}}
+  - {name: unknown item, as: ing_ann, request: {method: PUT, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000001/items/00000000-0000-4000-8000-000000000000/chunks/0, raw: x}}
+  - {name: item of another batch, as: ing_ann, request: {method: PUT, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000002/items/1A6E4000-0000-4000-8000-000000000001/chunks/0, raw: x}}
+  - {name: another tenant's item, as: bob, request: {method: PUT, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000001/items/1A6E4000-0000-4000-8000-000000000001/chunks/0, raw: x}}
+  - {name: a url item is queued, as: ing_ann, request: {method: PUT, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000001/items/1A6E4000-0000-4000-8000-000000000009/chunks/0, raw: x}}
+  - {name: a cancelled item, as: ing_ann, request: {method: PUT, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000001/items/1A6E4000-0000-4000-8000-00000000000C/chunks/0, raw: x}}
+  - name: nothing was written yet
+    as: ing_ann
+    request: {method: GET, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000001}
+    snapshot: &tables [ingestion_batches, ingestion_items, ingestion_events]
+    files: [ing_ann]
+
+  # Out of order, and an index that sorts wrong as text: assembly reads 0, 2, 10.
+  - name: chunk 10 first
+    as: ing_ann
+    request: {method: PUT, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000001/items/1A6E4000-0000-4000-8000-000000000001/chunks/10, raw: cccc, headers: {Content-Type: application/octet-stream}}
+    snapshot: *tables
+    files: [ing_ann]
+  - {name: incomplete upload, as: ing_ann, request: {method: POST, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000001/items/1A6E4000-0000-4000-8000-000000000001/complete}}
+  - name: chunk 0 as raw bytes
+    as: ing_ann
+    request: {method: PUT, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000001/items/1A6E4000-0000-4000-8000-000000000001/chunks/0, base64: YWFhYQ==}
+    snapshot: *tables
+  - {name: the same bytes again change nothing, as: ing_ann, request: {method: PUT, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000001/items/1A6E4000-0000-4000-8000-000000000001/chunks/0, raw: aaaa}, snapshot: *tables}
+  - {name: other bytes conflict, as: ing_ann, request: {method: PUT, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000001/items/1A6E4000-0000-4000-8000-000000000001/chunks/0, raw: zzzz}, snapshot: *tables}
+  - {name: an explicit plus index, as: ing_ann, request: {method: PUT, path: "/v1/ingestions/1A6E3000-0000-4000-8000-000000000001/items/1A6E4000-0000-4000-8000-000000000001/chunks/+2", raw: bbbb}, snapshot: *tables, files: [ing_ann]}
+  - {name: the detail shows the bytes, as: ing_ann, request: {method: GET, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000001}}
+  - name: complete assembles in numeric order
+    as: ing_ann
+    request: {method: POST, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000001/items/1A6E4000-0000-4000-8000-000000000001/complete}
+    snapshot: [ingestion_batches, ingestion_items, ingestion_events, vault_files]
+    files: [ing_ann]
+  - {name: complete again answers the same, as: ing_ann, request: {method: POST, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000001/items/1A6E4000-0000-4000-8000-000000000001/complete}, snapshot: *tables}
+  - {name: a chunk after complete, as: ing_ann, request: {method: PUT, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000001/items/1A6E4000-0000-4000-8000-000000000001/chunks/0, raw: aaaa}}
+  - {name: complete on a url item is a no-op, as: ing_ann, request: {method: POST, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000001/items/1A6E4000-0000-4000-8000-000000000009/complete}, snapshot: *tables}
+
+  # SHA-256
+  - {name: wrong sha chunk, as: ing_ann, request: {method: PUT, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000001/items/1A6E4000-0000-4000-8000-000000000002/chunks/0, raw: hello}}
+  - name: wrong sha keeps the chunks and leaves no file
+    as: ing_ann
+    request: {method: POST, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000001/items/1A6E4000-0000-4000-8000-000000000002/complete}
+    snapshot: [ingestion_items, vault_files]
+    files: [ing_ann]
+  - {name: right sha chunk, as: ing_ann, request: {method: PUT, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000001/items/1A6E4000-0000-4000-8000-000000000003/chunks/0, raw: hello}}
+  - name: right sha
+    as: ing_ann
+    request: {method: POST, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000001/items/1A6E4000-0000-4000-8000-000000000003/complete}
+    snapshot: [ingestion_items, vault_files]
+    files: [ing_ann]
+
+  # The chunk is on disk before the size check, and the row doesn't count it, so
+  # a repeat answers 204 and the item can't finish.
+  - name: more than declared
+    as: ing_ann
+    request: {method: PUT, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000001/items/1A6E4000-0000-4000-8000-000000000004/chunks/0, raw: abcde}
+    snapshot: *tables
+    files: [ing_ann]
+  - {name: the repeat answers 204, as: ing_ann, request: {method: PUT, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000001/items/1A6E4000-0000-4000-8000-000000000004/chunks/0, raw: abcde}, snapshot: *tables}
+  - {name: still incomplete, as: ing_ann, request: {method: POST, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000001/items/1A6E4000-0000-4000-8000-000000000004/complete}}
+
+  # Names and types, checked at complete.
+  - {name: exe chunk, as: ing_ann, request: {method: PUT, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000001/items/1A6E4000-0000-4000-8000-000000000005/chunks/0, raw: abc}}
+  - {name: exe is refused, as: ing_ann, request: {method: POST, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000001/items/1A6E4000-0000-4000-8000-000000000005/complete}, snapshot: [ingestion_items, vault_files], files: [ing_ann]}
+  - {name: mismatch chunk, as: ing_ann, request: {method: PUT, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000001/items/1A6E4000-0000-4000-8000-000000000006/chunks/0, raw: abc}}
+  - {name: type mismatch is refused, as: ing_ann, request: {method: POST, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000001/items/1A6E4000-0000-4000-8000-000000000006/complete}, snapshot: [ingestion_items, vault_files]}
+  - {name: name chunk, as: ing_ann, request: {method: PUT, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000001/items/1A6E4000-0000-4000-8000-000000000007/chunks/0, raw: abc}}
+  - name: a hostile name loses its folders and odd characters
+    as: ing_ann
+    request: {method: POST, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000001/items/1A6E4000-0000-4000-8000-000000000007/complete}
+    snapshot: [ingestion_items, vault_files]
+    files: [ing_ann]
+  - {name: bang name chunk, as: ing_ann, request: {method: PUT, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000001/items/1A6E4000-0000-4000-8000-00000000000D/chunks/0, raw: abc}}
+  - {name: a name of only odd characters, as: ing_ann, request: {method: POST, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000001/items/1A6E4000-0000-4000-8000-00000000000D/complete}, snapshot: [ingestion_items, vault_files], files: [ing_ann]}
+  - {name: dash name chunk, as: ing_ann, request: {method: PUT, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000001/items/1A6E4000-0000-4000-8000-00000000000E/chunks/0, raw: abc}}
+  - {name: a name with no extension, as: ing_ann, request: {method: POST, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000001/items/1A6E4000-0000-4000-8000-00000000000E/complete}, snapshot: [ingestion_items, vault_files], files: [ing_ann]}
+
+  # A whole 8 MiB chunk, and a chunked request.
+  - name: exactly 8 MiB
+    as: ing_ann
+    request: {method: PUT, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000001/items/1A6E4000-0000-4000-8000-000000000008/chunks/0, fill: {text: abcdefgh, size: 8388608}}
+    files: [ing_ann]
+  - name: a chunked request
+    as: ing_ann
+    request: {method: PUT, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000001/items/1A6E4000-0000-4000-8000-00000000000B/chunks/0, fill: {text: ab, size: 7}, chunked: true}
+    snapshot: [ingestion_items]
+    files: [ing_ann]
+  - {name: incomplete for the partial item, as: ing_ann, request: {method: POST, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000001/items/1A6E4000-0000-4000-8000-00000000000A/complete}}
+  - {name: unknown item on complete, as: ing_ann, request: {method: POST, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000001/items/00000000-0000-4000-8000-000000000000/complete}}
+  - {name: another tenant on complete, as: bob, request: {method: POST, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000001/items/1A6E4000-0000-4000-8000-00000000000A/complete}}
+  - {name: bad item on complete, as: ing_ann, request: {method: POST, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000001/items/nope/complete}}
+  - {name: bad batch on complete, as: ing_ann, request: {method: POST, path: /v1/ingestions/nope/items/nope/complete}}
+
+  # A space names the folder.
+  - {name: space chunk, as: ing_ann, request: {method: PUT, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000002/items/1A6E4000-0000-4000-8000-000000000010/chunks/0, raw: abc}}
+  - name: the space's slug is the folder
+    as: ing_ann
+    request: {method: POST, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000002/items/1A6E4000-0000-4000-8000-000000000010/complete}
+    snapshot: [ingestion_items, vault_files]
+    files: [ing_ann]
