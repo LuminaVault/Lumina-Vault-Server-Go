@@ -64,6 +64,19 @@ type Config struct {
 	FeedsBaseURL      string `env:"FEEDS_BASE_URL"`
 	FeedsDefaultFeeds string `env:"FEEDS_DEFAULT_FEEDS"`
 
+	// Image embeddings (vision module): vision.embed.*. The sealed api-env spells the
+	// key VISION_EMBED_PROVIDER_COHERE_APIKEY. Swift's encoder reads only _API_KEY, and
+	// so does Go: until someone seals that name, both answer 503 (see cutover-log).
+	VisionEmbedProvider            string  `env:"VISION_EMBED_PROVIDER" envDefault:"cohere"`
+	VisionEmbedProviderCohereKey   string  `env:"VISION_EMBED_PROVIDER_COHERE_API_KEY"`
+	VisionEmbedProviderCohereURL   string  `env:"VISION_EMBED_PROVIDER_COHERE_BASE_URL" envDefault:"https://api.cohere.com"`
+	VisionEmbedProviderCohereModel string  `env:"VISION_EMBED_PROVIDER_COHERE_MODEL" envDefault:"embed-image-v3.0"`
+	VisionEmbedStubDim             int     `env:"VISION_EMBED_STUB_DIM" envDefault:"1024"`
+	VisionEmbedStubFill            float64 `env:"VISION_EMBED_STUB_FILL" envDefault:"0.1"`
+	VisionEmbedStubModel           string  `env:"VISION_EMBED_STUB_MODEL" envDefault:"stub-clip"`
+	VisionEmbedStubSourceWidth     int     `env:"VISION_EMBED_STUB_SOURCE_WIDTH" envDefault:"768"`
+	VisionEmbedStubSourceHeight    int     `env:"VISION_EMBED_STUB_SOURCE_HEIGHT" envDefault:"768"`
+
 	// Team invitations (teams module): makeTeamInvitationSender's inputs.
 	EmailKind         string `env:"EMAIL_KIND" envDefault:"logging"`
 	EmailResendAPIKey string `env:"EMAIL_RESEND_API_KEY"`

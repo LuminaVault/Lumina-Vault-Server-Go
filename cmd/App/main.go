@@ -29,6 +29,8 @@ import (
 	"lumina/internal/modules/devices"
 	"lumina/internal/modules/health"
 	"lumina/internal/modules/kanban"
+	"lumina/internal/modules/kb"
+	"lumina/internal/modules/knowledge"
 	"lumina/internal/modules/mail"
 	"lumina/internal/modules/marketplace"
 	"lumina/internal/modules/me"
@@ -41,11 +43,13 @@ import (
 	"lumina/internal/modules/spaces"
 	"lumina/internal/modules/teams"
 	"lumina/internal/modules/todos"
+	"lumina/internal/modules/vision"
 	"lumina/internal/onboardlatch"
 	"lumina/internal/posthog"
 	"lumina/internal/ratelimit"
 	"lumina/internal/secretbox"
 	"lumina/internal/telemetry"
+	"lumina/internal/usagemeter"
 	"lumina/internal/vaultfiles"
 	"lumina/internal/vaultpaths"
 	"net"
@@ -192,6 +196,15 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 			onboarding.New(pool),
 			health.New(pool, healthGate, analytics),
 		)
+		// Wave 4: knowledge, vision and the compile probe. /v1/vision spends a platform
+		// key, so it has its own gate. Both groups read billing.enforcementEnabled.
+		enforcement := entitlement.EnforcementEnabled(cfg.BillingEnforcementEnabled)
+		deps.Modules = append(deps.Modules,
+			knowledge.New(pool, identify, entitlement.Middleware(pool, entitlement.MemoryQuery, enforcement, entitlement.PGCredentials(pool, box)), limits),
+			vision.New(memorystore.New(pool, nil), usagemeter.New(pool), identify,
+				entitlement.PlatformFundedMiddleware(pool, entitlement.MemoryQuery, enforcement), limits, visionConfig(cfg)),
+			kb.New(pool),
+		)
 		deps.Modules = append(deps.Modules, calendarModules(pool, cfg, identify, limits, embeddings, analytics)...)
 		if m := news.New(pool, cfg, identify, limits); m != nil { // nil without LV_SECRET_MASTER_KEY, as in Swift
 			deps.Modules = append(deps.Modules, m)
@@ -265,6 +278,21 @@ func captureModule(pool *pgxpool.Pool, cfg config.Config, paths vaultpaths.Paths
 // calendarModules builds calendar and mail, which share the Google grant and
 // flip together. Without a usable LV_SECRET_MASTER_KEY there is no Google side:
 // Swift then registers only /v1/calendar/sync and the brief.
+// visionConfig maps the env onto App+build.swift's vision.embed.* reads.
+func visionConfig(cfg config.Config) vision.Config {
+	return vision.Config{
+		Provider:         cfg.VisionEmbedProvider,
+		CohereAPIKey:     cfg.VisionEmbedProviderCohereKey,
+		CohereBaseURL:    cfg.VisionEmbedProviderCohereURL,
+		CohereModel:      cfg.VisionEmbedProviderCohereModel,
+		StubDim:          cfg.VisionEmbedStubDim,
+		StubFill:         cfg.VisionEmbedStubFill,
+		StubModel:        cfg.VisionEmbedStubModel,
+		StubSourceWidth:  cfg.VisionEmbedStubSourceWidth,
+		StubSourceHeight: cfg.VisionEmbedStubSourceHeight,
+	}
+}
+
 // embeddingConfig maps the env onto EmbeddingProviderRegistry.bootstrap's reads.
 func embeddingConfig(cfg config.Config) embedding.Config {
 	return embedding.Config{

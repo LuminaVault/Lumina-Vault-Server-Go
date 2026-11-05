@@ -1,0 +1,9 @@
+module: vision
+steps:
+  - name: "embed: nothing listening upstream"
+    as: vis_srch
+    request: {method: POST, path: "/v1/vision/embed", base64: "iVBORw==", headers: {"Content-Type": "image/png"}}
+  - name: "search: nothing listening upstream"
+    as: vis_srch
+    request: {method: POST, path: "/v1/vision/search", base64: "iVBORw==", headers: {"Content-Type": "image/png"}}
+    snapshot: ["parity_vision_usage"]

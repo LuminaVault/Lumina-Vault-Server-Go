@@ -8,14 +8,18 @@ VALUES
   ('ca97e000-0000-4000-8000-0000000000a1', 'capture-amy@parity.test', 'x', true, 'capture_amy', 'trial', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
   ('ca97e000-0000-4000-8000-0000000000b2', 'capture-ben@parity.test', 'x', true, 'capture_ben', 'trial', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
   ('ca97e000-0000-4000-8000-0000000000c3', 'capture-cid@parity.test', 'x', true, 'capture_cid', 'trial', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
-  ('ca97e000-0000-4000-8000-0000000000d4', 'capture-hal@parity.test', 'x', true, 'capture_hal', 'trial', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+  ('ca97e000-0000-4000-8000-0000000000d4', 'capture-hal@parity.test', 'x', true, 'capture_hal', 'trial', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
+  ('ca97e000-0000-4000-8000-0000000000e5', 'capture-arc@parity.test', 'x', true, 'capture_arc', 'archived', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
+  ('ca97e000-0000-4000-8000-0000000000f6', 'capture-lap@parity.test', 'x', true, 'capture_lap', 'lapsed', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
 
 INSERT INTO vaults (id, personal_owner_user_id, name, created_at, updated_at)
 VALUES
   ('ca97e000-0000-4000-8000-0000000000a1', 'ca97e000-0000-4000-8000-0000000000a1', 'capture_amy''s Vault', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
   ('ca97e000-0000-4000-8000-0000000000b2', 'ca97e000-0000-4000-8000-0000000000b2', 'capture_ben''s Vault', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
   ('ca97e000-0000-4000-8000-0000000000c3', 'ca97e000-0000-4000-8000-0000000000c3', 'capture_cid''s Vault', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
-  ('ca97e000-0000-4000-8000-0000000000d4', 'ca97e000-0000-4000-8000-0000000000d4', 'capture_hal''s Vault', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+  ('ca97e000-0000-4000-8000-0000000000d4', 'ca97e000-0000-4000-8000-0000000000d4', 'capture_hal''s Vault', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
+  ('ca97e000-0000-4000-8000-0000000000e5', 'ca97e000-0000-4000-8000-0000000000e5', 'capture_arc''s Vault', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
+  ('ca97e000-0000-4000-8000-0000000000f6', 'ca97e000-0000-4000-8000-0000000000f6', 'capture_lap''s Vault', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
 
 INSERT INTO spaces (id, tenant_id, name, slug, note_count, created_at, updated_at)
 VALUES

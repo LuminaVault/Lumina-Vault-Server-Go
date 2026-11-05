@@ -1,0 +1,92 @@
+module: knowledge
+steps:
+  - name: "default"
+    as: kg_kim
+    request: {method: GET, path: "/v1/knowledge/graph"}
+  - name: "limit 1"
+    as: kg_kim
+    request: {method: GET, path: "/v1/knowledge/graph?limit=1"}
+  - name: "limit 0 clamps up"
+    as: kg_kim
+    request: {method: GET, path: "/v1/knowledge/graph?limit=0"}
+  - name: "limit negative clamps up"
+    as: kg_kim
+    request: {method: GET, path: "/v1/knowledge/graph?limit=-3"}
+  - name: "limit text falls back"
+    as: kg_kim
+    request: {method: GET, path: "/v1/knowledge/graph?limit=abc"}
+  - name: "limit over the cap"
+    as: kg_kim
+    request: {method: GET, path: "/v1/knowledge/graph?limit=99999"}
+  - name: "limit plus sign"
+    as: kg_kim
+    request: {method: GET, path: "/v1/knowledge/graph?limit=%2B2"}
+  - name: "limit empty"
+    as: kg_kim
+    request: {method: GET, path: "/v1/knowledge/graph?limit="}
+  - name: "confidence half"
+    as: kg_kim
+    request: {method: GET, path: "/v1/knowledge/graph?minimumConfidence=0.5"}
+  - name: "confidence over one clamps"
+    as: kg_kim
+    request: {method: GET, path: "/v1/knowledge/graph?minimumConfidence=2"}
+  - name: "confidence negative clamps"
+    as: kg_kim
+    request: {method: GET, path: "/v1/knowledge/graph?minimumConfidence=-1"}
+  - name: "confidence nan"
+    as: kg_kim
+    request: {method: GET, path: "/v1/knowledge/graph?minimumConfidence=nan"}
+  - name: "confidence inf"
+    as: kg_kim
+    request: {method: GET, path: "/v1/knowledge/graph?minimumConfidence=inf"}
+  - name: "confidence text falls back"
+    as: kg_kim
+    request: {method: GET, path: "/v1/knowledge/graph?minimumConfidence=abc"}
+  - name: "confidence exponent"
+    as: kg_kim
+    request: {method: GET, path: "/v1/knowledge/graph?minimumConfidence=9e-1"}
+  - name: "confidence hex"
+    as: kg_kim
+    request: {method: GET, path: "/v1/knowledge/graph?minimumConfidence=0x1p-1"}
+  - name: "one kind"
+    as: kg_kim
+    request: {method: GET, path: "/v1/knowledge/graph?kinds=claim"}
+  - name: "two kinds"
+    as: kg_kim
+    request: {method: GET, path: "/v1/knowledge/graph?kinds=event,claim"}
+  - name: "unknown kind means no filter"
+    as: kg_kim
+    request: {method: GET, path: "/v1/knowledge/graph?kinds=bogus"}
+  - name: "empty pieces in kinds"
+    as: kg_kim
+    request: {method: GET, path: "/v1/knowledge/graph?kinds=,,entity,"}
+  - name: "kind case matters"
+    as: kg_kim
+    request: {method: GET, path: "/v1/knowledge/graph?kinds=CLAIM"}
+  - name: "one predicate"
+    as: kg_kim
+    request: {method: GET, path: "/v1/knowledge/graph?predicates=supports"}
+  - name: "snake case predicate"
+    as: kg_kim
+    request: {method: GET, path: "/v1/knowledge/graph?predicates=related_to,causes&states=confirmed,stale"}
+  - name: "camel case predicate is unknown"
+    as: kg_kim
+    request: {method: GET, path: "/v1/knowledge/graph?predicates=relatedTo"}
+  - name: "dismissed only"
+    as: kg_kim
+    request: {method: GET, path: "/v1/knowledge/graph?states=dismissed"}
+  - name: "stale and confirmed"
+    as: kg_kim
+    request: {method: GET, path: "/v1/knowledge/graph?states=stale,confirmed"}
+  - name: "unknown state means the default"
+    as: kg_kim
+    request: {method: GET, path: "/v1/knowledge/graph?states=BOGUS"}
+  - name: "everything at once"
+    as: kg_kim
+    request: {method: GET, path: "/v1/knowledge/graph?limit=4&kinds=claim,entity&predicates=supports,contradicts&states=asserted,dismissed&minimumConfidence=0.1"}
+  - name: "encoded comma"
+    as: kg_kim
+    request: {method: GET, path: "/v1/knowledge/graph?kinds=claim%2Centity"}
+  - name: "repeated key takes the first"
+    as: kg_kim
+    request: {method: GET, path: "/v1/knowledge/graph?kinds=event&kinds=claim"}

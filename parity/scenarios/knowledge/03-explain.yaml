@@ -1,0 +1,86 @@
+module: knowledge
+steps:
+  - name: "two hops, with an inferred edge"
+    as: kg_nia
+    request: {method: POST, path: "/v1/knowledge/connections/explain", json: {"fromNodeID": "6B100000-0000-4000-8000-00000000000B", "toNodeID": "6B100000-0000-4000-8000-00000000000D"}}
+  - name: "the same path walked backwards"
+    as: kg_nia
+    request: {method: POST, path: "/v1/knowledge/connections/explain", json: {"fromNodeID": "6B100000-0000-4000-8000-00000000000D", "toNodeID": "6B100000-0000-4000-8000-00000000000B"}}
+  - name: "four hops at the default depth"
+    as: kg_nia
+    request: {method: POST, path: "/v1/knowledge/connections/explain", json: {"fromNodeID": "6B100000-0000-4000-8000-00000000000B", "toNodeID": "6B100000-0000-4000-8000-000000000010"}}
+  - name: "maxDepth 3 is too short"
+    as: kg_nia
+    request: {method: POST, path: "/v1/knowledge/connections/explain", json: {"fromNodeID": "6B100000-0000-4000-8000-00000000000B", "toNodeID": "6B100000-0000-4000-8000-000000000010", "maxDepth": 3}}
+  - name: "maxDepth 1 finds the direct edge"
+    as: kg_nia
+    request: {method: POST, path: "/v1/knowledge/connections/explain", json: {"fromNodeID": "6B100000-0000-4000-8000-00000000000B", "toNodeID": "6B100000-0000-4000-8000-00000000000D", "maxDepth": 1}}
+  - name: "maxDepth 0 clamps to 1"
+    as: kg_nia
+    request: {method: POST, path: "/v1/knowledge/connections/explain", json: {"fromNodeID": "6B100000-0000-4000-8000-00000000000B", "toNodeID": "6B100000-0000-4000-8000-00000000000E", "maxDepth": 0}}
+  - name: "maxDepth negative clamps to 1"
+    as: kg_nia
+    request: {method: POST, path: "/v1/knowledge/connections/explain", json: {"fromNodeID": "6B100000-0000-4000-8000-00000000000B", "toNodeID": "6B100000-0000-4000-8000-00000000000C", "maxDepth": -9}}
+  - name: "maxDepth over the cap clamps to 4"
+    as: kg_nia
+    request: {method: POST, path: "/v1/knowledge/connections/explain", json: {"fromNodeID": "6B100000-0000-4000-8000-00000000000C", "toNodeID": "6B100000-0000-4000-8000-000000000010", "maxDepth": 99}}
+  - name: "maxDepth null is the default"
+    as: kg_nia
+    request: {method: POST, path: "/v1/knowledge/connections/explain", raw: "{\"fromNodeID\": \"6B100000-0000-4000-8000-00000000000B\", \"toNodeID\": \"6B100000-0000-4000-8000-00000000000C\", \"maxDepth\": null}"}
+  - name: "maxDepth 2.0 is an integer"
+    as: kg_nia
+    request: {method: POST, path: "/v1/knowledge/connections/explain", raw: "{\"fromNodeID\":\"6B100000-0000-4000-8000-00000000000B\",\"toNodeID\":\"6B100000-0000-4000-8000-00000000000C\",\"maxDepth\":2.0}"}
+  - name: "maxDepth 1.5 is not"
+    as: kg_nia
+    request: {method: POST, path: "/v1/knowledge/connections/explain", raw: "{\"fromNodeID\":\"6B100000-0000-4000-8000-00000000000B\",\"toNodeID\":\"6B100000-0000-4000-8000-00000000000C\",\"maxDepth\":1.5}"}
+  - name: "maxDepth as text"
+    as: kg_nia
+    request: {method: POST, path: "/v1/knowledge/connections/explain", json: {"fromNodeID": "6B100000-0000-4000-8000-00000000000B", "toNodeID": "6B100000-0000-4000-8000-00000000000C", "maxDepth": "2"}}
+  - name: "unconnected node"
+    as: kg_nia
+    request: {method: POST, path: "/v1/knowledge/connections/explain", json: {"fromNodeID": "6B100000-0000-4000-8000-00000000000B", "toNodeID": "6B100000-0000-4000-8000-000000000012"}}
+  - name: "same node twice"
+    as: kg_nia
+    request: {method: POST, path: "/v1/knowledge/connections/explain", json: {"fromNodeID": "6B100000-0000-4000-8000-00000000000B", "toNodeID": "6B100000-0000-4000-8000-00000000000B"}}
+  - name: "same node in two cases"
+    as: kg_nia
+    request: {method: POST, path: "/v1/knowledge/connections/explain", json: {"fromNodeID": "6B100000-0000-4000-8000-00000000000B", "toNodeID": "6b100000-0000-4000-8000-00000000000b"}}
+  - name: "lowercase ids"
+    as: kg_nia
+    request: {method: POST, path: "/v1/knowledge/connections/explain", json: {"fromNodeID": "6b100000-0000-4000-8000-00000000000b", "toNodeID": "6b100000-0000-4000-8000-00000000000c"}}
+  - name: "unknown ids"
+    as: kg_nia
+    request: {method: POST, path: "/v1/knowledge/connections/explain", json: {"fromNodeID": "00000000-0000-4000-8000-000000000000", "toNodeID": "00000000-0000-4000-8000-000000000001"}}
+  - name: "another tenant's nodes"
+    as: kg_nia
+    request: {method: POST, path: "/v1/knowledge/connections/explain", json: {"fromNodeID": "6B100000-0000-4000-8000-000000000028", "toNodeID": "6B100000-0000-4000-8000-000000000029"}}
+  - name: "an edge into another tenant's node can't be hydrated"
+    as: kg_nia
+    request: {method: POST, path: "/v1/knowledge/connections/explain", json: {"fromNodeID": "6B100000-0000-4000-8000-000000000011", "toNodeID": "6B100000-0000-4000-8000-000000000028"}}
+  - name: "empty body"
+    as: kg_nia
+    request: {method: POST, path: "/v1/knowledge/connections/explain", raw: ""}
+  - name: "not json"
+    as: kg_nia
+    request: {method: POST, path: "/v1/knowledge/connections/explain", raw: "{"}
+  - name: "array body"
+    as: kg_nia
+    request: {method: POST, path: "/v1/knowledge/connections/explain", raw: "[]"}
+  - name: "empty object"
+    as: kg_nia
+    request: {method: POST, path: "/v1/knowledge/connections/explain", json: {}}
+  - name: "missing toNodeID"
+    as: kg_nia
+    request: {method: POST, path: "/v1/knowledge/connections/explain", json: {"fromNodeID": "6B100000-0000-4000-8000-00000000000B"}}
+  - name: "null fromNodeID"
+    as: kg_nia
+    request: {method: POST, path: "/v1/knowledge/connections/explain", raw: "{\"fromNodeID\":null,\"toNodeID\":\"6B100000-0000-4000-8000-00000000000C\"}"}
+  - name: "number for an id"
+    as: kg_nia
+    request: {method: POST, path: "/v1/knowledge/connections/explain", raw: "{\"fromNodeID\":1,\"toNodeID\":\"6B100000-0000-4000-8000-00000000000C\"}"}
+  - name: "bad uuid"
+    as: kg_nia
+    request: {method: POST, path: "/v1/knowledge/connections/explain", json: {"fromNodeID": "nope", "toNodeID": "6B100000-0000-4000-8000-00000000000C"}}
+  - name: "unknown keys are ignored"
+    as: kg_nia
+    request: {method: POST, path: "/v1/knowledge/connections/explain", json: {"fromNodeID": "6B100000-0000-4000-8000-00000000000B", "toNodeID": "6B100000-0000-4000-8000-00000000000C", "extra": 1}}
