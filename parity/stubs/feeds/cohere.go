@@ -21,7 +21,6 @@ import (
 //	cohere-empty    200 with an empty vector
 //	cohere-null     200 with a null inside the vector
 //	cohere-nokey    200 without `embeddings`
-//	cohere-hangup   closes the connection without a response
 //	cohere-long     1600 dimensions, wider than memories.embedding
 //	anything else   a short vector whose values print differently across languages
 func cohereEmbed(w http.ResponseWriter, r *http.Request) {
@@ -61,12 +60,6 @@ func cohereEmbed(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"embeddings":{"float":[[0.5,null]]}}`))
 	case "cohere-nokey":
 		_, _ = w.Write([]byte(`{"id":"x"}`))
-	case "cohere-hangup":
-		if hj, ok := w.(http.Hijacker); ok {
-			if conn, _, err := hj.Hijack(); err == nil {
-				_ = conn.Close()
-			}
-		}
 	case "cohere-long":
 		_, _ = w.Write([]byte(`{"embeddings":{"float":[[0.5` + strings.Repeat(",0.25", 1599) + `]]}}`))
 	default:

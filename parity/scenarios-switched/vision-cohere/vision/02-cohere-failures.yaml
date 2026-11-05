@@ -1,8 +1,5 @@
 module: vision
 steps:
-  - name: "connection closed"
-    as: vis_srch
-    request: {method: POST, path: "/v1/vision/embed", base64: "Y29oZXJlLWhhbmd1cA==", headers: {"Content-Type": "image/png"}}
   - name: "missing embeddings key"
     as: vis_srch
     request: {method: POST, path: "/v1/vision/search", base64: "Y29oZXJlLW5va2V5", headers: {"Content-Type": "image/png"}}
