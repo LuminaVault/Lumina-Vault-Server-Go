@@ -80,6 +80,13 @@ func TestEveryPolicyNameIsUnique(t *testing.T) {
 	}
 }
 
+// "query policy uses the per user keyer": same budget as chat, because /v1/query
+// costs what chat costs.
+func TestQueryBudgetMatchesChat(t *testing.T) {
+	require.Equal(t, ratelimit.ChatByUser.Max, ratelimit.QueryByUser.Max)
+	require.Equal(t, ratelimit.ChatByUser.Window, ratelimit.QueryByUser.Window)
+}
+
 // TierAwareRateLimitTests.
 func TestPaidTiersGetHeadroomAboveTheBaseline(t *testing.T) {
 	require.Equal(t, 30, ratelimit.ChatByUser.EffectiveMax("trial"))
