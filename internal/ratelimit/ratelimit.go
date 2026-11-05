@@ -108,6 +108,10 @@ var VaultExportByUser = Policy{Name: "vaultExportByUser", Max: 3, Window: 300 * 
 // scale. The calendar brief and /v1/query share it.
 var QueryByUser = Policy{Name: "queryByUser", Max: 30, Window: 60 * time.Second, TierScale: StandardTierScale}
 
+// MemoryCompileByUser is RateLimitPolicy.memoryCompileByUser: 5 per 60 s on the
+// standard tier ladder.
+var MemoryCompileByUser = Policy{Name: "memoryCompileByUser", Max: 5, Window: 60 * time.Second, TierScale: StandardTierScale}
+
 // ErrLimited is the Swift 429 body.
 // VisionEmbedByUserPerMinute and VisionEmbedByUserDaily are
 // RateLimitPolicy.visionEmbedByUser*: stacked on /v1/vision, keyed by user or IP.

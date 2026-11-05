@@ -1,0 +1,28 @@
+# The stub's answer is what it received (host, bearer, canonical body), so these
+# compare the upstream call as well as the response. No token and no key is real: the
+# bearer is the seeded API_SERVER_KEY.
+module: grok
+steps:
+  - {name: default model, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: hi}]}}, snapshot: [hermes_tenant_containers]}
+  - {name: every field, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: system, content: be brief}, {role: user, content: "<hi> & \"é\" /path"}], model: grok-custom, stream: true, maxTokens: 12}}}
+  - {name: stream false is not sent either, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: hi}], stream: false}}}
+  - {name: maxTokens zero is sent, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: hi}], maxTokens: 0}}}
+  - {name: maxTokens integral number, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: hi}], maxTokens: 2.0}}}
+  - {name: empty model is kept, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: hi}], model: ""}}}
+  - {name: null model falls to the default, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: hi}], model: null}}}
+  - {name: empty messages go upstream, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: []}}}
+  - {name: unknown fields are dropped, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: hi, name: x}], temperature: 0.5}}}
+  - {name: a role is not checked, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: "", content: ""}]}}}
+  - {name: 201 is success, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:ok-201]]"}]}}}
+  # What the reply can leave out.
+  - {name: no model in the reply uses the request's, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:no-model]]"}], model: asked}}}
+  - {name: no model in the reply uses the default, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:no-model]]"}]}}}
+  - {name: null model in the reply, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:null-model]]"}]}}}
+  - {name: no usage, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:no-model]]"}]}}}
+  - {name: null usage, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:null-usage]]"}]}}}
+  - {name: integral usage, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:usage-integral]]"}]}}}
+  - {name: camelCase keys also match, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:usage-camel]]"}]}}}
+  - {name: convertFromSnakeCase on odd keys, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:usage-odd-case]]"}]}}}
+  - {name: extra usage keys, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:usage-extra]]"}]}}}
+  - {name: first of two choices, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:two-choices]]"}]}}}
+  - {name: empty content is an answer, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:empty-content]]"}]}}}

@@ -143,3 +143,17 @@ func TestStatsCountsAnsweredRequests(t *testing.T) {
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&stats))
 	require.Equal(t, 2, stats["/v1/chat/completions"])
 }
+
+func TestEchoRepliesWithTheCanonicalRequest(t *testing.T) {
+	s := server(t)
+	status, body := post(t, s.URL+"/v1/chat/completions", `{"temperature":0.2,"model":"m","messages":[{"role":"user","content":"[[stub:echo]]"}]}`)
+	require.Equal(t, http.StatusOK, status)
+	require.Contains(t, body, `{\"messages\":[{\"content\":\"[[stub:echo]]\",\"role\":\"user\"}],\"model\":\"m\",\"temperature\":0.2}`)
+}
+
+func TestToolResultsCanEndATurn(t *testing.T) {
+	s := server(t)
+	status, body := post(t, s.URL+"/v1/chat/completions", `{"model":"m","messages":[{"role":"user","content":"[[stub:tool:session_search:{}]]"},{"role":"tool","content":"{\"content\":\"[[stub:reply:done]]\"}"}]}`)
+	require.Equal(t, http.StatusOK, status)
+	require.Contains(t, body, `"content":"done"`)
+}

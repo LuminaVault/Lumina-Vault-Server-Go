@@ -1,0 +1,28 @@
+# memoryCompileByUser allows 5 per 60 s per user, so the steps are spread over users.
+module: kb-compile
+steps:
+  - {"name": "no token", "request": {"method": "POST", "path": "/v1/memory-compile", "json": {"forceFullRecompile": false}}}
+  - {"name": "bad token", "request": {"method": "POST", "path": "/v1/memory-compile", "json": {"forceFullRecompile": false}, "headers": {"Authorization": "Bearer not.a.jwt"}}}
+  - {"name": "malformed json", "as": "kbc_amy", "request": {"method": "POST", "path": "/v1/memory-compile", "raw": "{\"forceFullRecompile\":"}}
+  - {"name": "empty body", "as": "kbc_amy", "request": {"method": "POST", "path": "/v1/memory-compile", "raw": ""}}
+  - {"name": "array body", "as": "kbc_amy", "request": {"method": "POST", "path": "/v1/memory-compile", "raw": "[]"}}
+  - {"name": "the flag is required", "as": "kbc_amy", "request": {"method": "POST", "path": "/v1/memory-compile", "json": {}}}
+  - {"name": "null flag", "as": "kbc_ben", "request": {"method": "POST", "path": "/v1/memory-compile", "raw": "{\"forceFullRecompile\":null}"}}
+  - {"name": "flag wrong type", "as": "kbc_ben", "request": {"method": "POST", "path": "/v1/memory-compile", "raw": "{\"forceFullRecompile\":\"yes\"}"}}
+  - {"name": "ids wrong type", "as": "kbc_ben", "request": {"method": "POST", "path": "/v1/memory-compile", "raw": "{\"forceFullRecompile\":false,\"vaultFileIds\":\"x\"}"}}
+  - {"name": "an id that is not a uuid", "as": "kbc_ben", "request": {"method": "POST", "path": "/v1/memory-compile", "raw": "{\"forceFullRecompile\":false,\"vaultFileIds\":[\"nope\"]}"}}
+  - {"name": "empty path, no rows", "as": "kbc_cid", "request": {"method": "POST", "path": "/v1/memory-compile", "json": {"forceFullRecompile": false}}, "snapshot": ["parity_kbc_usage", "parity_kbc_onboarding"]}
+  - {"name": "force on an empty vault", "as": "kbc_cid", "request": {"method": "POST", "path": "/v1/memory-compile", "json": {"forceFullRecompile": true}}}
+  - {"name": "an empty id list means no filter", "as": "kbc_cid", "request": {"method": "POST", "path": "/v1/memory-compile", "json": {"forceFullRecompile": false, "vaultFileIds": []}}}
+  - {"name": "unknown ids", "as": "kbc_cid", "request": {"method": "POST", "path": "/v1/memory-compile", "json": {"forceFullRecompile": false, "vaultFileIds": ["5B100000-0000-4000-8000-00000000FFFF"]}}}
+  - {"name": "another tenant's id", "as": "kbc_cid", "request": {"method": "POST", "path": "/v1/memory-compile", "json": {"forceFullRecompile": false, "vaultFileIds": ["5B100000-0000-4000-8000-000000000001"]}}, "snapshot": ["parity_kbc_files"]}
+  - {"name": "a row whose file is gone", "as": "kbc_eve", "request": {"method": "POST", "path": "/v1/memory-compile", "json": {"forceFullRecompile": false}}, "snapshot": ["parity_kbc_files", "parity_kbc_usage"], "ignore": ["$.durationMs"]}
+  - {"name": "processed rows are not pending", "as": "kbc_fay", "request": {"method": "POST", "path": "/v1/memory-compile", "json": {"forceFullRecompile": false}}}
+  - {"name": "force includes processed rows", "as": "kbc_fay", "request": {"method": "POST", "path": "/v1/memory-compile", "json": {"forceFullRecompile": true}}, "snapshot": ["parity_kbc_files"], "ignore": ["$.durationMs"]}
+  - {"name": "wrong method", "as": "kbc_gus", "request": {"method": "GET", "path": "/v1/memory-compile"}}
+  - {"name": "the sixth request in a minute is limited", "as": "kbc_gus", "request": {"method": "POST", "path": "/v1/memory-compile", "json": {"forceFullRecompile": false}}, "ignore": ["$.runId"]}
+  - {"name": "2", "as": "kbc_gus", "request": {"method": "POST", "path": "/v1/memory-compile", "json": {"forceFullRecompile": false}}}
+  - {"name": "3", "as": "kbc_gus", "request": {"method": "POST", "path": "/v1/memory-compile", "json": {"forceFullRecompile": false}}}
+  - {"name": "4", "as": "kbc_gus", "request": {"method": "POST", "path": "/v1/memory-compile", "json": {"forceFullRecompile": false}}}
+  - {"name": "5", "as": "kbc_gus", "request": {"method": "POST", "path": "/v1/memory-compile", "json": {"forceFullRecompile": false}}}
+  - {"name": "6", "as": "kbc_gus", "request": {"method": "POST", "path": "/v1/memory-compile", "json": {"forceFullRecompile": false}}}

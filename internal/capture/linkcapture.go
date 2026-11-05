@@ -4,7 +4,7 @@
 // (internal/modules/capture) is one caller. Import (wave-4 4F) and chat's
 // auto-save-link (wave 5) are the others, which is why it isn't in the module.
 //
-// CaptureFilingService needs LLM and is off in production; it goes to 4F.
+// CaptureFilingService is filing.go: it needs LLM and is off in production.
 package capture
 
 //go:generate sh -c "cd ../.. && sqlc generate"

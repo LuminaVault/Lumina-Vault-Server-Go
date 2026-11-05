@@ -1,0 +1,20 @@
+# The stub answers: see parity/stubs/llm. [[stub:echo]] prints the whole request, so a
+# prompt or tool schema that differs is a body difference.
+module: memory-agent
+steps:
+  - {"name": "a plain answer", "as": "ma_sat", "request": {"method": "POST", "path": "/v1/memory/search", "json": {"query": "hello"}}}
+  - {"name": "the request itself", "as": "ma_sat", "request": {"method": "POST", "path": "/v1/memory/search", "json": {"query": "[[stub:echo]]", "limit": 3}}}
+  - {"name": "the tool loop finds a memory", "as": "ma_sat", "request": {"method": "POST", "path": "/v1/memory/search", "json": {"query": "[[stub:tool:session_search:{\"query\":\"saturn\",\"limit\":3}]]"}}, "snapshot": ["parity_ma_analytics"]}
+  - {"name": "limit is clamped, an unknown space is unscoped", "as": "ma_sat", "request": {"method": "POST", "path": "/v1/memory/search", "json": {"query": "[[stub:tool:session_search:{\"query\":\"saturn\",\"limit\":99,\"space\":\"nope\"}]]"}}}
+  - {"name": "a known space scopes, and nothing there leaves the loop running", "as": "ma_sat", "request": {"method": "POST", "path": "/v1/memory/search", "json": {"query": "[[stub:tool:session_search:{\"query\":\"saturn\",\"space\":\"planets\"}]]"}}}
+  - {"name": "the space map", "as": "ma_sat", "request": {"method": "POST", "path": "/v1/memory/search", "json": {"query": "[[stub:tool:vault_map:{}]]"}}}
+  - {"name": "no hits never ends the loop", "as": "ma_nil", "request": {"method": "POST", "path": "/v1/memory/search", "json": {"query": "[[stub:tool:session_search:{\"query\":\"nothing\"}]]"}}}
+  - {"name": "tag_extract before an upsert", "as": "ma_tag", "request": {"method": "POST", "path": "/v1/memory/search", "json": {"query": "[[stub:tool:tag_extract:{\"tags\":[\"a\"]}]]"}}}
+  - {"name": "memory_upsert from search runs every round", "as": "ma_tag", "request": {"method": "POST", "path": "/v1/memory/search", "json": {"query": "[[stub:tool:memory_upsert:{\"content\":\"from the loop\"}]]"}}, "snapshot": ["parity_ma_memories"]}
+  - {"name": "an unknown tool", "as": "ma_tag", "request": {"method": "POST", "path": "/v1/memory/search", "json": {"query": "[[stub:tool:nope:{}]]"}}}
+  - {"name": "arguments that are not json", "as": "ma_tag", "request": {"method": "POST", "path": "/v1/memory/search", "json": {"query": "[[stub:tool:session_search:not json]]"}}}
+  - {"name": "upstream 500", "as": "ma_tag", "request": {"method": "POST", "path": "/v1/memory/search", "json": {"query": "[[stub:error:500]]"}}}
+  - {"name": "upstream 400", "as": "ma_tag", "request": {"method": "POST", "path": "/v1/memory/search", "json": {"query": "[[stub:error:400]]"}}}
+  - {"name": "upstream 401", "as": "ma_tag", "request": {"method": "POST", "path": "/v1/memory/search", "json": {"query": "[[stub:error:401]]"}}}
+  - {"name": "upstream 429", "as": "ma_tag", "request": {"method": "POST", "path": "/v1/memory/search", "json": {"query": "[[stub:error:429]]"}}}
+  - {"name": "an empty answer", "as": "ma_tag", "request": {"method": "POST", "path": "/v1/memory/search", "json": {"query": "[[stub:reply:]]"}}}

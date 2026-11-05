@@ -3,6 +3,7 @@ package swiftstr
 import (
 	"sort"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"golang.org/x/text/unicode/norm"
@@ -334,6 +335,20 @@ func ReplaceBackslashes(s string) string {
 // same Dictionary key.
 func CanonicalKey(s string) string {
 	return norm.NFC.String(s)
+}
+
+// IsLetterOrNumber is Character.isLetter || Character.isNumber: a letter looks at the
+// first scalar's Alphabetic property, a number needs a single scalar with a numeric type.
+func IsLetterOrNumber(c string) bool {
+	runes := []rune(c)
+	if len(runes) == 0 {
+		return false
+	}
+	r := runes[0]
+	if unicode.IsLetter(r) || unicode.Is(unicode.Other_Alphabetic, r) || unicode.Is(unicode.Nl, r) {
+		return true
+	}
+	return len(runes) == 1 && unicode.IsNumber(r)
 }
 
 // CharacterPrefix is Swift's String(s.prefix(n)), exactly.
