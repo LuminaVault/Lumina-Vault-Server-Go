@@ -70,10 +70,12 @@ VALUES
   ('da5be000-0000-4000-8000-000000000013', 'da5b0000-0000-4000-8000-0000000000a1', 'Cold node', now() - interval '202 days', NULL, 0, 0, 0, NULL, NULL, 'auto', NULL, 1, 2, 3, NULL, NULL),
   ('da5be000-0000-4000-8000-000000000014', 'da5b0000-0000-4000-8000-0000000000a1', 'Partial layout, excluded', now() - interval '203 days', NULL, 0, 0, 0, NULL, NULL, 'auto', NULL, 1, 2, NULL, NULL, NULL);
 
+-- ...002 here and skill_run_log ...004 below must stay in yesterday's window. Just
+-- after midnight UTC, the plain interval lands them two days back.
 INSERT INTO conversations (id, tenant_id, title, created_at, updated_at)
 VALUES
   ('da5bd000-0000-4000-8000-000000000001', 'da5b0000-0000-4000-8000-0000000000a1', 'Trip planning', date_trunc('day', now()) + interval '3 seconds', now()),
-  ('da5bd000-0000-4000-8000-000000000002', 'da5b0000-0000-4000-8000-0000000000a1', '', now() - interval '1 day 1 hour', now()),
+  ('da5bd000-0000-4000-8000-000000000002', 'da5b0000-0000-4000-8000-0000000000a1', '', GREATEST(now() - interval '1 day 1 hour', date_trunc('day', now()) - interval '1 day' + interval '2 seconds'), now()),
   ('da5bd000-0000-4000-8000-000000000003', 'da5b0000-0000-4000-8000-0000000000a1', 'Three days back', now() - interval '3 days', now()),
   ('da5bd000-0000-4000-8000-000000000004', 'da5b0000-0000-4000-8000-0000000000a1', 'Outside every window', now() - interval '120 days', now());
 
@@ -82,7 +84,7 @@ VALUES
   ('da5b1000-0000-4000-8000-000000000001', 'da5b0000-0000-4000-8000-0000000000a1', 'builtin', 'digest', date_trunc('day', now()) + interval '4 seconds', 'OK'),
   ('da5b1000-0000-4000-8000-000000000002', 'da5b0000-0000-4000-8000-0000000000a1', 'builtin', 'digest', date_trunc('day', now()) + interval '5 seconds', 'failed'),
   ('da5b1000-0000-4000-8000-000000000003', 'da5b0000-0000-4000-8000-0000000000a1', 'vault', 'scrape', date_trunc('day', now()) + interval '6 seconds', 'running'),
-  ('da5b1000-0000-4000-8000-000000000004', 'da5b0000-0000-4000-8000-0000000000a1', 'builtin', 'digest', now() - interval '1 day 2 hours', 'completed'),
+  ('da5b1000-0000-4000-8000-000000000004', 'da5b0000-0000-4000-8000-0000000000a1', 'builtin', 'digest', GREATEST(now() - interval '1 day 2 hours', date_trunc('day', now()) - interval '1 day' + interval '1 second'), 'completed'),
   ('da5b1000-0000-4000-8000-000000000005', 'da5b0000-0000-4000-8000-0000000000a1', 'builtin', 'digest', now() - interval '8 days', 'succeeded');
 
 -- Nine enabled skills and tools (previews cap at 8) plus a disabled one.
