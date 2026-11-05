@@ -119,6 +119,14 @@ type Config struct {
 	HermesDataRoot            string `env:"HERMES_DATA_ROOT" envDefault:"/app/data/hermes"`
 	BillingEnforcementEnabled string `env:"BILLING_ENFORCEMENT_ENABLED" envDefault:"false"`
 
+	// Daily caps in million tokens, and the model the trial tier's soft cap degrades
+	// to (usagemeter.Budgets). SelfImprovementEnabled is the operator's switch
+	// (selfimprove.Activity).
+	UsageFreeMtokDaily     float64 `env:"USAGE_FREE_MTOK_DAILY" envDefault:"1.0"`
+	UsagePerSkillMtokDaily float64 `env:"USAGE_PER_SKILL_MTOK_DAILY" envDefault:"0.2"`
+	UsageDegradeModel      string  `env:"USAGE_DEGRADE_MODEL" envDefault:"hermes-3-small"`
+	SelfImprovementEnabled bool    `env:"SELF_IMPROVEMENT_ENABLED" envDefault:"true"`
+
 	// JinaAPIKey is Jina's reader, tier-2 of link enrichment. Unset still calls it,
 	// without the header, as in Swift.
 	JinaAPIKey string `env:"JINA_API_KEY"`

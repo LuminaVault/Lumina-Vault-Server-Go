@@ -1,0 +1,67 @@
+# Outreach Templates
+
+## Template 1: Growth Optimization
+**Best for**: Companies in growth phase, recently funded, or expanding
+
+```yaml
+templates:
+  - id: "growth_optimization"
+    name: "Growth Optimization"
+    subject: "Helping {company} scale efficiently"
+    opening: "Congratulations on {recent_accomplishment}! I noticed {company} is growing rapidly..."
+    value_prop: "Our solution helps companies like {company} achieve {specific_result} by {key_benefit}."
+    call_to_action: "Would you be open to a brief conversation about how we might support your growth objectives?"
+    ideal_for: ["recently_funded", "high_growth", "expansion"]
+```
+
+## Template 2: Integration Partnership
+**Best for**: Companies building ecosystems, API platforms, or integration strategies
+
+```yaml
+  - id: "integration_partnership"
+    name: "Integration Partnership"
+    subject: "Streamlining {company}'s workflow with {your_solution}"
+    opening: "I've been following {company}'s expansion into {new_product_area}. Your recent launch of {specific_feature} shows..."
+    value_prop: "We specialize in helping companies like {company} optimize their integration ecosystem, resulting in {specific_benefit}."
+    call_to_action: "Could we schedule a brief call to explore potential partnership opportunities?"
+    ideal_for: ["platform", "api_company", "integration_focus"]
+```
+
+## Template 3: Problem/Solution
+**Best for**: Companies with known pain points or industry challenges
+
+```yaml
+  - id: "problem_solution"
+    name: "Problem/Solution"
+    subject: "Solving {industry} challenges for {company}"
+    opening: "Many {industry} companies struggle with {specific_challenge}. I noticed {company} might be facing similar issues..."
+    value_prop: "Our solution addresses these challenges by {key_benefit}, helping companies achieve {specific_result}."
+    call_to_action: "Would you be interested in learning how {company} could benefit from this approach?"
+    ideal_for: ["pain_points", "industry_challenges", "known_problems"]
+```
+
+## Template 4: Social Proof
+**Best for**: Companies that value case studies and proven results
+
+```yaml
+  - id: "social_proof"
+    name: "Social Proof"
+    subject: "How we helped {similar_company} achieve {result}"
+    opening: "We recently helped {similar_company} achieve {specific_result} in just {timeframe}..."
+    value_prop: "Based on our success with {similar_company} and other {industry} companies, I believe we could deliver similar results for {company}."
+    call_to_action: "Could I share a brief case study about our work with {similar_company}?"
+    ideal_for: ["social_proof", "case_study", "reference"]
+```
+
+## Template 5: Thought Leadership
+**Best for**: Innovative companies that value industry insights
+
+```yaml
+  - id: "thought_leadership"
+    name: "Thought Leadership"
+    subject: "Trends in {industry} for {company}"
+    opening: "I've been analyzing trends in the {industry} space and wanted to share some insights that might impact {company}..."
+    value_prop: "Forward-thinking companies like {company} are staying ahead by {strategic_action}."
+    call_to_action: "I'd love to schedule a brief call to discuss how these trends might affect {company}."
+    ideal_for: ["innovative", "thought_leadership", "trend_focus"]
+```

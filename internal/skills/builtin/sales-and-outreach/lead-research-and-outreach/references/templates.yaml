@@ -1,0 +1,85 @@
+# Lead Research Templates
+
+## Company Research Template
+```yaml
+company_name: ""
+industry: ""
+founded_year: ""
+headquarters: ""
+employee_range: ""
+funding_stage: ""
+total_funding: ""
+key_products: []
+growth_rate: ""
+recent_funding: []
+key_opportunities: []
+target_contacts: []
+outreach_angle: ""
+```
+
+## Research Report Template (Markdown)
+```markdown
+# Lead Research Report: {company_name}
+
+## Executive Summary
+{company_name} is a {industry} company that {key_details}. This represents an opportunity due to {primary_opportunity}.
+
+## Company Overview
+- **Company Name**: {company_name}
+- **Industry**: {industry}
+- **Founded**: {founded_year}
+- **Headquarters**: {headquarters}
+- **Company Size**: {employee_range}
+- **Funding**: {total_funding}
+- **Key Products**: {key_products}
+
+## Recent Developments
+- **Funding**: {recent_funding}
+- **Product Launches**: {product_launches}
+- **Partnerships**: {partnerships}
+- **Leadership Changes**: {leadership_changes}
+
+## Buying Signals
+{buying_signals}
+
+## Opportunity Analysis
+{company_name} is an ideal target because:
+- {opportunity_1}
+- {opportunity_2}
+- {opportunity_3}
+
+## Personalized Outreach
+
+**Subject**: {subject_line}
+
+Hi {contact_name},
+
+I noticed {personalized_opening}. We recently helped {similar_company} achieve {specific_result}, and I thought you might be interested in how we could help {company_name} with {specific_challenge}.
+
+{brief_value_proposition}
+
+Would you be open to a brief conversation next week?
+
+Best,
+Your Name
+
+## Next Steps
+- [ ] Verify contact information
+- [ ] Customize based on specific research
+- [ ] Schedule outreach
+- [ ] Follow up based on response
+
+## Research Sources
+- Company website
+- TechCrunch
+- LinkedIn
+- GitHub
+- Crunchbase
+- Twitter
+- LinkedIn
+```
+
+## CSV Export Template
+```csv
+Company,Industry,Founded,Headquarters,Employee Range,Funding Stage,Total Funding,Key Products,Growth Rate,Recent Funding,Key Opportunities,Target Contacts,Outreach Angle
+```
