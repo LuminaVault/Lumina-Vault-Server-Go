@@ -1,0 +1,16 @@
+# The G2 smoke for DELETE /v1/account. It ends by deleting the user, so on staging
+# run it alone, on a throwaway account made for it, with a token at most 5 minutes
+# old: the delete relies on the fresh-JWT window, since no password is known here.
+# Don't share that account with another module's smoke: a team it owns makes the
+# delete a 500 (04-restrict). acct_smoke has a user and a personal vault, like a new signup.
+module: account
+smoke: true
+steps:
+  - {name: no token, request: {method: DELETE, path: /v1/account}}
+  - {name: bad token, request: {method: DELETE, path: /v1/account, headers: {Authorization: "Bearer not.a.jwt"}}}
+  - {name: signed in, as: acct_smoke, request: {method: GET, path: /v1/onboarding}}
+  - {name: a wrong password loses even with a fresh token, as: acct_smoke, request: {method: DELETE, path: /v1/account, json: {password: not the password}}}
+  - {name: still signed in, as: acct_smoke, request: {method: GET, path: /v1/onboarding}}
+  - {name: fresh token deletes, as: acct_smoke, request: {method: DELETE, path: /v1/account, json: {}}, snapshot: [users]}
+  - {name: token of the deleted user, as: acct_smoke, request: {method: GET, path: /v1/onboarding}}
+  - {name: delete again, as: acct_smoke, request: {method: DELETE, path: /v1/account, json: {}}}

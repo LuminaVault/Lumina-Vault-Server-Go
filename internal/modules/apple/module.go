@@ -13,7 +13,9 @@ import (
 	"lumina/internal/auth"
 	"lumina/internal/embedding"
 	"lumina/internal/httpserver"
+	"lumina/internal/ids"
 	"lumina/internal/modules/apple/db"
+	"lumina/internal/posthog"
 	"lumina/internal/wire"
 	"net/http"
 	"time"
@@ -35,19 +37,22 @@ var (
 )
 
 type Module struct {
-	q        *db.Queries
-	embedder embedding.Service
-	now      func() time.Time
+	q         *db.Queries
+	embedder  embedding.Service
+	analytics *posthog.Client
+	now       func() time.Time
 }
 
 // Options carries the services Swift injects into these controllers.
 type Options struct {
 	// Embedder is PhotoIndexController's text embedder.
 	Embedder embedding.Service
+	// Analytics is PostHogAnalytics. Nil means analytics are off.
+	Analytics *posthog.Client
 }
 
 func New(pool *pgxpool.Pool, opts Options) *Module {
-	return &Module{q: db.New(pool), embedder: opts.Embedder, now: time.Now}
+	return &Module{q: db.New(pool), embedder: opts.Embedder, analytics: opts.Analytics, now: time.Now}
 }
 
 func (m *Module) Register(r httpserver.Router, authMW echo.MiddlewareFunc) {
@@ -89,6 +94,9 @@ func (m *Module) putConsent(c *echo.Context) error {
 			return err
 		}
 	}
+	m.analytics.Capture("apple_data_consent_updated", ids.Upper(tenant), map[string]any{
+		"domain": string(body.Domain), "allowed": body.Allowed, "writes_allowed": writes,
+	})
 	out, err := m.snapshot(ctx, tenant)
 	if err != nil {
 		return err
@@ -191,6 +199,7 @@ func (m *Module) syncReminders(c *echo.Context) error {
 			out.Updated++
 		}
 	}
+	m.captureSync("apple_reminders_synced", tenant, out)
 	return wire.JSON(c, http.StatusOK, out)
 }
 
@@ -251,7 +260,16 @@ func (m *Module) indexPhotos(c *echo.Context) error {
 			out.Updated++
 		}
 	}
+	m.captureSync("photos_indexed", tenant, out)
 	return wire.JSON(c, http.StatusOK, out)
+}
+
+// captureSync fires for every batch that got this far, including one where
+// every item was skipped, as in Swift.
+func (m *Module) captureSync(event string, tenant uuid.UUID, out AppleSyncResponse) {
+	m.analytics.Capture(event, ids.Upper(tenant), map[string]any{
+		"inserted_count": out.Inserted, "updated_count": out.Updated, "skipped_count": out.Skipped,
+	})
 }
 
 // MARK: device commands

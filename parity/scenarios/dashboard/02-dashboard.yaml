@@ -1,4 +1,5 @@
 module: dashboard
+smoke: true
 ignore: ["$.activeJobs[*].elapsedSeconds"]
 steps:
   - {name: "stats dash_ann", as: dash_ann, request: {method: GET, path: "/v1/dashboard/stats"}}
