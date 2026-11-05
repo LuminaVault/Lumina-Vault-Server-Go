@@ -5256,17 +5256,38 @@ paths:
       operationId: llmVisionEmbed
       x-lv-module: vision
       summary: Image embedding (HER-205). Returns a float vector.
+      description: |
+        Raw image body, 8 MB cap. The vector is padded or truncated to 1536, the
+        width of `memories.embedding`. `indexAs=memory&memoryId=<uuid>` also writes
+        it to that memory.
+      parameters:
+        - { in: query, name: indexAs, description: "Only `memory`. Needs memoryId.", schema: { type: string, enum: [memory] } }
+        - { in: query, name: memoryId, description: "The caller's memory to index.", schema: { type: string, format: uuid } }
       requestBody:
         required: true
         content:
-          application/json:
-            schema: { $ref: '#/components/schemas/VisionEmbedRequest' }
+          image/png:  { schema: { type: string, format: binary } }
+          image/jpeg: { schema: { type: string, format: binary } }
+          image/webp: { schema: { type: string, format: binary } }
+          image/heic: { schema: { type: string, format: binary } }
       responses:
         '200':
           description: Embedding vector.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/VisionEmbedResponse' }
+        '400':
+          description: indexAs and memoryId are not a valid pair.
+        '404':
+          description: The memory to index is not the caller's.
+        '413':
+          description: Image body exceeded the 8 MB cap.
+        '415':
+          description: Unsupported image media type.
+        '502':
+          description: The provider failed or rejected the image.
+        '503':
+          description: No vision embed provider configured.
 
   /v1/vision/search:
     post:
@@ -14987,26 +15008,17 @@ components:
 
     # ── Vision embed (HER-205) ──
 
-    VisionEmbedRequest:
-      type: object
-      required: [image]
-      properties:
-        image:
-          type: string
-          format: byte
-          description: Base64-encoded image bytes.
-        mimeType:
-          type: string
-          enum: [image/png, image/jpeg, image/webp]
-        model: { type: string }
-
     VisionEmbedResponse:
       type: object
-      required: [embedding]
+      required: [embedding, dim, model, source_width, source_height]
       properties:
         embedding:
           type: array
           items: { type: number }
+        dim: { type: integer, description: Always 1536. }
+        model: { type: string, description: Which provider model answered. }
+        source_width: { type: integer, description: 0 when the provider doesn't report it. }
+        source_height: { type: integer, description: 0 when the provider doesn't report it. }
 
     VisionSearchResponse:
       type: object
@@ -15028,7 +15040,7 @@ components:
         distance:
           type: number
           description: pgvector cosine distance — smaller is closer.
-        createdAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time }
 
     # ── Memory ──
 
