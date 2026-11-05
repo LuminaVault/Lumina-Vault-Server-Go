@@ -1,0 +1,67 @@
+# PATCH /v1/memory/:id, with memory_chunks IDs compared: a corrected memory is chunked
+# with no file path, so its chunk IDs hash the seeded memory id and must match.
+module: memory
+steps:
+  - {name: "patch malformed", as: mem_wri, request: {method: PATCH, path: "/v1/memory/3E3A1000-0000-4000-8000-000000000001", raw: "{"}, snapshot: [memories]}
+  - {name: "patch empty body", as: mem_wri, request: {method: PATCH, path: "/v1/memory/3E3A1000-0000-4000-8000-000000000001", raw: ""}, snapshot: [memories]}
+  - {name: "patch array", as: mem_wri, request: {method: PATCH, path: "/v1/memory/3E3A1000-0000-4000-8000-000000000001", raw: "[]"}, snapshot: [memories]}
+  - {name: "patch string", as: mem_wri, request: {method: PATCH, path: "/v1/memory/3E3A1000-0000-4000-8000-000000000001", raw: "\"x\""}, snapshot: [memories]}
+  - {name: "patch null", as: mem_wri, request: {method: PATCH, path: "/v1/memory/3E3A1000-0000-4000-8000-000000000001", raw: "null"}, snapshot: [memories]}
+  - {name: "patch empty object", as: mem_wri, request: {method: PATCH, path: "/v1/memory/3E3A1000-0000-4000-8000-000000000001", raw: "{}"}, snapshot: [memories]}
+  - {name: "patch all null", as: mem_wri, request: {method: PATCH, path: "/v1/memory/3E3A1000-0000-4000-8000-000000000001", raw: "{\"content\":null,\"tags\":null,\"reviewState\":null,\"kind\":null}"}, snapshot: [memories]}
+  - {name: "patch content number", as: mem_wri, request: {method: PATCH, path: "/v1/memory/3E3A1000-0000-4000-8000-000000000001", raw: "{\"content\":1}"}, snapshot: [memories]}
+  - {name: "patch tags string", as: mem_wri, request: {method: PATCH, path: "/v1/memory/3E3A1000-0000-4000-8000-000000000001", raw: "{\"tags\":\"x\"}"}, snapshot: [memories]}
+  - {name: "patch tags number items", as: mem_wri, request: {method: PATCH, path: "/v1/memory/3E3A1000-0000-4000-8000-000000000001", raw: "{\"tags\":[1]}"}, snapshot: [memories]}
+  - {name: "patch tags null item", as: mem_wri, request: {method: PATCH, path: "/v1/memory/3E3A1000-0000-4000-8000-000000000001", raw: "{\"tags\":[null]}"}, snapshot: [memories]}
+  - {name: "patch review number", as: mem_wri, request: {method: PATCH, path: "/v1/memory/3E3A1000-0000-4000-8000-000000000001", raw: "{\"reviewState\":1}"}, snapshot: [memories]}
+  - {name: "patch kind number", as: mem_wri, request: {method: PATCH, path: "/v1/memory/3E3A1000-0000-4000-8000-000000000001", raw: "{\"kind\":1}"}, snapshot: [memories]}
+  - {name: "patch kind unknown", as: mem_wri, request: {method: PATCH, path: "/v1/memory/3E3A1000-0000-4000-8000-000000000001", raw: "{\"kind\":\"nope\"}"}, snapshot: [memories]}
+  - {name: "patch space number", as: mem_wri, request: {method: PATCH, path: "/v1/memory/3E3A1000-0000-4000-8000-000000000001", raw: "{\"spaceId\":1}"}, snapshot: [memories]}
+  - {name: "patch space bad uuid", as: mem_wri, request: {method: PATCH, path: "/v1/memory/3E3A1000-0000-4000-8000-000000000001", raw: "{\"spaceId\":\"nope\"}"}, snapshot: [memories]}
+  - {name: "patch space empty", as: mem_wri, request: {method: PATCH, path: "/v1/memory/3E3A1000-0000-4000-8000-000000000001", raw: "{\"spaceId\":\"\"}"}, snapshot: [memories]}
+  - {name: "patch unknown field only", as: mem_wri, request: {method: PATCH, path: "/v1/memory/3E3A1000-0000-4000-8000-000000000001", raw: "{\"whatever\":1}"}, snapshot: [memories]}
+  - {name: patch bad id, as: mem_wri, request: {method: PATCH, path: /v1/memory/not-a-uuid, json: {content: x}}}
+  - {name: patch bad id beats bad vault, as: mem_wri, request: {method: PATCH, path: /v1/memory/not-a-uuid, json: {content: x}, headers: {X-Vault-ID: nope}}}
+  - {name: patch bad vault beats bad body, as: mem_wri, request: {method: PATCH, path: "/v1/memory/3E3A1000-0000-4000-8000-000000000001", raw: "{", headers: {X-Vault-ID: nope}}}
+  - {name: patch unknown content, as: mem_wri, request: {method: PATCH, path: /v1/memory/3E3A1000-0000-4000-8000-0000000000FF, json: {content: x}}}
+  - {name: patch unknown tags, as: mem_wri, request: {method: PATCH, path: /v1/memory/3E3A1000-0000-4000-8000-0000000000FF, json: {tags: [x]}}}
+  - {name: patch unknown review, as: mem_wri, request: {method: PATCH, path: /v1/memory/3E3A1000-0000-4000-8000-0000000000FF, json: {reviewState: approved}}}
+  - {name: patch unknown kind, as: mem_wri, request: {method: PATCH, path: /v1/memory/3E3A1000-0000-4000-8000-0000000000FF, json: {kind: fact}}}
+  - {name: patch unknown space, as: mem_wri, request: {method: PATCH, path: /v1/memory/3E3A1000-0000-4000-8000-0000000000FF, json: {spaceId: null}}}
+  - {name: patch foreign memory, as: mem_wri, request: {method: PATCH, path: /v1/memory/3E3A0000-0000-4000-8000-0000000000B1, json: {content: stolen}}, snapshot: [memories]}
+  - {name: patch foreign memory review, as: mem_wri, request: {method: PATCH, path: /v1/memory/3E3A0000-0000-4000-8000-0000000000B1, json: {reviewState: approved}}, snapshot: [memories]}
+  - {name: "content rebuilds its chunks", as: mem_wri, request: {method: PATCH, path: "/v1/memory/3E3A1000-0000-4000-8000-000000000001", json: {content: "Corrected content"}}, snapshot: [memories, memory_contributions, memory_chunks]}
+  - {name: "content again replaces the chunks", as: mem_wri, request: {method: PATCH, path: "/v1/memory/3E3A1000-0000-4000-8000-000000000001", json: {content: "Corrected a second time"}}, snapshot: [memories, memory_contributions, memory_chunks]}
+  - {name: "content not trimmed, multi section", as: mem_wri, request: {method: PATCH, path: "/v1/memory/3E3A1000-0000-4000-8000-00000000000f", raw: "{\"content\":\"  # One\\n\\nFirst body.\\n\\n## Two\\n\\nSecond body.\\n\"}"}, snapshot: [memories, memory_contributions, memory_chunks]}
+  - {name: "content blank is saved as is", as: mem_wri, request: {method: PATCH, path: "/v1/memory/3E3A1000-0000-4000-8000-00000000000f", json: {content: "   "}}, snapshot: [memories, memory_contributions, memory_chunks]}
+  - {name: "content empty", as: mem_wri, request: {method: PATCH, path: "/v1/memory/3E3A1000-0000-4000-8000-000000000001", json: {content: ""}}, snapshot: [memories, memory_contributions]}
+  - {name: "tags", as: mem_wri, request: {method: PATCH, path: "/v1/memory/3E3A1000-0000-4000-8000-000000000002", json: {tags: [new, " spaced ", new]}}, snapshot: [memories, memory_contributions]}
+  - {name: "tags empty", as: mem_wri, request: {method: PATCH, path: "/v1/memory/3E3A1000-0000-4000-8000-000000000002", json: {tags: []}}, snapshot: [memories, memory_contributions]}
+  - {name: "content and tags", as: mem_wri, request: {method: PATCH, path: "/v1/memory/3E3A1000-0000-4000-8000-000000000002", json: {content: "Both fields", tags: [both]}}, snapshot: [memories, memory_contributions, memory_chunks]}
+  - {name: "review to pending refused", as: mem_wri, request: {method: PATCH, path: "/v1/memory/3E3A1000-0000-4000-8000-000000000003", json: {reviewState: pending}}, snapshot: [memories, memory_contributions]}
+  - {name: "review unknown value refused", as: mem_wri, request: {method: PATCH, path: "/v1/memory/3E3A1000-0000-4000-8000-000000000003", json: {reviewState: nope}}, snapshot: [memories, memory_contributions]}
+  - {name: "review approve", as: mem_wri, request: {method: PATCH, path: "/v1/memory/3E3A1000-0000-4000-8000-000000000003", json: {reviewState: approved}}, snapshot: [memories, memory_contributions, kb_compile_reject_list]}
+  - {name: "review approve twice refused", as: mem_wri, request: {method: PATCH, path: "/v1/memory/3E3A1000-0000-4000-8000-000000000003", json: {reviewState: approved}}, snapshot: [memories, memory_contributions]}
+  - {name: "review reject records the hash", as: mem_wri, request: {method: PATCH, path: "/v1/memory/3E3A1000-0000-4000-8000-000000000004", json: {reviewState: rejected}}, snapshot: [memories, memory_contributions, kb_compile_reject_list]}
+  - {name: "review from rejected refused", as: mem_wri, request: {method: PATCH, path: "/v1/memory/3E3A1000-0000-4000-8000-000000000005", json: {reviewState: approved}}, snapshot: [memories, memory_contributions]}
+  - {name: "review from auto refused", as: mem_wri, request: {method: PATCH, path: "/v1/memory/3E3A1000-0000-4000-8000-000000000006", json: {reviewState: rejected}}, snapshot: [memories, memory_contributions]}
+  - {name: "kind only records a contribution", as: mem_wri, request: {method: PATCH, path: "/v1/memory/3E3A1000-0000-4000-8000-000000000007", json: {kind: fact}}, snapshot: [memories, memory_contributions]}
+  - {name: "kind same value still edits", as: mem_wri, request: {method: PATCH, path: "/v1/memory/3E3A1000-0000-4000-8000-000000000007", json: {kind: fact}}, snapshot: [memories, memory_contributions]}
+  - {name: "move with no note", as: mem_wri, request: {method: PATCH, path: "/v1/memory/3E3A1000-0000-4000-8000-000000000008", json: {spaceId: 3E355000-0000-4000-8000-0000000000A9}}, snapshot: [memories, memory_contributions, spaces]}
+  - {name: "move lowercase id", as: mem_wri, request: {method: PATCH, path: "/v1/memory/3E3A1000-0000-4000-8000-000000000008", json: {spaceId: 3e355000-0000-4000-8000-0000000000b9}}, snapshot: [memories, memory_contributions]}
+  - {name: "move out with null", as: mem_wri, request: {method: PATCH, path: "/v1/memory/3E3A1000-0000-4000-8000-000000000008", raw: "{\"spaceId\":null}"}, snapshot: [memories, memory_contributions]}
+  - {name: "unfile when not filed does nothing", as: mem_wri, request: {method: PATCH, path: "/v1/memory/3E3A1000-0000-4000-8000-000000000008", raw: "{\"spaceId\":null}"}, snapshot: [memories, memory_contributions]}
+  - {name: "move foreign space", as: mem_wri, request: {method: PATCH, path: "/v1/memory/3E3A1000-0000-4000-8000-000000000008", json: {spaceId: 3E355000-0000-4000-8000-0000000000A1}}, snapshot: [memories, memory_contributions]}
+  - {name: "move unknown space", as: mem_wri, request: {method: PATCH, path: "/v1/memory/3E3A1000-0000-4000-8000-000000000008", json: {spaceId: 3E355000-0000-4000-8000-0000000000FF}}, snapshot: [memories, memory_contributions]}
+  - {name: "already filed does nothing", as: mem_wri, request: {method: PATCH, path: "/v1/memory/3E3A1000-0000-4000-8000-00000000000a", json: {spaceId: 3E355000-0000-4000-8000-0000000000A9}}, snapshot: [memories, memory_contributions]}
+  - {name: move with a note whose row has no bytes, as: mem_wri, request: {method: PATCH, path: "/v1/memory/3E3A1000-0000-4000-8000-000000000009", json: {spaceId: 3E355000-0000-4000-8000-0000000000A9}}, snapshot: [memories, memory_contributions, vault_files], files: [3E300000-0000-4000-8000-0000000000A9]}
+  - {name: "move fails before content is checked", as: mem_wri, request: {method: PATCH, path: "/v1/memory/3E3A1000-0000-4000-8000-000000000008", json: {spaceId: 3E355000-0000-4000-8000-0000000000A1, content: ""}}, snapshot: [memories, memory_contributions]}
+  - {name: "move happens before empty content is refused", as: mem_wri, request: {method: PATCH, path: "/v1/memory/3E3A1000-0000-4000-8000-000000000008", json: {spaceId: 3E355000-0000-4000-8000-0000000000B9, content: ""}}, snapshot: [memories, memory_contributions]}
+  - {name: "every field", as: mem_wri, request: {method: PATCH, path: "/v1/memory/3E3A1000-0000-4000-8000-00000000000b", json: {content: "All at once", tags: [all], reviewState: approved, kind: decision, spaceId: 3E355000-0000-4000-8000-0000000000B9}}, snapshot: [memories, memory_contributions, memory_chunks, kb_compile_reject_list]}
+  - {name: upload a real note, as: mem_wri, request: {method: POST, path: "/v1/vault/files?path=inbox/real.md&note=true", raw: "A note with bytes on disk", headers: {Content-Type: text/markdown}}, capture: {noteMemory: $.memoryId}, files: [mem_wri]}
+  - {name: moving its memory moves the bytes, as: mem_wri, request: {method: PATCH, path: "/v1/memory/{{noteMemory}}", json: {spaceId: 3E355000-0000-4000-8000-0000000000A9}}, snapshot: [memories, memory_contributions, vault_files], files: [mem_wri]}
+  - {name: and on to another Space, as: mem_wri, request: {method: PATCH, path: "/v1/memory/{{noteMemory}}", json: {spaceId: 3E355000-0000-4000-8000-0000000000B9}}, snapshot: [memories, vault_files], files: [mem_wri]}
+  - {name: unfiling it moves the bytes to the root, as: mem_wri, request: {method: PATCH, path: "/v1/memory/{{noteMemory}}", raw: "{\"spaceId\":null}"}, snapshot: [memories, vault_files], files: [mem_wri]}
+  - {name: the team admin edits, as: mem_ann, request: {method: PATCH, path: /v1/memory/3E3A0000-0000-4000-8000-0000000000D1, json: {kind: note}, headers: {X-Vault-ID: 3E3C0000-0000-4000-8000-0000000000C1}}, snapshot: [memories]}
+  - {name: the writer lists, as: mem_wri, request: {method: GET, path: "/v1/memory?limit=100"}}
+  - {name: the writer provenance, as: mem_wri, request: {method: GET, path: "/v1/memory/3E3A1000-0000-4000-8000-000000000007/provenance"}}

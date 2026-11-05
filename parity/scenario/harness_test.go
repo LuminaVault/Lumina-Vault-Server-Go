@@ -506,6 +506,21 @@ func TestCompareTreeIsStableForIdenticalNames(t *testing.T) {
 	)
 }
 
+func TestStableOrderUsesTheWriteTimeWhenThereIsNoCreatedAt(t *testing.T) {
+	// Masked, these rows tie: only the time orders them, whatever their random ids.
+	first := json.RawMessage(`{"id":"ffffffff-0000-4000-8000-000000000001","key":"memory-created:FFFFFFFF-0000-4000-8000-000000000001","occurred_at":"2026-01-01T00:00:01+00:00"}`)
+	second := json.RawMessage(`{"id":"00000000-0000-4000-8000-000000000002","key":"memory-created:00000000-0000-4000-8000-000000000002","occurred_at":"2026-01-01T00:00:02+00:00"}`)
+	rows := []json.RawMessage{second, first}
+	stableOrder(rows)
+	require.Equal(t, []json.RawMessage{first, second}, rows)
+
+	gone := json.RawMessage(`{"id":"00000000-0000-4000-8000-000000000003","deleted_at":"2026-01-01T00:00:01+00:00"}`)
+	later := json.RawMessage(`{"id":"00000000-0000-4000-8000-000000000002","deleted_at":"2026-01-01T00:00:02+00:00"}`)
+	rows = []json.RawMessage{later, gone}
+	stableOrder(rows)
+	require.Equal(t, []json.RawMessage{gone, later}, rows)
+}
+
 // A wait-only step reads its snapshot after the view empties, and running out of
 // time compares what's there instead of failing the run.
 func TestWaitEmptyPollsUntilNoRows(t *testing.T) {

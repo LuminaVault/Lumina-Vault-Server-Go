@@ -1,0 +1,23 @@
+# The G2 smoke, for a fresh user with no seeded rows. Nothing here embeds: upsert
+# stops at its blank-content check and no content patch reaches a memory, so no step
+# makes a paid OpenRouter call on staging.
+module: memory
+smoke: true
+steps:
+  - {name: suggestions, as: mem_new, request: {method: GET, path: /v1/me/suggestions}}
+  - {name: list empty, as: mem_new, request: {method: GET, path: /v1/memory}}
+  - {name: list bad filter, as: mem_new, request: {method: GET, path: "/v1/memory?healthFilter=not-real"}}
+  - {name: facets, as: mem_new, request: {method: GET, path: /v1/memory/facets}}
+  - {name: graph empty, as: mem_new, request: {method: GET, path: /v1/memory/graph}, ignore: [$.generatedAt]}
+  - {name: sync empty, as: mem_new, request: {method: GET, path: /v1/memory/local-sync}}
+  - {name: sync bad cursor, as: mem_new, request: {method: GET, path: "/v1/memory/local-sync?cursor=garbage"}}
+  - {name: get unknown, as: mem_new, request: {method: GET, path: /v1/memory/3E3A0000-0000-4000-8000-0000000000FF}}
+  - {name: get bad id, as: mem_new, request: {method: GET, path: /v1/memory/not-a-uuid}}
+  - {name: lineage unknown, as: mem_new, request: {method: GET, path: /v1/memory/3E3A0000-0000-4000-8000-0000000000FF/lineage}}
+  - {name: related unknown, as: mem_new, request: {method: GET, path: /v1/memory/3E3A0000-0000-4000-8000-0000000000FF/related}}
+  - {name: provenance unknown, as: mem_new, request: {method: GET, path: /v1/memory/3E3A0000-0000-4000-8000-0000000000FF/provenance}}
+  - {name: review unknown, as: mem_new, request: {method: POST, path: /v1/memory/3E3A0000-0000-4000-8000-0000000000FF/review}}
+  - {name: delete unknown, as: mem_new, request: {method: DELETE, path: /v1/memory/3E3A0000-0000-4000-8000-0000000000FF}}
+  - {name: patch empty, as: mem_new, request: {method: PATCH, path: /v1/memory/3E3A0000-0000-4000-8000-0000000000FF, json: {}}}
+  - {name: patch unknown tags, as: mem_new, request: {method: PATCH, path: /v1/memory/3E3A0000-0000-4000-8000-0000000000FF, json: {tags: [x]}}}
+  - {name: upsert blank is refused before it embeds, as: mem_new, request: {method: POST, path: /v1/memory/upsert, json: {content: "   "}}}

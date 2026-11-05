@@ -1,0 +1,73 @@
+# GET /v1/memory/graph. mem_gra has one Space hub only: Swift maps a Dictionary over
+# the hubs, so several would come back in a different order on each process. Go sorts
+# them by id (a Go test covers that). mem_ann also has one. The team vault holds a
+# memory 02-upsert just wrote, whose activity decays with the clock.
+module: memory
+ignore: [$.generatedAt]
+steps:
+  - {name: "graph default", as: mem_gra, request: {method: GET, path: "/v1/memory/graph"}}
+  - {name: "graph no wiki", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?includeWikiPages=false"}}
+  - {name: "graph wiki 1", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?includeWikiPages=1"}}
+  - {name: "graph wiki true", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?includeWikiPages=true"}}
+  - {name: "graph wiki TRUE is false", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?includeWikiPages=TRUE"}}
+  - {name: "graph wiki empty is false", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?includeWikiPages="}}
+  - {name: "graph limit 1", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?limit=1"}}
+  - {name: "graph limit 2 no wiki", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?limit=2&includeWikiPages=false"}}
+  - {name: "graph limit zero", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?limit=0"}}
+  - {name: "graph limit huge", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?limit=999999"}}
+  - {name: "graph limit garbage", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?limit=abc"}}
+  - {name: "graph similarity low", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?similarityThreshold=0"}}
+  - {name: "graph similarity 0.5", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?similarityThreshold=0.5"}}
+  - {name: "graph similarity 1", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?similarityThreshold=1"}}
+  - {name: "graph similarity above", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?similarityThreshold=5"}}
+  - {name: "graph similarity below", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?similarityThreshold=-1"}}
+  - {name: "graph similarity garbage", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?similarityThreshold=abc"}}
+  - {name: "graph similarity empty", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?similarityThreshold="}}
+  - {name: "graph similarity nan", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?similarityThreshold=nan"}}
+  - {name: "graph similarity inf", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?similarityThreshold=inf"}}
+  - {name: "graph similarity exp", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?similarityThreshold=1e-1"}}
+  - {name: "graph similarity huge", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?similarityThreshold=1e999"}}
+  - {name: "graph edges 1", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?maxEdgesPerNode=1"}}
+  - {name: "graph edges 2", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?maxEdgesPerNode=2"}}
+  - {name: "graph edges zero", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?maxEdgesPerNode=0"}}
+  - {name: "graph edges huge", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?maxEdgesPerNode=500"}}
+  - {name: "graph edges garbage", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?maxEdgesPerNode=abc"}}
+  - {name: "graph kinds tag", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?kinds=tag"}}
+  - {name: "graph kinds wikilink", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?kinds=wikilink"}}
+  - {name: "graph kinds space", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?kinds=space"}}
+  - {name: "graph kinds semantic", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?kinds=semantic&similarityThreshold=0.5"}}
+  - {name: "graph kinds temporal", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?kinds=temporal"}}
+  - {name: "graph kinds two spaced", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?kinds=tag,%20temporal"}}
+  - {name: "graph kinds unknown is all", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?kinds=nope"}}
+  - {name: "graph kinds empty is all", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?kinds="}}
+  - {name: "graph providers", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?providers=openrouter"}}
+  - {name: "graph providers mcp", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?providers=mcp:codex"}}
+  - {name: "graph providers two", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?providers=openrouter,mcp:codex"}}
+  - {name: "graph providers unknown", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?providers=nope"}}
+  - {name: "graph providers commas", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?providers=,,"}}
+  - {name: "graph models", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?models=gpt-5"}}
+  - {name: "graph models unknown", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?models=nope"}}
+  - {name: "graph sources chat", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?sources=chat"}}
+  - {name: "graph sources vault keeps wiki", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?sources=vault"}}
+  - {name: "graph sources legacy", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?sources=legacy"}}
+  - {name: "graph sources two", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?sources=chat,manual"}}
+  - {name: "graph sources one known", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?sources=nope,chat"}}
+  - {name: "graph sources none known", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?sources=nope"}}
+  - {name: "graph sources commas", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?sources=,"}}
+  - {name: "graph sources empty", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?sources="}}
+  - {name: "graph after", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?createdAfter=2026-01-11T00:00:00Z"}}
+  - {name: "graph before", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?createdBefore=2026-01-10T10:00:00Z"}}
+  - {name: "graph both", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?createdAfter=2026-01-10T09:00:00Z&createdBefore=2026-01-10T11:00:00Z"}}
+  - {name: "graph after offset", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?createdAfter=2026-01-11T02:00:00%2B02:00"}}
+  - {name: "graph after empty", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?createdAfter="}}
+  - {name: "graph after bad", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?createdAfter=yesterday"}}
+  - {name: "graph after fractional bad", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?createdAfter=2026-01-10T09:00:00.5Z"}}
+  - {name: "graph before bad", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?createdBefore=2026-01-10"}}
+  - {name: "graph bad sources beats bad date", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?sources=nope&createdAfter=bad"}}
+  - {name: "graph bad after beats bad before", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?createdAfter=bad&createdBefore=bad"}}
+  - {name: "graph nothing matches", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?createdAfter=2099-01-01T00:00:00Z"}}
+  - {name: "graph models and wiki", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?models=gpt-5&includeWikiPages=true"}}
+  - {name: "graph empty user", as: mem_new, request: {method: GET, path: "/v1/memory/graph"}}
+  - {name: "graph managed sees origin models, unlike the other routes", as: mem_ann, request: {method: GET, path: "/v1/memory/graph"}}
+  - {name: "graph byok", as: mem_cat, request: {method: GET, path: "/v1/memory/graph"}}
+  - {name: "graph team", as: mem_vie, request: {method: GET, path: "/v1/memory/graph", headers: {X-Vault-ID: 3E3C0000-0000-4000-8000-0000000000C1}}, ignore: ["$.nodes[*].activity"]}

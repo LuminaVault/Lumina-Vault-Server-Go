@@ -1,0 +1,17 @@
+# GET /v1/memory/:id/related: the stored vector only, no embedding call. The memories
+# snapshot pins that it leaves query_hit_count alone.
+module: memory
+steps:
+  - {name: "related target", as: mem_rel, request: {method: GET, path: "/v1/memory/3E3A4000-0000-4000-8000-000000000001/related"}, snapshot: [memories]}
+  - {name: "related limit 1", as: mem_rel, request: {method: GET, path: "/v1/memory/3E3A4000-0000-4000-8000-000000000001/related?limit=1"}, snapshot: [memories]}
+  - {name: "related limit 2", as: mem_rel, request: {method: GET, path: "/v1/memory/3E3A4000-0000-4000-8000-000000000001/related?limit=2"}, snapshot: [memories]}
+  - {name: "related limit zero", as: mem_rel, request: {method: GET, path: "/v1/memory/3E3A4000-0000-4000-8000-000000000001/related?limit=0"}, snapshot: [memories]}
+  - {name: "related limit negative", as: mem_rel, request: {method: GET, path: "/v1/memory/3E3A4000-0000-4000-8000-000000000001/related?limit=-1"}, snapshot: [memories]}
+  - {name: "related limit over", as: mem_rel, request: {method: GET, path: "/v1/memory/3E3A4000-0000-4000-8000-000000000001/related?limit=50"}, snapshot: [memories]}
+  - {name: "related limit garbage", as: mem_rel, request: {method: GET, path: "/v1/memory/3E3A4000-0000-4000-8000-000000000001/related?limit=abc"}, snapshot: [memories]}
+  - {name: "related from a neighbour", as: mem_rel, request: {method: GET, path: "/v1/memory/3E3A4000-0000-4000-8000-000000000002/related"}, snapshot: [memories]}
+  - {name: "related orthogonal has none in range", as: mem_rel, request: {method: GET, path: "/v1/memory/3E3A4000-0000-4000-8000-000000000005/related"}, snapshot: [memories]}
+  - {name: "related no vector", as: mem_rel, request: {method: GET, path: "/v1/memory/3E3A4000-0000-4000-8000-000000000006/related"}, snapshot: [memories]}
+  - {name: "related foreign twin", as: mem_rel, request: {method: GET, path: "/v1/memory/3E3A4000-0000-4000-8000-000000000008/related"}, snapshot: [memories]}
+  - {name: "related own twin", as: mem_bob, request: {method: GET, path: "/v1/memory/3E3A4000-0000-4000-8000-000000000008/related"}, snapshot: [memories]}
+  - {name: related empty for a memory with no vector and no vault file, as: mem_ann, request: {method: GET, path: /v1/memory/3E3A0000-0000-4000-8000-000000000001/related}}

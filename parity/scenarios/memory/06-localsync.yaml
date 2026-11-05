@@ -1,0 +1,33 @@
+# GET /v1/memory/local-sync. nextCursor is ignored as text (Swift's JSONEncoder key
+# order inside it is not stable) and each server pages with its own; the literal
+# cursors below are the form Swift issues, so a client survives the flip.
+module: memory
+steps:
+  - {name: "sync default", as: mem_cur, request: {method: GET, path: "/v1/memory/local-sync"}, ignore: [$.nextCursor]}
+  - {name: "sync limit 1", as: mem_cur, request: {method: GET, path: "/v1/memory/local-sync?limit=1"}, ignore: [$.nextCursor]}
+  - {name: "sync limit zero", as: mem_cur, request: {method: GET, path: "/v1/memory/local-sync?limit=0"}, ignore: [$.nextCursor]}
+  - {name: "sync limit negative", as: mem_cur, request: {method: GET, path: "/v1/memory/local-sync?limit=-1"}, ignore: [$.nextCursor]}
+  - {name: "sync limit huge", as: mem_cur, request: {method: GET, path: "/v1/memory/local-sync?limit=9999"}, ignore: [$.nextCursor]}
+  - {name: "sync limit garbage", as: mem_cur, request: {method: GET, path: "/v1/memory/local-sync?limit=abc"}, ignore: [$.nextCursor]}
+  - {name: "sync page 1", as: mem_cur, request: {method: GET, path: "/v1/memory/local-sync?limit=2"}, ignore: [$.nextCursor], capture: {c1: $.nextCursor}}
+  - {name: sync page 2, as: mem_cur, request: {method: GET, path: "/v1/memory/local-sync?limit=2&cursor={{c1}}"}, ignore: [$.nextCursor], capture: {c2: $.nextCursor}}
+  - {name: sync page 3, as: mem_cur, request: {method: GET, path: "/v1/memory/local-sync?limit=2&cursor={{c2}}"}, ignore: [$.nextCursor], capture: {c3: $.nextCursor}}
+  - {name: sync page 4, as: mem_cur, request: {method: GET, path: "/v1/memory/local-sync?limit=2&cursor={{c3}}"}, ignore: [$.nextCursor], capture: {c4: $.nextCursor}}
+  - {name: sync page 5, as: mem_cur, request: {method: GET, path: "/v1/memory/local-sync?limit=2&cursor={{c4}}"}, ignore: [$.nextCursor]}
+  - {name: "sync swift memory cursor", as: mem_cur, request: {method: GET, path: "/v1/memory/local-sync?cursor=v1.eyJpZCI6IjNFM0EzMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMiIsImtpbmQiOjAsInRpbWVzdGFtcCI6Nzg5NzMyMDAwLjB9"}, ignore: [$.nextCursor]}
+  - {name: "sync swift deletion cursor", as: mem_cur, request: {method: GET, path: "/v1/memory/local-sync?cursor=v1.eyJ0aW1lc3RhbXAiOjc4OTczNTYwMC4wLCJpZCI6IjNFM0EzMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwNCIsImtpbmQiOjF9"}, ignore: [$.nextCursor]}
+  - {name: "sync lowercase id cursor", as: mem_cur, request: {method: GET, path: "/v1/memory/local-sync?cursor=v1.eyJ0aW1lc3RhbXAiOjc4OTczMjAwMC4wLCJpZCI6IjNlM2EzMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMiIsImtpbmQiOjB9"}, ignore: [$.nextCursor]}
+  - {name: "sync legacy cursor", as: mem_cur, request: {method: GET, path: "/v1/memory/local-sync?cursor=2026-01-10T10:00:00Z"}, ignore: [$.nextCursor]}
+  - {name: "sync legacy offset cursor", as: mem_cur, request: {method: GET, path: "/v1/memory/local-sync?cursor=2026-01-10T12:00:00%2B02:00"}, ignore: [$.nextCursor]}
+  - {name: "sync legacy fractional refused", as: mem_cur, request: {method: GET, path: "/v1/memory/local-sync?cursor=2026-01-10T10:00:00.5Z"}, ignore: [$.nextCursor]}
+  - {name: "sync empty cursor", as: mem_cur, request: {method: GET, path: "/v1/memory/local-sync?cursor="}, ignore: [$.nextCursor]}
+  - {name: "sync garbage", as: mem_cur, request: {method: GET, path: "/v1/memory/local-sync?cursor=garbage"}, ignore: [$.nextCursor]}
+  - {name: "sync v1 no payload", as: mem_cur, request: {method: GET, path: "/v1/memory/local-sync?cursor=v1."}, ignore: [$.nextCursor]}
+  - {name: "sync v1 bad base64", as: mem_cur, request: {method: GET, path: "/v1/memory/local-sync?cursor=v1.!!!!"}, ignore: [$.nextCursor]}
+  - {name: "sync v1 not json", as: mem_cur, request: {method: GET, path: "/v1/memory/local-sync?cursor=v1.bm90"}, ignore: [$.nextCursor]}
+  - {name: "sync v1 empty object", as: mem_cur, request: {method: GET, path: "/v1/memory/local-sync?cursor=v1.e30"}, ignore: [$.nextCursor]}
+  - {name: "sync v1 bad kind", as: mem_cur, request: {method: GET, path: "/v1/memory/local-sync?cursor=v1.eyJ0aW1lc3RhbXAiOjc4OTczMjAwMC4wLCJpZCI6IjNFM0EzMDAwLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMiIsImtpbmQiOjJ9"}, ignore: [$.nextCursor]}
+  - {name: "sync v1 bad id", as: mem_cur, request: {method: GET, path: "/v1/memory/local-sync?cursor=v1.eyJ0aW1lc3RhbXAiOjc4OTczMjAwMC4wLCJpZCI6Im5vcGUiLCJraW5kIjowfQ"}, ignore: [$.nextCursor]}
+  - {name: "sync v1 string time", as: mem_cur, request: {method: GET, path: "/v1/memory/local-sync?cursor=v1.eyJ0aW1lc3RhbXAiOiJ4IiwiaWQiOiIzRTNBMzAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwMDIiLCJraW5kIjowfQ"}, ignore: [$.nextCursor]}
+  - {name: "sync other tenant empty", as: mem_new, request: {method: GET, path: "/v1/memory/local-sync"}, ignore: [$.nextCursor]}
+  - {name: sync team vault, as: mem_vie, request: {method: GET, path: "/v1/memory/local-sync", headers: {X-Vault-ID: 3E3C0000-0000-4000-8000-0000000000C1}}, ignore: [$.nextCursor]}

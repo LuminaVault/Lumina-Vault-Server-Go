@@ -139,6 +139,11 @@ type Config struct {
 	BYOHermesRequireHTTPSRaw string `env:"BYO_HERMES_REQUIRE_HTTPS"`
 	BYOHermesAllowTailnet    string `env:"BYO_HERMES_ALLOW_TAILNET_HTTP" envDefault:"true"`
 
+	// Memory routes. HybridExecutionEnabled stays a string, read with Swift's
+	// lowercased() == "true"; it mounts /v1/memory/local-sync.
+	HybridExecutionEnabled   string  `env:"HYBRID_EXECUTION_ENABLED" envDefault:"true"`
+	MemoryRelatedMaxDistance float64 `env:"MEMORY_RELATED_MAX_DISTANCE" envDefault:"0.45"`
+
 	// Product analytics (posthog package). Off unless both are set, as in Swift.
 	PostHogProjectToken string `env:"POSTHOG_PROJECT_TOKEN"`
 	PostHogHost         string `env:"POSTHOG_HOST"`

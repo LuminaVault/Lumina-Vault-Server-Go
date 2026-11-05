@@ -107,6 +107,13 @@ type HasUsableCredential func(ctx context.Context, tenant uuid.UUID) bool
 // Hermes resolution (so the own-Hermes exemption never applies). Mount it
 // after auth: like Swift it calls requireIdentity first.
 func Middleware(pool *pgxpool.Pool, c Capability, enforcementEnabled bool, hasCredential HasUsableCredential) echo.MiddlewareFunc {
+	return MiddlewareWithHermes(pool, c, enforcementEnabled, hasCredential, nil)
+}
+
+// MiddlewareWithHermes is Middleware on a group behind HermesResolutionMiddleware:
+// ownHermes is context.hermesResolution?.isUserOverride, the free check Swift makes
+// before it spends reads on hasCredential. Nil means no resolution on this group.
+func MiddlewareWithHermes(pool *pgxpool.Pool, c Capability, enforcementEnabled bool, hasCredential HasUsableCredential, ownHermes func(*echo.Context) bool) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		if !enforcementEnabled {
 			return next
@@ -123,9 +130,14 @@ func Middleware(pool *pgxpool.Pool, c Capability, enforcementEnabled bool, hasCr
 			if Entitled(tier, override, c) {
 				return next(ctx)
 			}
-			// BYOEntitlementPolicy.exemption with hasOwnHermes false.
-			if !c.RequiresUltimate() && tier != "archived" && hasCredential != nil && hasCredential(ctx.Request().Context(), tenant) {
-				return next(ctx)
+			// BYOEntitlementPolicy.exemption.
+			if !c.RequiresUltimate() && tier != "archived" {
+				if ownHermes != nil && ownHermes(ctx) {
+					return next(ctx)
+				}
+				if hasCredential != nil && hasCredential(ctx.Request().Context(), tenant) {
+					return next(ctx)
+				}
 			}
 			return wire.JSON(ctx, http.StatusPaymentRequired, paywallFor(c))
 		}

@@ -11,12 +11,15 @@ import (
 	"lumina/internal/apns"
 	"lumina/internal/auth"
 	linkcapture "lumina/internal/capture"
+	"lumina/internal/chunkindex"
 	"lumina/internal/config"
 	"lumina/internal/db"
 	"lumina/internal/diskguard"
 	"lumina/internal/embedding"
 	"lumina/internal/entitlement"
+	"lumina/internal/hermesresolve"
 	"lumina/internal/httpserver"
+	"lumina/internal/llm"
 	"lumina/internal/memorystore"
 	"lumina/internal/migrations"
 	"lumina/internal/modules/account"
@@ -35,6 +38,7 @@ import (
 	"lumina/internal/modules/mail"
 	"lumina/internal/modules/marketplace"
 	"lumina/internal/modules/me"
+	"lumina/internal/modules/memory"
 	"lumina/internal/modules/news"
 	"lumina/internal/modules/onboarding"
 	"lumina/internal/modules/profiles"
@@ -50,14 +54,17 @@ import (
 	"lumina/internal/posthog"
 	"lumina/internal/ratelimit"
 	"lumina/internal/secretbox"
+	"lumina/internal/ssrfguard"
 	"lumina/internal/telemetry"
 	"lumina/internal/usagemeter"
 	"lumina/internal/vaultfiles"
 	"lumina/internal/vaultpaths"
 	"net"
+	"net/url"
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -167,9 +174,14 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		// SecretBox: nil without LV_SECRET_MASTER_KEY, as in Swift.
 		box, _ := secretbox.New(cfg.LVSecretMasterKey)
 		embeddings := embedding.New(pool, embeddingConfig(cfg), box)
+		meModule := me.New(pool, identify, limits, me.Options{RecapThemesEnabled: cfg.RecapThemesEnabled})
+		// One achievements inbox per process, and MeTodayCache is its one real subscriber.
+		// The sink stops after the HTTP server, so a request finishing in graceful shutdown
+		// can still enqueue.
+		sink, stopSink := startAchievementSink(ctx, pool, cfg, func(tenant uuid.UUID, _ achievements.Sub) { meModule.InvalidateToday(tenant) })
+		defer stopSink()
 		// Migrated modules (modules.yaml status ≥ parity). Traffic only reaches
 		// them through the api ingress.extraPaths that name them.
-		meModule := me.New(pool, identify, limits, me.Options{RecapThemesEnabled: cfg.RecapThemesEnabled})
 		deps.Modules = []httpserver.Module{
 			projects.New(pool),
 			kanban.New(pool, identify, limits, paths),
@@ -201,6 +213,7 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 			onboarding.New(pool),
 			health.New(pool, healthGate, analytics),
 		)
+		deps.Modules = append(deps.Modules, memoryModule(pool, cfg, box, identify, limits, paths, embeddings, sink, meModule))
 		// Wave 4: knowledge, vision and the compile probe. /v1/vision spends a platform
 		// key, so it has its own gate. Both groups read billing.enforcementEnabled.
 		enforcement := entitlement.EnforcementEnabled(cfg.BillingEnforcementEnabled)
@@ -221,10 +234,7 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		if m := marketplace.New(pool, cfg.LVSecretMasterKey, pluginOptions, identify, limits, paths); m != nil { // nil without LV_SECRET_MASTER_KEY, as in Swift
 			deps.Modules = append(deps.Modules, m)
 		}
-		// One sink and one disk guard for wave 4's writers. The sink stops after the
-		// HTTP server, so a request finishing in graceful shutdown can still enqueue.
-		sink, stopSink := startAchievementSink(ctx, pool, cfg, func(tenant uuid.UUID, _ achievements.Sub) { meModule.InvalidateToday(tenant) })
-		defer stopSink()
+		// One disk guard for wave 4's writers.
 		disk := diskguard.New(paths.Root, cfg.StorageMinFreeBytes, cfg.StorageMinFreeRatio, diskguard.Options{})
 		memories := memorystore.New(pool, nil)
 		deps.Modules = append(deps.Modules,
@@ -329,6 +339,36 @@ func embeddingConfig(cfg config.Config) embedding.Config {
 		OpenRouterModel:   cfg.EmbeddingOpenRouterModel,
 		NomicAPIKey:       cfg.EmbeddingNomicAPIKey,
 	}
+}
+
+// memoryModule builds /v1/memory. POST /v1/memory/upsert sits behind BYO Hermes
+// resolution (only with a SecretBox, as Swift's) and the capture gate.
+func memoryModule(pool *pgxpool.Pool, cfg config.Config, box *secretbox.Box, identify echo.MiddlewareFunc, limits *ratelimit.Store, paths vaultpaths.Paths, embeddings embedding.Service, sink *achievementsink.Sink, today *me.Module) httpserver.Module {
+	opts := memory.Options{
+		Identify:   identify,
+		Limits:     limits,
+		Paths:      paths,
+		Embeddings: embeddings,
+		Indexer: chunkindex.NewIndexer(chunkindex.NewChunkRepository(pool), embeddings,
+			chunkindex.NewLinkRepository(pool)),
+		Preferences: llm.NewPreferenceRepository(pool),
+		CaptureGate: entitlement.MiddlewareWithHermes(pool, entitlement.Capture,
+			entitlement.EnforcementEnabled(cfg.BillingEnforcementEnabled), entitlement.PGCredentials(pool, box), hermesresolve.IsUserOverride),
+		Achievements:           sink,
+		OnUpserted:             today.InvalidateToday,
+		HybridExecutionEnabled: strings.EqualFold(cfg.HybridExecutionEnabled, "true"),
+		RelatedMaxDistance:     float32(cfg.MemoryRelatedMaxDistance),
+	}
+	if box != nil {
+		if gateway, err := url.Parse(cfg.HermesGatewayURL); err == nil {
+			opts.Hermes = hermesresolve.New(pool, box, ssrfguard.Guard{
+				AllowPrivateRanges: strings.EqualFold(cfg.BYOHermesAllowPrivate, "true"),
+				RequireHTTPS:       cfg.BYOHermesRequireHTTPS(),
+				AllowTailnetHTTP:   strings.EqualFold(cfg.BYOHermesAllowTailnet, "true"),
+			}, gateway).Middleware()
+		}
+	}
+	return memory.New(pool, memorystore.New(pool, nil), opts)
 }
 
 func calendarModules(pool *pgxpool.Pool, cfg config.Config, identify echo.MiddlewareFunc, limits *ratelimit.Store, embeddings embedding.Service, analytics *posthog.Client) []httpserver.Module {
