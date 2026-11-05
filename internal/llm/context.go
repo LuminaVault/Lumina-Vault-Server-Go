@@ -22,10 +22,40 @@ type Resolution = hermesresolve.Resolution
 // WireRoute is RouterModelRouteDTO: a route as clients and Cerberus name it.
 // The rates are optional, and win over the catalogue when present.
 type WireRoute struct {
-	Provider                  ProviderID
-	Model                     string
-	InputPerMillionUsdMicros  *int64
-	OutputPerMillionUsdMicros *int64
+	Provider                  ProviderID `json:"provider"`
+	Model                     string     `json:"model"`
+	InputPerMillionUsdMicros  *int64     `json:"inputPerMillionUsdMicros,omitempty"`
+	OutputPerMillionUsdMicros *int64     `json:"outputPerMillionUsdMicros,omitempty"`
+}
+
+// ID is RouterModelRouteDTO.id: rates do not distinguish two routes.
+func (r WireRoute) ID() string { return string(r.Provider) + ":" + r.Model }
+
+// ParallelParticipant is ParallelParticipantDTO.
+type ParallelParticipant struct {
+	ID           uuid.UUID `json:"id"`
+	Role         string    `json:"role"`
+	Instructions *string   `json:"instructions,omitempty"`
+	Route        WireRoute `json:"route"`
+}
+
+// ParallelRequest is the part of ParallelExecutionRequestDTO routing reads. A nil
+// Participants means none were named; an empty one means none, as in Swift.
+type ParallelRequest struct {
+	Strategy        ParallelStrategy
+	Participants    []ParallelParticipant
+	SynthesisRoute  *WireRoute
+	SynthesisPrompt *string
+}
+
+// CerberusScope is CerberusRequestScope: which call this is, for rule matching
+// and profile bindings. Nil on Values means a system call.
+type CerberusScope struct {
+	Surface        RouterSurface
+	SpaceID        *uuid.UUID
+	JobID          string // empty means none
+	WorkflowID     string // empty means none
+	ConversationID *uuid.UUID
 }
 
 // ModelProvenance is ModelProvenanceDTO: which route answered.
@@ -72,8 +102,11 @@ type Values struct {
 	CurrentUser           *User
 	CurrentResolution     *Resolution
 	ForcedRoute           *WireRoute
+	CerberusScope         *CerberusScope
 	CerberusPrompt        string
-	ParallelRequested     bool // LLMRoutingContext.parallelStrategy != nil
+	ParallelStrategy      ParallelStrategy // empty means none requested
+	ParallelRequest       *ParallelRequest
+	AnalyticsVaultID      *uuid.UUID
 	BillingTenantID       *uuid.UUID
 	CredentialMode        CredentialMode
 	ConversationMessageID *uuid.UUID

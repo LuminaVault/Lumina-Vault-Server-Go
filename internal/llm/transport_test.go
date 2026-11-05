@@ -797,7 +797,7 @@ func TestRouterTelemetryHook(t *testing.T) {
 		adapter := &scriptedAdapter{kind: OpenAI, outcomes: []outcome{reply("WRONG")}}
 		transport := transportFor(Decision{Primary: Route{OpenAI, "m"}, Cerberus: m}, adapter)
 		transport.RouterTelemetry = telemetry
-		ctx := WithValues(context.Background(), func(v *Values) { v.ParallelRequested = true })
+		ctx := WithValues(context.Background(), func(v *Values) { v.ParallelStrategy = ParallelConsensus })
 		_, err := transport.ChatCompletions(ctx, []byte(emptyPayload), "alice", "")
 		var response *UpstreamErrorResponse
 		require.ErrorAs(t, err, &response)
