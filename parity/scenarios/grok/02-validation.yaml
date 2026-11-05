@@ -1,0 +1,65 @@
+# Past the guard, the body is decoded and validated before the container is looked
+# up: grok_nobox has none, so a 400 here beats its 409.
+module: grok
+steps:
+  # chat
+  - {name: chat malformed, as: grok_nobox, request: {method: POST, path: /v1/grok/chat, raw: "{\"messages\":"}}
+  - {name: chat empty body, as: grok_nobox, request: {method: POST, path: /v1/grok/chat}}
+  - {name: chat array, as: grok_nobox, request: {method: POST, path: /v1/grok/chat, json: []}}
+  - {name: chat null, as: grok_nobox, request: {method: POST, path: /v1/grok/chat, raw: "null"}}
+  - {name: chat missing messages, as: grok_nobox, request: {method: POST, path: /v1/grok/chat, json: {}}}
+  - {name: chat null messages, as: grok_nobox, request: {method: POST, path: /v1/grok/chat, json: {messages: null}}}
+  - {name: chat messages wrong type, as: grok_nobox, request: {method: POST, path: /v1/grok/chat, json: {messages: hi}}}
+  - {name: chat message wrong type, as: grok_nobox, request: {method: POST, path: /v1/grok/chat, json: {messages: [hi]}}}
+  - {name: chat null message, as: grok_nobox, request: {method: POST, path: /v1/grok/chat, json: {messages: [null]}}}
+  - {name: chat message no role, as: grok_nobox, request: {method: POST, path: /v1/grok/chat, json: {messages: [{content: hi}]}}}
+  - {name: chat message no content, as: grok_nobox, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user}]}}}
+  - {name: chat message null content, as: grok_nobox, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: null}]}}}
+  - {name: chat content parts, as: grok_nobox, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: [{type: text}]}]}}}
+  - {name: chat model wrong type, as: grok_nobox, request: {method: POST, path: /v1/grok/chat, json: {messages: [], model: 4}}}
+  - {name: chat stream wrong type, as: grok_nobox, request: {method: POST, path: /v1/grok/chat, json: {messages: [], stream: "yes"}}}
+  - {name: chat stream null is absent, as: grok_nobox, request: {method: POST, path: /v1/grok/chat, json: {messages: [], stream: null}}}
+  - {name: chat maxTokens wrong type, as: grok_nobox, request: {method: POST, path: /v1/grok/chat, json: {messages: [], maxTokens: many}}}
+  - {name: chat maxTokens fraction, as: grok_nobox, request: {method: POST, path: /v1/grok/chat, json: {messages: [], maxTokens: 1.5}}}
+  - {name: first failing key in Swift order, as: grok_nobox, request: {method: POST, path: /v1/grok/chat, json: {model: 4, stream: 4, maxTokens: x}}}
+  - {name: chat snake_case key is ignored, as: grok_nobox, request: {method: POST, path: /v1/grok/chat, json: {messages: [], max_tokens: many}}}
+  - {name: chat empty messages passes validation, as: grok_nobox, request: {method: POST, path: /v1/grok/chat, json: {messages: []}}}
+  # x-search
+  - {name: search malformed, as: grok_nobox, request: {method: POST, path: /v1/grok/x-search, raw: "nope"}}
+  - {name: search empty body, as: grok_nobox, request: {method: POST, path: /v1/grok/x-search}}
+  - {name: search array, as: grok_nobox, request: {method: POST, path: /v1/grok/x-search, json: []}}
+  - {name: search missing query, as: grok_nobox, request: {method: POST, path: /v1/grok/x-search, json: {}}}
+  - {name: search null query, as: grok_nobox, request: {method: POST, path: /v1/grok/x-search, json: {query: null}}}
+  - {name: search query wrong type, as: grok_nobox, request: {method: POST, path: /v1/grok/x-search, json: {query: 4}}}
+  - {name: search empty query, as: grok_nobox, request: {method: POST, path: /v1/grok/x-search, json: {query: ""}}}
+  - {name: search blank query is not empty, as: grok_nobox, request: {method: POST, path: /v1/grok/x-search, json: {query: "  "}}}
+  - {name: search handles wrong type, as: grok_nobox, request: {method: POST, path: /v1/grok/x-search, json: {query: q, allowedXHandles: a}}}
+  - {name: search handle wrong type, as: grok_nobox, request: {method: POST, path: /v1/grok/x-search, json: {query: q, excludedXHandles: [1]}}}
+  - {name: search date wrong type, as: grok_nobox, request: {method: POST, path: /v1/grok/x-search, json: {query: q, fromDate: 1}}}
+  - {name: search flag wrong type, as: grok_nobox, request: {method: POST, path: /v1/grok/x-search, json: {query: q, enableImageUnderstanding: 1}}}
+  - {name: search a date is not parsed, as: grok_nobox, request: {method: POST, path: /v1/grok/x-search, json: {query: q, toDate: whenever}}}
+  - {name: search decode error beats the empty query, as: grok_nobox, request: {method: POST, path: /v1/grok/x-search, json: {query: "", toDate: 1}}}
+  # vision
+  - {name: vision malformed, as: grok_nobox, request: {method: POST, path: /v1/grok/vision, raw: "nope"}}
+  - {name: vision empty body, as: grok_nobox, request: {method: POST, path: /v1/grok/vision}}
+  - {name: vision array, as: grok_nobox, request: {method: POST, path: /v1/grok/vision, json: []}}
+  - {name: vision missing prompt, as: grok_nobox, request: {method: POST, path: /v1/grok/vision, json: {imageURLs: [u]}}}
+  - {name: vision missing urls, as: grok_nobox, request: {method: POST, path: /v1/grok/vision, json: {prompt: p}}}
+  - {name: vision null urls, as: grok_nobox, request: {method: POST, path: /v1/grok/vision, json: {prompt: p, imageURLs: null}}}
+  - {name: vision urls wrong type, as: grok_nobox, request: {method: POST, path: /v1/grok/vision, json: {prompt: p, imageURLs: u}}}
+  - {name: vision url wrong type, as: grok_nobox, request: {method: POST, path: /v1/grok/vision, json: {prompt: p, imageURLs: [1]}}}
+  - {name: vision empty urls, as: grok_nobox, request: {method: POST, path: /v1/grok/vision, json: {prompt: p, imageURLs: []}}}
+  - {name: vision empty prompt passes validation, as: grok_nobox, request: {method: POST, path: /v1/grok/vision, json: {prompt: "", imageURLs: [u]}}}
+  - {name: vision prompt wrong type, as: grok_nobox, request: {method: POST, path: /v1/grok/vision, json: {prompt: 1, imageURLs: [u]}}}
+  - {name: vision a url is not checked, as: grok_nobox, request: {method: POST, path: /v1/grok/vision, json: {prompt: p, imageURLs: ["not a url"]}}}
+  # tts never reads the body
+  - {name: tts malformed, as: grok_nobox, request: {method: POST, path: /v1/grok/tts, raw: "nope"}}
+  - {name: tts empty body, as: grok_nobox, request: {method: POST, path: /v1/grok/tts}}
+  - {name: tts array, as: grok_nobox, request: {method: POST, path: /v1/grok/tts, json: []}}
+  - {name: tts missing text, as: grok_nobox, request: {method: POST, path: /v1/grok/tts, json: {}}}
+  - {name: tts with a linked container, as: grok_ann, request: {method: POST, path: /v1/grok/tts, json: {text: hello, voice: eve}}}
+  # methods and paths
+  - {name: get on chat, as: grok_ann, request: {method: GET, path: /v1/grok/chat}}
+  - {name: get on tts, as: grok_ann, request: {method: GET, path: /v1/grok/tts}}
+  - {name: unknown subpath, as: grok_ann, request: {method: POST, path: /v1/grok/nope, json: {}}}
+  - {name: bare prefix, as: grok_ann, request: {method: POST, path: /v1/grok, json: {}}}

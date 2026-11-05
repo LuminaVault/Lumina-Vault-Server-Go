@@ -1,0 +1,10 @@
+# LV_SECRET_MASTER_KEY empty: Swift builds grokController inside the SecretBox branch,
+# so /v1/grok isn't mounted and every path is a plain 404, even with no token.
+module: grok
+steps:
+  - {name: chat for a linked pro, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: hi}]}}}
+  - {name: x-search, as: grok_ann, request: {method: POST, path: /v1/grok/x-search, json: {query: q}}}
+  - {name: vision, as: grok_ann, request: {method: POST, path: /v1/grok/vision, json: {prompt: p, imageURLs: [u]}}}
+  - {name: tts, as: grok_ann, request: {method: POST, path: /v1/grok/tts, json: {text: t}}}
+  - {name: trial user, as: grok_trial, request: {method: POST, path: /v1/grok/chat, json: {messages: []}}}
+  - {name: no token, request: {method: POST, path: /v1/grok/chat, json: {messages: []}}}
