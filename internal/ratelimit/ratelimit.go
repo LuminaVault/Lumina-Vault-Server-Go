@@ -91,6 +91,10 @@ var VaultExportByUser = Policy{Name: "vaultExportByUser", Max: 3, Window: 300 * 
 // scale. The calendar brief and /v1/query share it.
 var QueryByUser = Policy{Name: "queryByUser", Max: 30, Window: 60 * time.Second, TierScale: StandardTierScale}
 
+// MemoryCompileByUser is RateLimitPolicy.memoryCompileByUser: 5 per 60 s on the
+// standard tier ladder.
+var MemoryCompileByUser = Policy{Name: "memoryCompileByUser", Max: 5, Window: 60 * time.Second, TierScale: StandardTierScale}
+
 // ErrLimited is the Swift 429 body.
 // VisionEmbedByUserPerMinute and VisionEmbedByUserDaily are
 // RateLimitPolicy.visionEmbedByUser*: stacked on /v1/vision, keyed by user or IP.
@@ -220,4 +224,55 @@ func IPKey(r *http.Request) string {
 		return real[0]
 	}
 	return "anon"
+}
+
+// InFlight is InFlightLimitStore: concurrent requests per key. Swift gives each
+// middleware its own store, so build one per route group.
+type InFlight struct {
+	mu     sync.Mutex
+	counts map[string]int
+}
+
+// NewInFlight builds an empty store.
+func NewInFlight() *InFlight { return &InFlight{counts: map[string]int{}} }
+
+func (s *InFlight) acquire(key string, limit int) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.counts[key] >= limit {
+		return false
+	}
+	s.counts[key]++
+	return true
+}
+
+func (s *InFlight) release(key string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.counts[key] <= 1 {
+		delete(s.counts, key)
+		return
+	}
+	s.counts[key]--
+}
+
+// errTooManyStreams is InFlightLimitMiddleware's 429.
+var errTooManyStreams = wire.NewError(http.StatusTooManyRequests, "too many concurrent streams")
+
+// InFlightMiddleware is InFlightLimitMiddleware: at most limit (floored at 1) requests
+// per key at once, held until the response has been written. Over it, a 429 with
+// Retry-After: 1.
+func InFlightMiddleware(s *InFlight, limit int, key func(*echo.Context) string) echo.MiddlewareFunc {
+	limit = max(1, limit)
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c *echo.Context) error {
+			k := "if:" + key(c)
+			if !s.acquire(k, limit) {
+				c.Response().Header().Set("Retry-After", "1")
+				return errTooManyStreams
+			}
+			defer s.release(k)
+			return next(c)
+		}
+	}
 }

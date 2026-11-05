@@ -134,10 +134,20 @@ type Config struct {
 	// BYO Hermes resolution (hermesresolve, ssrfguard). Strings, read with
 	// Swift's lowercased() == "true". BYOHermesRequireHTTPS has no default here
 	// because Swift's depends on LV_ENVIRONMENT; use its method.
-	HermesGatewayURL         string `env:"HERMES_GATEWAY_URL" envDefault:"http://hermes:8642"`
-	BYOHermesAllowPrivate    string `env:"BYO_HERMES_ALLOW_PRIVATE" envDefault:"false"`
-	BYOHermesRequireHTTPSRaw string `env:"BYO_HERMES_REQUIRE_HTTPS"`
-	BYOHermesAllowTailnet    string `env:"BYO_HERMES_ALLOW_TAILNET_HTTP" envDefault:"true"`
+	HermesGatewayURL string `env:"HERMES_GATEWAY_URL" envDefault:"http://hermes:8642"`
+	// Wave 4F. Strings where Swift reads lowercased() != "false" or == "true".
+	HermesAPIKey                string `env:"HERMES_API_KEY"`
+	HermesStreamIdleTimeout     int    `env:"HERMES_STREAM_IDLE_TIMEOUT" envDefault:"60"`
+	HermesToolVaultMapEnabled   string `env:"HERMES_TOOL_VAULT_MAP_ENABLED" envDefault:"true"`
+	RetrievalTelemetryEnabled   string `env:"RETRIEVAL_TELEMETRY_ENABLED" envDefault:"true"`
+	MaxConcurrentStreamsPerUser int    `env:"HTTP_MAX_CONCURRENT_STREAMS_PER_USER" envDefault:"3"`
+	// capture.autoFile.enabled. Swift's key encodes as CAPTURE_AUTO_FILE_ENABLED, while its
+	// comment and the runbooks say CAPTURE_AUTOFILE_ENABLED, so Go honours either.
+	CaptureAutoFileEnabled    string `env:"CAPTURE_AUTO_FILE_ENABLED"`
+	CaptureAutoFileEnabledAlt string `env:"CAPTURE_AUTOFILE_ENABLED"`
+	BYOHermesAllowPrivate     string `env:"BYO_HERMES_ALLOW_PRIVATE" envDefault:"false"`
+	BYOHermesRequireHTTPSRaw  string `env:"BYO_HERMES_REQUIRE_HTTPS"`
+	BYOHermesAllowTailnet     string `env:"BYO_HERMES_ALLOW_TAILNET_HTTP" envDefault:"true"`
 
 	// Memory routes. HybridExecutionEnabled stays a string, read with Swift's
 	// lowercased() == "true"; it mounts /v1/memory/local-sync.
