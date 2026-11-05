@@ -11,6 +11,8 @@ steps:
     capture: {conversation: $.id}
   - name: a classic turn, compared on its joined text
     as: vault_pro
+    # The usage frame's wall clock. The field must still be there on both servers.
+    ignore: ["$.payload.latencyMs"]
     stream: true
     frames: 10
     framesTimeout: 20s

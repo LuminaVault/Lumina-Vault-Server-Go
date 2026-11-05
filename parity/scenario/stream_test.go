@@ -104,6 +104,35 @@ func TestCoalesceKeepsWhatIsContract(t *testing.T) {
 	}
 }
 
+// A chat stream's usage frame holds a wall clock (RoutedHermesLLMStreamService). The
+// ignore reaches only that field, skips frames whose payload is a string, and still
+// reports a server that leaves the field out.
+func TestCoalesceIgnoresOnlyTheTimingField(t *testing.T) {
+	usage := func(fields string) string { return "data: {\"type\":\"usage\",\"payload\":{" + fields + "}}\n\n" }
+	a := sseServer(t, tokenFrame("hel"), tokenFrame("lo"), usage(`"latencyMs":0,"tokensIn":5`))
+	st := framesStep(2)
+	st.Coalesce = tokens
+	st.Ignore = []string{"$.payload.latencyMs"}
+
+	b := sseServer(t, tokenFrame("hello"), usage(`"latencyMs":7,"tokensIn":5`))
+	require.Empty(t, diffOf(t, scenarioOf(st), target(a.URL), target(b.URL)))
+
+	for name, c := range map[string]struct {
+		frames []string
+		field  string
+	}{
+		"other usage fields": {[]string{tokenFrame("hello"), usage(`"latencyMs":7,"tokensIn":6`)}, "$[1].data.payload.tokensIn"},
+		"a missing field":    {[]string{tokenFrame("hello"), usage(`"tokensIn":5`)}, "$[1].data.payload.latencyMs"},
+		"the token text":     {[]string{tokenFrame("other"), usage(`"latencyMs":7,"tokensIn":5`)}, "$[0].data.payload"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			diffs := diffOf(t, scenarioOf(st), target(a.URL), target(sseServer(t, c.frames...).URL))
+			require.Len(t, diffs, 1)
+			require.Equal(t, c.field, diffs[0].Field)
+		})
+	}
+}
+
 // Normalizing after the join is what masks a value split across chunks.
 func TestCoalesceNormalizesTheJoinedText(t *testing.T) {
 	const id = "11111111-1111-4111-8111-111111111111"
