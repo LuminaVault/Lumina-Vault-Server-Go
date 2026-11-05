@@ -1271,3 +1271,35 @@ Beyond the pilot gate (D-wave2-early):
 
 - Holds on Swift: `/v1/memory/search` and `/v1/memory-compile`. `/v1/memory-compile/pending` goes to Go.
   `/v1/knowledge/reason` stays on Swift because only three knowledge sub-paths move.
+
+## self-improvement (wave 5)
+
+### G0 entry: met 2026-11-05
+
+- Routes: 12, under `/v1/me/improvement`.
+- Prefixes: disjoint (`internal/manifest`).
+- Coupling: the routes write `self_improvement_settings`, `self_improvement_runs`,
+  `self_improvement_changes`, `skills_state`, and on the volume `SOUL.md` (approve) and skill files
+  (rollback). Reject writes no file. Rollback never writes SOUL. Approve also copies SOUL into the Hermes
+  profile, which only Go tests cover: `files` steps see `tenants/<ID>` only.
+- Jobs: none move. `SelfImprovementScheduler` stays in Swift and claims the rows `curator/runs` and
+  `soul/reviews` queue. A Go test mimics the claim SQL. Parity doesn't prove the pickup, so check it at G2.
+- Swift tests: 12 of 13 ported: 6 `SelfImprovementPolicyTests` and 6 of 7 `SelfImprovementServiceTests`.
+  Not ported, because it tests the scheduler: "tick dry-run skips pinned skill and applies zero mutations".
+- Paths: `skillFile` and `restore`'s `os.MkdirAll` and `os.RemoveAll` skip `SanitizePath`, as Swift does.
+  Their names and paths come from `snapshot_json`. Parity shows `../outside-skills` writing outside
+  `skills/` on both servers. Hardening them is an owner decision.
+
+### G1 parity: met 2026-11-05
+
+- CI run 42071476680 on head 4301416: self-test (Swift vs Swift) and Swift vs Go give
+  **164 scenarios, 0 differences** (whole suite). `parity/scenarios/self-improvement` has 9 files.
+  Switch state `improvement-off`: 1 scenario, 0 differences. `parity`, `lint`, `test` and `vuln` pass
+  (https://github.com/LuminaVault/Lumina-Vault-Server-Go/actions/runs/42071476680/job/127400255939).
+- First parity coverage of real SOUL bodies: `05-soul-bodies.yaml` approves 22 bodies with a `files` step
+  after each, and the transcripts show each approve returned 200. `internal/soul` showed no difference.
+- Swift bug kept: Fluent's `@ID(custom: "tenant_id")` on `SkillsState` makes `save()` on a loaded row
+  update every `skills_state` row of the tenant. So pinning one skill pins all of them, and a rollback
+  sets one curator state on all of them. Parity confirms it. Fixing it is an owner decision.
+- An empty `archivedPath` is skipped in Go. Swift would target the working directory. The curator never
+  writes that value, so parity doesn't cover it.
