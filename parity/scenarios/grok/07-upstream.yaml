@@ -32,7 +32,7 @@ steps:
   - {name: not-json, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:not-json]]"}]}}}
   - {name: empty, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:empty]]"}]}}}
   - {name: array, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:array]]"}]}}}
-  - {name: null, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:null]]"}]}}}
+  - {name: a null body, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:null]]"}]}}}
   - {name: string, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:string]]"}]}}}
   - {name: truncated-json, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:truncated-json]]"}]}}}
   - {name: over the 8 MiB limit, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:oversize]]"}]}}}
