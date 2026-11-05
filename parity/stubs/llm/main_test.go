@@ -28,6 +28,13 @@ func server(t *testing.T) *httptest.Server {
 	return s
 }
 
+func httptestServer(t *testing.T, h http.Handler) string {
+	t.Helper()
+	s := httptest.NewServer(h)
+	t.Cleanup(s.Close)
+	return s.URL
+}
+
 func TestChatIsDeterministicAndShowsPromptDifferences(t *testing.T) {
 	s := server(t)
 	ask := func(text string) string {

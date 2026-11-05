@@ -10,7 +10,9 @@ prefix moves exactly that module. When no such prefix exists:
     reach production in the same infra PR.
 
 A module may leave routes on Swift (`HELD` below): its prefix still covers them,
-and an explicit ingress entry keeps them on Swift. They need no flip partner.
+and an explicit ingress entry keeps them on Swift. They need no flip partner. A
+held route of the module's own that no shared prefix covers is also listed under
+`exactPaths`, the entry it takes when released; until then the hold wins.
 
 The chart's `pathType: Prefix` on Traefik matches plain string prefixes (no
 `strictPrefixMatching`), so `/v1/vault` also catches `/v1/vaults`. Prefixes are
@@ -54,6 +56,11 @@ WAVES = {
     # Pseudo-modules split out of a Swift dir by controller (SPLITS below).
     "MeGateways": 6, "MeProviders": 5,
     "MemoryAgent": 4, "KnowledgeReason": 4, "KBCompile": 4,
+    # wave-5-plan.md, P6. `llm` is four surfaces with different auth and limits.
+    # The cron bridge runs `docker exec`, which is wave 6 machinery. Wave 4 committed
+    # to flipping /v1/ws at the end of wave 5, ahead of the rest of App.
+    "LLMRouter": 5, "LLMVoice": 5, "LLMChat": 5, "LLMAdmin": 5, "WS": 5,
+    "SkillsCron": 6,
 }
 
 # Some Swift dirs hold controllers that belong to a later wave
@@ -68,6 +75,13 @@ SPLITS = {
     # with POST: ingress can't split a path by method.
     "Sources/App/Memory/MemoController.swift": "MemoryAgent",
     "Sources/App/Memory/QueryController.swift": "MemoryAgent",
+    "Sources/App/LLM/Routing/RouterController.swift": "LLMRouter",
+    "Sources/App/LLM/Routing/ParallelController.swift": "LLMRouter",
+    "Sources/App/LLM/OpenAIAudio/OpenAIAudioController.swift": "LLMVoice",
+    "Sources/App/LLM/Transcribe/TranscribeController.swift": "LLMVoice",
+    "Sources/App/LLM/LLMController.swift": "LLMChat",
+    "Sources/App/LLM/Routing/LLMHealthController.swift": "LLMAdmin",
+    "Sources/App/Skills/CronBridgeController.swift": "SkillsCron",
 }
 # Routes whose controller also holds routes of the parent module, or that are
 # registered in App+build.swift.
@@ -77,11 +91,17 @@ SPLIT_PATHS = {
     "/v1/knowledge/reason": "KnowledgeReason",
     "/v1/knowledge/reason/stream": "KnowledgeReason",
     "/v1/memory-compile": "KBCompile",
+    "/v1/ws": "WS",
 }
+# The smallest free prefix can be wider than the module means to take. /admin is
+# free today only because the inventory has one route under it; ingress takes the
+# route itself (wave-5-plan.md, "Ingress holds and traps").
+MIN_PREFIX_ELEMENTS = {"LLMAdmin": 3}
 # Routes a module leaves on Swift when it flips: path, reason, and the group that
 # releases them. A held route is out of its module's G1 and in the releasing
-# group's. Owner decisions still open (flip-blockers.md: /v1/reminders/detect,
-# /v1/admin/community) are recorded here once they are made.
+# group's. "batch" means wave-5-plan.md, "Flip order and what flips together". The
+# owner decision on /v1/admin/community is still open (flip-blockers.md); batch
+# 5-3b adds or releases that hold accordingly.
 HELD = {
     "Memory": [(
         "/v1/memory/search",
@@ -91,7 +111,27 @@ HELD = {
     "KBCompile": [(
         "/v1/memory-compile",
         "must stay on the same server as /v1/ws: the iOS review sheet fills only from its .memorySaved frames",
-        "end of wave 5, with /v1/ws, /v1/devices/command, mcp and skills",
+        "batch 5-4",
+    )],
+    "Apple": [(
+        "/v1/devices/command",
+        "DeviceCommandBroker's continuations live in the server's memory: a result reaching another server resumes nothing",
+        "batch 5-4",
+    )],
+    "Reminders": [(
+        "/v1/reminders/detect",
+        "ReminderIntentClassifier needs the LLM; Go's UnavailableTransport would answer isReminder false",
+        "batch 5-3b",
+    )],
+    "Me": [(
+        "/v1/me/recap/period",
+        "the claim and the themes worker share a process: on Go the row is claimed and nothing generates it",
+        "batch 5-3b",
+    )],
+    "Community": [(
+        "/v1/admin/community",
+        "the daily run needs the LLM: on Go it can only record failed attempts, and three cost that day's post",
+        "batch 5-3b",
     )],
 }
 # Must flip together though no prefix is shared: Gmail connect finishes at
@@ -104,6 +144,12 @@ SWIFT_DIRS = {
     "MemoryAgent": "Sources/App/Memory",
     "KnowledgeReason": "Sources/App/Knowledge",
     "KBCompile": "Sources/App/KB",
+    "LLMRouter": "Sources/App/LLM/Routing",
+    "LLMVoice": "Sources/App/LLM",
+    "LLMChat": "Sources/App/LLM",
+    "LLMAdmin": "Sources/App/LLM/Routing",
+    "SkillsCron": "Sources/App/Skills",
+    "WS": "Sources/App/App+build.swift",
 }
 
 
@@ -127,6 +173,11 @@ def string_only(prefix: str, path: str) -> bool:
     return path.startswith(prefix) and not matches(segments(prefix), segments(path))
 
 
+def under(prefix: list[str], path: list[str]) -> bool:
+    """Literal containment, as in internal/manifest: a {param} is not a wildcard here."""
+    return path[: len(prefix)] == prefix
+
+
 def main() -> int:
     routes = json.loads(ROUTES.read_text())
     by_module: dict[str, list[list[str]]] = {}
@@ -148,7 +199,7 @@ def main() -> int:
         prefixes, exact, shared, partners = set(), set(), set(), set()
         for path in paths:
             chosen = None
-            for n in range(1, len(path) + 1):
+            for n in range(MIN_PREFIX_ELEMENTS.get(module, 1), len(path) + 1):
                 cand = path[:n]
                 if any(s.startswith("{") or s.startswith("*") for s in cand):
                     break  # a literal prefix cannot contain a parameter
@@ -171,6 +222,13 @@ def main() -> int:
         # Drop prefixes covered by a shorter one of the same module.
         prefixes = {p for p in prefixes if not any(q != p and p.startswith(q + "/") for q in prefixes)}
         prefixes -= shared
+        # A held route of its own stops counting as claimed by the prefix.
+        for hold in holds:
+            for path in paths:
+                route = "/" + "/".join(path)
+                literal = not any(s.startswith("{") or s.startswith("*") for s in path)
+                if literal and under(hold, path) and not any(matches(segments(s), path) for s in shared):
+                    exact.add(route)
         plan[module] = (sorted(prefixes), sorted(exact), sorted(shared), sorted(partners))
 
     for module, others in COUPLED.items():
