@@ -8,7 +8,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"lumina/internal/ids"
+	"math"
 	"reflect"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -89,3 +91,16 @@ func jsonString(b []byte) (string, error) {
 
 // String returns the Swift form; used for path params and logs.
 func (u UUID) String() string { return ids.Upper(u.UUID) }
+
+// Double marshals like Foundation's JSONEncoder: Double.description with a trailing
+// ".0" dropped. Below 0.0001 and above 2^53 that is exponential with at least two
+// exponent digits ("1e-05"), where encoding/json would print 0.00001.
+type Double float64
+
+func (d Double) MarshalJSON() ([]byte, error) {
+	f := float64(d)
+	if abs := math.Abs(f); abs != 0 && (abs < 1e-4 || abs > 1<<53) {
+		return strconv.AppendFloat(nil, f, 'e', -1, 64), nil
+	}
+	return strconv.AppendFloat(nil, f, 'f', -1, 64), nil
+}

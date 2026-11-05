@@ -51,7 +51,7 @@ VALUES
 -- cat reads model identity (BYOK). gus has a BYO Hermes at a private address, which
 -- the capture group's resolution refuses before the handler runs.
 INSERT INTO user_llm_preferences (id, tenant_id, primary_provider, primary_model, fallback_chain, mode, created_at, updated_at)
-VALUES ('3e3e0000-0000-4000-8000-000000000001', '3e300000-0000-4000-8000-0000000000a3', 'openai', 'gpt-4o', '[]', 'byok', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+VALUES ('3e3e0000-0000-4000-8000-000000000001', '3e300000-0000-4000-8000-0000000000a3', 'openai', 'gpt-4o', '{"steps": []}', 'byok', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
 INSERT INTO user_hermes_config (id, tenant_id, base_url, verified_at, created_at, updated_at)
 VALUES ('3e3e0000-0000-4000-8000-000000000002', '3e300000-0000-4000-8000-0000000000a4', 'http://10.20.30.40:8642', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
 

@@ -1,11 +1,10 @@
-// Package memorystore is MemoryRepository: the memories table, its searches, the
-// hit count queue, and the two provenance writes the repository itself makes.
+// Package memorystore is MemoryRepository and MemoryProvenanceRepository: the memories
+// table, its searches, the hit count queue, and the provenance rows.
 //
 // Raw pgx rather than sqlc, as Swift's repository is raw SQL: the embedding column,
 // optional filters and text arrays don't fit generated queries. Fluent's paths are
 // spelled out too, and where Fluent and raw SQL write differently (updated_at, for
-// one) each method says so. The rest of MemoryProvenanceRepository (timeline,
-// summaries, facets, enqueueOutput) has no caller before group 4C and stays with it.
+// one) each method says so. The rest of MemoryProvenanceRepository is in provenance.go.
 package memorystore
 
 import (

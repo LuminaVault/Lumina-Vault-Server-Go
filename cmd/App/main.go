@@ -7,12 +7,18 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"lumina/internal/achievementsink"
+	"lumina/internal/apns"
 	"lumina/internal/auth"
+	"lumina/internal/chunkindex"
 	"lumina/internal/config"
 	"lumina/internal/db"
 	"lumina/internal/embedding"
 	"lumina/internal/entitlement"
+	"lumina/internal/hermesresolve"
 	"lumina/internal/httpserver"
+	"lumina/internal/llm"
+	"lumina/internal/memorystore"
 	"lumina/internal/migrations"
 	"lumina/internal/modules/account"
 	"lumina/internal/modules/achievements"
@@ -26,6 +32,7 @@ import (
 	"lumina/internal/modules/mail"
 	"lumina/internal/modules/marketplace"
 	"lumina/internal/modules/me"
+	"lumina/internal/modules/memory"
 	"lumina/internal/modules/news"
 	"lumina/internal/modules/onboarding"
 	"lumina/internal/modules/profiles"
@@ -37,15 +44,19 @@ import (
 	"lumina/internal/posthog"
 	"lumina/internal/ratelimit"
 	"lumina/internal/secretbox"
+	"lumina/internal/ssrfguard"
 	"lumina/internal/telemetry"
 	"lumina/internal/vaultpaths"
 	"net"
+	"net/url"
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/labstack/echo/v5"
 )
@@ -151,6 +162,23 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		// SecretBox: nil without LV_SECRET_MASTER_KEY, as in Swift.
 		box, _ := secretbox.New(cfg.LVSecretMasterKey)
 		embeddings := embedding.New(pool, embeddingConfig(cfg), box)
+		meModule := me.New(pool, identify, limits, me.Options{RecapThemesEnabled: cfg.RecapThemesEnabled})
+		// One achievements inbox per process. It stops after the HTTP server and
+		// before the pool closes: this defer runs before pool.Close's.
+		sink := achievementsink.New(achievements.NewRecorder(pool), apns.New(pool, apns.Config{
+			Enabled: cfg.APNSEnabled, BundleID: cfg.APNSBundleID, TeamID: cfg.APNSTeamID, KeyID: cfg.APNSKeyID,
+			PrivateKeyPath: cfg.APNSPrivateKeyPath, Environment: cfg.APNSEnvironment,
+		}), achievementsink.Options{OnUnlock: func(tenant uuid.UUID, _ achievements.Sub) { meModule.InvalidateToday(tenant) }})
+		sinkCtx, stopSink := context.WithCancel(context.WithoutCancel(ctx))
+		sinkDone := make(chan struct{})
+		go func() {
+			defer close(sinkDone)
+			sink.Run(sinkCtx)
+		}()
+		defer func() {
+			stopSink()
+			<-sinkDone
+		}()
 		// Migrated modules (modules.yaml status ≥ parity). Traffic only reaches
 		// them through the api ingress.extraPaths that name them.
 		deps.Modules = []httpserver.Module{
@@ -168,7 +196,7 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 				Kind: cfg.EmailKind, APIKey: cfg.EmailResendAPIKey, FromAddress: cfg.EmailFromAddress,
 				ReplyTo: cfg.EmailReplyTo, BaseURL: cfg.TeamInviteBaseURL,
 			}, slog.Default().With("module", "teams"))),
-			me.New(pool, identify, limits, me.Options{RecapThemesEnabled: cfg.RecapThemesEnabled}),
+			meModule,
 			dashboard.New(pool, identify),
 		}
 		// Wave 3: account, onboarding, health. Health ingest sits behind the
@@ -181,6 +209,7 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 			onboarding.New(pool),
 			health.New(pool, healthGate, analytics),
 		)
+		deps.Modules = append(deps.Modules, memoryModule(pool, cfg, box, identify, limits, paths, embeddings, sink, meModule))
 		deps.Modules = append(deps.Modules, calendarModules(pool, cfg, identify, limits, embeddings, analytics)...)
 		if m := news.New(pool, cfg, identify, limits); m != nil { // nil without LV_SECRET_MASTER_KEY, as in Swift
 			deps.Modules = append(deps.Modules, m)
@@ -225,6 +254,36 @@ func embeddingConfig(cfg config.Config) embedding.Config {
 		OpenRouterModel:   cfg.EmbeddingOpenRouterModel,
 		NomicAPIKey:       cfg.EmbeddingNomicAPIKey,
 	}
+}
+
+// memoryModule builds /v1/memory. POST /v1/memory/upsert sits behind BYO Hermes
+// resolution (only with a SecretBox, as Swift's) and the capture gate.
+func memoryModule(pool *pgxpool.Pool, cfg config.Config, box *secretbox.Box, identify echo.MiddlewareFunc, limits *ratelimit.Store, paths vaultpaths.Paths, embeddings embedding.Service, sink *achievementsink.Sink, today *me.Module) httpserver.Module {
+	opts := memory.Options{
+		Identify:   identify,
+		Limits:     limits,
+		Paths:      paths,
+		Embeddings: embeddings,
+		Indexer: chunkindex.NewIndexer(chunkindex.NewChunkRepository(pool), embeddings,
+			chunkindex.NewLinkRepository(pool)),
+		Preferences: llm.NewPreferenceRepository(pool),
+		CaptureGate: entitlement.MiddlewareWithHermes(pool, entitlement.Capture,
+			entitlement.EnforcementEnabled(cfg.BillingEnforcementEnabled), entitlement.PGCredentials(pool, box), hermesresolve.IsUserOverride),
+		Achievements:           sink,
+		OnUpserted:             today.InvalidateToday,
+		HybridExecutionEnabled: strings.EqualFold(cfg.HybridExecutionEnabled, "true"),
+		RelatedMaxDistance:     float32(cfg.MemoryRelatedMaxDistance),
+	}
+	if box != nil {
+		if gateway, err := url.Parse(cfg.HermesGatewayURL); err == nil {
+			opts.Hermes = hermesresolve.New(pool, box, ssrfguard.Guard{
+				AllowPrivateRanges: strings.EqualFold(cfg.BYOHermesAllowPrivate, "true"),
+				RequireHTTPS:       cfg.BYOHermesRequireHTTPS(),
+				AllowTailnetHTTP:   strings.EqualFold(cfg.BYOHermesAllowTailnet, "true"),
+			}, gateway).Middleware()
+		}
+	}
+	return memory.New(pool, memorystore.New(pool, nil), opts)
 }
 
 func calendarModules(pool *pgxpool.Pool, cfg config.Config, identify echo.MiddlewareFunc, limits *ratelimit.Store, embeddings embedding.Service, analytics *posthog.Client) []httpserver.Module {

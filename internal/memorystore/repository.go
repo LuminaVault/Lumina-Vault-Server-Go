@@ -551,12 +551,9 @@ func (r *Repository) Forget(ctx context.Context, tenant, id uuid.UUID) (bool, er
 	if err != nil {
 		return false, err
 	}
-	if m != nil && m.OriginSourceID != nil {
-		if _, err := r.pool.Exec(ctx, `
-			UPDATE memory_index_jobs SET status = 'suppressed', updated_at = NOW()
-			WHERE tenant_id = $1 AND source_kind = $2 AND source_id = $3`,
-			tenant, m.OriginKind, *m.OriginSourceID); err != nil {
-			return false, fmt.Errorf("memorystore: suppress job: %w", err)
+	if m != nil {
+		if err := r.SuppressJob(ctx, tenant, m); err != nil {
+			return false, err
 		}
 	}
 	deleted, err := r.Delete(ctx, tenant, id)

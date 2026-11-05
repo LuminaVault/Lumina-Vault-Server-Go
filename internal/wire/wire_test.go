@@ -101,3 +101,26 @@ func TestHTTPErrorHandlerResponseError(t *testing.T) {
 	require.Equal(t, "text/x-self", rec.Header().Get("Content-Type"))
 	require.Equal(t, "rendered", rec.Body.String())
 }
+
+func TestDoubleMarshalsLikeFoundation(t *testing.T) {
+	for _, c := range []struct {
+		in   float64
+		want string
+	}{
+		{0, "0"},
+		{1, "1"},
+		{1.5, "1.5"},
+		{-122.4194, "-122.4194"},
+		{0.0001, "0.0001"},
+		{0.00001, "1e-05"},
+		{9007199254740993, "9.007199254740992e+15"},
+	} {
+		got, err := json.Marshal(wire.Double(c.in))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(got) != c.want {
+			t.Errorf("Double(%v) = %s, want %s", c.in, got, c.want)
+		}
+	}
+}

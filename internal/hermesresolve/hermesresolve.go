@@ -208,3 +208,10 @@ func writeUnreachable(c *echo.Context, failure *ResolutionError) error {
 func trimWhitespaces(s string) string {
 	return strings.TrimFunc(s, func(r rune) bool { return r == '\t' || unicode.Is(unicode.Zs, r) })
 }
+
+// IsUserOverride says this request resolved to the caller's own Hermes, which
+// EntitlementMiddleware treats as BYOK: the capture gate lets it through.
+func IsUserOverride(c *echo.Context) bool {
+	r, ok := FromContext(c)
+	return ok && r.IsUserOverride
+}

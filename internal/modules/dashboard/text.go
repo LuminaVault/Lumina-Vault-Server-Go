@@ -1,6 +1,7 @@
 package dashboard
 
 import (
+	"lumina/internal/memorystore"
 	"lumina/internal/swiftstr"
 	"math"
 	"strings"
@@ -12,60 +13,12 @@ import (
 // graphCubeExtent is GraphLayoutService.cubeExtent.
 const graphCubeExtent = 60.0
 
-const titleMarkers = "#>-* \t"
+// titleFromContent is MemoryGraphService.titleFromContent.
+func titleFromContent(content string) string { return memorystore.GraphTitle(content) }
 
-// isSwiftNewline is Character.isNewline.
-func isSwiftNewline(r rune) bool {
-	switch r {
-	case '\n', '\r', 0x0B, 0x0C, 0x85, 0x2028, 0x2029:
-		return true
-	}
-	return false
-}
-
-// isSwiftWhitespace is Foundation's CharacterSet.whitespaces as CoreFoundation
-// implements it on Linux: Zs, tab and U+200B (see internal/swiftstr).
-func isSwiftWhitespace(r rune) bool {
-	return r == '\t' || r == 0x200B || unicode.Is(unicode.Zs, r)
-}
-
-// titleFromContent is MemoryGraphService.titleFromContent: the first non-empty
-// line with leading markdown markers dropped, capped at 60 characters.
-func titleFromContent(content string) string {
-	raw := content
-	if lines := strings.FieldsFunc(content, isSwiftNewline); len(lines) > 0 {
-		raw = lines[0]
-	}
-	rest := raw
-	for rest != "" {
-		// Swift drops whole Characters, so a marker carrying a combining mark stays.
-		c := swiftstr.Prefix(rest, 1)
-		if len(c) != 1 || !strings.Contains(titleMarkers, c) {
-			break
-		}
-		rest = rest[len(c):]
-	}
-	first := strings.TrimFunc(rest, isSwiftWhitespace)
-	if first == "" {
-		first = strings.TrimFunc(raw, isSwiftWhitespace)
-	}
-	if swiftstr.Count(first) <= 60 {
-		return first
-	}
-	return swiftstr.Prefix(first, 60) + "…"
-}
-
-// nodeActivity is MemoryGraphService.activity: recency over a 90-day window
-// blended with a log-normalized score. The explicit float64 conversions stop
-// the compiler fusing the multiply-add on arm64, which would change the result.
+// nodeActivity is MemoryGraphService.activity.
 func nodeActivity(score float64, lastAccessed *time.Time, now time.Time) float64 {
-	scoreNorm := math.Min(1, math.Max(0, math.Log1p(math.Max(0, score))/math.Log1p(100)))
-	recency := 0.0
-	if lastAccessed != nil {
-		ageDays := now.Sub(*lastAccessed).Seconds() / 86400
-		recency = math.Min(1, math.Max(0, 1-ageDays/90))
-	}
-	return math.Min(1, math.Max(0, float64(0.6*recency)+float64(0.4*scoreNorm)))
+	return memorystore.GraphActivity(score, lastAccessed, now)
 }
 
 // isSwiftLetterOrNumber is Character.isLetter || Character.isNumber on a
