@@ -19,6 +19,7 @@
 # A state for LLM success paths, once Go serves them (group 4F, wave 5), is one more
 # run_state with the stub up and SWITCH_HERMES_GATEWAY_URL=http://llmstub:8080,
 # SWITCH_LLM_BASE_URL=http://llmstub:8080 or SWITCH_TRANSCRIBE_BASE_URL=http://llmstub:8080/v1.
+# Chat also needs SWITCH_OPENROUTER_API_KEY: see docker-compose.parity.yml.
 # Until then llm_selftest proves the stub, and the coalesce and ws steps, on Swift alone.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -69,7 +70,8 @@ llm_selftest() {
     "${COMPOSE[@]}" exec -T pg psql -v ON_ERROR_STOP=1 -q -U lv -d postgres -c "CREATE DATABASE $db TEMPLATE parity_template"
   done
   "${COMPOSE[@]}" up -d --build --force-recreate llmstub
-  SWITCH_HERMES_GATEWAY_URL=http://llmstub:8080 SWITCH_TRANSCRIBE_BASE_URL=http://llmstub:8080/v1 \
+  SWITCH_HERMES_GATEWAY_URL=http://llmstub:8080 SWITCH_LLM_BASE_URL=http://llmstub:8080 \
+    SWITCH_OPENROUTER_API_KEY=parity-openrouter-not-a-real-key SWITCH_TRANSCRIBE_BASE_URL=http://llmstub:8080/v1 \
     "${COMPOSE[@]}" up -d --force-recreate swift-switched swift2-switched
   for port in 18083 18086 18085; do
     for _ in $(seq 1 60); do
@@ -103,8 +105,9 @@ llm_selftest() {
       failed=1
     fi
   done <<'EXPECT'
-"payload": "stub reply [0-9a-f]{16}"|chat
-"type": "hermes|chat
+"payload": "stub reply [0-9a-f]{16}"|chat/stream.yaml.json
+"payload": "stub reply [0-9a-f]{16}"|chat/free-lane.yaml.json
+"type": "hermes|chat/stream.yaml.json
 "text": "stub transcript"|transcribe
 "status": 101|ws
 "hello"|ws

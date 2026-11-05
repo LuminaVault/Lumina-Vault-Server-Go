@@ -1,0 +1,19 @@
+# Self-test on Swift (scripts/parity-switches.sh, llm_selftest): a free user's turn
+# takes the free lane, so it reaches the stub through the OpenRouter base URL rather
+# than HERMES_GATEWAY_URL. Same frames, by another route.
+module: chat
+steps:
+  - name: create a conversation
+    as: alice
+    request: {method: POST, path: /v1/conversations, json: {title: Stub}}
+    capture: {conversation: $.id}
+  - name: a free lane turn, compared on its joined text
+    as: alice
+    stream: true
+    frames: 10
+    framesTimeout: 20s
+    coalesce: {type: token, field: payload}
+    request:
+      method: POST
+      path: /v1/conversations/{{conversation}}/messages/stream
+      json: {content: tell me about the stub}

@@ -1,8 +1,8 @@
 # Self-test on Swift (scripts/parity-switches.sh, llm_selftest): the coalesce option
 # joins Swift's real token frames, and Swift's real runs client accepts the stub's
-# capabilities and POST /v1/runs. Group 5C's scenarios build on this. The user is on
-# a paid tier because a free one takes the free lane, not the gateway, and answers
-# free_lane_unavailable with no provider key.
+# capabilities and POST /v1/runs. Group 5C's scenarios build on this. A paid user
+# reaches HERMES_GATEWAY_URL only because the self-test loads a fake OpenRouter key:
+# see FreeLanePolicy, rule 3. free-lane.yaml is the other route.
 module: chat
 steps:
   - name: create a conversation

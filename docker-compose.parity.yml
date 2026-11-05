@@ -50,7 +50,10 @@ x-common-env: &common-env
   # Both servers read these, in this spelling, for every provider that takes a base
   # URL. The legacy LLM_PROVIDER_<KEY>_BASEURL reaches only some adapters. A state
   # puts them all on the stub with SWITCH_LLM_BASE_URL=http://llmstub:8080. No
-  # provider has a key here, so they only matter once a scenario supplies one.
+  # provider has a key here, so they only matter once a state supplies one. Chat needs
+  # SWITCH_OPENROUTER_API_KEY as well, a fake one: with no OpenRouter key, FreeLanePolicy
+  # puts every tier on the free lane, which has no legs, and the gateway is never called.
+  LLM_PROVIDER_OPEN_ROUTER_API_KEY: ${SWITCH_OPENROUTER_API_KEY:-}
   LLM_PROVIDER_ANTHROPIC_BASE_URL: ${SWITCH_LLM_BASE_URL:-http://127.0.0.1:9}
   LLM_PROVIDER_OPENAI_BASE_URL: ${SWITCH_LLM_BASE_URL:-http://127.0.0.1:9}
   LLM_PROVIDER_OPEN_ROUTER_BASE_URL: ${SWITCH_LLM_BASE_URL:-http://127.0.0.1:9}
