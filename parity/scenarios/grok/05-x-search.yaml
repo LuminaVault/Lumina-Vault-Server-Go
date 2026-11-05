@@ -1,0 +1,23 @@
+# x-search: POST /v1/responses with the x_search tool, model fixed. The stub echoes it.
+module: grok
+steps:
+  - {name: query only, as: grok_ann, request: {method: POST, path: /v1/grok/x-search, json: {query: what happened}}, snapshot: [hermes_tenant_containers]}
+  - {name: every field, as: grok_ann, request: {method: POST, path: /v1/grok/x-search, json: {query: q, allowedXHandles: [a, b], excludedXHandles: [c], fromDate: "2026-01-01", toDate: whenever, enableImageUnderstanding: true, enableVideoUnderstanding: false}}}
+  - {name: empty lists are sent, as: grok_ann, request: {method: POST, path: /v1/grok/x-search, json: {query: q, allowedXHandles: [], excludedXHandles: []}}}
+  - {name: nulls are omitted, as: grok_ann, request: {method: POST, path: /v1/grok/x-search, json: {query: q, allowedXHandles: null, fromDate: null, enableImageUnderstanding: null}}}
+  - {name: blank query goes upstream, as: grok_ann, request: {method: POST, path: /v1/grok/x-search, json: {query: "  "}}}
+  - {name: nothing in the reply, as: grok_ann, request: {method: POST, path: /v1/grok/x-search, json: {query: "[[grok:search-empty]]"}}}
+  - {name: nulls in the reply, as: grok_ann, request: {method: POST, path: /v1/grok/x-search, json: {query: "[[grok:search-nulls]]"}}}
+  - {name: full citations, as: grok_ann, request: {method: POST, path: /v1/grok/x-search, json: {query: "[[grok:search-full]]"}}}
+  - {name: an offset date comes back in UTC, as: grok_ann, request: {method: POST, path: /v1/grok/x-search, json: {query: "[[grok:search-date-offset]]"}}}
+  - {name: a fractional date, as: grok_ann, request: {method: POST, path: /v1/grok/x-search, json: {query: "[[grok:search-date-fraction]]"}}}
+  - {name: a camelCase date key, as: grok_ann, request: {method: POST, path: /v1/grok/x-search, json: {query: "[[grok:search-date-camel]]"}}}
+  - {name: a date with no time, as: grok_ann, request: {method: POST, path: /v1/grok/x-search, json: {query: "[[grok:search-date-only]]"}}}
+  - {name: a garbage date, as: grok_ann, request: {method: POST, path: /v1/grok/x-search, json: {query: "[[grok:search-date-garbage]]"}}}
+  - {name: a numeric date, as: grok_ann, request: {method: POST, path: /v1/grok/x-search, json: {query: "[[grok:search-date-number]]"}}}
+  - {name: output as parts, as: grok_ann, request: {method: POST, path: /v1/grok/x-search, json: {query: "[[grok:search-output-parts]]"}}}
+  - {name: a bare citation, as: grok_ann, request: {method: POST, path: /v1/grok/x-search, json: {query: "[[grok:search-citation-bare]]"}}}
+  - {name: citation with no url, as: grok_ann, request: {method: POST, path: /v1/grok/x-search, json: {query: "[[grok:search-no-url]]"}}}
+  - {name: citation with a null url, as: grok_ann, request: {method: POST, path: /v1/grok/x-search, json: {query: "[[grok:search-null-url]]"}}}
+  - {name: upstream status, as: grok_ann, request: {method: POST, path: /v1/grok/x-search, json: {query: "[[grok:status:503]]"}}}
+  - {name: not json, as: grok_ann, request: {method: POST, path: /v1/grok/x-search, json: {query: "[[grok:not-json]]"}}}

@@ -10,6 +10,7 @@
 #                   (a short key with a runner token refuses to boot, in both servers)
 #   runner-off      no runner token
 #   catalog-unseeded  no "luminavault" publisher: the first read tries to seed the catalog
+#   import-links      no switch: links staged by import have random paths, so they get a database of their own
 #   hybrid-off      HYBRID_EXECUTION_ENABLED=false: /v1/memory/local-sync is not mounted
 #   disk-full       a free-space floor no disk meets: every user-file write answers 507
 #   vision-stub     VISION_EMBED_PROVIDER=stub: Swift's test adapter answers
@@ -21,8 +22,12 @@
 #   whisper-none    a blank base URL: no adapter, so 503
 #   tts-on          /v1/tts mounted: Swift on a fake OpenAI key, Go on TTS_BASE_URL, both on the LLM stub
 #   tts-billing     tts-on with BILLING_ENFORCEMENT_ENABLED=true
+#   no-master-key   LV_SECRET_MASTER_KEY empty: /v1/grok is not mounted
 #
-# A state for LLM success paths, once Go serves them (group 4F, wave 5), is one more
+#   llm             HERMES_GATEWAY_URL on the LLM stub, and capture.autoFile.enabled on:
+#                   the model-calling routes' success paths (group 4F)
+#
+# A state for other LLM success paths, once Go serves them (wave 5), is one more
 # run_state with the stub up and SWITCH_HERMES_GATEWAY_URL=http://llmstub:8080,
 # SWITCH_LLM_BASE_URL=http://llmstub:8080 or SWITCH_TRANSCRIBE_BASE_URL=http://llmstub:8080/v1.
 # Chat also needs SWITCH_OPENROUTER_API_KEY: see docker-compose.parity.yml.
@@ -153,6 +158,7 @@ run_state posting-off SWITCH_COMMUNITY_POSTING_ENABLED=false
 run_state unconfigured SWITCH_ADMIN_TOKEN= SWITCH_SIGNING_KEY=too-short SWITCH_RUNNER_TOKEN=
 run_state runner-off SWITCH_RUNNER_TOKEN=
 run_state catalog-unseeded SWITCH_NONE=
+run_state import-links SWITCH_NONE=
 run_state hybrid-off SWITCH_HYBRID_EXECUTION_ENABLED=false
 run_state disk-full SWITCH_STORAGE_MIN_FREE_BYTES=4611686018427387903
 run_state vision-stub SWITCH_VISION_EMBED_PROVIDER=stub
@@ -160,6 +166,13 @@ run_state vision-cohere SWITCH_VISION_COHERE_API_KEY=parity-cohere-key SWITCH_VI
 run_state vision-cohere-down SWITCH_VISION_COHERE_API_KEY=parity-cohere-key SWITCH_VISION_COHERE_BASE_URL=http://feeds:9
 run_state billing-on SWITCH_BILLING_ENFORCEMENT_ENABLED=true
 voice_states
+run_state no-master-key SWITCH_LV_SECRET_MASTER_KEY=
+"${COMPOSE[@]}" up -d --build --force-recreate llmstub
+for _ in $(seq 1 60); do
+  curl -fsS "http://localhost:18085/health" >/dev/null 2>&1 && break
+  sleep 1
+done
+run_state llm SWITCH_HERMES_GATEWAY_URL=http://llmstub:8080 SWITCH_CAPTURE_AUTO_FILE_ENABLED=true
 llm_selftest
 "${COMPOSE[@]}" stop swift-switched go-switched >/dev/null 2>&1 || true
 exit "$failed"

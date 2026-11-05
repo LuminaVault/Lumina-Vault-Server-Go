@@ -152,7 +152,7 @@ modules:
   import:
     wave: 4
     swiftDir: Sources/App/Import
-    status: swift
+    status: parity
     prefixes: [/v1/import]
     jobs: []
   ingestion:
@@ -170,7 +170,7 @@ modules:
   kb-compile:
     wave: 4
     swiftDir: Sources/App/KB
-    status: swift
+    status: parity
     prefixes: []
     exactPaths: [/v1/memory-compile]
     heldPaths:
@@ -185,7 +185,7 @@ modules:
   knowledge-reason:
     wave: 4
     swiftDir: Sources/App/Knowledge
-    status: swift
+    status: parity
     prefixes: [/v1/knowledge/reason]
     jobs: []
   memory:
@@ -200,7 +200,7 @@ modules:
   memory-agent:
     wave: 4
     swiftDir: Sources/App/Memory
-    status: swift
+    status: parity
     prefixes: [/v1/memos, /v1/query]
     exactPaths: [/v1/memory/search]
     jobs: []
@@ -238,7 +238,7 @@ modules:
   grok:
     wave: 5
     swiftDir: Sources/App/Grok
-    status: swift
+    status: parity
     prefixes: [/v1/grok]
     jobs: []
   llm-admin:

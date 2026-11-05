@@ -1,0 +1,9 @@
+module: import
+steps:
+  - {"name": "files: mine, a foreign one, an unknown one, and a repeat", "as": "imp_cid", "request": {"method": "POST", "path": "/v1/import/files", "json": {"sourceType": "", "vaultFileIds": ["1A300000-0000-4000-8000-000000000001", "1A300000-0000-4000-8000-000000000003", "1A300000-0000-4000-8000-000000000009", "1A300000-0000-4000-8000-000000000002", "1A300000-0000-4000-8000-000000000001"]}}, "capture": {"f": "$.sessionId"}, "snapshot": ["parity_import_sessions", "parity_import_items", "parity_import_spaces"]}
+  - {"name": "status", "as": "imp_cid", "request": {"method": "GET", "path": "/v1/import/{{f}}"}, "capture": {"i1": "$.items[0].id", "i2": "$.items[1].id"}}
+  - {"name": "categorize: the gateway is down, nothing changes", "as": "imp_cid", "request": {"method": "POST", "path": "/v1/import/{{f}}/categorize"}, "snapshot": ["parity_import_items"]}
+  - {"name": "approve with overrides: existing, new, unknown; nothing left to compile", "as": "imp_cid", "request": {"method": "POST", "path": "/v1/import/{{f}}/approve", "raw": "{\"overrides\":{\"{{i1}}\":\"reading\",\"{{i2}}\":\"new:Fresh Space\"},\"extra\":1}"}, "snapshot": ["parity_import_sessions", "parity_import_items", "parity_import_spaces", "parity_import_files"]}
+  - {"name": "status after approve", "as": "imp_cid", "request": {"method": "GET", "path": "/v1/import/{{f}}"}}
+  - {"name": "approve again: same paths", "as": "imp_cid", "request": {"method": "POST", "path": "/v1/import/{{f}}/approve", "raw": "{\"overrides\":null}"}, "snapshot": ["parity_import_files", "parity_import_sessions"]}
+  - {"name": "source type given", "as": "imp_fay", "request": {"method": "POST", "path": "/v1/import/files", "json": {"sourceType": "photos", "vaultFileIds": ["1A300000-0000-4000-8000-000000000009"]}}, "capture": {"g": "$.sessionId"}, "snapshot": ["parity_import_sessions"]}

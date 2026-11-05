@@ -1,0 +1,16 @@
+# PremiumGuardMiddleware: 401 first, then 402 before the body is read, for everyone
+# whose effective tier isn't pro or ultimate. The override replaces the tier.
+module: grok
+steps:
+  - {name: unauthenticated beats a bad body, request: {method: POST, path: /v1/grok/chat, raw: "not json"}}
+  - {name: trial with a bad body, as: grok_trial, request: {method: POST, path: /v1/grok/chat, raw: "not json"}}
+  - {name: trial with an empty query, as: grok_trial, request: {method: POST, path: /v1/grok/x-search, json: {query: ""}}}
+  - {name: trial on tts, as: grok_trial, request: {method: POST, path: /v1/grok/tts, raw: "not json"}}
+  - {name: free, as: grok_free, request: {method: POST, path: /v1/grok/chat, json: {messages: []}}}
+  - {name: lapsed, as: grok_lapsed, request: {method: POST, path: /v1/grok/vision, json: {prompt: p, imageURLs: [u]}}}
+  - {name: archived, as: grok_arch, request: {method: POST, path: /v1/grok/x-search, json: {query: q}}}
+  - {name: alice has the seed default tier, as: alice, request: {method: POST, path: /v1/grok/tts, json: {text: t}}}
+  - {name: a trial with a pro override passes, as: grok_over, request: {method: POST, path: /v1/grok/chat, json: {messages: []}}}
+  - {name: archived with an override passes, as: grok_archover, request: {method: POST, path: /v1/grok/tts, json: {text: t}}}
+  - {name: pro passes, as: grok_nobox, request: {method: POST, path: /v1/grok/tts}}
+  - {name: ultimate passes, as: grok_ben, request: {method: POST, path: /v1/grok/tts}}

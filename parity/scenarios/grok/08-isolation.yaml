@@ -1,0 +1,12 @@
+# Each tenant reaches its own container with its own key. Nothing about another
+# tenant's row helps: the echoed host and bearer show which one was dialled.
+module: grok
+steps:
+  - {name: ann on chat, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: same}]}}}
+  - {name: ben on chat, as: grok_ben, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: same}]}}}
+  - {name: ann on search, as: grok_ann, request: {method: POST, path: /v1/grok/x-search, json: {query: same}}}
+  - {name: ben on search, as: grok_ben, request: {method: POST, path: /v1/grok/x-search, json: {query: same}}}
+  - {name: ann on vision, as: grok_ann, request: {method: POST, path: /v1/grok/vision, json: {prompt: same, imageURLs: [u]}}}
+  - {name: ben on vision, as: grok_ben, request: {method: POST, path: /v1/grok/vision, json: {prompt: same, imageURLs: [u]}}}
+  - {name: bob stops at the guard, as: bob, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: same}]}}}
+  - {name: nothing was written, as: grok_ann, request: {method: POST, path: /v1/grok/tts}, snapshot: [hermes_tenant_containers]}

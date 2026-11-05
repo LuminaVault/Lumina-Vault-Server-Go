@@ -1,0 +1,15 @@
+# G2 smoke: a fresh account is on trial, so every route stops at the guard. Nothing
+# here reaches a Hermes container or spends the tenant's xAI OAuth. grok_trial stands
+# for that fresh user: no seed ids, no provider, no second user.
+module: grok
+smoke: true
+steps:
+  - {name: chat no token, request: {method: POST, path: /v1/grok/chat, json: {messages: []}}}
+  - {name: chat bad token, request: {method: POST, path: /v1/grok/chat, json: {messages: []}, headers: {Authorization: "Bearer not.a.jwt"}}}
+  - {name: x-search no token, request: {method: POST, path: /v1/grok/x-search, json: {query: hi}}}
+  - {name: vision no token, request: {method: POST, path: /v1/grok/vision, json: {prompt: hi, imageURLs: []}}}
+  - {name: tts no token, request: {method: POST, path: /v1/grok/tts, json: {text: hi}}}
+  - {name: chat on trial, as: grok_trial, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: hi}]}}}
+  - {name: x-search on trial, as: grok_trial, request: {method: POST, path: /v1/grok/x-search, json: {query: hi}}}
+  - {name: vision on trial, as: grok_trial, request: {method: POST, path: /v1/grok/vision, json: {prompt: hi, imageURLs: ["https://x.test/a.png"]}}}
+  - {name: tts on trial, as: grok_trial, request: {method: POST, path: /v1/grok/tts, json: {text: hi}}}

@@ -1,0 +1,9 @@
+module: memory-agent
+steps:
+  - {"name": "a plain answer, no follow-ups", "as": "ma_qry", "request": {"method": "POST", "path": "/v1/query", "json": {"query": "hello"}}}
+  - {"name": "the request itself", "as": "ma_qry", "request": {"method": "POST", "path": "/v1/query", "json": {"query": "[[stub:echo]]"}}}
+  - {"name": "session id is ignored here", "as": "ma_qry", "request": {"method": "POST", "path": "/v1/query", "json": {"query": "hello", "session_id": "s-1"}}}
+  - {"name": "a memory, and its follow-ups", "as": "ma_fup", "request": {"method": "POST", "path": "/v1/query", "json": {"query": "[[stub:tool:session_search:{\"query\":\"jupiter\"}]]", "limit": 2}}}
+  - {"name": "the same memory with no answer to chip", "as": "ma_sat", "request": {"method": "POST", "path": "/v1/query", "json": {"query": "[[stub:tool:session_search:{\"query\":\"saturn\"}]]"}}}
+  - {"name": "upstream 500", "as": "ma_qry", "request": {"method": "POST", "path": "/v1/query", "json": {"query": "[[stub:error:500]]"}}}
+  - {"name": "an empty answer has no follow-up call", "as": "ma_qry", "request": {"method": "POST", "path": "/v1/query", "json": {"query": "[[stub:reply:]]"}}}

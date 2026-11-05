@@ -75,6 +75,22 @@ func Bind[T any](c *echo.Context) (*T, error) {
 	return &out, nil
 }
 
+// Decode is Bind's decoder over bytes already read, for routes that collect their
+// own body with a larger limit than ReadBody's.
+func Decode[T any](raw []byte) (*T, error) {
+	var out T
+	if err := decode(raw, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// DecodeInto decodes raw into *dst by Bind's rules, for a body that isn't the request's:
+// an upstream reply a Swift Codable would have decoded.
+func DecodeInto(raw []byte, dst any) error {
+	return decode(raw, dst)
+}
+
 func invalid(detail string) *Error {
 	return NewError(http.StatusBadRequest, "The given data was not valid input: "+detail)
 }

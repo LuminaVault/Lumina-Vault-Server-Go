@@ -1,0 +1,12 @@
+module: knowledge-reason
+steps:
+  - {"name": "a synthesized answer", "as": "kr_kim", "request": {"method": "POST", "path": "/v1/knowledge/reason", "json": {"query": "atlas beacon"}}}
+  - {"name": "the request itself", "as": "kr_kim", "request": {"method": "POST", "path": "/v1/knowledge/reason", "json": {"query": "atlas beacon launch [[stub:echo]]"}}}
+  - {"name": "a chosen answer is trimmed", "as": "kr_kim", "request": {"method": "POST", "path": "/v1/knowledge/reason", "json": {"query": "atlas [[stub:reply:  Atlas is the answer [E1]. ]]"}}}
+  - {"name": "an empty answer falls back", "as": "kr_kim", "request": {"method": "POST", "path": "/v1/knowledge/reason", "json": {"query": "atlas [[stub:reply:]]"}}}
+  - {"name": "upstream 500 falls back", "as": "kr_two", "request": {"method": "POST", "path": "/v1/knowledge/reason", "json": {"query": "orion [[stub:error:500]]"}}}
+  - {"name": "nothing matched, no model call", "as": "kr_nia", "request": {"method": "POST", "path": "/v1/knowledge/reason", "json": {"query": "atlas [[stub:error:500]]"}}}
+  - {"name": "tokens and the final answer", "as": "kr_kim", "request": {"method": "POST", "path": "/v1/knowledge/reason/stream", "json": {"query": "atlas beacon [[stub:reply:Atlas leads to Beacon.]]"}}, "ignore": ["$.payload.latencyMs"], "stream": true, "frames": 30, "framesTimeout": "20s"}
+  - {"name": "the request itself, streaming", "as": "kr_two", "request": {"method": "POST", "path": "/v1/knowledge/reason/stream", "json": {"query": "orion [[stub:echo]]"}}, "ignore": ["$.payload.latencyMs"], "stream": true, "frames": 1000, "framesTimeout": "20s"}
+  - {"name": "an empty stream", "as": "kr_two", "request": {"method": "POST", "path": "/v1/knowledge/reason/stream", "json": {"query": "orion [[stub:reply:]]"}}, "ignore": ["$.payload.latencyMs"], "stream": true, "frames": 10, "framesTimeout": "20s"}
+  - {"name": "upstream 500 in a stream", "as": "kr_two", "request": {"method": "POST", "path": "/v1/knowledge/reason/stream", "json": {"query": "orion [[stub:error:500]]"}}, "ignore": ["$.payload.latencyMs"], "stream": true, "frames": 10, "framesTimeout": "20s"}

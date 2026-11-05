@@ -1,0 +1,30 @@
+# The gateway is unroutable, so these are the grounded fallbacks.
+module: knowledge-reason
+steps:
+  - {"name": "no token", "request": {"method": "POST", "path": "/v1/knowledge/reason", "json": {"query": "atlas"}}}
+  - {"name": "bad token", "request": {"method": "POST", "path": "/v1/knowledge/reason", "json": {"query": "atlas"}, "headers": {"Authorization": "Bearer not.a.jwt"}}}
+  - {"name": "malformed json", "as": "kr_nia", "request": {"method": "POST", "path": "/v1/knowledge/reason", "raw": "{\"query\":"}}
+  - {"name": "empty body", "as": "kr_nia", "request": {"method": "POST", "path": "/v1/knowledge/reason", "raw": ""}}
+  - {"name": "array body", "as": "kr_nia", "request": {"method": "POST", "path": "/v1/knowledge/reason", "raw": "[]"}}
+  - {"name": "missing field", "as": "kr_nia", "request": {"method": "POST", "path": "/v1/knowledge/reason", "json": {}}}
+  - {"name": "null query", "as": "kr_nia", "request": {"method": "POST", "path": "/v1/knowledge/reason", "raw": "{\"query\":null}"}}
+  - {"name": "query wrong type", "as": "kr_nia", "request": {"method": "POST", "path": "/v1/knowledge/reason", "raw": "{\"query\":7}"}}
+  - {"name": "limit wrong type", "as": "kr_nia", "request": {"method": "POST", "path": "/v1/knowledge/reason", "raw": "{\"query\":\"atlas\",\"limit\":\"5\"}"}}
+  - {"name": "maxDepth wrong type", "as": "kr_nia", "request": {"method": "POST", "path": "/v1/knowledge/reason", "raw": "{\"query\":\"atlas\",\"maxDepth\":\"5\"}"}}
+  - {"name": "bad vault header", "as": "kr_nia", "request": {"method": "POST", "path": "/v1/knowledge/reason", "json": {"query": "atlas"}, "headers": {"X-Vault-ID": "nope"}}}
+  - {"name": "foreign vault", "as": "kr_nia", "request": {"method": "POST", "path": "/v1/knowledge/reason", "json": {"query": "atlas"}, "headers": {"X-Vault-ID": "6C000000-0000-4000-8000-0000000000A1"}}}
+  - {"name": "empty query", "as": "kr_nia", "request": {"method": "POST", "path": "/v1/knowledge/reason", "json": {"query": ""}}}
+  - {"name": "whitespace query", "as": "kr_nia", "request": {"method": "POST", "path": "/v1/knowledge/reason", "json": {"query": " \n "}}}
+  - {"name": "stop words and single letters", "as": "kr_nia", "request": {"method": "POST", "path": "/v1/knowledge/reason", "json": {"query": "what is a b c"}}}
+  - {"name": "nothing matches", "as": "kr_nia", "request": {"method": "POST", "path": "/v1/knowledge/reason", "json": {"query": "atlas"}}}
+  - {"name": "one seed, no paths", "as": "kr_two", "request": {"method": "POST", "path": "/v1/knowledge/reason", "json": {"query": "rises"}}}
+  - {"name": "two seeds and a path", "as": "kr_two", "request": {"method": "POST", "path": "/v1/knowledge/reason", "json": {"query": "orion"}}}
+  - {"name": "depth 1 still finds it", "as": "kr_two", "request": {"method": "POST", "path": "/v1/knowledge/reason", "json": {"query": "orion", "maxDepth": 1}}}
+  - {"name": "seeds, suggestions and paths", "as": "kr_kim", "request": {"method": "POST", "path": "/v1/knowledge/reason", "json": {"query": "atlas beacon launch"}}}
+  - {"name": "limit caps the seeds", "as": "kr_kim", "request": {"method": "POST", "path": "/v1/knowledge/reason", "json": {"query": "atlas beacon launch", "limit": 1}}}
+  - {"name": "limit under 1, depth over 4", "as": "kr_cut", "request": {"method": "POST", "path": "/v1/knowledge/reason", "json": {"query": "atlas", "limit": -5, "maxDepth": 99}}}
+  - {"name": "another tenant sees nothing", "as": "kr_cut", "request": {"method": "POST", "path": "/v1/knowledge/reason", "json": {"query": "atlas beacon"}}}
+  - {"name": "capitals, punctuation and repeats", "as": "kr_kim", "request": {"method": "POST", "path": "/v1/knowledge/reason", "json": {"query": "ATLAS, atlas! Beacon?"}}}
+  - {"name": "digits and unicode", "as": "kr_kim", "request": {"method": "POST", "path": "/v1/knowledge/reason", "json": {"query": "atlas 2026 caffè"}}}
+  - {"name": "wrong method", "as": "kr_kim", "request": {"method": "GET", "path": "/v1/knowledge/reason"}}
+  - {"name": "stream, wrong method", "as": "kr_kim", "request": {"method": "GET", "path": "/v1/knowledge/reason/stream"}}

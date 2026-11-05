@@ -329,3 +329,13 @@ func parseID(c *echo.Context) (uuid.UUID, error) {
 	}
 	return id, nil
 }
+
+// CreateSpace is SpacesService.create with no actor, for the import routes: the same
+// validation and folder, the same errors.
+func (m *Module) CreateSpace(ctx context.Context, vault uuid.UUID, name, slug string, description, icon *string) (id uuid.UUID, createdSlug string, err error) {
+	s, err := m.createSpace(ctx, vault, uuid.Nil, name, slug, description, nil, icon, nil)
+	if err != nil {
+		return uuid.Nil, "", err
+	}
+	return s.ID, s.Slug, nil
+}
