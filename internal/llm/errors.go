@@ -366,6 +366,7 @@ func (e *FreeLaneUnavailableError) UserMessage() string       { return freeLaneU
 func (e *FreeLaneUnavailableError) ReasonCode() string        { return "free_lane_unavailable" }
 func (e *FreeLaneUnavailableError) RecoveryActions() []string { return e.Actions }
 func (e *FreeLaneUnavailableError) HTTPStatus() int           { return http.StatusServiceUnavailable }
+
 func (e *FreeLaneUnavailableError) Body() []byte {
 	actions := e.Actions
 	if actions == nil {

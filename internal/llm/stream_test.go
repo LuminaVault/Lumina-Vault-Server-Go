@@ -156,9 +156,7 @@ func TestRunStream(t *testing.T) {
 			<-r.Context().Done()
 			close(gone)
 		})
-		for range runTestStream(context.Background(), srv.URL, time.Minute) {
-			break
-		}
+		runTestStream(context.Background(), srv.URL, time.Minute)(func(Chunk, error) bool { return false })
 		select {
 		case <-gone:
 		case <-time.After(5 * time.Second):

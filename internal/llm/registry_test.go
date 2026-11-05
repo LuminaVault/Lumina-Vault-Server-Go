@@ -19,6 +19,7 @@ func (a namedAdapter) AcceptsUserCredentials() bool { return false }
 func (a namedAdapter) ChatCompletions(context.Context, []byte, string, string) (Metadata, error) {
 	return Metadata{}, nil
 }
+
 func (a namedAdapter) ChatStream(ctx context.Context, p []byte, k, id string) Stream {
 	return BufferedChatStream(ctx, a, p, k, id)
 }
