@@ -1,0 +1,106 @@
+# index, lint, context, links over seeded rows. Read-only, so ordering of the
+# steps doesn't matter except where a step uploads.
+module: vault
+steps:
+  - name: index with no token
+    request: {method: GET, path: /v1/vault/index}
+  - name: index with a bad token
+    request: {method: GET, path: /v1/vault/index, headers: {Authorization: Bearer not-a-token}}
+  - name: index with a malformed vault id
+    request: {method: GET, path: /v1/vault/index, headers: {X-Vault-ID: nope}}
+  - name: lint with no token
+    request: {method: GET, path: /v1/vault/lint}
+  - name: lint with a bad token
+    request: {method: GET, path: /v1/vault/lint, headers: {Authorization: Bearer not-a-token}}
+  - name: context with no token
+    request: {method: GET, path: /v1/vault/context/5a017000-0000-4000-8000-0000000005a1}
+  - name: context with a bad token
+    request: {method: GET, path: /v1/vault/context/5a017000-0000-4000-8000-0000000005a1, headers: {Authorization: Bearer not-a-token}}
+  - name: links with no token
+    request: {method: GET, path: /v1/vault/links/5a017000-0000-4000-8000-0000000005a1}
+  - name: links with a bad token
+    request: {method: GET, path: /v1/vault/links/5a017000-0000-4000-8000-0000000005a1, headers: {Authorization: Bearer not-a-token}}
+  - name: index of nothing
+    as: vault_empty
+    request: {method: GET, path: /v1/vault/index}
+  - name: lint of nothing
+    as: vault_empty
+    request: {method: GET, path: /v1/vault/lint}
+  - name: index
+    as: vault_idx
+    request: {method: GET, path: /v1/vault/index}
+  - name: lint with no file on disk
+    as: vault_idx
+    request: {method: GET, path: /v1/vault/lint}
+  - name: give unindexed a body
+    as: vault_idx
+    request: {method: POST, path: "/v1/vault/files?path=unindexed.md", raw: "# heading\n\nbody\n", headers: {Content-Type: text/markdown}}
+  - name: give stale no text
+    as: vault_idx
+    request: {method: POST, path: "/v1/vault/files?path=stale.md", raw: "   \n", headers: {Content-Type: text/markdown}}
+  - name: give a new one bad bytes
+    as: vault_idx
+    request: {method: POST, path: "/v1/vault/files?path=bad.md", base64: "/////w==", headers: {Content-Type: text/markdown}}
+  - name: give a new one only a byte order mark
+    as: vault_idx
+    request: {method: POST, path: "/v1/vault/files?path=bom.md", base64: "77u/", headers: {Content-Type: text/markdown}}
+  - name: lint with files
+    as: vault_idx
+    request: {method: GET, path: /v1/vault/lint}
+  - name: index after uploads
+    as: vault_idx
+    request: {method: GET, path: /v1/vault/index}
+  - name: context
+    as: vault_idx
+    request: {method: GET, path: /v1/vault/context/5a017000-0000-4000-8000-0000000005a1}
+  - name: context of an uppercase id
+    as: vault_idx
+    request: {method: GET, path: /v1/vault/context/5A017000-0000-4000-8000-0000000005A1}
+  - name: context sibling limit
+    as: vault_idx
+    request: {method: GET, path: "/v1/vault/context/5a017000-0000-4000-8000-0000000005a1?siblingLimit=1"}
+  - name: context sibling limit zero
+    as: vault_idx
+    request: {method: GET, path: "/v1/vault/context/5a017000-0000-4000-8000-0000000005a1?siblingLimit=0"}
+  - name: context sibling limit huge
+    as: vault_idx
+    request: {method: GET, path: "/v1/vault/context/5a017000-0000-4000-8000-0000000005a1?siblingLimit=1000"}
+  - name: context sibling limit not a number
+    as: vault_idx
+    request: {method: GET, path: "/v1/vault/context/5a017000-0000-4000-8000-0000000005a1?siblingLimit=abc"}
+  - name: context of a leaf
+    as: vault_idx
+    request: {method: GET, path: /v1/vault/context/5a017000-0000-4000-8000-0000000005a2}
+  - name: context unfiled has no siblings
+    as: vault_idx
+    request: {method: GET, path: /v1/vault/context/5a017000-0000-4000-8000-0000000005a4}
+  - name: context bad id
+    as: vault_idx
+    request: {method: GET, path: /v1/vault/context/nope}
+  - name: context escaped id is not decoded
+    as: vault_idx
+    request: {method: GET, path: /v1/vault/context/5a017000%2D0000-4000-8000-0000000005a1}
+  - name: context absent id
+    as: vault_idx
+    request: {method: GET, path: /v1/vault/context/5a017000-0000-4000-8000-00000000ffff}
+  - name: context of another tenant
+    as: vault_out
+    request: {method: GET, path: /v1/vault/context/5a017000-0000-4000-8000-0000000005a1}
+  - name: links
+    as: vault_idx
+    request: {method: GET, path: /v1/vault/links/5a017000-0000-4000-8000-0000000005a1}
+  - name: links of a leaf
+    as: vault_idx
+    request: {method: GET, path: /v1/vault/links/5a017000-0000-4000-8000-0000000005a2}
+  - name: links of none
+    as: vault_idx
+    request: {method: GET, path: /v1/vault/links/5a017000-0000-4000-8000-0000000005a8}
+  - name: links bad id
+    as: vault_idx
+    request: {method: GET, path: /v1/vault/links/nope}
+  - name: links absent id
+    as: vault_idx
+    request: {method: GET, path: /v1/vault/links/5a017000-0000-4000-8000-00000000ffff}
+  - name: links of another tenant
+    as: vault_out
+    request: {method: GET, path: /v1/vault/links/5a017000-0000-4000-8000-0000000005a1}

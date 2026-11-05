@@ -1,0 +1,65 @@
+# Export. Trial gets 3 in 5 minutes and free 1, so the steps are counted.
+module: vault
+steps:
+  - name: no token
+    request: {method: GET, path: /v1/vault/export}
+  - name: bad token
+    request: {method: GET, path: /v1/vault/export, headers: {Authorization: Bearer not-a-token}}
+  - name: a user with no vault directory gets a manifest
+    as: vault_exp
+    request: {method: GET, path: /v1/vault/export}
+    zip: true
+    headers: [Content-Disposition]
+  - name: seed files
+    as: vault_exp
+    request: {method: POST, path: "/v1/vault/files?path=one.md", raw: "file one", headers: {Content-Type: text/markdown}}
+  - name: seed in a space-less subfolder
+    as: vault_exp
+    request: {method: POST, path: "/v1/vault/files?path=two.txt", raw: "file two", headers: {Content-Type: text/plain}}
+  - name: seed a deleted one
+    as: vault_exp
+    request: {method: POST, path: "/v1/vault/files?path=three.md", raw: "file three", headers: {Content-Type: text/markdown}}
+  - name: delete it
+    as: vault_exp
+    request: {method: DELETE, path: /v1/vault/files/inbox/three.md}
+  - name: export has them and not the deleted one
+    as: vault_exp
+    request: {method: GET, path: /v1/vault/export}
+    zip: true
+  - name: a malformed vault id is not read
+    as: vault_exp
+    request: {method: GET, path: /v1/vault/export, headers: {X-Vault-ID: nope}}
+    zip: true
+  - name: over the limit
+    as: vault_exp
+    request: {method: GET, path: /v1/vault/export}
+  - name: free tier first
+    as: vault_free
+    request: {method: GET, path: /v1/vault/export}
+    zip: true
+  - name: free tier second is over the limit
+    as: vault_free
+    request: {method: GET, path: /v1/vault/export}
+  - name: memory text with every escape
+    as: vault_pro
+    request: {method: GET, path: /v1/vault/export}
+    zip: true
+  - name: create a soul for it
+    as: vault_pro
+    request: {method: POST, path: /v1/vault/create}
+  - name: export has the soul at the root only
+    as: vault_pro
+    request: {method: GET, path: /v1/vault/export}
+    zip: true
+  - name: since before everything
+    as: vault_pro
+    request: {method: GET, path: "/v1/vault/export?since=2020-01-01T00:00:00Z"}
+    zip: true
+  - name: since cuts memories
+    as: vault_pro
+    request: {method: GET, path: "/v1/vault/export?since=2026-01-15T00:00:00Z"}
+    zip: true
+  - name: since after everything
+    as: vault_pro
+    request: {method: GET, path: "/v1/vault/export?since=2100-01-01T00:00:00Z"}
+    zip: true

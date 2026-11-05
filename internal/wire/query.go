@@ -1,12 +1,30 @@
 package wire
 
 import (
+	"net/http"
 	"strconv"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/labstack/echo/v5"
 )
+
+// RawPath is Hummingbird's request.uri.path: the path as sent, up to the first
+// "?", with percent escapes intact. Hummingbird routes on this and never decodes
+// it, so its path parameters, ":id" and "**" alike, keep their escapes.
+func RawPath(r *http.Request) string {
+	if strings.HasPrefix(r.RequestURI, "/") {
+		path, _, _ := strings.Cut(r.RequestURI, "?")
+		return path
+	}
+	return r.URL.EscapedPath()
+}
+
+// PathSegments is RawPath split as Hummingbird's router splits it: empty
+// segments don't count.
+func PathSegments(r *http.Request) []string {
+	return strings.FieldsFunc(RawPath(r), func(c rune) bool { return c == '/' })
+}
 
 // QueryValue is Hummingbird's `request.uri.queryParameters[key]` over a raw
 // query string, which is not net/url's parsing. Pairs split on "&" and the

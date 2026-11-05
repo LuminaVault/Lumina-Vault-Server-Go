@@ -1,0 +1,33 @@
+# The 10 MiB upload limit: exactly the limit is stored, one byte over is a bare 413.
+module: vault
+steps:
+  - name: exactly the limit
+    as: vault_big
+    request:
+      method: POST
+      path: "/v1/vault/files?path=limit.md"
+      fill: {text: "abcdefgh", size: 10485760}
+      headers: {Content-Type: text/markdown}
+    files: [vault_big]
+  - name: one byte over
+    as: vault_big
+    request:
+      method: POST
+      path: "/v1/vault/files?path=over.md"
+      fill: {text: "abcdefgh", size: 10485761}
+      headers: {Content-Type: text/markdown}
+    files: [vault_big]
+  - name: one byte over, chunked
+    as: vault_big
+    request:
+      method: POST
+      path: "/v1/vault/files?path=over2.md"
+      fill: {text: "abcdefgh", size: 10485761}
+      chunked: true
+      headers: {Content-Type: text/markdown}
+    files: [vault_big]
+  - name: a 413 does not stop a smaller one
+    as: vault_big
+    request: {method: POST, path: "/v1/vault/files?path=small.md", raw: "small", headers: {Content-Type: text/markdown}}
+    snapshot: [vault_files]
+    files: [vault_big]

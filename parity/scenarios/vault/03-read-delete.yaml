@@ -1,0 +1,82 @@
+# Read and delete, including the raw catch-all.
+module: vault
+steps:
+  - name: read with no token
+    request: {method: GET, path: /v1/vault/files/inbox/doc.md}
+  - name: read with a bad token
+    request: {method: GET, path: /v1/vault/files/inbox/doc.md, headers: {Authorization: Bearer not-a-token}}
+  - name: delete with no token
+    request: {method: DELETE, path: /v1/vault/files/inbox/doc.md}
+  - name: malformed vault id with no token
+    request: {method: DELETE, path: /v1/vault/files/inbox/doc.md, headers: {X-Vault-ID: nope}}
+  - name: seed the file
+    as: vault_rw
+    request: {method: POST, path: "/v1/vault/files?path=doc.md", raw: "body text", headers: {Content-Type: "text/markdown; charset=utf-8"}}
+  - name: seed a spaced name through the query
+    as: vault_rw
+    request: {method: POST, path: "/v1/vault/files?path=a%20b.md", raw: "spaced", headers: {Content-Type: text/markdown}}
+    files: [vault_rw]
+  - name: read
+    as: vault_rw
+    request: {method: GET, path: /v1/vault/files/inbox/doc.md}
+    headers: [Content-Length]
+  - name: read through a doubled slash
+    as: vault_rw
+    request: {method: GET, path: /v1/vault/files//inbox//doc.md}
+  - name: read with a trailing slash
+    as: vault_rw
+    request: {method: GET, path: /v1/vault/files/inbox/doc.md/}
+  - name: read of a percent escape is not decoded
+    as: vault_rw
+    request: {method: GET, path: /v1/vault/files/inbox/a%20b.md}
+  - name: read of an escaped slash is not decoded
+    as: vault_rw
+    request: {method: GET, path: /v1/vault/files/inbox%2Fdoc.md}
+  - name: read of an escaped dot-dot
+    as: vault_rw
+    request: {method: GET, path: /v1/vault/files/%2E%2E/doc.md}
+  - name: read traversal
+    as: vault_rw
+    request: {method: GET, path: "/v1/vault/files/inbox/..%2F..%2Fdoc.md"}
+  - name: read absent
+    as: vault_rw
+    request: {method: GET, path: /v1/vault/files/inbox/nope.md}
+  - name: read a row with no file
+    as: vault_rw
+    request: {method: GET, path: /v1/vault/files/inbox/ghost.md}
+  - name: read as another tenant
+    as: vault_out
+    request: {method: GET, path: /v1/vault/files/inbox/doc.md}
+  - name: read of a path called move goes nowhere
+    as: vault_rw
+    request: {method: GET, path: /v1/vault/files/move}
+  - name: delete of a path called move goes nowhere
+    as: vault_rw
+    request: {method: DELETE, path: /v1/vault/files/move}
+  - name: read under move is the catch-all
+    as: vault_rw
+    request: {method: GET, path: /v1/vault/files/move/doc.md}
+  - name: post to a file path
+    as: vault_rw
+    request: {method: POST, path: /v1/vault/files/inbox/doc.md, raw: "x"}
+  - name: delete as another tenant
+    as: vault_out
+    request: {method: DELETE, path: /v1/vault/files/inbox/doc.md}
+    snapshot: [vault_files]
+    files: [vault_rw]
+  - name: delete
+    as: vault_rw
+    request: {method: DELETE, path: /v1/vault/files/inbox/doc.md}
+    snapshot: [vault_files]
+    files: [vault_rw]
+    filesMask: ['_deleted_\d+_']
+  - name: read after delete
+    as: vault_rw
+    request: {method: GET, path: /v1/vault/files/inbox/doc.md}
+  - name: delete again
+    as: vault_rw
+    request: {method: DELETE, path: /v1/vault/files/inbox/doc.md}
+  - name: delete a row with no file removes the row
+    as: vault_rw
+    request: {method: DELETE, path: /v1/vault/files/inbox/ghost.md}
+    snapshot: [vault_files]

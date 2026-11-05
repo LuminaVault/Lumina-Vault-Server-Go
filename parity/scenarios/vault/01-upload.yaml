@@ -1,0 +1,101 @@
+# Upload: every way in, then the row, the file and its mode.
+module: vault
+steps:
+  - name: no token
+    request: {method: POST, path: "/v1/vault/files?path=a.md", raw: "x", headers: {Content-Type: text/markdown}}
+  - name: bad token
+    request: {method: POST, path: "/v1/vault/files?path=a.md", raw: "x", headers: {Content-Type: text/markdown, Authorization: Bearer not-a-token}}
+  - name: malformed vault id with no token is still 401, identity comes first
+    request: {method: POST, path: "/v1/vault/files?path=a.md", raw: "x", headers: {Content-Type: text/markdown, X-Vault-ID: nope}}
+  - name: path missing
+    as: vault_up
+    request: {method: POST, path: /v1/vault/files, raw: "x", headers: {Content-Type: text/markdown}}
+  - name: path empty
+    as: vault_up
+    request: {method: POST, path: "/v1/vault/files?path=", raw: "x", headers: {Content-Type: text/markdown}}
+  - name: traversal
+    as: vault_up
+    request: {method: POST, path: "/v1/vault/files?path=../a.md", raw: "x", headers: {Content-Type: text/markdown}}
+  - name: absolute
+    as: vault_up
+    request: {method: POST, path: "/v1/vault/files?path=/etc/a.md", raw: "x", headers: {Content-Type: text/markdown}}
+  - name: encoded traversal decodes in the query
+    as: vault_up
+    request: {method: POST, path: "/v1/vault/files?path=%2E%2E%2Fa.md", raw: "x", headers: {Content-Type: text/markdown}}
+  - name: illegal characters
+    as: vault_up
+    request: {method: POST, path: "/v1/vault/files?path=a%3Cb.md", raw: "x", headers: {Content-Type: text/markdown}}
+  - name: space id malformed
+    as: vault_up
+    request: {method: POST, path: "/v1/vault/files?path=a.md&space_id=nope", raw: "x", headers: {Content-Type: text/markdown}}
+  - name: space id of another tenant
+    as: vault_up
+    request: {method: POST, path: "/v1/vault/files?path=a.md&space_id=5bace000-0000-4000-8000-0000000000a1", raw: "x", headers: {Content-Type: text/markdown}}
+  - name: space id unknown
+    as: vault_up
+    request: {method: POST, path: "/v1/vault/files?path=a.md&space_id=5a017000-0000-4000-8000-00000000ffff", raw: "x", headers: {Content-Type: text/markdown}}
+  - name: content type missing
+    as: vault_up
+    request: {method: POST, path: "/v1/vault/files?path=a.md", base64: "eA=="}
+  - name: content type against the extension
+    as: vault_up
+    request: {method: POST, path: "/v1/vault/files?path=a.md", raw: "x", headers: {Content-Type: image/png}}
+  - name: content type not allowed
+    as: vault_up
+    request: {method: POST, path: "/v1/vault/files?path=a.exe", raw: "x", headers: {Content-Type: application/x-msdownload}}
+  - name: empty body
+    as: vault_up
+    request: {method: POST, path: "/v1/vault/files?path=a.md", raw: "", headers: {Content-Type: text/markdown}}
+    snapshot: [vault_files]
+    files: [vault_up]
+  - name: markdown
+    as: vault_up
+    request: {method: POST, path: "/v1/vault/files?path=first.md", raw: "# hello\n", headers: {Content-Type: text/markdown}}
+    snapshot: [vault_files, onboarding_state, memories]
+    files: [vault_up]
+  - name: the client prefix is ignored
+    as: vault_up
+    request: {method: POST, path: "/v1/vault/files?path=some/deep/second.md", raw: "two", headers: {Content-Type: text/markdown}}
+    files: [vault_up]
+  - name: charset in the content type
+    as: vault_up
+    request: {method: POST, path: "/v1/vault/files?path=third.txt", raw: "three", headers: {Content-Type: "text/plain; charset=utf-8"}}
+  - name: a png
+    as: vault_up
+    request: {method: POST, path: "/v1/vault/files?path=pic.png", base64: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEBgIApD5fRAAAAABJRU5ErkJggg==", headers: {Content-Type: image/png}}
+    files: [vault_up]
+  - name: a non-ascii name decoded from the query
+    as: vault_up
+    request: {method: POST, path: "/v1/vault/files?path=caf%C3%A9.md", raw: "cafe", headers: {Content-Type: text/markdown}}
+    files: [vault_up]
+  - name: into a space
+    as: vault_up
+    request: {method: POST, path: "/v1/vault/files?path=x/paper.md&space_id=5a017000-0000-4000-8000-0000000001a1", raw: "paper", headers: {Content-Type: text/markdown}}
+    snapshot: [vault_files]
+    files: [vault_up]
+  - name: an uppercase space id
+    as: vault_up
+    request: {method: POST, path: "/v1/vault/files?path=paper2.md&space_id=5A017000-0000-4000-8000-0000000001A1", raw: "paper", headers: {Content-Type: text/markdown}}
+  - name: overwrite keeps the row
+    as: vault_up
+    request: {method: POST, path: "/v1/vault/files?path=first.md", raw: "# hello again\n", headers: {Content-Type: text/markdown}}
+    snapshot: [vault_files]
+    files: [vault_up]
+  - name: processed flag
+    as: vault_up
+    request: {method: POST, path: "/v1/vault/files?path=done.md&processed=true", raw: "d", headers: {Content-Type: text/markdown}}
+  - name: processed only as the exact word
+    as: vault_up
+    request: {method: POST, path: "/v1/vault/files?path=done2.md&processed=TRUE", raw: "d", headers: {Content-Type: text/markdown}}
+    snapshot: [vault_files]
+  - name: sidecar
+    as: vault_up
+    request: {method: POST, path: "/v1/vault/files?path=meta.md", raw: "m", headers: {Content-Type: text/markdown, X-Vault-Metadata: '{"title":"T","tags":["a","b"],"isTodo":true,"done":false,"dueAt":"2026-05-01T10:00:00Z","enrichmentStatus":"pending"}'}}
+  - name: sidecar empty clears
+    as: vault_up
+    request: {method: POST, path: "/v1/vault/files?path=meta.md", raw: "m2", headers: {Content-Type: text/markdown, X-Vault-Metadata: '{}'}}
+    snapshot: [vault_files]
+  - name: sidecar malformed is no sidecar
+    as: vault_up
+    request: {method: POST, path: "/v1/vault/files?path=meta2.md", raw: "m", headers: {Content-Type: text/markdown, X-Vault-Metadata: 'not json'}}
+    snapshot: [vault_files]
