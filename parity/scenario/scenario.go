@@ -46,12 +46,20 @@ type Step struct {
 	// stream (SSE) that never ends, so it is closed unread, unless Frames is set.
 	Stream bool `yaml:"stream"`
 	// Frames, with Stream, reads up to this many SSE frames and compares them.
-	// Comment lines (keep-alives) don't count and aren't compared.
+	// Comment lines (keep-alives) don't count and aren't compared. With WS, it reads
+	// that many WebSocket messages.
 	Frames int `yaml:"frames"`
 	// FramesTimeout bounds the whole step (default 5 s). Fewer frames than Frames
 	// by then is not an error: the frames read are what gets compared.
 	FramesTimeout time.Duration `yaml:"framesTimeout"`
-	// Trigger is sent once the stream is open, for streams with no initial frame.
+	// Coalesce, with Frames, joins runs of token frames (see sse.go): chunk
+	// boundaries aren't contract. Frames then counts a run as one frame.
+	Coalesce *Coalesce `yaml:"coalesce"`
+	// WS upgrades the request to a WebSocket (see ws.go) and, with Frames, compares
+	// the messages the server sends. A refused upgrade compares as a plain response.
+	WS *WS `yaml:"ws"`
+	// Trigger is sent once the stream or socket is open, for streams with no
+	// initial frame.
 	Trigger *Trigger `yaml:"trigger"`
 	// Files lists vault trees compared after the step (see files.go): a fixture
 	// user, a UUID, or a {{var}} holding one, read as tenants/<UPPERCASE UUID>.
@@ -162,8 +170,19 @@ func (st Step) validate() error {
 			return fmt.Errorf("bad snapshot table %q", table)
 		}
 	}
-	if st.Frames < 0 || (st.Frames > 0 && !st.Stream) {
-		return errors.New("frames needs stream and a positive count")
+	if st.WS != nil && (st.Stream || st.Binary || st.Zip || len(st.Capture) > 0) {
+		return errors.New("ws is exclusive with stream, binary, zip and capture")
+	}
+	if st.Frames < 0 || (st.Frames > 0 && !st.Stream && st.WS == nil) {
+		return errors.New("frames needs stream or ws, and a positive count")
+	}
+	if st.Coalesce != nil {
+		if st.Frames == 0 || st.WS != nil {
+			return errors.New("coalesce needs stream and frames")
+		}
+		if st.Coalesce.Type == "" || st.Coalesce.Field == "" {
+			return errors.New("coalesce needs type and field")
+		}
 	}
 	if st.Frames == 0 && (st.FramesTimeout != 0 || st.Trigger != nil) {
 		return errors.New("framesTimeout and trigger need frames")

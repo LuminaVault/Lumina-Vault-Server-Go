@@ -1,0 +1,19 @@
+# Self-test on Swift (scripts/parity-switches.sh, llm_selftest): Swift's Whisper
+# adapter sends its multipart form to the stub and reads the verbose shape back.
+module: transcribe
+steps:
+  - name: a transcript comes back
+    as: alice
+    request:
+      method: POST
+      path: /v1/transcribe
+      headers: {Content-Type: audio/wav}
+      base64: UklGRiQAAABXQVZF
+  - name: an upstream error is reported
+    as: alice
+    request:
+      method: POST
+      path: /v1/transcribe
+      headers: {Content-Type: audio/ogg}
+      # "[[stub:error:503]]"
+      base64: W1tzdHViOmVycm9yOjUwM11d
