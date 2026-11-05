@@ -1,0 +1,24 @@
+# Runs on seeds only (parity/seed/todos.sql).
+module: todos
+steps:
+  - {name: open first then by due date, as: todo_tia, request: {method: GET, path: /v1/todos}}
+  - {name: done only, as: todo_tia, request: {method: GET, path: "/v1/todos?done=true"}}
+  - {name: open only, as: todo_tia, request: {method: GET, path: "/v1/todos?done=false"}}
+  - {name: done not a bool is no filter, as: todo_tia, request: {method: GET, path: "/v1/todos?done=yes"}}
+  - {name: done uppercase is no filter, as: todo_tia, request: {method: GET, path: "/v1/todos?done=TRUE"}}
+  - {name: done 1 is no filter, as: todo_tia, request: {method: GET, path: "/v1/todos?done=1"}}
+  - {name: done empty is no filter, as: todo_tia, request: {method: GET, path: "/v1/todos?done="}}
+  - {name: first done wins, as: todo_tia, request: {method: GET, path: "/v1/todos?done=true&done=false"}}
+  - {name: encoded done, as: todo_tia, request: {method: GET, path: "/v1/todos?done=tru%65"}}
+  - {name: by project, as: todo_tia, request: {method: GET, path: "/v1/todos?projectID=70D00000-0000-4000-8000-0000000001A1"}}
+  - {name: by project lowercase, as: todo_tia, request: {method: GET, path: "/v1/todos?projectID=70d00000-0000-4000-8000-0000000001a1"}}
+  - {name: by project with done, as: todo_tia, request: {method: GET, path: "/v1/todos?projectID=70D00000-0000-4000-8000-0000000001A1&done=true"}}
+  - {name: project with no todos, as: todo_tia, request: {method: GET, path: "/v1/todos?projectID=70D00000-0000-4000-8000-0000000001A2"}}
+  - {name: unknown project is an empty list, as: todo_tia, request: {method: GET, path: "/v1/todos?projectID=70D00000-0000-4000-8000-00000000FFFF"}}
+  - {name: another user's project is an empty list, as: todo_tia, request: {method: GET, path: "/v1/todos?projectID=70D00000-0000-4000-8000-0000000001B2"}}
+  - {name: bad project is no filter, as: todo_tia, request: {method: GET, path: "/v1/todos?projectID=nope"}}
+  - {name: bare hex project is no filter, as: todo_tia, request: {method: GET, path: "/v1/todos?projectID=70D000000000400080000000000001A1"}}
+  - {name: empty project is no filter, as: todo_tia, request: {method: GET, path: "/v1/todos?projectID="}}
+  - {name: wrong key case is no filter, as: todo_tia, request: {method: GET, path: "/v1/todos?projectid=70D00000-0000-4000-8000-0000000001A1"}}
+  - {name: a user sees only their own, as: todo_tom, request: {method: GET, path: /v1/todos}}
+  - {name: a user with none, as: capture_cid, request: {method: GET, path: /v1/todos}}

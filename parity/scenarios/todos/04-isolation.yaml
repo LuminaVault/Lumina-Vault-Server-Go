@@ -1,0 +1,9 @@
+# todo_tom reaches for todo_tia's rows and projects.
+module: todos
+steps:
+  - {name: patch another user's todo, as: todo_tom, request: {method: PATCH, path: /v1/todos/70D00000-0000-4000-8000-000000000F02, json: {title: hijack}}}
+  - {name: delete another user's todo, as: todo_tom, request: {method: DELETE, path: /v1/todos/70D00000-0000-4000-8000-000000000F02}}
+  - {name: create in another user's project, as: todo_tom, request: {method: POST, path: /v1/todos, json: {title: x, projectID: 70D00000-0000-4000-8000-0000000001A1}}}
+  - {name: patch own todo into another user's project, as: todo_tom, request: {method: PATCH, path: /v1/todos/70D00000-0000-4000-8000-000000000F11, json: {projectID: 70D00000-0000-4000-8000-0000000001A1}}}
+  - {name: filter by another user's project, as: todo_tom, request: {method: GET, path: "/v1/todos?projectID=70D00000-0000-4000-8000-0000000001A1"}}
+  - {name: rows untouched, as: todo_tia, request: {method: PATCH, path: /v1/todos/70D00000-0000-4000-8000-000000000F02, json: {}}, snapshot: [parity_todo_files]}

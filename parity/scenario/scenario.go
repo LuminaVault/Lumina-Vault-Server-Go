@@ -59,6 +59,14 @@ type Step struct {
 	// FilesNormalizeContent replaces UUIDs and timestamps in file contents with
 	// placeholders before hashing, for files that embed server-generated values.
 	FilesNormalizeContent bool `yaml:"filesNormalizeContent"`
+	// WaitEmpty names a table or view polled after the request until it has no
+	// rows, before the step's snapshots and files are read. It's for work a server
+	// finishes after answering (capture's enrichment): the view lists what's owed.
+	// Running out of WaitTimeout (default 25 s) is not an error; the comparison
+	// then shows what the server hadn't finished. A deployed server has no database
+	// to poll, so smoke skips it.
+	WaitEmpty   string        `yaml:"waitEmpty"`
+	WaitTimeout time.Duration `yaml:"waitTimeout"`
 }
 
 // Trigger is a request sent while a stream step reads its frames.
@@ -166,6 +174,15 @@ func (st Step) validate() error {
 		if err := st.Trigger.Request.validate(); err != nil {
 			return fmt.Errorf("trigger: %w", err)
 		}
+	}
+	if st.WaitEmpty == "" && st.WaitTimeout != 0 {
+		return errors.New("waitTimeout needs waitEmpty")
+	}
+	if st.WaitEmpty != "" && !tableRe.MatchString(st.WaitEmpty) {
+		return fmt.Errorf("bad waitEmpty table %q", st.WaitEmpty)
+	}
+	if st.WaitTimeout < 0 || st.WaitTimeout > maxFramesTimeout {
+		return fmt.Errorf("waitTimeout must be at most %s", maxFramesTimeout)
 	}
 	if len(st.Files) == 0 && (len(st.FilesMask) > 0 || st.FilesNormalizeContent) {
 		return errors.New("filesMask and filesNormalizeContent need files")

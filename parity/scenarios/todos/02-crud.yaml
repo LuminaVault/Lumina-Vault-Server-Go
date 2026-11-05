@@ -1,0 +1,65 @@
+module: todos
+steps:
+  - name: create with a title only
+    as: todo_tia
+    request: {method: POST, path: /v1/todos, json: {title: "Buy milk"}}
+    capture: {milk: $.id}
+    headers: [Content-Type]
+    snapshot: [parity_todo_files, parity_todo_memories]
+    files: [todo_tia]
+    filesMask: &masks ['_deleted_\d+_']
+  - name: create with a due date and a project, trimmed
+    as: todo_tia
+    request: {method: POST, path: /v1/todos, json: {title: " \n Call bank\t ", dueAt: "2026-12-01T10:00:00Z", projectID: 70D00000-0000-4000-8000-0000000001A1}}
+    capture: {bank: $.id}
+    snapshot: [parity_todo_files, parity_todo_memories]
+    files: [todo_tia]
+    filesMask: *masks
+  - {name: an archived project is still a project, as: todo_tia, request: {method: POST, path: /v1/todos, json: {title: "In archived", projectID: 70d00000-0000-4000-8000-0000000001a2}}, capture: {archived: $.id}, snapshot: [parity_todo_files]}
+  - {name: non-ascii title, as: todo_tia, request: {method: POST, path: /v1/todos, json: {title: "Café ☕ 日本語"}}, capture: {cafe: $.id}, snapshot: [parity_todo_files, parity_todo_memories]}
+  - {name: fractional and offset dates, as: todo_tia, request: {method: POST, path: /v1/todos, json: {title: "Offset", dueAt: "2026-12-01T10:00:00.250+02:00"}}, capture: {offset: $.id}, snapshot: [parity_todo_files]}
+  - {name: unknown keys are ignored, as: todo_tia, request: {method: POST, path: /v1/todos, json: {title: "Extra", done: true, due_at: "x", project_id: "y"}}, capture: {extra: $.id}, snapshot: [parity_todo_files]}
+  - {name: null optionals, as: todo_tia, request: {method: POST, path: /v1/todos, raw: "{\"title\":\"Nulls\",\"dueAt\":null,\"projectID\":null}"}, capture: {nulls: $.id}, snapshot: [parity_todo_files]}
+  - {name: list holds them all, as: todo_tia, request: {method: GET, path: /v1/todos}}
+  - {name: files of every create, as: todo_tia, request: {method: GET, path: /health}, files: [todo_tia], filesMask: *masks}
+
+  - {name: done, as: todo_tia, request: {method: PATCH, path: "/v1/todos/{{milk}}", json: {done: true}}, snapshot: [parity_todo_files]}
+  - {name: undone, as: todo_tia, request: {method: PATCH, path: "/v1/todos/{{milk}}", json: {done: false}}, snapshot: [parity_todo_files]}
+  - {name: title is not trimmed, as: todo_tia, request: {method: PATCH, path: "/v1/todos/{{milk}}", json: {title: "  Oat milk "}}, snapshot: [parity_todo_files]}
+  - {name: empty title falls back to the file name, as: todo_tia, request: {method: PATCH, path: "/v1/todos/{{milk}}", json: {title: ""}}, ignore: ["$.title"], snapshot: [parity_todo_files]}
+  - {name: due date, as: todo_tia, request: {method: PATCH, path: "/v1/todos/{{milk}}", json: {dueAt: "2027-01-02T03:04:05Z"}}, snapshot: [parity_todo_files]}
+  - {name: project, as: todo_tia, request: {method: PATCH, path: "/v1/todos/{{milk}}", json: {projectID: 70D00000-0000-4000-8000-0000000001A2}}, snapshot: [parity_todo_files]}
+  - {name: null leaves everything, as: todo_tia, request: {method: PATCH, path: "/v1/todos/{{milk}}", raw: "{\"title\":null,\"done\":null,\"dueAt\":null,\"projectID\":null}"}, snapshot: [parity_todo_files]}
+  - {name: empty object still saves, as: todo_tia, request: {method: PATCH, path: "/v1/todos/{{milk}}", json: {}}, snapshot: [parity_todo_files]}
+  - {name: lowercase id, as: todo_tia, request: {method: PATCH, path: /v1/todos/70d00000-0000-4000-8000-000000000f03, json: {done: true}}, snapshot: [parity_todo_files]}
+  - {name: seeded due date round trips, as: todo_tia, request: {method: PATCH, path: /v1/todos/70D00000-0000-4000-8000-000000000F01, json: {title: "Later still"}}, snapshot: [parity_todo_files]}
+
+  # A vault file that isn't a todo.
+  - {name: patch makes a note a todo and keeps its other fields, as: todo_tia, request: {method: PATCH, path: /v1/todos/70D00000-0000-4000-8000-000000000F07, json: {done: true}}, snapshot: [parity_todo_files]}
+  - {name: patch null metadata, as: todo_tia, request: {method: PATCH, path: /v1/todos/70D00000-0000-4000-8000-000000000F08, json: {}}, snapshot: [parity_todo_files]}
+  - {name: patch isTodo false, as: todo_tia, request: {method: PATCH, path: /v1/todos/70D00000-0000-4000-8000-000000000F09, json: {title: "Now a todo"}}, snapshot: [parity_todo_files]}
+  - {name: list after promotions, as: todo_tia, request: {method: GET, path: /v1/todos}}
+
+  - name: delete soft-deletes the file and cascades the memory
+    as: todo_tia
+    request: {method: DELETE, path: "/v1/todos/{{bank}}"}
+    headers: [Content-Type]
+    snapshot: [parity_todo_files, parity_todo_memories]
+    files: [todo_tia]
+    filesMask: *masks
+  - {name: delete again, as: todo_tia, request: {method: DELETE, path: "/v1/todos/{{bank}}"}}
+  - {name: patch deleted, as: todo_tia, request: {method: PATCH, path: "/v1/todos/{{bank}}", json: {done: true}}}
+  - {name: delete a note with a memory and no file, as: todo_tia, request: {method: DELETE, path: /v1/todos/70D00000-0000-4000-8000-000000000F0A}, snapshot: [parity_todo_files, parity_todo_memories]}
+  - {name: delete a lowercase id with no file, as: todo_tia, request: {method: DELETE, path: /v1/todos/70d00000-0000-4000-8000-000000000f06}, snapshot: [parity_todo_files]}
+  - {name: delete milk, as: todo_tia, request: {method: DELETE, path: "/v1/todos/{{milk}}"}}
+  - {name: delete archived, as: todo_tia, request: {method: DELETE, path: "/v1/todos/{{archived}}"}}
+  - {name: delete cafe, as: todo_tia, request: {method: DELETE, path: "/v1/todos/{{cafe}}"}}
+  - {name: delete offset, as: todo_tia, request: {method: DELETE, path: "/v1/todos/{{offset}}"}}
+  - {name: delete extra, as: todo_tia, request: {method: DELETE, path: "/v1/todos/{{extra}}"}}
+  - {name: delete nulls, as: todo_tia, request: {method: DELETE, path: "/v1/todos/{{nulls}}"}}
+  - name: everything trashed
+    as: todo_tia
+    request: {method: GET, path: /v1/todos}
+    snapshot: [parity_todo_files, parity_todo_memories]
+    files: [todo_tia]
+    filesMask: *masks

@@ -1,0 +1,9 @@
+# For staging with a fresh user: only refusals, because an accepted capture would
+# fetch a real page and call Jina's reader.
+module: capture
+smoke: true
+steps:
+  - {name: no scheme, as: capture_cid, request: {method: POST, path: /v1/capture/safari, json: {url: "example.com/path"}}}
+  - {name: invalid url, as: capture_cid, request: {method: POST, path: /v1/capture/safari, json: {url: ""}}}
+  - {name: private address, as: capture_cid, request: {method: POST, path: /v1/capture/safari, json: {url: "http://10.0.0.1/"}}}
+  - {name: unknown space, as: capture_cid, request: {method: POST, path: /v1/capture/safari, json: {url: "https://example.com/", space_id: CA97E000-0000-4000-8000-00000000FFFF}}}

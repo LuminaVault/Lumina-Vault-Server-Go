@@ -10,6 +10,7 @@
 #                   (a short key with a runner token refuses to boot, in both servers)
 #   runner-off      no runner token
 #   catalog-unseeded  no "luminavault" publisher: the first read tries to seed the catalog
+#   disk-full       a free-space floor no disk meets: every user-file write answers 507
 #
 # A state for LLM success paths, once Go serves them (group 4F), is one more
 # run_state with SWITCH_HERMES_GATEWAY_URL=http://llmstub:8080 and the stub up.
@@ -92,6 +93,7 @@ run_state posting-off SWITCH_COMMUNITY_POSTING_ENABLED=false
 run_state unconfigured SWITCH_ADMIN_TOKEN= SWITCH_SIGNING_KEY=too-short SWITCH_RUNNER_TOKEN=
 run_state runner-off SWITCH_RUNNER_TOKEN=
 run_state catalog-unseeded SWITCH_NONE=
+run_state disk-full SWITCH_STORAGE_MIN_FREE_BYTES=4611686018427387903
 llm_selftest
 "${COMPOSE[@]}" stop swift-switched go-switched >/dev/null 2>&1 || true
 exit "$failed"
