@@ -1,0 +1,29 @@
+module: vision
+steps:
+  - name: "missing type"
+    as: vis_ct
+    request: {method: POST, path: "/v1/vision/embed", base64: "iVBORw0KGgo=", headers: {}}
+  - name: "text type"
+    as: vis_ct
+    request: {method: POST, path: "/v1/vision/embed", base64: "iVBORw0KGgo=", headers: {"Content-Type": "text/plain"}}
+  - name: "gif is not accepted"
+    as: vis_ct
+    request: {method: POST, path: "/v1/vision/search", base64: "iVBORw0KGgo=", headers: {"Content-Type": "image/gif"}}
+  - name: "json is not accepted"
+    as: vis_ct
+    request: {method: POST, path: "/v1/vision/embed", json: {"image": "x"}}
+  - name: "empty type"
+    as: vis_ct
+    request: {method: POST, path: "/v1/vision/search", base64: "iVBORw0KGgo=", headers: {"Content-Type": ""}}
+  - name: "parameters are stripped"
+    as: vis_ct
+    request: {method: POST, path: "/v1/vision/embed", base64: "iVBORw0KGgo=", headers: {"Content-Type": "image/jpeg; charset=binary"}}
+  - name: "case is folded"
+    as: vis_ct
+    request: {method: POST, path: "/v1/vision/embed", base64: "iVBORw0KGgo=", headers: {"Content-Type": "IMAGE/PNG"}}
+  - name: "leading semicolon is skipped"
+    as: vis_ct
+    request: {method: POST, path: "/v1/vision/search", base64: "iVBORw0KGgo=", headers: {"Content-Type": ";image/webp"}}
+  - name: "heic"
+    as: vis_ct
+    request: {method: POST, path: "/v1/vision/search", base64: "iVBORw0KGgo=", headers: {"Content-Type": "image/heic"}}

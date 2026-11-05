@@ -497,6 +497,18 @@ func (r *Repository) StoredEmbedding(ctx context.Context, tenant, id uuid.UUID) 
 	return ParseVector(*text), true, nil
 }
 
+// SetEmbedding is VisionEmbedService.writeEmbedding: the vector alone, because it
+// came from an image and says nothing about content, so updated_at and the content
+// don't change. found is false when the tenant has no such memory.
+func (r *Repository) SetEmbedding(ctx context.Context, tenant, id uuid.UUID, vec []float32) (found bool, err error) {
+	tag, err := r.pool.Exec(ctx, `UPDATE memories SET embedding = $3::vector WHERE tenant_id = $1 AND id = $2`,
+		tenant, id, VectorArg(vec))
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() > 0, nil
+}
+
 // ParseVector is parseVector: pgvector's text form, "[0.1,0.2,...]". An element that
 // does not parse is dropped, as compactMap does.
 func ParseVector(text string) []float32 {

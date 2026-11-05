@@ -924,3 +924,88 @@ Beyond the pilot gate (D-wave2-early):
 
 - Owner's check still open: one real team invitation email.
 
+## knowledge (wave 4)
+
+### G0 entry: met 2026-11-05
+
+- Routes: 4 in `docs/migration/routes.json`: `GET /v1/knowledge/graph`,
+  `POST /v1/knowledge/connections/explain`, `POST /v1/knowledge/edges/{id}/confirm` and
+  `/dismiss`. `/v1/knowledge/reason` is `knowledge-reason`, held for group 4F.
+- Prefixes: `/v1/knowledge/connections`, `/edges`, `/graph`, disjoint (`internal/manifest`).
+- Coupling: reads and reviews the `knowledge_*` tables only. No vault-file writes, no path
+  handling, no PostHog captures.
+- Jobs: `KnowledgeExtractionWorker` stays in Swift and writes the same tables.
+- Swift tests: `KnowledgeVaultScopeIntegrationTests` 1 ported. `KnowledgeReasoningPathTests`
+  (3) go with 4F, `KnowledgeExtractionWorkerTests` (9) stay with the worker.
+- Quirks kept: the BYO exemption can never decide these routes, since `memoryQuery` reaches
+  everyone but archived and archived is excluded from BYO. A NaN `minimumConfidence` gives
+  an empty graph. With enforcement off, a bad body answers before 401. An edge into another
+  tenant's node is a 500. Path `id` is a new UUID per response.
+
+### G1 parity: met 2026-11-05
+
+- CI run 41947259214 on head cc3d0ea: self-test (Swift vs Swift) and Swift vs Go give
+  **115 scenarios, 0 differences** (whole suite), and every switch state has 0 differences.
+  `parity/scenarios/knowledge` has 7 files and 152 steps, 9 with snapshots, plus 9 steps in
+  `billing-on`. `parity`, `lint`, `test` and `vuln` pass (https://github.com/LuminaVault/Lumina-Vault-Server-Go/actions/runs/41947259214/job/126982428061).
+- Go tests: `internal/modules/knowledge` has 8 tests on Postgres, including spec conformance.
+
+## vision (wave 4)
+
+### G0 entry: met 2026-11-05
+
+- Routes: 2: `POST /v1/vision/embed` and `POST /v1/vision/search`.
+- Prefix: `/v1/vision`, disjoint (`internal/manifest`).
+- Coupling: writes `memories.embedding` (`memorystore.SetEmbedding`, no `updated_at` change)
+  and upserts `usage_meter` once per successful embed. Both servers read the same memories.
+- Jobs: none.
+- Swift tests: `VisionSearchLimitTests` 7 ported, plus 10 of the 15 in
+  `BYOEntitlementMiddlewareTests` in `internal/entitlement/platform_test.go`. Of the other 5,
+  two are about Hermes resolution, which these routes don't use, and three are covered by
+  neighbouring cases and `TestEntitledMatrix` rather than ported one for one.
+- Config: the sealed names in infra are `VISION_EMBED_PROVIDER_COHERE_APIKEY` and `_BASEURL`.
+  Swift's key encoder reads `_API_KEY` and `_BASE_URL`, and Go reads the same names. The
+  `vision-cohere` state shows both servers read those spellings. So production and staging
+  most likely answer 503 on these routes from either server. That is read from the code and
+  the sealed names, not checked on the cluster. Sealing the right name starts paid calls, so
+  it is the owner's decision.
+- Quirks kept: `hermesVision` can't be selected, because the name is lowercased first. A
+  Cohere key with `provider=openai` is a 503. `/search` checks `limit` before reading the
+  body and `/embed` checks `indexAs` after. An empty body goes to the provider. `;image/png`
+  is accepted. `X-Vault-ID` is ignored. Search counts no hits.
+
+### G1 parity: met 2026-11-05, with one uncompared failure path
+
+- CI run 41947259214 on head cc3d0ea: **115 scenarios, 0 differences** (whole suite).
+  `parity/scenarios/vision` has 7 files and 59 steps, 1 with a snapshot. These run without a
+  key, so success paths are in switch states: `vision-stub`, `vision-cohere` (Cohere stand-in
+  on the feeds stub), `vision-cohere-down` and `billing-on`, 5 files and 37 steps, 8 with
+  snapshots, all 0 differences (https://github.com/LuminaVault/Lumina-Vault-Server-Go/actions/runs/41947259214/job/126982428061). Those states save no transcripts.
+- Go tests: `internal/modules/vision` has 16 tests, on Postgres and with `httptest` stand-ins
+  for Cohere. No real key is used.
+- Gap, not compared: when the upstream closes the connection without a response, Swift gave
+  no answer within the harness's 30 s (run 41946466833), and Go answers 502 at once. Swift's
+  final answer is unknown, so the step was removed. A refused connection reaches the same
+  branch and matches. Only reachable once a Cohere key is live.
+- Small differences: the Cohere client has a 60 s total timeout where URLSession's is
+  idle-based. Embed uses `context.WithoutCancel`, to mirror Swift running on after a client
+  disconnect.
+
+## kb (wave 4)
+
+### G0 entry: met 2026-11-05
+
+- Routes: 1: `GET /v1/memory-compile/pending`. `POST /v1/memory-compile` is `kb-compile`,
+  held for group 4F.
+- Prefix: `/v1/memory-compile/pending` (`internal/manifest`).
+- Coupling: read-only count on `vault_files`, by identity. `X-Vault-ID` is not read.
+- Jobs: none.
+- Swift tests: `KBCompilePendingTests` 4 ported. The other `Tests/AppTests/KB` suites cover
+  `POST /v1/memory-compile` and its services, and go with 4F.
+
+### G1 parity: met 2026-11-05
+
+- CI run 41947259214 on head cc3d0ea: **115 scenarios, 0 differences** (whole suite).
+  `parity/scenarios/kb` has 2 files and 11 steps, 1 with a snapshot, plus 2 steps in
+  `billing-on`. `parity`, `lint`, `test` and `vuln` pass (https://github.com/LuminaVault/Lumina-Vault-Server-Go/actions/runs/41947259214/job/126982428061).
+- Go tests: `internal/modules/kb` has 6 tests on Postgres, including spec conformance.

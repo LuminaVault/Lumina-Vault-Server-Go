@@ -1,0 +1,13 @@
+module: vision
+steps:
+  - name: "missing embeddings key"
+    as: vis_srch
+    request: {method: POST, path: "/v1/vision/search", base64: "Y29oZXJlLW5va2V5", headers: {"Content-Type": "image/png"}}
+  - name: "a failed search writes no usage"
+    as: vis_srch
+    request: {method: POST, path: "/v1/vision/embed", base64: "Y29oZXJlLTQwMA==", headers: {"Content-Type": "image/png"}}
+    snapshot: ["parity_vision_usage"]
+  - name: "metered by provider kind, not model"
+    as: vis_srch
+    request: {method: GET, path: "/v1/knowledge/graph"}
+    snapshot: ["parity_vision_usage"]

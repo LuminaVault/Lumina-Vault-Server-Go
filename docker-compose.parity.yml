@@ -97,6 +97,10 @@ services:
       ADMIN_TOKEN: ${SWITCH_ADMIN_TOKEN-parity-admin-token}
       PLUGIN_ARTIFACT_SIGNING_KEY: ${SWITCH_SIGNING_KEY-parity-signing-key-parity-signing-key-0000}
       PLUGIN_RUNNER_TOKEN: ${SWITCH_RUNNER_TOKEN-parity-runner-token}
+      BILLING_ENFORCEMENT_ENABLED: ${SWITCH_BILLING_ENFORCEMENT_ENABLED:-false}
+      VISION_EMBED_PROVIDER: ${SWITCH_VISION_EMBED_PROVIDER:-cohere}
+      VISION_EMBED_PROVIDER_COHERE_API_KEY: ${SWITCH_VISION_COHERE_API_KEY-}
+      VISION_EMBED_PROVIDER_COHERE_BASE_URL: ${SWITCH_VISION_COHERE_BASE_URL:-https://api.cohere.com}
     ports: ["18083:8080"]
     depends_on: { pg: { condition: service_healthy }, feeds: { condition: service_started } }
     profiles: [switched]
@@ -113,6 +117,10 @@ services:
       ADMIN_TOKEN: ${SWITCH_ADMIN_TOKEN-parity-admin-token}
       PLUGIN_ARTIFACT_SIGNING_KEY: ${SWITCH_SIGNING_KEY-parity-signing-key-parity-signing-key-0000}
       PLUGIN_RUNNER_TOKEN: ${SWITCH_RUNNER_TOKEN-parity-runner-token}
+      BILLING_ENFORCEMENT_ENABLED: ${SWITCH_BILLING_ENFORCEMENT_ENABLED:-false}
+      VISION_EMBED_PROVIDER: ${SWITCH_VISION_EMBED_PROVIDER:-cohere}
+      VISION_EMBED_PROVIDER_COHERE_API_KEY: ${SWITCH_VISION_COHERE_API_KEY-}
+      VISION_EMBED_PROVIDER_COHERE_BASE_URL: ${SWITCH_VISION_COHERE_BASE_URL:-https://api.cohere.com}
     ports: ["18084:8080"]
     depends_on: { pg: { condition: service_healthy }, feeds: { condition: service_started } }
     profiles: [switched]
