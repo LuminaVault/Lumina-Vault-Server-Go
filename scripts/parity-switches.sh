@@ -16,9 +16,11 @@
 #   vision-cohere   a Cohere key, with the base URL on the feeds stub (POST /v2/embed)
 #   billing-on      BILLING_ENFORCEMENT_ENABLED=true: the /v1/knowledge and /v1/vision paywalls, the capture gate on memory upsert
 #
-# A state for LLM success paths, once Go serves them (group 4F), is one more
-# run_state with SWITCH_HERMES_GATEWAY_URL=http://llmstub:8080 and the stub up.
-# Until then llm_selftest proves the stub on Swift alone.
+# A state for LLM success paths, once Go serves them (group 4F, wave 5), is one more
+# run_state with the stub up and SWITCH_HERMES_GATEWAY_URL=http://llmstub:8080,
+# SWITCH_LLM_BASE_URL=http://llmstub:8080 or SWITCH_TRANSCRIBE_BASE_URL=http://llmstub:8080/v1.
+# Chat also needs SWITCH_OPENROUTER_API_KEY: see docker-compose.parity.yml.
+# Until then llm_selftest proves the stub, and the coalesce and ws steps, on Swift alone.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -68,7 +70,9 @@ llm_selftest() {
     "${COMPOSE[@]}" exec -T pg psql -v ON_ERROR_STOP=1 -q -U lv -d postgres -c "CREATE DATABASE $db TEMPLATE parity_template"
   done
   "${COMPOSE[@]}" up -d --build --force-recreate llmstub
-  SWITCH_HERMES_GATEWAY_URL=http://llmstub:8080 "${COMPOSE[@]}" up -d --force-recreate swift-switched swift2-switched
+  SWITCH_HERMES_GATEWAY_URL=http://llmstub:8080 SWITCH_LLM_BASE_URL=http://llmstub:8080 \
+    SWITCH_OPENROUTER_API_KEY=parity-openrouter-not-a-real-key SWITCH_TRANSCRIBE_BASE_URL=http://llmstub:8080/v1 \
+    "${COMPOSE[@]}" up -d --force-recreate swift-switched swift2-switched
   for port in 18083 18086 18085; do
     for _ in $(seq 1 60); do
       curl -fsS "http://localhost:$port/health" >/dev/null 2>&1 && break
@@ -82,12 +86,32 @@ llm_selftest() {
     --go http://localhost:18086 --go-db postgres://lv:lv@localhost:15432/parity_swift2_switched \
     --save-swift-transcripts swift-transcripts/llm-stub \
     --scenarios parity/scenarios-llm || failed=1
-  calls=$(curl -fsS http://localhost:18085/stub/stats | sed -n 's/.*"\/v1\/chat\/completions":\([0-9]*\).*/\1/p')
-  echo "stub answered ${calls:-0} chat completions"
-  if [ "${calls:-0}" -lt 2 ]; then
-    echo "the servers never reached the LLM stub"
-    failed=1
-  fi
+  # Zero differences alone would also pass if both servers failed the same way, so
+  # the counters and Swift's transcripts have to show the real thing happened.
+  local stats route
+  stats=$(curl -fsS http://localhost:18085/stub/stats)
+  for route in /v1/chat/completions /v1/audio/transcriptions /v1/runs; do
+    calls=$(printf '%s' "$stats" | sed -n "s|.*\"$route\":\([0-9]*\).*|\1|p")
+    echo "stub answered ${calls:-0} on $route"
+    if [ "${calls:-0}" -lt 2 ]; then
+      echo "the servers never reached the stub on $route"
+      failed=1
+    fi
+  done
+  local want
+  while IFS='|' read -r want route; do
+    if ! grep -rqE "$want" "swift-transcripts/llm-stub/$route"; then
+      echo "no transcript under $route matches: $want"
+      failed=1
+    fi
+  done <<'EXPECT'
+"payload": "stub reply [0-9a-f]{16}"|chat/stream.yaml.json
+"payload": "stub reply [0-9a-f]{16}"|chat/free-lane.yaml.json
+"type": "hermes|chat/stream.yaml.json
+"text": "stub transcript"|transcribe
+"status": 101|ws
+"hello"|ws
+EXPECT
   "${COMPOSE[@]}" stop swift-switched swift2-switched llmstub >/dev/null 2>&1 || true
 }
 
