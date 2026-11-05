@@ -64,7 +64,7 @@ func (m *Module) ticker(c *echo.Context) error {
 	if !ok {
 		return wire.ErrUnauthenticated
 	}
-	limit, err := strconv.Atoi(c.QueryParam("limit"))
+	limit, err := strconv.Atoi(wire.Query(c, "limit"))
 	if err != nil {
 		limit = defaultLimit // Swift: Int($0) ?? 30
 	}

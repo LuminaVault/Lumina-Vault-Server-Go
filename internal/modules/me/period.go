@@ -180,7 +180,7 @@ func (m *Module) getPeriodRecap(c *echo.Context) error {
 		return err
 	}
 	now := m.now()
-	p, err := parsePeriodParams(c.QueryParam("period"), c.QueryParam("year"), c.QueryParam("month"), u.timezone, now)
+	p, err := parsePeriodParams(wire.Query(c, "period"), wire.Query(c, "year"), wire.Query(c, "month"), u.timezone, now)
 	if err != nil {
 		return err
 	}

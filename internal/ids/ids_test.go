@@ -28,3 +28,19 @@ func TestParseAcceptsBothCases(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, lower, upper)
 }
+
+// The accepted and refused forms were checked against swiftc's UUID(uuidString:).
+func TestParseIsStrictLikeSwift(t *testing.T) {
+	for _, bad := range []string{
+		"",
+		"aaaaaaaa000040008000000000000001",
+		"{aaaaaaaa-0000-4000-8000-000000000001}",
+		"urn:uuid:aaaaaaaa-0000-4000-8000-000000000001",
+		" aaaaaaaa-0000-4000-8000-000000000001",
+		"aaaaaaaa-0000-4000-8000-00000000000g",
+		"aaaaaaaa0000-4000-8000-0000000000001",
+	} {
+		_, err := ids.Parse(bad)
+		require.Error(t, err, bad)
+	}
+}

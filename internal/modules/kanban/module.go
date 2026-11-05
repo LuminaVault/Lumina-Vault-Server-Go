@@ -862,7 +862,7 @@ func expectedVersion(c *echo.Context, acc vaultaccess.Access) (*int64, error) {
 func uuidParam(c *echo.Context, name string) (uuid.UUID, error) {
 	raw := c.Param(name)
 	id, err := ids.Parse(raw)
-	if err != nil || len(raw) != 36 {
+	if err != nil {
 		return uuid.Nil, wire.NewError(http.StatusBadRequest, "invalid_"+name)
 	}
 	return id, nil

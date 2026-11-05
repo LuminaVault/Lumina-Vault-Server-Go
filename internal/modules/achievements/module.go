@@ -110,7 +110,7 @@ func (m *Module) list(c *echo.Context) error {
 }
 
 func (m *Module) recent(c *echo.Context) error {
-	limit := min(parseLimit(c.QueryParam("limit")), serviceMaxLimit)
+	limit := min(parseLimit(wire.Query(c, "limit")), serviceMaxLimit)
 	rows, err := m.q.RecentUnlocks(c.Request().Context(), db.RecentUnlocksParams{
 		TenantID: auth.UserID(c),
 		Limit:    int32(limit), //nolint:gosec // clamped to 1..50

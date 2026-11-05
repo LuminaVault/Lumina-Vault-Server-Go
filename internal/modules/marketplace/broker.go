@@ -159,7 +159,7 @@ func (b *CapabilityBroker) executeOne(ctx context.Context, r CapabilityRequest, 
 
 func (b *CapabilityBroker) readMemory(ctx context.Context, args map[string]string, tenant uuid.UUID) (map[string]string, error) {
 	raw, ok := args["id"]
-	if !ok || len(raw) != 36 {
+	if !ok {
 		return nil, errInvalidArguments
 	}
 	id, err := ids.Parse(raw)

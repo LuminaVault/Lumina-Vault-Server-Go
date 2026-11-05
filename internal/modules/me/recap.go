@@ -46,7 +46,7 @@ func (m *Module) getRecap(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	rng := c.QueryParam("range")
+	rng := wire.Query(c, "range")
 	if rng == "" {
 		rng = "7d"
 	}

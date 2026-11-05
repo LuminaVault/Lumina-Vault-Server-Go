@@ -1009,9 +1009,6 @@ func uuidParam(c *echo.Context, name string) (uuid.UUID, error) {
 
 // parseUUID accepts what Foundation's UUID(uuidString:) accepts: the 36-character form.
 func parseUUID(s string) (uuid.UUID, bool) {
-	if len(s) != 36 {
-		return uuid.Nil, false
-	}
 	id, err := ids.Parse(s)
 	return id, err == nil
 }

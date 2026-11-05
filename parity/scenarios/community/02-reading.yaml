@@ -44,3 +44,7 @@ steps:
   - {"name": "tied page 1", "as": "comm_page", "request": {"method": "GET", "path": "/v1/community/posts?limit=8"}, "capture": {"p1": "$.nextCursor"}}
   - {"name": "tied page 2", "as": "comm_page", "request": {"method": "GET", "path": "/v1/community/posts?limit=3&cursor={{p1}}"}, "capture": {"p2": "$.nextCursor"}}
   - {"name": "tied page 3", "as": "comm_page", "request": {"method": "GET", "path": "/v1/community/posts?limit=3&cursor={{p2}}"}}
+  - {"name": "board limit with a literal plus", "as": "comm_read", "request": {"method": "GET", "path": "/v1/community/posts?limit=+1"}}
+  - {"name": "board encoded limit key is no key", "as": "comm_read", "request": {"method": "GET", "path": "/v1/community/posts?%6Cimit=1"}}
+  - {"name": "a literal plus in a cursor is still a bad cursor", "as": "comm_read", "request": {"method": "GET", "path": "/v1/community/posts?cursor=MTcwMDAwMDAwMDAwMDAwMHwwMDAwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwMDA+"}}
+  - {"name": "a malformed escape in a cursor reads raw", "as": "comm_read", "request": {"method": "GET", "path": "/v1/community/posts?cursor=%zz"}}

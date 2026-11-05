@@ -9,6 +9,15 @@ prefix moves exactly that module. When no such prefix exists:
     modules with routes under it are listed in `flipsWith`: those modules must
     reach production in the same infra PR.
 
+A module may leave routes on Swift (`HELD` below): its prefix still covers them,
+and an explicit ingress entry keeps them on Swift. They need no flip partner.
+
+The chart's `pathType: Prefix` on Traefik matches plain string prefixes (no
+`strictPrefixMatching`), so `/v1/vault` also catches `/v1/vaults`. Prefixes are
+still chosen by path element, and any route of another module caught only as a
+string goes under `stringPrefixCatches`: a flip of that prefix must name those
+paths explicitly in ingress, which is correct under either behaviour.
+
 Statuses of modules already in modules.yaml are kept, so re-running after the
 route inventory changes never resets progress.
 
@@ -44,6 +53,7 @@ WAVES = {
     "App": 8,  # root-mounted routes (/health, AASA, /v1/ws, /v1/auth/me*) move with the final cutover
     # Pseudo-modules split out of a Swift dir by controller (SPLITS below).
     "MeGateways": 6, "MeProviders": 5,
+    "MemoryAgent": 4, "KnowledgeReason": 4, "KBCompile": 4,
 }
 
 # Some Swift dirs hold controllers that belong to a later wave
@@ -54,13 +64,47 @@ SPLITS = {
     "Sources/App/Me/ProvidersController.swift": "MeProviders",
     "Sources/App/Me/LLMPreferencesController.swift": "MeProviders",
     "Sources/App/Me/ConnectionsController.swift": "MeProviders",
+    # Call the LLM transport (wave-4-plan.md, group 4F). GET /v1/memos travels
+    # with POST: ingress can't split a path by method.
+    "Sources/App/Memory/MemoController.swift": "MemoryAgent",
+    "Sources/App/Memory/QueryController.swift": "MemoryAgent",
 }
-# Routes registered in App+build.swift that belong to a split module.
-SPLIT_PATHS = {"/v1/gateways/photon/inbound": "MeGateways"}
+# Routes whose controller also holds routes of the parent module, or that are
+# registered in App+build.swift.
+SPLIT_PATHS = {
+    "/v1/gateways/photon/inbound": "MeGateways",
+    "/v1/memory/search": "MemoryAgent",
+    "/v1/knowledge/reason": "KnowledgeReason",
+    "/v1/knowledge/reason/stream": "KnowledgeReason",
+    "/v1/memory-compile": "KBCompile",
+}
+# Routes a module leaves on Swift when it flips: path, reason, and the group that
+# releases them. A held route is out of its module's G1 and in the releasing
+# group's. Owner decisions still open (flip-blockers.md: /v1/reminders/detect,
+# /v1/admin/community) are recorded here once they are made.
+HELD = {
+    "Memory": [(
+        "/v1/memory/search",
+        "runs the agent loop (HermesMemoryService.search), which needs internal/llm; owned by memory-agent",
+        "wave-4-agent",
+    )],
+    "KBCompile": [(
+        "/v1/memory-compile",
+        "must stay on the same server as /v1/ws: the iOS review sheet fills only from its .memorySaved frames",
+        "end of wave 5, with /v1/ws, /v1/devices/command, mcp and skills",
+    )],
+}
 # Must flip together though no prefix is shared: Gmail connect finishes at
 # /v1/calendar/oauth/callback, which only finds OAuth sessions from its own process.
 COUPLED = {"Calendar": {"Mail"}}
-SWIFT_DIRS = {"App": "Sources/App/App+build.swift", "MeGateways": "Sources/App/Me", "MeProviders": "Sources/App/Me"}
+SWIFT_DIRS = {
+    "App": "Sources/App/App+build.swift",
+    "MeGateways": "Sources/App/Me",
+    "MeProviders": "Sources/App/Me",
+    "MemoryAgent": "Sources/App/Memory",
+    "KnowledgeReason": "Sources/App/Knowledge",
+    "KBCompile": "Sources/App/KB",
+}
 
 
 def kebab(name: str) -> str:
@@ -78,9 +122,15 @@ def matches(prefix: list[str], path: list[str]) -> bool:
     return all(p == s or s.startswith("{") or s.startswith("*") for p, s in zip(prefix, path))
 
 
+def string_only(prefix: str, path: str) -> bool:
+    """The route is caught by the prefix as a string, but not by path element."""
+    return path.startswith(prefix) and not matches(segments(prefix), segments(path))
+
+
 def main() -> int:
     routes = json.loads(ROUTES.read_text())
     by_module: dict[str, list[list[str]]] = {}
+    held_segments = {m: [segments(path) for path, _, _ in held] for m, held in HELD.items()}
     for r in routes:
         module = SPLIT_PATHS.get(r["path"]) or SPLITS.get(r["source"].split(":")[0], r["module"])
         by_module.setdefault(module, []).append(segments(r["path"]))
@@ -92,7 +142,9 @@ def main() -> int:
 
     plan = {}
     for module, paths in sorted(by_module.items()):
-        others = [p for m, ps in by_module.items() if m != module for p in ps]
+        # A route this module holds doesn't stop it taking the shorter prefix.
+        holds = held_segments.get(module, [])
+        others = [p for m, ps in by_module.items() if m != module for p in ps if p not in holds]
         prefixes, exact, shared, partners = set(), set(), set(), set()
         for path in paths:
             chosen = None
@@ -113,7 +165,7 @@ def main() -> int:
                     exact.add("/" + "/".join(path))
                 else:
                     shared.add("/" + "/".join(literal))
-                    partners |= {m for m, ps in by_module.items() if m != module and any(matches(literal, q) for q in ps)}
+                    partners |= {m for m, ps in by_module.items() if m != module and any(matches(literal, q) for q in ps if q not in holds)}
             else:
                 prefixes.add("/" + "/".join(chosen))
         # Drop prefixes covered by a shorter one of the same module.
@@ -130,6 +182,22 @@ def main() -> int:
             if module not in plan[other][3]:
                 plan[other][3].append(module)
     plan = {m: (p, e, s, sorted(set(ps))) for m, (p, e, s, ps) in plan.items()}
+
+    # What each module's prefixes catch of other modules' routes, only as strings.
+    # Named by the other module's own entries, which is what ingress has to list.
+    catches: dict[str, set[str]] = {m: set() for m in plan}
+    for module, (prefixes, _, shared, _) in plan.items():
+        for prefix in prefixes + shared:
+            for other, (o_prefixes, o_exact, o_shared, _) in plan.items():
+                if other == module:
+                    continue
+                for path in by_module[other]:
+                    route = "/" + "/".join(path)
+                    if not string_only(prefix, route):
+                        continue
+                    entries = [e for e in o_exact if e == route]
+                    entries += [e for e in o_prefixes + o_shared if matches(segments(e), path)]
+                    catches[module].update(entries or [route])
 
     existing = {}
     if OUT.exists():
@@ -159,6 +227,12 @@ def main() -> int:
             lines.append(f"    exactPaths: [{', '.join(exact)}]")
         if shared:
             lines.append(f"    sharedPrefixes: [{', '.join(shared)}]")
+        if catches[module]:
+            lines.append(f"    stringPrefixCatches: [{', '.join(sorted(catches[module]))}]")
+        if module in HELD:
+            lines.append("    heldPaths:")
+            for path, reason, released_by in HELD[module]:
+                lines.append(f"      - {{path: {path}, reason: {json.dumps(reason)}, releasedBy: {json.dumps(released_by)}}}")
         if partners:
             lines.append(f"    flipsWith: [{', '.join(kebab(m) for m in partners)}]")
             if any(WAVES[m] != WAVES[module] for m in partners):

@@ -21,8 +21,13 @@ x-common-env: &common-env
   LV_ENVIRONMENT: test
   CORS_ALLOWED_ORIGINS: https://app.luminavault.fyi
   HERMES_API_KEY: parity-hermes-key-not-real-0000000000
-  # Unroutable: no scenario may depend on an external service by accident.
+  # Unroutable: no scenario may depend on an external service by accident. LLM
+  # success paths use the stub below, in a switch state (scripts/parity-switches.sh).
   HERMES_GATEWAY_URL: http://127.0.0.1:9
+  # Each server has its own container filesystem and no volume, so this one path
+  # is a separate tree per server. `parity compare --swift-files/--go-files` reads
+  # it with `docker cp`; recreating a container (scripts/parity-up.sh) empties it.
+  VAULT_ROOT_PATH: /tmp/luminavault
   BOOTSTRAP_ADMIN_EMAIL: golden@example.test
   BOOTSTRAP_ADMIN_PASSWORD: correct horse battery staple
   # News ticker: the deterministic stub aggregator below (parity/stubs/feeds),
@@ -86,6 +91,7 @@ services:
     environment:
       <<: *common-env
       POSTGRES_DATABASE: parity_swift_switched
+      HERMES_GATEWAY_URL: ${SWITCH_HERMES_GATEWAY_URL:-http://127.0.0.1:9}
       COMMUNITY_ENABLED: ${SWITCH_COMMUNITY_ENABLED:-true}
       COMMUNITY_POSTING_ENABLED: ${SWITCH_COMMUNITY_POSTING_ENABLED:-true}
       ADMIN_TOKEN: ${SWITCH_ADMIN_TOKEN-parity-admin-token}
@@ -101,6 +107,7 @@ services:
     environment:
       <<: *common-env
       POSTGRES_DATABASE: parity_go_switched
+      HERMES_GATEWAY_URL: ${SWITCH_HERMES_GATEWAY_URL:-http://127.0.0.1:9}
       COMMUNITY_ENABLED: ${SWITCH_COMMUNITY_ENABLED:-true}
       COMMUNITY_POSTING_ENABLED: ${SWITCH_COMMUNITY_POSTING_ENABLED:-true}
       ADMIN_TOKEN: ${SWITCH_ADMIN_TOKEN-parity-admin-token}
@@ -108,6 +115,23 @@ services:
       PLUGIN_RUNNER_TOKEN: ${SWITCH_RUNNER_TOKEN-parity-runner-token}
     ports: ["18084:8080"]
     depends_on: { pg: { condition: service_healthy }, feeds: { condition: service_started } }
+    profiles: [switched]
+
+  # A second Swift for the LLM stub self-test (scripts/parity-switches.sh).
+  swift2-switched:
+    image: ${PARITY_SWIFT_IMAGE:-lv-swift:fdbed9b0}
+    environment:
+      <<: *common-env
+      POSTGRES_DATABASE: parity_swift2_switched
+      HERMES_GATEWAY_URL: ${SWITCH_HERMES_GATEWAY_URL:-http://127.0.0.1:9}
+    ports: ["18086:8080"]
+    depends_on: { pg: { condition: service_healthy }, feeds: { condition: service_started } }
+    profiles: [switched]
+
+  # Stub LLM upstream: deterministic chat, see parity/stubs/llm/main.go.
+  llmstub:
+    build: { context: ., dockerfile: parity/stubs/llm/Dockerfile }
+    ports: ["18085:8080"]
     profiles: [switched]
 
   # Stub feed aggregator for the news ticker; fixed answers, see main.go.

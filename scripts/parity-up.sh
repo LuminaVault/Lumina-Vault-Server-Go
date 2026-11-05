@@ -5,7 +5,9 @@
 #      other parity/seed/*.sql in name order (one file per module)
 #   3. parity_swift / parity_go / parity_swift2 cloned from the template
 #   4. the three servers
-# Re-running drops and recreates every parity_* database.
+# Re-running drops and recreates every parity_* database and every server
+# container, which also empties each server's vault tree (they live in the
+# container filesystem), so a re-run starts clean for `files` steps.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -37,7 +39,8 @@ for db in parity_swift parity_go parity_swift2; do
 done
 
 echo "==> servers"
-"${COMPOSE[@]}" --profile servers up -d --build swift swift2 go
+"${COMPOSE[@]}" --profile servers up -d --build feeds
+"${COMPOSE[@]}" --profile servers up -d --build --force-recreate --no-deps swift swift2 go
 for port in 18080 18081 18082; do
   for _ in $(seq 1 60); do
     curl -fsS "http://localhost:$port/health" >/dev/null 2>&1 && break

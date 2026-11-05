@@ -53,7 +53,7 @@ func (m *Module) getBrief(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	day, err := parseBriefDate(c.QueryParam("date"), u.timezone, m.now())
+	day, err := parseBriefDate(wire.Query(c, "date"), u.timezone, m.now())
 	if err != nil {
 		return err
 	}
@@ -174,7 +174,7 @@ func (m *Module) postFeedback(c *echo.Context) error {
 		return err
 	}
 	briefID, err := ids.Parse(c.Param("briefId"))
-	if err != nil || len(c.Param("briefId")) != 36 {
+	if err != nil {
 		return badRequest("invalid brief id")
 	}
 	cardID := c.Param("cardId")
@@ -215,7 +215,7 @@ func (m *Module) postFeedback(c *echo.Context) error {
 				continue
 			}
 			memoryID, err := ids.Parse(ref.Id)
-			if err != nil || len(ref.Id) != 36 {
+			if err != nil {
 				continue
 			}
 			if err := m.q.SnoozeMemory(ctx(c), db.SnoozeMemoryParams{

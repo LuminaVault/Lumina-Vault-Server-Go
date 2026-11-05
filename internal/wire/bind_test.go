@@ -199,3 +199,38 @@ func TestBindNullRootAndNonIntegerNumbers(t *testing.T) {
 		require.Equal(t, want, we.Message, raw)
 	}
 }
+
+// Hummingbird collects up to maxUploadSize (2 MiB) and renders the overflow as a
+// bare 413. A body of exactly the limit still reaches the decoder.
+func TestBindBodyLimit(t *testing.T) {
+	const limit = 2 << 20
+	bind := func(body string) (*createProject, *httptest.ResponseRecorder) {
+		rec := httptest.NewRecorder()
+		c := echo.New().NewContext(httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body)), rec)
+		out, err := wire.Bind[createProject](c)
+		if err != nil {
+			wire.HTTPErrorHandler(c, err)
+		}
+		return out, rec
+	}
+	name := func(n int) string { // a valid document of exactly n bytes
+		const shell = `{"name":""}`
+		return `{"name":"` + strings.Repeat("x", n-len(shell)) + `"}`
+	}
+
+	out, rec := bind(name(limit))
+	require.NotNil(t, out)
+	require.Equal(t, limit-len(`{"name":""}`), len(out.Name))
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	out, rec = bind(name(limit + 1))
+	require.Nil(t, out)
+	require.Equal(t, http.StatusRequestEntityTooLarge, rec.Code)
+	require.Empty(t, rec.Body.String())
+	require.Empty(t, rec.Header().Get("Content-Type"))
+
+	// The limit comes before decoding: oversized garbage is 413, not 400.
+	out, rec = bind(strings.Repeat("!", limit+1))
+	require.Nil(t, out)
+	require.Equal(t, http.StatusRequestEntityTooLarge, rec.Code)
+}

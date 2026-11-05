@@ -1,6 +1,7 @@
 // Command parity runs parity scenarios against the Swift and Go servers.
 //
 //	parity compare --swift URL --swift-db DSN --go URL --go-db DSN --scenarios DIR [--module M] [--save-swift-transcripts DIR]
+//	               [--swift-files docker:CONTAINER:ROOT|dir:ROOT --go-files ...]
 //	parity smoke   --target URL --token JWT --transcripts DIR --scenarios DIR --module M
 //
 // compare exits 1 on any difference. A self-test is compare with --go pointing
@@ -52,6 +53,8 @@ func compare(args []string) error {
 	swiftDB := fs.String("swift-db", "", "Swift database DSN")
 	goURL := fs.String("go", "http://localhost:18081", "Go base URL (a second Swift for self-test)")
 	goDB := fs.String("go-db", "", "Go database DSN")
+	swiftFiles := fs.String("swift-files", "", "Swift vault root, docker:CONTAINER:ROOT or dir:ROOT (needed by steps with `files`)")
+	goFiles := fs.String("go-files", "", "Go vault root, same form")
 	secrets := fs.String("jwt-secrets", "parity:parity-secret-parity-secret-0000", "JWT_HMAC_SECRETS shared by both servers")
 	users := fs.String("users", "parity/seed/users.yaml", "fixture users")
 	dir := fs.String("scenarios", "parity/scenarios", "scenario root")
@@ -68,11 +71,11 @@ func compare(args []string) error {
 	if err != nil {
 		return err
 	}
-	swiftT, err := target(ctx, "swift", *swiftURL, *swiftDB, keys, fixture)
+	swiftT, err := target(ctx, "swift", *swiftURL, *swiftDB, *swiftFiles, keys, fixture)
 	if err != nil {
 		return err
 	}
-	goT, err := target(ctx, "go", *goURL, *goDB, keys, fixture)
+	goT, err := target(ctx, "go", *goURL, *goDB, *goFiles, keys, fixture)
 	if err != nil {
 		return err
 	}
@@ -166,8 +169,15 @@ func statusAt(t scenario.Transcript, i int) any {
 	return "<no step>"
 }
 
-func target(ctx context.Context, name, url, dsn string, keys auth.Keyset, users map[string]uuid.UUID) (scenario.Target, error) {
+func target(ctx context.Context, name, url, dsn, files string, keys auth.Keyset, users map[string]uuid.UUID) (scenario.Target, error) {
 	t := scenario.Target{Name: name, BaseURL: url, Keys: keys, Users: users}
+	if files != "" {
+		reader, err := scenario.NewFileReader(files)
+		if err != nil {
+			return t, err
+		}
+		t.Files = reader
+	}
 	if dsn != "" {
 		pool, err := pgxpool.New(ctx, dsn)
 		if err != nil {

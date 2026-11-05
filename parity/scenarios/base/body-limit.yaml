@@ -1,0 +1,13 @@
+# Hummingbird collects a JSON body up to maxUploadSize, 2 MiB: one byte more is a
+# bare 413, with no body and no Content-Type, before any decoding. Exactly 2 MiB
+# still reaches the decoder (here, a 400: it isn't JSON).
+module: base
+steps:
+  - {name: over the limit, as: limit_ann, request: {method: POST, path: /v1/projects, fill: {text: x, size: 2097153}, headers: {Content-Type: application/json}}, snapshot: [projects]}
+  - {name: exactly the limit, as: limit_ann, request: {method: POST, path: /v1/projects, fill: {text: x, size: 2097152}, headers: {Content-Type: application/json}}}
+  - {name: over the limit chunked, as: limit_ann, request: {method: POST, path: /v1/projects, chunked: true, fill: {text: x, size: 2097153}, headers: {Content-Type: application/json}}}
+  - {name: exactly the limit chunked, as: limit_ann, request: {method: POST, path: /v1/projects, chunked: true, fill: {text: x, size: 2097152}, headers: {Content-Type: application/json}}}
+  - {name: a small chunked body decodes, as: limit_ann, request: {method: POST, path: /v1/projects, chunked: true, raw: "{\"name\":\"Chunked\"}"}, snapshot: [projects]}
+  - {name: over the limit on another module, as: limit_ann, request: {method: POST, path: /v1/reminders, fill: {text: x, size: 2097153}, headers: {Content-Type: application/json}}}
+  # The route's bytes, not just its text: the binary comparison on a live server.
+  - {name: root bytes, binary: true, request: {method: GET, path: /}, headers: [Content-Length]}

@@ -64,7 +64,9 @@ jobs:
         run: |
           go run ./parity/cmd/parity compare \
             --swift http://localhost:18080 --swift-db postgres://lv:lv@localhost:15432/parity_swift \
-            --go http://localhost:18082 --go-db postgres://lv:lv@localhost:15432/parity_swift2
+            --go http://localhost:18082 --go-db postgres://lv:lv@localhost:15432/parity_swift2 \
+            --swift-files docker:lvparity-swift-1:/tmp/luminavault \
+            --go-files docker:lvparity-swift2-1:/tmp/luminavault
       - name: Reset databases for the Go comparison
         run: PARITY_SWIFT_IMAGE="$(cat parity/SWIFT_IMAGE)" scripts/parity-up.sh
       - name: Compare
@@ -72,6 +74,8 @@ jobs:
           go run ./parity/cmd/parity compare \
             --swift http://localhost:18080 --swift-db postgres://lv:lv@localhost:15432/parity_swift \
             --go http://localhost:18081 --go-db postgres://lv:lv@localhost:15432/parity_go \
+            --swift-files docker:lvparity-swift-1:/tmp/luminavault \
+            --go-files docker:lvparity-go-1:/tmp/luminavault \
             --save-swift-transcripts swift-transcripts
       - name: Compare the switch states
         run: PARITY_SWIFT_IMAGE="$(cat parity/SWIFT_IMAGE)" scripts/parity-switches.sh

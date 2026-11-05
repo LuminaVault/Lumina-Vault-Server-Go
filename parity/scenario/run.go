@@ -3,6 +3,9 @@ package scenario
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -34,6 +37,7 @@ type Target struct {
 	Keys     auth.Keyset
 	Users    map[string]uuid.UUID
 	Snapshot Snapshotter  // nil disables snapshots (smoke mode)
+	Files    FileReader   // nil fails a step with `files`, except in smoke mode
 	Token    string       // when set, used for every authenticated step (smoke mode)
 	Client   *http.Client // nil uses a 30 s default
 }
@@ -51,6 +55,10 @@ type StepResult struct {
 	Body        any               `json:"body"`
 	Headers     map[string]string `json:"headers,omitempty"`
 	Snapshots   map[string]any    `json:"snapshots,omitempty"`
+	// Files holds each tree of the step's `files`.
+	Files map[string]any `json:"files,omitempty"`
+	// TriggerStatus is the status of the step's `trigger` request.
+	TriggerStatus int `json:"triggerStatus,omitempty"`
 }
 
 // Run executes sc against t. One Normalizer spans the whole run, so an id
@@ -70,89 +78,166 @@ func Run(ctx context.Context, sc Scenario, t Target) (Transcript, error) {
 	tr := Transcript{Scenario: sc.File, Target: t.Name}
 
 	for _, st := range sc.Steps {
-		req, err := buildRequest(ctx, t, st, vars)
+		res, err := runStep(ctx, sc, st, t, client, norm, vars)
 		if err != nil {
 			return tr, fmt.Errorf("%s/%s: %w", sc.File, st.Name, err)
-		}
-		resp, err := client.Do(req)
-		if err != nil {
-			return tr, fmt.Errorf("%s/%s: %w", sc.File, st.Name, err)
-		}
-		var raw []byte
-		if !st.Stream {
-			raw, err = io.ReadAll(resp.Body)
-		}
-		_ = resp.Body.Close()
-		if err != nil {
-			return tr, err
-		}
-		if err := capture(raw, st.Capture, vars); err != nil {
-			return tr, fmt.Errorf("%s/%s: %w", sc.File, st.Name, err)
-		}
-		body, err := norm.Body(raw, append(append([]string{}, sc.Ignore...), st.Ignore...))
-		if err != nil {
-			return tr, err
-		}
-		res := StepResult{Name: st.Name, Status: resp.StatusCode, ContentType: resp.Header.Get("Content-Type"), Body: body}
-		for _, h := range st.Headers {
-			if res.Headers == nil {
-				res.Headers = map[string]string{}
-			}
-			res.Headers[h] = strings.Join(resp.Header.Values(h), ", ")
-		}
-		if t.Snapshot != nil && len(st.Snapshot) > 0 {
-			res.Snapshots = map[string]any{}
-			for _, table := range st.Snapshot {
-				rows, err := t.Snapshot(ctx, table)
-				if err != nil {
-					return tr, fmt.Errorf("%s/%s snapshot %s: %w", sc.File, st.Name, table, err)
-				}
-				stableOrder(rows)
-				vals := make([]any, len(rows))
-				for i, r := range rows {
-					if vals[i], err = norm.Body(r, nil); err != nil {
-						return tr, err
-					}
-				}
-				res.Snapshots[table] = vals
-			}
 		}
 		tr.Steps = append(tr.Steps, res)
 	}
 	return tr, nil
 }
 
-func buildRequest(ctx context.Context, t Target, st Step, vars map[string]string) (*http.Request, error) {
+func runStep(ctx context.Context, sc Scenario, st Step, t Target, client *http.Client, norm *normalize.Normalizer, vars map[string]string) (StepResult, error) {
+	var res StepResult
+	ignore := append(append([]string{}, sc.Ignore...), st.Ignore...)
+	reqCtx := ctx
+	if st.Frames > 0 {
+		timeout := st.FramesTimeout
+		if timeout == 0 {
+			timeout = defaultFramesTimeout
+		}
+		var cancel context.CancelFunc
+		reqCtx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
+	req, err := buildRequest(reqCtx, t, st.As, st.Request, vars)
+	if err != nil {
+		return res, err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return res, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var (
+		raw        []byte
+		body       any
+		triggerRes int
+	)
+	switch {
+	case st.Frames > 0:
+		// Smoke checks statuses on a deployed server, so it doesn't need the write.
+		if st.Trigger != nil && t.Token == "" {
+			if triggerRes, err = sendTrigger(ctx, t, client, *st.Trigger, vars); err != nil {
+				return res, fmt.Errorf("trigger: %w", err)
+			}
+		}
+		if body, err = readFrames(resp.Body, st.Frames, norm, ignore); err != nil {
+			return res, err
+		}
+	case st.Stream:
+		body = ""
+	default:
+		if raw, err = io.ReadAll(resp.Body); err != nil {
+			return res, err
+		}
+		if err := capture(raw, st.Capture, vars); err != nil {
+			return res, err
+		}
+		if st.Binary {
+			body = binaryBody(raw)
+		} else if body, err = norm.Body(raw, ignore); err != nil {
+			return res, err
+		}
+	}
+	_ = resp.Body.Close()
+
+	res = StepResult{Name: st.Name, Status: resp.StatusCode, ContentType: resp.Header.Get("Content-Type"), Body: body, TriggerStatus: triggerRes}
+	for _, h := range st.Headers {
+		if res.Headers == nil {
+			res.Headers = map[string]string{}
+		}
+		res.Headers[h] = strings.Join(resp.Header.Values(h), ", ")
+	}
+	if t.Snapshot != nil && len(st.Snapshot) > 0 {
+		res.Snapshots = map[string]any{}
+		for _, table := range st.Snapshot {
+			rows, err := t.Snapshot(ctx, table)
+			if err != nil {
+				return res, fmt.Errorf("snapshot %s: %w", table, err)
+			}
+			stableOrder(rows)
+			vals := make([]any, len(rows))
+			for i, r := range rows {
+				if vals[i], err = norm.Body(r, nil); err != nil {
+					return res, err
+				}
+			}
+			res.Snapshots[table] = vals
+		}
+	}
+	if res.Files, err = snapshotFiles(ctx, st, t, norm, vars); err != nil {
+		return res, err
+	}
+	return res, nil
+}
+
+// sendTrigger sends a stream step's trigger and returns its status.
+func sendTrigger(ctx context.Context, t Target, client *http.Client, tr Trigger, vars map[string]string) (int, error) {
+	req, err := buildRequest(ctx, t, tr.As, tr.Request, vars)
+	if err != nil {
+		return 0, err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	_, _ = io.Copy(io.Discard, resp.Body)
+	return resp.StatusCode, nil
+}
+
+// binaryBody is what a `binary` step compares.
+func binaryBody(raw []byte) any {
+	sum := sha256.Sum256(raw)
+	return map[string]any{"size": len(raw), "sha256": hex.EncodeToString(sum[:])}
+}
+
+func buildRequest(ctx context.Context, t Target, as string, r Request, vars map[string]string) (*http.Request, error) {
 	var body io.Reader
 	contentType := ""
 	switch {
-	case st.Request.Raw != nil:
-		body = strings.NewReader(substitute(*st.Request.Raw, vars))
+	case r.Raw != nil:
+		body = strings.NewReader(substitute(*r.Raw, vars))
 		contentType = "application/json"
-	case st.Request.JSON != nil:
-		b, err := json.Marshal(st.Request.JSON)
+	case r.JSON != nil:
+		b, err := json.Marshal(r.JSON)
 		if err != nil {
 			return nil, err
 		}
 		body = strings.NewReader(substitute(string(b), vars))
 		contentType = "application/json"
+	case r.Base64 != nil:
+		b, err := base64.StdEncoding.DecodeString(*r.Base64)
+		if err != nil {
+			return nil, err
+		}
+		body = bytes.NewReader(b)
+	case r.Fill != nil:
+		repeat := r.Fill.Size/len(r.Fill.Text) + 1
+		body = strings.NewReader(strings.Repeat(r.Fill.Text, repeat)[:r.Fill.Size])
 	}
-	req, err := http.NewRequestWithContext(ctx, st.Request.Method, strings.TrimRight(t.BaseURL, "/")+substitute(st.Request.Path, vars), body)
+	req, err := http.NewRequestWithContext(ctx, r.Method, strings.TrimRight(t.BaseURL, "/")+substitute(r.Path, vars), body)
 	if err != nil {
 		return nil, err
+	}
+	if r.Chunked {
+		req.ContentLength = -1
+		req.TransferEncoding = []string{"chunked"}
 	}
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
 	}
-	for k, v := range st.Request.Headers {
+	for k, v := range r.Headers {
 		req.Header.Set(k, substitute(v, vars))
 	}
-	if st.As != "" {
+	if as != "" {
 		token := t.Token
 		if token == "" {
-			user, ok := t.Users[st.As]
+			user, ok := t.Users[as]
 			if !ok {
-				return nil, fmt.Errorf("unknown fixture user %q", st.As)
+				return nil, fmt.Errorf("unknown fixture user %q", as)
 			}
 			if token, err = Mint(t.Keys, user); err != nil {
 				return nil, err

@@ -39,8 +39,8 @@ func parseTaskState(raw string) string {
 
 // tasks is TasksController.list.
 func (m *Module) tasks(c *echo.Context) error {
-	out, err := m.activeTasks(requestContext(c), auth.UserID(c), parseTaskState(query(c, "state")),
-		clampedLimit(query(c, "limit"), tasksDefaultLimit, tasksMaxLimit))
+	out, err := m.activeTasks(requestContext(c), auth.UserID(c), parseTaskState(wire.Query(c, "state")),
+		clampedLimit(wire.Query(c, "limit"), tasksDefaultLimit, tasksMaxLimit))
 	if err != nil {
 		return err
 	}

@@ -62,13 +62,13 @@ func (r insightRow) toDTO() InsightDTO {
 // listInsights is InsightsController.list.
 func (m *Module) listInsights(c *echo.Context) error {
 	var section *string
-	if raw := query(c, "section"); isInsightSection(raw) {
+	if raw := wire.Query(c, "section"); isInsightSection(raw) {
 		section = &raw
 	}
 	rows, err := m.q.ListInsights(requestContext(c), db.ListInsightsParams{
 		TenantID: auth.UserID(c),
 		Section:  section,
-		RowLimit: int32(clampedLimit(query(c, "limit"), insightsDefaultLimit, insightsMaxLimit)), //nolint:gosec // clamped to 1..100
+		RowLimit: int32(clampedLimit(wire.Query(c, "limit"), insightsDefaultLimit, insightsMaxLimit)), //nolint:gosec // clamped to 1..100
 	})
 	if err != nil {
 		return err
@@ -105,7 +105,7 @@ func (m *Module) dismissInsight(c *echo.Context) error {
 	ctx, tenant := requestContext(c), auth.UserID(c)
 	raw := c.Param("id")
 	id, err := ids.Parse(raw)
-	if err != nil || len(raw) != 36 {
+	if err != nil {
 		return wire.NewError(http.StatusBadRequest, "invalid insight id")
 	}
 	dismissed, err := m.q.InsightDismissedAt(ctx, db.InsightDismissedAtParams{TenantID: tenant, ID: id})
