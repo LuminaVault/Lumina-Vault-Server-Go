@@ -203,7 +203,7 @@ modules:
   vault:
     wave: 4
     swiftDir: Sources/App/Vault
-    status: swift
+    status: parity
     prefixes: [/v1/vault]
     stringPrefixCatches: [/v1/vaults]
     jobs: []
