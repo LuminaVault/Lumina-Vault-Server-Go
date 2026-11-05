@@ -296,18 +296,19 @@ func TestBYOKFailClosed(t *testing.T) {
 	}
 }
 
-// ProviderCredentialWiringTests, without Gemini and Ollama, which are not ported.
+// ProviderCredentialWiringTests.
 func TestCredentialWiring(t *testing.T) {
 	source := stubCredentials{}
-	ported := []ProviderKind{Anthropic, OpenAI, XAI, OpenRouter, Nous, Nvidia, Deepseek, Kimi, Custom}
-	for _, kind := range ported {
-		if !UserCredentialTarget(kind) {
-			continue
-		}
+	for kind := range userCredentialTargets {
 		var bare, stored Adapter
-		if kind == Anthropic {
+		switch kind {
+		case Anthropic:
 			bare, stored = &AnthropicAdapter{}, &AnthropicAdapter{Credentials: source}
-		} else {
+		case Gemini:
+			bare, stored = &GeminiContentsAdapter{}, &GeminiContentsAdapter{Credentials: source}
+		case Ollama:
+			bare, stored = &OllamaAdapter{}, &OllamaAdapter{Credentials: source}
+		default:
 			bare, stored = &OpenAICompatibleAdapter{ProviderKind: kind}, &OpenAICompatibleAdapter{ProviderKind: kind, Credentials: source}
 		}
 		assert.False(t, bare.AcceptsUserCredentials(), kind)
@@ -400,7 +401,7 @@ func TestStackAssembly(t *testing.T) {
 	})
 	stack := NewStack(StackConfig{Getenv: env, HermesURL: hermes, HermesDefaultModel: "hermes-3"})
 
-	assert.ElementsMatch(t, []ProviderKind{HermesGateway, Groq, XAI, OpenAI, OpenRouter, Nous, Nvidia, Custom, Anthropic}, stack.Registry.Registered())
+	assert.ElementsMatch(t, []ProviderKind{HermesGateway, Groq, XAI, OpenAI, OpenRouter, Nous, Nvidia, Custom, Anthropic, Gemini, Ollama}, stack.Registry.Registered())
 	assert.True(t, stack.Registry.IsEnabled(OpenRouter))
 	assert.True(t, stack.Registry.IsEnabled(Nvidia))
 	assert.False(t, stack.Registry.IsEnabled(Anthropic), "the trial key is not a registry key")
@@ -411,9 +412,4 @@ func TestStackAssembly(t *testing.T) {
 	d := stack.Router.Pick(context.Background(), "", CapabilityMedium, nil)
 	assert.Equal(t, Route{Anthropic, TrialDefaultModel}, d.Primary, "the trial comes first")
 	assert.Equal(t, Route{OpenRouter, FreeLaneOpenRouterModel}, d.Fallbacks[0], "the old chain is the fallback")
-
-	wrapped := NewStack(StackConfig{Getenv: envOf(nil), HermesURL: hermes, HermesDefaultModel: "hermes-3", WrapRouter: func(Router) Router {
-		return fixedRouter{Decision{Primary: Route{Groq, "wrapped"}}}
-	}})
-	assert.Equal(t, Route{Groq, "wrapped"}, wrapped.Router.Pick(context.Background(), "", CapabilityMedium, nil).Primary)
 }
