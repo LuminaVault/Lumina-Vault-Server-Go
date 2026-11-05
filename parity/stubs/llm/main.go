@@ -20,6 +20,9 @@
 //	                            structured-output route expects)
 //	[[stub:tool:NAME:ARGS]]     call tool NAME with the JSON text ARGS
 //	[[stub:error:STATUS]]       answer that HTTP status
+//	[[stub:echo]]               reply with the whole request body as canonical JSON
+//	                            (sorted keys), so a prompt, tool schema or sampling
+//	                            parameter that differs shows up in the response
 //
 // /v1/messages refuses what Haiku 5.5 refuses (platform/infra
 // docs/llm-haiku-trial.md): temperature, top_p, top_k and assistant prefill are
@@ -46,7 +49,7 @@ const (
 	fixedID      = "stub-0001"
 )
 
-var directiveRe = regexp.MustCompile(`(?s)\[\[stub:(reply|tool|error):(.*)\]\]`)
+var directiveRe = regexp.MustCompile(`(?s)\[\[stub:(?:(echo)|(reply|tool|error):(.*))\]\]`)
 
 type message struct {
 	Role    string          `json:"role"`
@@ -83,20 +86,23 @@ type answer struct {
 }
 
 // decide turns a conversation into the stub's answer.
-func decide(messages []message) answer {
+func decide(messages []message, body []byte) answer {
 	for i := len(messages) - 1; i >= 0; i-- {
 		m := directiveRe.FindStringSubmatch(messages[i].text())
 		if m == nil {
 			continue
 		}
-		switch m[1] {
+		if m[1] == "echo" {
+			return answer{text: canonical(body)}
+		}
+		switch m[2] {
 		case "reply":
-			return answer{text: m[2]}
+			return answer{text: m[3]}
 		case "tool":
-			name, args, _ := strings.Cut(m[2], ":")
+			name, args, _ := strings.Cut(m[3], ":")
 			return answer{toolName: name, toolArgs: args}
 		case "error":
-			code, err := strconv.Atoi(m[2])
+			code, err := strconv.Atoi(m[3])
 			if err != nil {
 				code = http.StatusInternalServerError
 			}
@@ -112,6 +118,19 @@ func decide(messages []message) answer {
 	}
 	sum := sha256.Sum256([]byte(last))
 	return answer{text: "stub reply " + hex.EncodeToString(sum[:8])}
+}
+
+// canonical re-encodes a JSON body with sorted keys, so field order isn't a difference.
+func canonical(body []byte) string {
+	var v any
+	if json.Unmarshal(body, &v) != nil {
+		return string(body)
+	}
+	out, err := json.Marshal(v)
+	if err != nil {
+		return string(body)
+	}
+	return string(out)
 }
 
 // pieces splits a reply into stream deltas that join back to it exactly.
@@ -178,11 +197,15 @@ type chatRequest struct {
 func (s *stub) chat(w http.ResponseWriter, r *http.Request) {
 	s.count(r.URL.Path)
 	var req chatRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	body, err := io.ReadAll(r.Body)
+	if err == nil {
+		err = json.Unmarshal(body, &req)
+	}
+	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]any{"message": "bad json", "type": "invalid_request_error"}})
 		return
 	}
-	a := decide(req.Messages)
+	a := decide(req.Messages, body)
 	if a.errorCode != 0 {
 		writeJSON(w, a.errorCode, map[string]any{"error": map[string]any{"message": "stub error", "type": "stub_error"}})
 		return
@@ -262,7 +285,11 @@ func anthropicError(w http.ResponseWriter, status int, kind, msg string) {
 func (s *stub) messages(w http.ResponseWriter, r *http.Request) {
 	s.count(r.URL.Path)
 	var req messagesRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	body, err := io.ReadAll(r.Body)
+	if err == nil {
+		err = json.Unmarshal(body, &req)
+	}
+	if err != nil {
 		anthropicError(w, http.StatusBadRequest, "invalid_request_error", "bad json")
 		return
 	}
@@ -274,7 +301,7 @@ func (s *stub) messages(w http.ResponseWriter, r *http.Request) {
 		anthropicError(w, http.StatusBadRequest, "invalid_request_error", "assistant prefill is not supported")
 		return
 	}
-	a := decide(req.Messages)
+	a := decide(req.Messages, body)
 	if a.errorCode != 0 {
 		anthropicError(w, a.errorCode, "api_error", "stub error")
 		return

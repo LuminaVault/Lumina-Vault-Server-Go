@@ -1,9 +1,9 @@
 package swiftstr
 
 import (
-	"unicode"
 	"sort"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"golang.org/x/text/unicode/norm"

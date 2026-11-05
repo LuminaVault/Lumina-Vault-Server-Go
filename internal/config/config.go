@@ -141,13 +141,12 @@ type Config struct {
 	HermesToolVaultMapEnabled   string `env:"HERMES_TOOL_VAULT_MAP_ENABLED" envDefault:"true"`
 	RetrievalTelemetryEnabled   string `env:"RETRIEVAL_TELEMETRY_ENABLED" envDefault:"true"`
 	MaxConcurrentStreamsPerUser int    `env:"HTTP_MAX_CONCURRENT_STREAMS_PER_USER" envDefault:"3"`
-	// capture.autoFile.enabled. Swift's key encodes as CAPTURE_AUTO_FILE_ENABLED, while its
-	// comment and the runbooks say CAPTURE_AUTOFILE_ENABLED, so Go honours either.
-	CaptureAutoFileEnabled    string `env:"CAPTURE_AUTO_FILE_ENABLED"`
-	CaptureAutoFileEnabledAlt string `env:"CAPTURE_AUTOFILE_ENABLED"`
-	BYOHermesAllowPrivate     string `env:"BYO_HERMES_ALLOW_PRIVATE" envDefault:"false"`
-	BYOHermesRequireHTTPSRaw  string `env:"BYO_HERMES_REQUIRE_HTTPS"`
-	BYOHermesAllowTailnet     string `env:"BYO_HERMES_ALLOW_TAILNET_HTTP" envDefault:"true"`
+	// capture.autoFile.enabled. Swift's key encodes as CAPTURE_AUTO_FILE_ENABLED, whatever
+	// its comment says about CAPTURE_AUTOFILE_ENABLED, which it never reads.
+	CaptureAutoFileEnabled   string `env:"CAPTURE_AUTO_FILE_ENABLED"`
+	BYOHermesAllowPrivate    string `env:"BYO_HERMES_ALLOW_PRIVATE" envDefault:"false"`
+	BYOHermesRequireHTTPSRaw string `env:"BYO_HERMES_REQUIRE_HTTPS"`
+	BYOHermesAllowTailnet    string `env:"BYO_HERMES_ALLOW_TAILNET_HTTP" envDefault:"true"`
 
 	// Memory routes. HybridExecutionEnabled stays a string, read with Swift's
 	// lowercased() == "true"; it mounts /v1/memory/local-sync.

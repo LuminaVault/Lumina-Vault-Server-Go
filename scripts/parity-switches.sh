@@ -16,9 +16,9 @@
 #   vision-cohere   a Cohere key, with the base URL on the feeds stub (POST /v2/embed)
 #   billing-on      BILLING_ENFORCEMENT_ENABLED=true: the /v1/knowledge and /v1/vision paywalls, the capture gate on memory upsert
 #
-# A state for LLM success paths, once Go serves them (group 4F), is one more
-# run_state with SWITCH_HERMES_GATEWAY_URL=http://llmstub:8080 and the stub up.
-# Until then llm_selftest proves the stub on Swift alone.
+#   llm             HERMES_GATEWAY_URL on the LLM stub, and capture.autoFile.enabled on:
+#                   the model-calling routes' success paths (group 4F)
+# llm_selftest proves the stub on Swift alone.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -103,6 +103,12 @@ run_state vision-stub SWITCH_VISION_EMBED_PROVIDER=stub
 run_state vision-cohere SWITCH_VISION_COHERE_API_KEY=parity-cohere-key SWITCH_VISION_COHERE_BASE_URL=http://feeds:8080
 run_state vision-cohere-down SWITCH_VISION_COHERE_API_KEY=parity-cohere-key SWITCH_VISION_COHERE_BASE_URL=http://feeds:9
 run_state billing-on SWITCH_BILLING_ENFORCEMENT_ENABLED=true
+"${COMPOSE[@]}" up -d --build --force-recreate llmstub
+for _ in $(seq 1 60); do
+  curl -fsS "http://localhost:18085/health" >/dev/null 2>&1 && break
+  sleep 1
+done
+run_state llm SWITCH_HERMES_GATEWAY_URL=http://llmstub:8080 SWITCH_CAPTURE_AUTO_FILE_ENABLED=true
 llm_selftest
 "${COMPOSE[@]}" stop swift-switched go-switched >/dev/null 2>&1 || true
 exit "$failed"

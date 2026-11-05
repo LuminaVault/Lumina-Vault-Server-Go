@@ -1,0 +1,16 @@
+module: knowledge-reason
+steps:
+  - {"name": "no token", "request": {"method": "POST", "path": "/v1/knowledge/reason/stream", "json": {"query": "atlas"}}}
+  - {"name": "bad token", "request": {"method": "POST", "path": "/v1/knowledge/reason/stream", "json": {"query": "atlas"}, "headers": {"Authorization": "Bearer not.a.jwt"}}}
+  - {"name": "malformed json", "as": "kr_vie", "request": {"method": "POST", "path": "/v1/knowledge/reason/stream", "raw": "{\"query\":"}}
+  - {"name": "empty body", "as": "kr_vie", "request": {"method": "POST", "path": "/v1/knowledge/reason/stream", "raw": ""}}
+  - {"name": "array body", "as": "kr_vie", "request": {"method": "POST", "path": "/v1/knowledge/reason/stream", "raw": "[]"}}
+  - {"name": "missing field", "as": "kr_vie", "request": {"method": "POST", "path": "/v1/knowledge/reason/stream", "json": {}}}
+  - {"name": "null query", "as": "kr_vie", "request": {"method": "POST", "path": "/v1/knowledge/reason/stream", "raw": "{\"query\":null}"}}
+  - {"name": "bad vault header", "as": "kr_vie", "request": {"method": "POST", "path": "/v1/knowledge/reason/stream", "json": {"query": "atlas"}, "headers": {"X-Vault-ID": "nope"}}}
+  - {"name": "foreign vault", "as": "kr_vie", "request": {"method": "POST", "path": "/v1/knowledge/reason/stream", "json": {"query": "atlas"}, "headers": {"X-Vault-ID": "6C000000-0000-4000-8000-0000000000A1"}}}
+  - {"name": "empty query is a frame after the 200", "as": "kr_vie", "request": {"method": "POST", "path": "/v1/knowledge/reason/stream", "json": {"query": ""}}, "stream": true, "frames": 5, "framesTimeout": "20s"}
+  - {"name": "no searchable words is a frame after the 200", "as": "kr_vie", "request": {"method": "POST", "path": "/v1/knowledge/reason/stream", "json": {"query": "what is the"}}, "stream": true, "frames": 5, "framesTimeout": "20s"}
+  - {"name": "nothing matches", "as": "kr_vie", "request": {"method": "POST", "path": "/v1/knowledge/reason/stream", "json": {"query": "atlas"}}, "stream": true, "frames": 10, "framesTimeout": "20s"}
+  - {"name": "the fallback answer is one token", "as": "kr_two", "request": {"method": "POST", "path": "/v1/knowledge/reason/stream", "json": {"query": "orion"}}, "stream": true, "frames": 10, "framesTimeout": "20s"}
+  - {"name": "with suggestions", "as": "kr_kim", "request": {"method": "POST", "path": "/v1/knowledge/reason/stream", "json": {"query": "atlas beacon launch"}}, "stream": true, "frames": 10, "framesTimeout": "20s"}

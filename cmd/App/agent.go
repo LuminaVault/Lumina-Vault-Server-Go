@@ -104,7 +104,7 @@ func newAgent(ctx context.Context, pool *pgxpool.Pool, cfg config.Config, box *s
 // captureFiling is the note upload's Space suggestion; nil while capture.autoFile.enabled
 // is off, which it is in production. It runs detached: the upload never waits on the model.
 func (a *agent) captureFiling() func(tenant, file uuid.UUID) {
-	if !strings.EqualFold(a.cfg.CaptureAutoFileEnabled, "true") && !strings.EqualFold(a.cfg.CaptureAutoFileEnabledAlt, "true") {
+	if !strings.EqualFold(a.cfg.CaptureAutoFileEnabled, "true") {
 		return nil
 	}
 	filing := &capture.FilingService{

@@ -1,0 +1,7 @@
+# capture.autoFile.enabled is on in this state: an unfiled note gets a Space suggestion.
+module: vault
+steps:
+  - {"name": "a space to suggest", "as": "ma_cit", "request": {"method": "POST", "path": "/v1/spaces", "json": {"name": "Reading", "slug": "reading"}}}
+  - {"name": "an unfiled note", "as": "ma_cit", "request": {"method": "POST", "path": "/v1/vault/files?path=note.md&note=true", "raw": "to read [[stub:reply:{\"space\":\"Reading\"}]]", "headers": {"Content-Type": "text/markdown"}}}
+  - {"name": "the suggestion landed", "as": "ma_cit", "request": {"method": "GET", "path": "/health"}, "waitEmpty": "parity_ma_autofile_pending", "snapshot": ["parity_ma_autofile"]}
+  - {"name": "a none answer", "as": "ma_cit", "request": {"method": "POST", "path": "/v1/vault/files?path=none.md&note=true", "raw": "[[stub:reply:{\"space\":\"none\"}]]", "headers": {"Content-Type": "text/markdown"}}}

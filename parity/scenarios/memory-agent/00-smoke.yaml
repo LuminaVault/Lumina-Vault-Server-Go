@@ -1,0 +1,9 @@
+# No step reaches the model: each stops at its own validation, or only reads.
+module: memory-agent
+smoke: true
+steps:
+  - {"name": "search with an empty query", "as": "alice", "request": {"method": "POST", "path": "/v1/memory/search", "json": {"query": ""}}}
+  - {"name": "query with an empty query", "as": "alice", "request": {"method": "POST", "path": "/v1/query", "json": {"query": ""}}}
+  - {"name": "stream with an empty query", "as": "alice", "request": {"method": "POST", "path": "/v1/query/stream", "json": {"query": ""}}}
+  - {"name": "memo with an empty topic", "as": "alice", "request": {"method": "POST", "path": "/v1/memos", "json": {"topic": ""}}}
+  - {"name": "list memos", "as": "alice", "request": {"method": "GET", "path": "/v1/memos"}}

@@ -1,0 +1,7 @@
+# A fresh user has no files, so this is the empty path: no model call, no latch.
+module: kb-compile
+smoke: true
+steps:
+  - {"name": "nothing to compile", "as": "alice", "request": {"method": "POST", "path": "/v1/memory-compile", "json": {"forceFullRecompile": false}}}
+  - {"name": "missing the required flag", "as": "alice", "request": {"method": "POST", "path": "/v1/memory-compile", "json": {}}}
+  - {"name": "no token", "request": {"method": "POST", "path": "/v1/memory-compile", "json": {"forceFullRecompile": false}}}

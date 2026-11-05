@@ -1,0 +1,21 @@
+# Links stage through the capture pipeline, against the feeds stub.
+module: import
+steps:
+  - {"name": "stage links: dups, blanks, refused hosts, bad urls", "as": "imp_amy", "request": {"method": "POST", "path": "/v1/import", "json": {"sourceType": "", "urls": ["http://feeds:8080/capture/article", " http://feeds:8080/capture/article ", "  ", "http://feeds:8080/capture/plain", "http://localhost/x", "not a url", "ftp://a/"]}}, "capture": {"s1": "$.sessionId"}, "snapshot": ["parity_import_sessions", "parity_import_items", "parity_import_spaces"]}
+  - {"name": "enriched", "as": "imp_amy", "request": {"method": "GET", "path": "/health"}, "waitEmpty": "parity_import_pending", "snapshot": ["parity_import_files", "parity_import_items", "parity_import_memories"], "files": ["imp_amy"], "filesMask": ["\\d{4}-\\d{2}-\\d{2}-\\d{6}", "-[0-9a-f]{8}\\.md"]}
+  - {"name": "status", "as": "imp_amy", "request": {"method": "GET", "path": "/v1/import/{{s1}}"}}
+  - {"name": "another tenant cannot see it", "as": "imp_ben", "request": {"method": "GET", "path": "/v1/import/{{s1}}"}}
+  - {"name": "a url seen before is a skip", "as": "imp_amy", "request": {"method": "POST", "path": "/v1/import", "json": {"sourceType": "links", "urls": ["http://feeds:8080/capture/plain", "http://feeds:8080/capture/empty"]}}, "capture": {"s2": "$.sessionId"}, "snapshot": ["parity_import_sessions", "parity_import_items", "parity_import_spaces"]}
+  - {"name": "enriched again", "as": "imp_amy", "request": {"method": "GET", "path": "/health"}, "waitEmpty": "parity_import_pending"}
+  - {"name": "only blanks", "as": "imp_amy", "request": {"method": "POST", "path": "/v1/import", "json": {"sourceType": "links", "urls": ["  "]}}, "capture": {"s3": "$.sessionId"}}
+  - {"name": "status of a session with no items", "as": "imp_amy", "request": {"method": "GET", "path": "/v1/import/{{s3}}"}}
+  - {"name": "categorize with no items goes to review, no model", "as": "imp_amy", "request": {"method": "POST", "path": "/v1/import/{{s3}}/categorize"}, "snapshot": ["parity_import_sessions"]}
+  - {"name": "categorize with items: the gateway is down", "as": "imp_amy", "request": {"method": "POST", "path": "/v1/import/{{s1}}/categorize"}, "snapshot": ["parity_import_sessions", "parity_import_items"]}
+  - {"name": "approve an empty session", "as": "imp_amy", "request": {"method": "POST", "path": "/v1/import/{{s3}}/approve"}, "snapshot": ["parity_import_sessions"]}
+  - {"name": "approve with bad json is no overrides, and the compile hits the dead gateway", "as": "imp_amy", "request": {"method": "POST", "path": "/v1/import/{{s1}}/approve", "raw": "{\"overrides\":"}, "snapshot": ["parity_import_sessions", "parity_import_items", "parity_import_spaces", "parity_import_files"], "files": ["imp_amy"], "filesMask": ["\\d{4}-\\d{2}-\\d{2}-\\d{6}", "-[0-9a-f]{8}\\.md"]}
+  - {"name": "status after a failed approve", "as": "imp_amy", "request": {"method": "GET", "path": "/v1/import/{{s1}}"}}
+  - {"name": "another tenant cannot approve", "as": "imp_ben", "request": {"method": "POST", "path": "/v1/import/{{s2}}/approve"}}
+  - {"name": "another tenant cannot categorize", "as": "imp_ben", "request": {"method": "POST", "path": "/v1/import/{{s2}}/categorize"}}
+  - {"name": "bookmarks, html with mixed quotes and case", "as": "imp_gus", "request": {"method": "POST", "path": "/v1/import/bookmarks", "raw": "<DT><A HREF=\"http://feeds:8080/capture/entities\" ADD_DATE=\"1\">a</A>\n<a href = 'http://feeds:8080/capture/latin1'>b</a>\n<a href=\"http://feeds:8080/capture/entities\">dup</a><a href=\"/rel\">c</a><a href=\"http://localhost/\">d</a>"}, "capture": {"bm": "$.sessionId"}, "snapshot": ["parity_import_sessions", "parity_import_items", "parity_import_spaces"]}
+  - {"name": "bookmarks enriched", "as": "imp_gus", "request": {"method": "GET", "path": "/health"}, "waitEmpty": "parity_import_pending", "snapshot": ["parity_import_files"], "files": ["imp_gus"], "filesMask": ["\\d{4}-\\d{2}-\\d{2}-\\d{6}", "-[0-9a-f]{8}\\.md"]}
+  - {"name": "bookmarks status", "as": "imp_gus", "request": {"method": "GET", "path": "/v1/import/{{bm}}"}}

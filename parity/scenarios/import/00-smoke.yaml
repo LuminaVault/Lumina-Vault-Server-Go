@@ -1,0 +1,11 @@
+# Validation only, plus a bookmarks file with no links. Nothing is staged, so nothing
+# is fetched and no model is called.
+module: import
+smoke: true
+steps:
+  - {"name": "no urls", "as": "alice", "request": {"method": "POST", "path": "/v1/import", "json": {"sourceType": "bookmarks", "urls": []}}}
+  - {"name": "no files", "as": "alice", "request": {"method": "POST", "path": "/v1/import/files", "json": {"sourceType": "documents", "vaultFileIds": []}}}
+  - {"name": "a file with no links", "as": "alice", "request": {"method": "POST", "path": "/v1/import/bookmarks", "raw": "<a>none</a>"}}
+  - {"name": "no space", "as": "alice", "request": {"method": "POST", "path": "/v1/import/vault-bulk", "json": {"space": " ", "files": []}}}
+  - {"name": "unknown session", "as": "alice", "request": {"method": "GET", "path": "/v1/import/00000000-0000-4000-8000-000000000000"}}
+  - {"name": "bad session id", "as": "alice", "request": {"method": "GET", "path": "/v1/import/nope"}}
