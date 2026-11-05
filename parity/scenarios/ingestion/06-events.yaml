@@ -1,0 +1,62 @@
+# GET /v1/ingestions/{id}/events: frames from Postgres. b5 is terminal and has the
+# seeded events 1 to 7 (parity/seed/ingestion.sql), so each stream ends after its
+# frames. b6 is terminal with none; b7 and b8 are live and get a write mid-stream.
+module: ingestion
+steps:
+  - name: every event a terminal batch holds
+    as: ing_ann
+    request: {method: GET, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000005/events}
+    stream: true
+    frames: 10
+    framesTimeout: 10s
+    headers: [Cache-Control, X-Accel-Buffering]
+  - {name: after in the query, as: ing_ann, request: {method: GET, path: "/v1/ingestions/1A6E3000-0000-4000-8000-000000000005/events?after=2"}, stream: true, frames: 10, framesTimeout: 10s}
+  - {name: Last-Event-ID, as: ing_ann, request: {method: GET, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000005/events, headers: {Last-Event-ID: "4"}}, stream: true, frames: 10, framesTimeout: 10s}
+  - {name: the query wins, as: ing_ann, request: {method: GET, path: "/v1/ingestions/1A6E3000-0000-4000-8000-000000000005/events?after=5", headers: {Last-Event-ID: "1"}}, stream: true, frames: 10, framesTimeout: 10s}
+  - {name: a bad query falls to the header, as: ing_ann, request: {method: GET, path: "/v1/ingestions/1A6E3000-0000-4000-8000-000000000005/events?after=nope", headers: {Last-Event-ID: "5"}}, stream: true, frames: 10, framesTimeout: 10s}
+  - {name: a bad header falls to zero, as: ing_ann, request: {method: GET, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000005/events, headers: {Last-Event-ID: nope}}, stream: true, frames: 10, framesTimeout: 10s}
+  - {name: a literal plus in the query, as: ing_ann, request: {method: GET, path: "/v1/ingestions/1A6E3000-0000-4000-8000-000000000005/events?after=+5"}, stream: true, frames: 10, framesTimeout: 10s}
+  - {name: a negative cursor, as: ing_ann, request: {method: GET, path: "/v1/ingestions/1A6E3000-0000-4000-8000-000000000005/events?after=-9"}, stream: true, frames: 10, framesTimeout: 10s}
+  - {name: past the last event, as: ing_ann, request: {method: GET, path: "/v1/ingestions/1A6E3000-0000-4000-8000-000000000005/events?after=99"}, stream: true, frames: 10, framesTimeout: 10s}
+  - {name: terminal with no events, as: ing_ann, request: {method: GET, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000006/events}, stream: true, frames: 10, framesTimeout: 10s}
+  - {name: a live batch opens, as: ing_ann, request: {method: GET, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000009/events, headers: {Accept: text/event-stream}}, stream: true, headers: [Cache-Control, X-Accel-Buffering]}
+  - name: a live batch sends a chunk's progress
+    as: ing_ann
+    request: {method: GET, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000007/events}
+    stream: true
+    frames: 1
+    framesTimeout: 10s
+    trigger:
+      as: ing_ann
+      request: {method: PUT, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000007/items/1A6E4000-0000-4000-8000-000000000040/chunks/0, raw: abc}
+  - name: resuming after that event sends nothing new
+    as: ing_ann
+    request: {method: GET, path: "/v1/ingestions/1A6E3000-0000-4000-8000-000000000007/events?after=99999"}
+    stream: true
+    frames: 1
+    framesTimeout: 3s
+  - name: complete sends a state change, from the start
+    as: ing_ann
+    request: {method: GET, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000007/events}
+    stream: true
+    frames: 2
+    framesTimeout: 10s
+    trigger:
+      as: ing_ann
+      request: {method: POST, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000007/items/1A6E4000-0000-4000-8000-000000000040/complete}
+  - name: cancelling the only item ends the stream
+    as: ing_ann
+    request: {method: GET, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000008/events}
+    stream: true
+    frames: 1
+    framesTimeout: 10s
+    trigger:
+      as: ing_ann
+      request: {method: DELETE, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000008/items/1A6E4000-0000-4000-8000-000000000041}
+    snapshot: [ingestion_batches, ingestion_events]
+    files: [ing_ann]
+  - {name: a bad id, as: ing_ann, request: {method: GET, path: /v1/ingestions/nope/events}}
+  - {name: an unknown batch, as: ing_ann, request: {method: GET, path: /v1/ingestions/00000000-0000-4000-8000-000000000000/events}}
+  - {name: another tenant's batch, as: bob, request: {method: GET, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000005/events}}
+  - {name: bad id beats a bad vault header, as: ing_ann, request: {method: GET, path: /v1/ingestions/nope/events, headers: {X-Vault-ID: nope}}}
+  - {name: a bad vault header, as: ing_ann, request: {method: GET, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000005/events, headers: {X-Vault-ID: nope}}}

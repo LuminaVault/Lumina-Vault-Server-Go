@@ -152,6 +152,23 @@ func (s *Service) NotifyAchievement(ctx context.Context, tenant uuid.UUID, _ /* 
 	})
 }
 
+// NotifyIngestion is the push for an item reaching a final state. The Swift worker
+// still sends these (MultimodalIngestionService.notifyTerminalFailure); it moves
+// here with the worker.
+func (s *Service) NotifyIngestion(ctx context.Context, tenant, batchID, itemID uuid.UUID, completed bool, fileName *string) error {
+	title, body, state := "Capture needs attention", "Open LuminaVault to review the ingestion status.", "failed"
+	if completed {
+		title, body, state = "Capture ready", "Hermes finished processing and linked the new memory.", "completed"
+	}
+	return s.Notify(ctx, tenant, Message{
+		Title:    title,
+		Subtitle: fileName,
+		Body:     body,
+		Category: CategoryIngestion,
+		Payload:  map[string]string{"batchID": ids.Upper(batchID), "itemID": ids.Upper(itemID), "state": state},
+	})
+}
+
 // Notify pushes to every device token of tenant, each under its own app's topic.
 // It returns an error only for the opt-out and token lookups: a failed device is
 // logged and the rest still get theirs. A dead token's row is deleted.

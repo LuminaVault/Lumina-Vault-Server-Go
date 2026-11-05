@@ -148,7 +148,7 @@ modules:
   ingestion:
     wave: 4
     swiftDir: Sources/App/Ingestion
-    status: swift
+    status: parity
     prefixes: [/v1/ingestion-sources, /v1/ingestions]
     jobs: []
   kb:
@@ -181,7 +181,7 @@ modules:
   memory:
     wave: 4
     swiftDir: Sources/App/Memory
-    status: swift
+    status: parity
     prefixes: [/v1/me/suggestions, /v1/memory]
     stringPrefixCatches: [/v1/memory-compile, /v1/memory-compile/pending]
     heldPaths:

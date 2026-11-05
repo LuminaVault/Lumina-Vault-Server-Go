@@ -13,6 +13,7 @@ import (
 	"lumina/internal/chunkindex"
 	"lumina/internal/config"
 	"lumina/internal/db"
+	"lumina/internal/diskguard"
 	"lumina/internal/embedding"
 	"lumina/internal/entitlement"
 	"lumina/internal/hermesresolve"
@@ -28,6 +29,7 @@ import (
 	"lumina/internal/modules/dashboard"
 	"lumina/internal/modules/devices"
 	"lumina/internal/modules/health"
+	"lumina/internal/modules/ingestion"
 	"lumina/internal/modules/kanban"
 	"lumina/internal/modules/kb"
 	"lumina/internal/modules/knowledge"
@@ -202,6 +204,9 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 			}, slog.Default().With("module", "teams"))),
 			meModule,
 			dashboard.New(pool, identify),
+			ingestion.New(pool, identify, limits, paths,
+				diskguard.New(cfg.VaultRootPath, cfg.StorageMinFreeBytes, cfg.StorageMinFreeRatio, diskguard.Options{}),
+				ingestion.QuotaFromConfig(cfg)),
 		}
 		// Wave 3: account, onboarding, health. Health ingest sits behind the
 		// billing gate; the BYO-key exemption needs the SecretBox (nil without

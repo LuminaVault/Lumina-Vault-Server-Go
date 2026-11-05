@@ -12,6 +12,7 @@
 package swiftstr
 
 import (
+	"fmt"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -195,4 +196,33 @@ func isExtPict(r rune) bool {
 		return (r < 0x1F1E6 || r > 0x1F1FF) && (r < 0x1F3FB || r > 0x1F3FF)
 	}
 	return false
+}
+
+// EncodeInvalidURLCharacters mirrors URL(string:) in swift-foundation, which
+// percent-encodes characters that are not valid in a URL instead of failing
+// (encodingInvalidCharacters: true). Parity showed it: a feed_urls piece with an
+// inner "\r\n" or a non-ASCII path is kept. Bytes outside RFC 3986 and a "%" not
+// starting an escape are encoded; the rest is left for url.Parse.
+func EncodeInvalidURLCharacters(s string) string {
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c == '%' && i+2 < len(s) && isHex(s[i+1]) && isHex(s[i+2]):
+			b.WriteByte(c)
+		case isUnreserved(c) || strings.IndexByte(":/?#[]@!$&'()*+,;=", c) >= 0:
+			b.WriteByte(c)
+		default:
+			fmt.Fprintf(&b, "%%%02X", c)
+		}
+	}
+	return b.String()
+}
+
+func isUnreserved(c byte) bool {
+	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-' || c == '.' || c == '_' || c == '~'
+}
+
+func isHex(c byte) bool {
+	return c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F'
 }

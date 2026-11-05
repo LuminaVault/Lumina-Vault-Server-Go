@@ -1,0 +1,32 @@
+# Swift "shared vault ingestion uses requested vault partition": the batch, the
+# file and the tree belong to the vault named by X-Vault-ID.
+module: ingestion
+steps:
+  - {name: viewer may read, as: ing_vic, request: {method: GET, path: /v1/ingestions, headers: {X-Vault-ID: 1A6E2100-0000-4000-8000-000000000001}}}
+  - {name: viewer sees the batch, as: ing_vic, request: {method: GET, path: /v1/ingestions/1A6E3000-0000-4000-8000-0000000000C1, headers: {X-Vault-ID: 1A6E2100-0000-4000-8000-000000000001}}}
+  - {name: viewer cannot create, as: ing_vic, request: {method: POST, path: /v1/ingestions, json: {items: [{kind: url, url: "https://example.test"}]}, headers: {X-Vault-ID: 1A6E2100-0000-4000-8000-000000000001}}}
+  - {name: viewer write beats a bad body, as: ing_vic, request: {method: POST, path: /v1/ingestions, raw: "{", headers: {X-Vault-ID: 1A6E2100-0000-4000-8000-000000000001}}}
+  - {name: viewer cannot upload, as: ing_vic, request: {method: PUT, path: /v1/ingestions/1A6E3000-0000-4000-8000-0000000000C1/items/1A6E4000-0000-4000-8000-0000000000C1/chunks/0, raw: team, headers: {X-Vault-ID: 1A6E2100-0000-4000-8000-000000000001}}}
+  - {name: viewer cannot complete, as: ing_vic, request: {method: POST, path: /v1/ingestions/1A6E3000-0000-4000-8000-0000000000C1/items/1A6E4000-0000-4000-8000-0000000000C1/complete, headers: {X-Vault-ID: 1A6E2100-0000-4000-8000-000000000001}}}
+  - {name: viewer cannot retry, as: ing_vic, request: {method: POST, path: /v1/ingestions/1A6E3000-0000-4000-8000-0000000000C1/items/1A6E4000-0000-4000-8000-0000000000C1/retry, headers: {X-Vault-ID: 1A6E2100-0000-4000-8000-000000000001}}}
+  - {name: viewer cannot cancel, as: ing_vic, request: {method: DELETE, path: /v1/ingestions/1A6E3000-0000-4000-8000-0000000000C1/items/1A6E4000-0000-4000-8000-0000000000C1, headers: {X-Vault-ID: 1A6E2100-0000-4000-8000-000000000001}}}
+  - {name: an outsider has no seat, as: bob, request: {method: GET, path: /v1/ingestions, headers: {X-Vault-ID: 1A6E2100-0000-4000-8000-000000000001}}}
+  - {name: a bad vault header, as: ing_oli, request: {method: GET, path: /v1/ingestions, headers: {X-Vault-ID: nope}}}
+  - name: a team vault has no user row, so the trial ceiling applies
+    as: ing_oli
+    request: {method: POST, path: /v1/ingestions, json: {items: [{kind: url, url: "https://example.test", sizeBytes: 5368709120}, {kind: url, url: "https://example.test", sizeBytes: 1}]}, headers: {X-Vault-ID: 1A6E2100-0000-4000-8000-000000000001}}
+  - name: owner creates in the vault
+    as: ing_oli
+    request: {method: POST, path: /v1/ingestions, json: {items: [{kind: url, url: "https://example.test/team"}]}, headers: {X-Vault-ID: 1A6E2100-0000-4000-8000-000000000001}}
+    snapshot: [ingestion_batches, ingestion_items]
+  - name: owner uploads in the vault
+    as: ing_oli
+    request: {method: PUT, path: /v1/ingestions/1A6E3000-0000-4000-8000-0000000000C1/items/1A6E4000-0000-4000-8000-0000000000C1/chunks/0, raw: team file, headers: {X-Vault-ID: 1A6E2100-0000-4000-8000-000000000001}}
+    files: [1A6E2100-0000-4000-8000-000000000001, ing_oli]
+  - name: owner completes in the vault
+    as: ing_oli
+    request: {method: POST, path: /v1/ingestions/1A6E3000-0000-4000-8000-0000000000C1/items/1A6E4000-0000-4000-8000-0000000000C1/complete, headers: {X-Vault-ID: 1A6E2100-0000-4000-8000-000000000001}}
+    snapshot: [ingestion_items, ingestion_events, vault_files]
+    files: [1A6E2100-0000-4000-8000-000000000001, ing_oli]
+  - {name: the personal vault doesn't have it, as: ing_oli, request: {method: GET, path: /v1/ingestions/1A6E3000-0000-4000-8000-0000000000C1}}
+  - {name: the personal list doesn't either, as: ing_oli, request: {method: GET, path: /v1/ingestions}}

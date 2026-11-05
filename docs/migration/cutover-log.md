@@ -1009,3 +1009,105 @@ Beyond the pilot gate (D-wave2-early):
   `parity/scenarios/kb` has 2 files and 11 steps, 1 with a snapshot, plus 2 steps in
   `billing-on`. `parity`, `lint`, `test` and `vuln` pass (https://github.com/LuminaVault/Lumina-Vault-Server-Go/actions/runs/41947259214/job/126982428061).
 - Go tests: `internal/modules/kb` has 6 tests on Postgres, including spec conformance.
+
+## ingestion (wave 4)
+
+### G0 entry: met 2026-11-05
+
+- Routes: 10, under `/v1/ingestions` and `/v1/ingestion-sources`.
+- Prefixes: disjoint (`internal/manifest`).
+- Coupling: the routes write `ingestion_batches`, `ingestion_items`, `ingestion_events`,
+  `vault_files` and the volume. Capability checks, LLM calls, link capture and push all stay in
+  the worker.
+- Jobs: none move. `MultimodalIngestionWorker` stays in Swift (`SKIP LOCKED` plus a lease, on the
+  same volume). Go's chunk and assembled files are mode 0644 and their directories 0755, the same as
+  Swift's (`files` steps).
+- Swift tests: 14 ported.
+  - 5 of 6 `MultimodalIngestionAPIIntegrationTests`, the ingestion route of `DiskSpaceGuardTests`,
+    the ingestion payload of `APNSNotificationServiceTests`, and 7 `StorageQuotaServiceTests`.
+  - Not ported, because they test the worker: "expired worker lease is recovered",
+    `MultimodalIngestionCapabilityTests` (3) and `HermesIngestionTransportTests` (2).
+- `INGESTION_PUBLIC_BASE_URL`: Go doesn't read it. Only the worker builds source URLs from it. It
+  keeps pointing at the API host, so Hermes reaches Go through the ingress after the flip.
+
+### G1 parity: met 2026-11-05
+
+- CI run 41971580058 on head eabd4e3: self-test (Swift vs Swift) and Swift vs Go give
+  **108 scenarios, 0 differences** (whole suite). `parity/scenarios/ingestion` has 9 files and 263
+  steps: 41 with snapshots, 25 with `files`, 14 with `frames`. `parity`, `lint`, `test` and `vuln`
+  pass (https://github.com/LuminaVault/Lumina-Vault-Server-Go/actions/runs/41971580058/job/127060848060).
+- Swift's storage quota never counts stored bytes. `usedBytes` decodes `COALESCE(SUM(size_bytes), 0)`,
+  a numeric, as `Int64`. Under `try?` that reads as 0, so only one batch's declared bytes meet the
+  ceiling, and the 413 always says "0 B of ...". Parity shows it: a free tenant holding 1073741000 B
+  and a pro tenant holding 99 GiB were both allowed past their ceilings. Go keeps this
+  (`usedBytes` in `internal/modules/ingestion/quota.go`). Fixing it is an owner decision.
+- The source route reads `vault_files.path` without `SanitizePath`, as Swift does.
+- `DiskSpaceMonitorService`'s periodic `Sample` isn't wired in Go. The guard still checks the disk
+  on each request.
+
+## memory (wave 4)
+
+### G0 entry: met 2026-11-05
+
+- Routes: 13: `GET /v1/me/suggestions`, `POST /v1/memory/upsert`, `GET /v1/memory`,
+  `/graph`, `/facets`, `/local-sync`, and on `/v1/memory/{id}`: `GET`, `PATCH`, `DELETE`,
+  `GET /lineage`, `/related`, `/provenance`, `POST /review`. `/v1/memory/search` stays on
+  Swift (`heldPaths`, `memory-agent`), and `/v1/memory-compile` is its own module.
+- Coupling: writes `memories`, `memory_contributions`, `memory_chunks` (content patch),
+  `memory_sync_tombstones` and `memory_index_jobs` (delete), `kb_compile_reject_list`
+  (reject), `analytics_events`, and `vault_files` plus the file itself when a note-backed
+  memory moves. No PostHog captures in these routes.
+- Paid calls: upsert and a content patch call `internal/embedding`, so they spend on
+  staging. The `smoke: true` scenario (`08-smoke.yaml`) reaches neither path.
+- Jobs: the index, heal, pruning and layout workers stay in Swift. `HitCountQueue.Run` is
+  not wired: `related` skips hit counts and `/search` is held. The achievements sink is
+  the one process singleton in `cmd/App`, with `InvalidateToday` as its `OnUnlock`.
+- Paths: the move's destination goes through `vaultfiles.MoveDestination`, so
+  `SanitizePath` applies. Its source is `vault_files.path` from the database, which only
+  `ResolveInside` checks.
+- Swift tests: 49 ported. `Memory/MemoryCRUDTests` 9, `Geo` 3, `GraphController` 3,
+  `GraphService` 8, `Lineage` 4, `Related` 1, `SavedID` 4, `SpaceMove` 3, `Correction` 3,
+  `Kind` 2, `LocalMemorySyncCursor` 3, `Suggestions` 2, the health filter 1, and
+  `EmbeddingDegradation` 2 plus one more `Related` already in `internal/memorystore`. Left
+  out: `a note upload returns its memory id` and `moving a note into a Space folder` (both
+  drive `/v1/vault/files`, group 4A); `MemoryScoring`, `MemoryPruningService`,
+  `MemoryKeepGate`, `GraphLayoutService` (workers, per the plan).
+- Quirks kept:
+  - `/v1/me/suggestions` needs no token and spends the `meTodayByUser` bucket.
+  - Upsert never dials Hermes, but a BYO Hermes that fails resolution answers 502 before
+    the body is read.
+  - `/v1/memory/graph` skips `ModelDisclosurePolicy`, so a managed tenant sees origin
+    models there and nowhere else.
+  - A patch with `spaceId` and empty `content` moves the memory, then answers 400.
+  - Review bodies are read to 4096 bytes, and bytes 0x85 and 0xA0 count as blank.
+  - A local-sync cursor can land a microsecond before its row, so that row repeats on the
+    next page.
+  - A path ending on a literal (`DELETE /v1/memory/graph`, `GET /v1/memory/upsert`) is a
+    404 with no body, while `/v1/memory/graph/lineage` reaches `:id` and answers 400. With
+    `HYBRID_EXECUTION_ENABLED=false`, `/v1/memory/local-sync` reaches `:id` too.
+  - The capture gate's own-Hermes exemption can't decide this route: `capture` reaches
+    everyone but archived, and archived is excluded from BYO.
+- Differences from Swift, both deliberate:
+  - Space hubs on the graph are sorted by id. Swift maps a `Dictionary`, so its order
+    changes per process, and the fixture has one hub per tenant. A Go test covers several.
+  - `?offset=` near `Int.max` traps Swift's `offset + limit`. Go answers normally. Not in
+    parity, since it would kill the Swift server.
+- Spec: wrong for upsert's response (names `MemoryDTO`), `MemoryLineageResponse` (another
+  shape), and thin on `MemoryDTO` and `MemoryUpsertRequest` (no geo or actor fields). Those
+  DTOs are hand-written from LuminaVaultShared 5.32.0.
+- Harness: `stableOrder` also orders by `occurred_at` and `deleted_at`, and snapshots
+  normalize UUIDs inside text, for `analytics_events` and `memory_sync_tombstones`.
+
+### G1 parity: met 2026-11-05
+
+- CI run 41973749983 on head 38ea86c: self-test (Swift vs Swift) and Swift vs Go give
+  **125 scenarios, 0 differences** (whole suite), and every switch state has 0 differences,
+  including the new `hybrid-off` and `billing-on/memory`. `parity/scenarios/memory` has 10
+  files and 625 steps, 134 with snapshots, with `memory_chunks` chunk IDs compared after
+  content patches. `parity`, `lint`, `test` and `vuln` pass
+  (https://github.com/LuminaVault/Lumina-Vault-Server-Go/actions/runs/41973749983).
+- Not observable in parity: the file move with bytes on disk, because no route in Go can
+  put them there before 4A. The fixture's note has a row only, and a Go test covers the
+  real move.
+- Go tests: `internal/modules/memory` has 70 tests, on Postgres where they need it,
+  including spec conformance. `internal/memorystore/provenance_test.go` has 2.
