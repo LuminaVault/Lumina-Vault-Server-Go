@@ -60,7 +60,11 @@ CREATE VIEW parity_import_chunks AS
 SELECT tenant_id, memory_id, source_path, created_at
 FROM memory_chunks WHERE tenant_id IN (SELECT id FROM users WHERE username LIKE 'imp\_%');
 
+-- What enrichment still owes. A file over 100 bytes has content, so it gets a memory, and
+-- Swift writes that after the row's status.
 CREATE VIEW parity_import_pending AS
 SELECT f.id FROM vault_files f
 WHERE f.tenant_id IN (SELECT id FROM users WHERE username LIKE 'imp\_%')
-  AND f.metadata->>'enrichmentStatus' = 'pending';
+  AND (f.metadata->>'enrichmentStatus' = 'pending'
+       OR (f.metadata->>'enrichmentStatus' = 'done' AND f.size_bytes > 100
+           AND NOT EXISTS (SELECT 1 FROM memories m WHERE m.source_vault_file_id = f.id)));

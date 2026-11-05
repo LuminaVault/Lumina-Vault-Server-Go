@@ -76,5 +76,5 @@ FROM vault_files WHERE tenant_id IN (SELECT id FROM users WHERE username = 'ma_c
 
 CREATE VIEW parity_ma_autofile_pending AS
 SELECT id FROM vault_files
-WHERE tenant_id IN (SELECT id FROM users WHERE username = 'ma_cit') AND path = 'note.md'
+WHERE tenant_id IN (SELECT id FROM users WHERE username = 'ma_cit') AND path = 'inbox/note.md'
   AND metadata->>'suggestedSpaceID' IS NULL;

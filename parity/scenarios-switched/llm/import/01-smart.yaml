@@ -1,5 +1,6 @@
 # Categorize's stub answer can't name item ids it hasn't seen, so a model mapping is
-# covered in Go's tests; here everything falls back to the inbox.
+# covered in Go's tests; here everything falls back to the inbox. The compile's wiki pages
+# embed the time, so the file contents are normalized.
 module: import
 steps:
   - {"name": "stage a file", "as": "imp_eve", "request": {"method": "POST", "path": "/v1/import/files", "json": {"sourceType": "documents", "vaultFileIds": ["1A300000-0000-4000-8000-000000000004"]}}, "capture": {"e": "$.sessionId"}}
@@ -7,7 +8,7 @@ steps:
   - {"name": "stage a link", "as": "imp_gus", "request": {"method": "POST", "path": "/v1/import", "json": {"sourceType": "links", "urls": ["http://feeds:8080/capture/plain"]}}, "capture": {"l": "$.sessionId"}}
   - {"name": "enriched", "as": "imp_gus", "request": {"method": "GET", "path": "/health"}, "waitEmpty": "parity_import_pending"}
   - {"name": "categorize a link", "as": "imp_gus", "request": {"method": "POST", "path": "/v1/import/{{l}}/categorize"}, "snapshot": ["parity_import_items"]}
-  - {"name": "approve: filed and compiled", "as": "imp_gus", "request": {"method": "POST", "path": "/v1/import/{{l}}/approve"}, "snapshot": ["parity_import_sessions", "parity_import_items", "parity_import_files", "parity_import_memories"], "files": ["imp_gus"], "filesMask": ["\\d{4}-\\d{2}-\\d{2}-\\d{6}", "-[0-9a-f]{8}\\.md"]}
+  - {"name": "approve: filed and compiled", "as": "imp_gus", "request": {"method": "POST", "path": "/v1/import/{{l}}/approve"}, "snapshot": ["parity_import_sessions", "parity_import_items", "parity_import_files", "parity_import_memories"], "files": ["imp_gus"], "filesNormalizeContent": true, "filesMask": ["\\d{4}-\\d{2}-\\d{2}-\\d{6}", "-[0-9a-f]{8}\\.md"]}
   - {"name": "status", "as": "imp_gus", "request": {"method": "GET", "path": "/v1/import/{{l}}"}}
   - {"name": "upstream down leaves it compiling", "as": "imp_fay", "request": {"method": "POST", "path": "/v1/import", "json": {"sourceType": "links", "urls": ["http://feeds:8080/capture/empty"]}}, "capture": {"d": "$.sessionId"}}
   - {"name": "enriched again", "as": "imp_fay", "request": {"method": "GET", "path": "/health"}, "waitEmpty": "parity_import_pending"}
