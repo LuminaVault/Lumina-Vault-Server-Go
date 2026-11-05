@@ -52,8 +52,11 @@ var allowedExtensions = map[string][]string{
 // all letters, marks, numbers, ".", "_" or "-", with an allowed extension. The
 // checks run in Swift's order, because each has its own message on the wire.
 //
-// It sees the path as the router hands it over. Percent-decoding happens
-// before this call, so a route must not decode twice.
+// It sees the path as Swift's handler does, so a route must not decode it. A
+// query parameter arrives decoded (wire.QueryValue). A catch-all path parameter
+// arrives raw, because Hummingbird's router never decodes (wire.RawPath), and
+// "%" is an illegal character here: "inbox/caf%C3%A9.md" is a 400 even though
+// upload can store "inbox/café.md".
 func SanitizePath(raw string) (string, error) {
 	trimmed := swiftstr.TrimWhitespacesAndNewlines(raw)
 	if trimmed == "" || swiftstr.Count(trimmed) > maxPathCharacters {

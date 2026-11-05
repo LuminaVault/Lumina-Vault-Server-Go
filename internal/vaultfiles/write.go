@@ -24,7 +24,7 @@ const filePerm = 0o666
 // remove-and-move of ReplaceFile.
 func WriteAtomic(path string, data []byte) error {
 	aux := filepath.Join(filepath.Dir(path), "."+filepath.Base(path)+".aux-"+shortID())
-	f, err := os.OpenFile(aux, os.O_WRONLY|os.O_CREATE|os.O_EXCL, filePerm)
+	f, err := os.OpenFile(aux, os.O_WRONLY|os.O_CREATE|os.O_EXCL, filePerm) //nolint:gosec // aux sits beside a path from ResolveInside
 	if err != nil {
 		return err
 	}
@@ -68,6 +68,10 @@ func ReplaceFile(target string, data []byte) error {
 // CreateParent is `createDirectory(at: path.deletingLastPathComponent(),
 // withIntermediateDirectories: true)`.
 func CreateParent(path string) error { return createParent(path) }
+
+// Exists is FileManager.fileExists(atPath:): it follows symlinks, so a dangling
+// symlink does not exist.
+func Exists(path string) bool { return fileExists(path) }
 
 func writeAndSync(f *os.File, data []byte) error {
 	_, err := f.Write(data)

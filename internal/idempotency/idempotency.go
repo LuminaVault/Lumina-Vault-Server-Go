@@ -111,21 +111,21 @@ func (m *middleware) handle(c *echo.Context, next echo.HandlerFunc) error {
 	}
 	ctx := r.Context()
 
-	original := r.Body
-	body, err := readUpTo(original, m.opts.MaxRequestBody)
+	body, err := readUpTo(r.Body, m.opts.MaxRequestBody)
 	if err != nil {
-		// Too large or unreadable: skip idempotency. The retry re-executes, and
-		// the handler still gets every byte, whatever was read so far included.
-		// Swift hands the handler a stream it has already drained (see the PR).
+		// Too large or unreadable: skip idempotency, so a retry re-executes.
+		//
+		// The handler gets an empty body, as in Swift. The middleware passes on
+		// the original request, whose stream is unicast: a second iterator in a
+		// release build (the assert in NIOAsyncChannelRequestBody.makeAsyncIterator
+		// is compiled out) reports the end at once, so a vault upload answers 400
+		// "empty body" and not 413. Parity covers it (vault/idempotency.yaml).
 		slog.DebugContext(ctx, "idempotency: body too large, bypassing", "key", key.String())
-		r.Body = struct {
-			io.Reader
-			io.Closer
-		}{io.MultiReader(bytes.NewReader(body), original), original}
+		r.Body = http.NoBody
 		return next(c)
 	}
 
-	requestHash := hashRequest(body, r.Method, rawPath(r))
+	requestHash := hashRequest(body, r.Method, wire.RawPath(r))
 
 	existing, err := m.lookup(ctx, tenant, key)
 	if err != nil {
@@ -179,18 +179,17 @@ func parseKey(values []string) (uuid.UUID, bool) {
 
 var errTooLarge = errors.New("idempotency: request body too large")
 
-// readUpTo reads at most limit bytes. On any failure it returns what it read
-// with the error, so the caller can still hand the handler the whole body.
+// readUpTo reads at most limit+1 bytes, and fails when there are more than limit.
 func readUpTo(body io.Reader, limit int64) ([]byte, error) {
 	if body == nil {
 		return nil, nil
 	}
 	b, err := io.ReadAll(io.LimitReader(body, limit+1))
 	if err != nil {
-		return b, err
+		return nil, err
 	}
 	if int64(len(b)) > limit {
-		return b, errTooLarge
+		return nil, errTooLarge
 	}
 	return b, nil
 }
@@ -203,16 +202,6 @@ func hashRequest(body []byte, method, path string) string {
 	h.Write([]byte(method))
 	h.Write([]byte(path))
 	return hex.EncodeToString(h.Sum(nil))
-}
-
-// rawPath is Hummingbird's request.uri.path: the path as sent, without the
-// query and with percent escapes intact.
-func rawPath(r *http.Request) string {
-	if r.RequestURI != "" {
-		path, _, _ := strings.Cut(r.RequestURI, "?")
-		return path
-	}
-	return r.URL.EscapedPath()
 }
 
 func (m *middleware) lookup(ctx context.Context, tenant, key uuid.UUID) (*stored, error) {
