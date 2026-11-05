@@ -1,6 +1,7 @@
-// Package sse serves polling event streams: the Go port of Swift's
-// IngestionSSEResponse (Sources/App/HTTP/IngestionSSEResponse.swift). The events
-// live in Postgres, so the stream works whichever server wrote them.
+// Package sse serves event streams. This file holds the polling stream, the Go
+// port of Swift's IngestionSSEResponse (Sources/App/HTTP/IngestionSSEResponse.swift):
+// the events live in Postgres, so the stream works whichever server wrote them.
+// push.go holds the writer for events a request produces as it runs.
 //
 // The loop, in Swift's order: fetch events after the cursor and write them; stop
 // if the source is terminal; write a heartbeat if there were no events; sleep.
@@ -9,10 +10,9 @@
 package sse
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"log/slog"
+	"lumina/internal/wire"
 	"net/http"
 	"strconv"
 	"strings"
@@ -68,15 +68,9 @@ func Ingestion() Options {
 // cleanly, because in Swift a throw from the body writer does the same. A client
 // can then tell "the server failed" from "the stream is finished".
 func Serve(c *echo.Context, src Source, after int64, opts Options) error {
-	w := c.Response()
-	h := w.Header()
-	h.Set("Content-Type", "text/event-stream")
-	h.Set("Cache-Control", "no-cache")
-	h.Set("X-Accel-Buffering", "no")
-	w.WriteHeader(http.StatusOK)
-	rc := http.NewResponseController(w)
-	if err := rc.Flush(); err != nil {
-		return nil //nolint:nilerr // headers are sent; nothing left to report
+	w, rc, ok := start(c)
+	if !ok {
+		return nil
 	}
 
 	ctx := c.Request().Context()
@@ -115,6 +109,19 @@ func Serve(c *echo.Context, src Source, after int64, opts Options) error {
 	return nil
 }
 
+// start commits the 200 and the three stream headers. False means the client has
+// gone already; headers are sent, so there is nothing left to report.
+func start(c *echo.Context) (http.ResponseWriter, *http.ResponseController, bool) {
+	w := c.Response()
+	h := w.Header()
+	h.Set("Content-Type", "text/event-stream")
+	h.Set("Cache-Control", "no-cache")
+	h.Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+	rc := http.NewResponseController(w)
+	return w, rc, rc.Flush() == nil
+}
+
 // abort ends the handler without completing the response. A client that left
 // already is not a failure worth logging.
 func abort(ctx context.Context, err error) {
@@ -133,13 +140,10 @@ func write(w http.ResponseWriter, rc *http.ResponseController, b []byte) bool {
 
 // Frame is "id: <ID>\nevent: <name>\ndata: <json>\n\n".
 func Frame(ev Event, eventName string) ([]byte, error) {
-	var buf bytes.Buffer
-	enc := json.NewEncoder(&buf)
-	enc.SetEscapeHTML(false)
-	if err := enc.Encode(ev.Data); err != nil {
+	data, err := wire.MarshalFoundation(ev.Data)
+	if err != nil {
 		return nil, err
 	}
-	data := bytes.ReplaceAll(bytes.TrimSuffix(buf.Bytes(), []byte("\n")), []byte("/"), []byte(`\/`))
 	out := make([]byte, 0, len(data)+len(eventName)+48)
 	out = append(out, "id: "...)
 	out = strconv.AppendInt(out, ev.ID, 10)

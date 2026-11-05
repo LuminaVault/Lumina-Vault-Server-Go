@@ -9,7 +9,9 @@ package entitlement
 
 import (
 	"context"
+	"log/slog"
 	"lumina/internal/auth"
+	"lumina/internal/ids"
 	"lumina/internal/wire"
 	"net/http"
 	"strings"
@@ -182,4 +184,36 @@ func meetsPlatformFundedFloor(tier, override string) bool {
 // enabled only when the value lowercases to exactly "true".
 func EnforcementEnabled(raw string) bool {
 	return strings.ToLower(raw) == "true"
+}
+
+// PremiumGuardMiddleware is PremiumGuardMiddleware.swift, on the /v1/grok routes:
+// pro and ultimate pass, everyone else gets a 402 whose requiresXaiConnect sends iOS
+// back to the Linked Accounts pane. Mount it after auth.
+//
+// It reads the raw columns on purpose, not EffectiveTier: any override other than
+// "none" replaces the tier, and an unknown tier goes into the body as it is.
+func PremiumGuardMiddleware(pool *pgxpool.Pool) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(ctx *echo.Context) error {
+			tenant, ok := auth.Identity(ctx)
+			if !ok {
+				return wire.ErrUnauthenticated
+			}
+			var tier, override string
+			if err := pool.QueryRow(ctx.Request().Context(), `SELECT tier, tier_override FROM users WHERE id = $1`, tenant).Scan(&tier, &override); err != nil {
+				return err
+			}
+			effective := tier
+			if override != "none" {
+				effective = override
+			}
+			if effective == "pro" || effective == "ultimate" {
+				return next(ctx)
+			}
+			slog.InfoContext(ctx.Request().Context(), "premium guard rejected request",
+				"userID", ids.Upper(tenant), "tier", effective, "path", ctx.Request().URL.Path)
+			body := `{"error":"premium_required","tier":"` + effective + `","requiresXaiConnect":true}`
+			return ctx.Blob(http.StatusPaymentRequired, echo.MIMEApplicationJSON, []byte(body))
+		}
+	}
 }
