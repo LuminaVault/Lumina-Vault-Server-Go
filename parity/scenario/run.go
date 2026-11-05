@@ -117,7 +117,8 @@ func runStep(ctx context.Context, sc Scenario, st Step, t Target, client *http.C
 	)
 	switch {
 	case st.Frames > 0:
-		if st.Trigger != nil {
+		// Smoke checks statuses on a deployed server, so it doesn't need the write.
+		if st.Trigger != nil && t.Token == "" {
 			if triggerRes, err = sendTrigger(ctx, t, client, *st.Trigger, vars); err != nil {
 				return res, fmt.Errorf("trigger: %w", err)
 			}

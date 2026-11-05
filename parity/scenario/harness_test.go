@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -420,6 +421,25 @@ func TestFilesAreCompared(t *testing.T) {
 		_, err = Run(context.Background(), bad, tg)
 		require.ErrorContains(t, err, "neither a fixture user nor a UUID")
 	})
+}
+
+func TestTriggerIsNotSentInSmoke(t *testing.T) {
+	var writes atomic.Int32
+	srv := serve(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			writes.Add(1)
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+	st := framesStep(1)
+	st.FramesTimeout = time.Second
+	st.Trigger = &Trigger{As: "alice", Request: Request{Method: http.MethodPost, Path: "/write"}}
+
+	tr, err := Run(context.Background(), scenarioOf(st), Target{Name: "staging", BaseURL: srv.URL, Token: "t"})
+	require.NoError(t, err)
+	require.Zero(t, writes.Load())
+	require.Zero(t, tr.Steps[0].TriggerStatus)
+	require.Equal(t, http.StatusOK, tr.Steps[0].Status)
 }
 
 func TestFilesNeedAReaderExceptInSmoke(t *testing.T) {
