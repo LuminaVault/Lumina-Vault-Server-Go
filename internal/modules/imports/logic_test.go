@@ -43,3 +43,18 @@ func TestParseMappingsToleratesCodeFencesAndSurroundingProse(t *testing.T) {
 func TestParseMappingsReturnsEmptyOnGarbage(t *testing.T) {
 	assert.Empty(t, ParseMappings("not json"))
 }
+
+// Title falls back on the name without its extension, as corelibs' NSString computes it.
+func TestTitleFallbackFollowsNSString(t *testing.T) {
+	for fallback, want := range map[string]string{
+		"note.md":   "note",
+		"a.b.md":    "a.b",
+		"":          "",
+		"/":         "",
+		"trailing.": "trailing.",
+		".hidden":   ".hidden",
+		"plain":     "plain",
+	} {
+		assert.Equal(t, want, Title("no heading", fallback), fallback)
+	}
+}

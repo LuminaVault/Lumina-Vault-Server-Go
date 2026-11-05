@@ -224,11 +224,17 @@ func Title(content, fallback string) string {
 	return deleteExtension(fallback)
 }
 
+// deleteExtension is `(name as NSString).deletingPathExtension` on Linux, for a single
+// path component: "/" is "", and a trailing dot or a leading one is no extension.
 func deleteExtension(name string) string {
-	if at := strings.LastIndexByte(name, '.'); at > 0 {
-		return name[:at]
+	if name == "/" {
+		return ""
 	}
-	return name
+	ext := vaultfiles.PathExtension(name)
+	if ext == "" {
+		return name
+	}
+	return strings.TrimSuffix(name, "."+ext)
 }
 
 // SafePath is safePath: each segment slugified, subfolders kept, `.` and `..` dropped,

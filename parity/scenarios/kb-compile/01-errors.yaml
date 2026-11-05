@@ -16,9 +16,9 @@ steps:
   - {"name": "an empty id list means no filter", "as": "kbc_cid", "request": {"method": "POST", "path": "/v1/memory-compile", "json": {"forceFullRecompile": false, "vaultFileIds": []}}}
   - {"name": "unknown ids", "as": "kbc_cid", "request": {"method": "POST", "path": "/v1/memory-compile", "json": {"forceFullRecompile": false, "vaultFileIds": ["5B100000-0000-4000-8000-00000000FFFF"]}}}
   - {"name": "another tenant's id", "as": "kbc_cid", "request": {"method": "POST", "path": "/v1/memory-compile", "json": {"forceFullRecompile": false, "vaultFileIds": ["5B100000-0000-4000-8000-000000000001"]}}, "snapshot": ["parity_kbc_files"]}
-  - {"name": "a row whose file is gone", "as": "kbc_eve", "request": {"method": "POST", "path": "/v1/memory-compile", "json": {"forceFullRecompile": false}}, "snapshot": ["parity_kbc_files", "parity_kbc_usage"]}
+  - {"name": "a row whose file is gone", "as": "kbc_eve", "request": {"method": "POST", "path": "/v1/memory-compile", "json": {"forceFullRecompile": false}}, "snapshot": ["parity_kbc_files", "parity_kbc_usage"], "ignore": ["$.durationMs"]}
   - {"name": "processed rows are not pending", "as": "kbc_fay", "request": {"method": "POST", "path": "/v1/memory-compile", "json": {"forceFullRecompile": false}}}
-  - {"name": "force includes processed rows", "as": "kbc_fay", "request": {"method": "POST", "path": "/v1/memory-compile", "json": {"forceFullRecompile": true}}, "snapshot": ["parity_kbc_files"]}
+  - {"name": "force includes processed rows", "as": "kbc_fay", "request": {"method": "POST", "path": "/v1/memory-compile", "json": {"forceFullRecompile": true}}, "snapshot": ["parity_kbc_files"], "ignore": ["$.durationMs"]}
   - {"name": "wrong method", "as": "kbc_gus", "request": {"method": "GET", "path": "/v1/memory-compile"}}
   - {"name": "the sixth request in a minute is limited", "as": "kbc_gus", "request": {"method": "POST", "path": "/v1/memory-compile", "json": {"forceFullRecompile": false}}, "ignore": ["$.runId"]}
   - {"name": "2", "as": "kbc_gus", "request": {"method": "POST", "path": "/v1/memory-compile", "json": {"forceFullRecompile": false}}}
