@@ -10,6 +10,8 @@
 #                   (a short key with a runner token refuses to boot, in both servers)
 #   runner-off      no runner token
 #   catalog-unseeded  no "luminavault" publisher: the first read tries to seed the catalog
+#   hybrid-off      HYBRID_EXECUTION_ENABLED=false: /v1/memory/local-sync is not mounted
+#   billing-on      BILLING_ENFORCEMENT_ENABLED=true: the capture gate on memory upsert
 #
 # A state for LLM success paths, once Go serves them (group 4F), is one more
 # run_state with SWITCH_HERMES_GATEWAY_URL=http://llmstub:8080 and the stub up.
@@ -92,6 +94,8 @@ run_state posting-off SWITCH_COMMUNITY_POSTING_ENABLED=false
 run_state unconfigured SWITCH_ADMIN_TOKEN= SWITCH_SIGNING_KEY=too-short SWITCH_RUNNER_TOKEN=
 run_state runner-off SWITCH_RUNNER_TOKEN=
 run_state catalog-unseeded SWITCH_NONE=
+run_state hybrid-off SWITCH_HYBRID_EXECUTION_ENABLED=false
+run_state billing-on SWITCH_BILLING_ENFORCEMENT_ENABLED=true
 llm_selftest
 "${COMPOSE[@]}" stop swift-switched go-switched >/dev/null 2>&1 || true
 exit "$failed"

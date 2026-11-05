@@ -1,0 +1,125 @@
+# Every filter and DTO shape of the read routes, for a managed reader and a BYOK
+# reader. The Double fields (geo) are compared as text, so their formatting counts.
+module: memory
+steps:
+  - {name: "list default", as: mem_ann, request: {method: GET, path: "/v1/memory"}}
+  - {name: "list limit 2", as: mem_ann, request: {method: GET, path: "/v1/memory?limit=2"}}
+  - {name: "list limit zero", as: mem_ann, request: {method: GET, path: "/v1/memory?limit=0"}}
+  - {name: "list limit negative", as: mem_ann, request: {method: GET, path: "/v1/memory?limit=-5"}}
+  - {name: "list limit huge", as: mem_ann, request: {method: GET, path: "/v1/memory?limit=9999"}}
+  - {name: "list limit garbage", as: mem_ann, request: {method: GET, path: "/v1/memory?limit=abc"}}
+  - {name: "list limit empty", as: mem_ann, request: {method: GET, path: "/v1/memory?limit="}}
+  - {name: "list limit float", as: mem_ann, request: {method: GET, path: "/v1/memory?limit=1.5"}}
+  - {name: "list limit plus", as: mem_ann, request: {method: GET, path: "/v1/memory?limit=%2B2"}}
+  - {name: "list offset 2", as: mem_ann, request: {method: GET, path: "/v1/memory?limit=2&offset=2"}}
+  - {name: "list offset negative", as: mem_ann, request: {method: GET, path: "/v1/memory?offset=-3"}}
+  - {name: "list offset garbage", as: mem_ann, request: {method: GET, path: "/v1/memory?offset=abc"}}
+  - {name: "list offset beyond", as: mem_ann, request: {method: GET, path: "/v1/memory?offset=500"}}
+  - {name: "list tag", as: mem_ann, request: {method: GET, path: "/v1/memory?tag=finance"}}
+  - {name: "list tag empty", as: mem_ann, request: {method: GET, path: "/v1/memory?tag="}}
+  - {name: "list tag unknown", as: mem_ann, request: {method: GET, path: "/v1/memory?tag=none"}}
+  - {name: "list space inbox", as: mem_ann, request: {method: GET, path: "/v1/memory?space=inbox"}}
+  - {name: "list space slug", as: mem_ann, request: {method: GET, path: "/v1/memory?space=stocks"}}
+  - {name: "list space empty", as: mem_ann, request: {method: GET, path: "/v1/memory?space="}}
+  - {name: "list space unknown", as: mem_ann, request: {method: GET, path: "/v1/memory?space=nope"}}
+  - {name: "list space foreign", as: mem_ann, request: {method: GET, path: "/v1/memory?space=work"}}
+  - {name: "list space unknown beats bad health", as: mem_ann, request: {method: GET, path: "/v1/memory?space=nope&healthFilter=bad"}}
+  - {name: "list health review-overdue", as: mem_ann, request: {method: GET, path: "/v1/memory?healthFilter=review-overdue"}}
+  - {name: "list health pending", as: mem_ann, request: {method: GET, path: "/v1/memory?healthFilter=pending"}}
+  - {name: "list health unorganized", as: mem_ann, request: {method: GET, path: "/v1/memory?healthFilter=unorganized"}}
+  - {name: "list health unused", as: mem_ann, request: {method: GET, path: "/v1/memory?healthFilter=unused"}}
+  - {name: "list health empty", as: mem_ann, request: {method: GET, path: "/v1/memory?healthFilter="}}
+  - {name: "list health bad", as: mem_ann, request: {method: GET, path: "/v1/memory?healthFilter=not-real"}}
+  - {name: "list health case", as: mem_ann, request: {method: GET, path: "/v1/memory?healthFilter=Pending"}}
+  - {name: "list health bad beats bad review", as: mem_ann, request: {method: GET, path: "/v1/memory?healthFilter=bad&reviewState=bad"}}
+  - {name: "list review one", as: mem_ann, request: {method: GET, path: "/v1/memory?reviewState=pending"}}
+  - {name: "list review two", as: mem_ann, request: {method: GET, path: "/v1/memory?reviewState=pending,approved"}}
+  - {name: "list review spaces", as: mem_ann, request: {method: GET, path: "/v1/memory?reviewState=%20pending%20,%20rejected"}}
+  - {name: "list review one known", as: mem_ann, request: {method: GET, path: "/v1/memory?reviewState=nope,auto"}}
+  - {name: "list review none known", as: mem_ann, request: {method: GET, path: "/v1/memory?reviewState=nope"}}
+  - {name: "list review commas", as: mem_ann, request: {method: GET, path: "/v1/memory?reviewState=,,"}}
+  - {name: "list review empty", as: mem_ann, request: {method: GET, path: "/v1/memory?reviewState="}}
+  - {name: "list review bad beats bad kind", as: mem_ann, request: {method: GET, path: "/v1/memory?reviewState=bad&kind=bad"}}
+  - {name: "list kind fact", as: mem_ann, request: {method: GET, path: "/v1/memory?kind=fact"}}
+  - {name: "list kind decision", as: mem_ann, request: {method: GET, path: "/v1/memory?kind=decision"}}
+  - {name: "list kind preference", as: mem_ann, request: {method: GET, path: "/v1/memory?kind=preference"}}
+  - {name: "list kind note", as: mem_ann, request: {method: GET, path: "/v1/memory?kind=note"}}
+  - {name: "list kind empty", as: mem_ann, request: {method: GET, path: "/v1/memory?kind="}}
+  - {name: "list kind bad", as: mem_ann, request: {method: GET, path: "/v1/memory?kind=nope"}}
+  - {name: "list kind case", as: mem_ann, request: {method: GET, path: "/v1/memory?kind=Fact"}}
+  - {name: "list combined", as: mem_ann, request: {method: GET, path: "/v1/memory?space=stocks&tag=finance&kind=fact&reviewState=auto&limit=1"}}
+  - {name: "list unknown param", as: mem_ann, request: {method: GET, path: "/v1/memory?whatever=1"}}
+  - {name: "list byok reader", as: mem_cat, request: {method: GET, path: "/v1/memory"}}
+  - {name: "list empty user", as: mem_new, request: {method: GET, path: "/v1/memory"}}
+  - {name: "list team admin", as: mem_ann, request: {method: GET, path: "/v1/memory", headers: {X-Vault-ID: 3E3C0000-0000-4000-8000-0000000000C1}}}
+  - {name: "list team viewer", as: mem_vie, request: {method: GET, path: "/v1/memory", headers: {X-Vault-ID: 3E3C0000-0000-4000-8000-0000000000C1}}}
+  - {name: "list team byok viewer sees models", as: mem_cat, request: {method: GET, path: "/v1/memory", headers: {X-Vault-ID: 3E3C0000-0000-4000-8000-0000000000C1}}}
+  - {name: "list lowercase vault header", as: mem_vie, request: {method: GET, path: "/v1/memory", headers: {X-Vault-ID: 3e3c0000-0000-4000-8000-0000000000c1}}}
+  - {name: "get 1", as: mem_ann, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000001"}}
+  - {name: "lineage 1", as: mem_ann, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000001/lineage"}}
+  - {name: "provenance 1", as: mem_ann, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000001/provenance"}}
+  - {name: "get 2", as: mem_ann, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000002"}}
+  - {name: "lineage 2", as: mem_ann, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000002/lineage"}}
+  - {name: "provenance 2", as: mem_ann, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000002/provenance"}}
+  - {name: "get 3", as: mem_ann, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000003"}}
+  - {name: "lineage 3", as: mem_ann, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000003/lineage"}}
+  - {name: "provenance 3", as: mem_ann, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000003/provenance"}}
+  - {name: "get 4", as: mem_ann, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000004"}}
+  - {name: "lineage 4", as: mem_ann, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000004/lineage"}}
+  - {name: "provenance 4", as: mem_ann, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000004/provenance"}}
+  - {name: "get 5", as: mem_ann, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000005"}}
+  - {name: "lineage 5", as: mem_ann, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000005/lineage"}}
+  - {name: "provenance 5", as: mem_ann, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000005/provenance"}}
+  - {name: "get 6", as: mem_ann, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000006"}}
+  - {name: "lineage 6", as: mem_ann, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000006/lineage"}}
+  - {name: "provenance 6", as: mem_ann, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000006/provenance"}}
+  - {name: "get 7", as: mem_ann, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000007"}}
+  - {name: "lineage 7", as: mem_ann, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000007/lineage"}}
+  - {name: "provenance 7", as: mem_ann, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000007/provenance"}}
+  - {name: "get lowercase id", as: mem_ann, request: {method: GET, path: "/v1/memory/3e3a0000-0000-4000-8000-000000000001"}}
+  - {name: "get bad id", as: mem_ann, request: {method: GET, path: "/v1/memory/not-a-uuid"}}
+  - {name: "get bare hex id", as: mem_ann, request: {method: GET, path: "/v1/memory/3e3a0000000040008000000000000001"}}
+  - {name: "get braced id", as: mem_ann, request: {method: GET, path: "/v1/memory/%7B3e3a0000-0000-4000-8000-000000000001%7D"}}
+  - {name: "get unknown", as: mem_ann, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-0000000000FF"}}
+  - {name: "get foreign", as: mem_ann, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-0000000000B1"}}
+  - {name: "get bad id with bad vault", as: mem_ann, request: {method: GET, path: "/v1/memory/not-a-uuid", headers: {X-Vault-ID: nope}}}
+  - {name: "get team memory from personal vault", as: mem_ann, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-0000000000D1"}}
+  - {name: "get team memory", as: mem_vie, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-0000000000D1", headers: {X-Vault-ID: 3E3C0000-0000-4000-8000-0000000000C1}}}
+  - {name: "get team memory byok", as: mem_cat, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-0000000000D1", headers: {X-Vault-ID: 3E3C0000-0000-4000-8000-0000000000C1}}}
+  - {name: "lineage lowercase id", as: mem_ann, request: {method: GET, path: "/v1/memory/3e3a0000-0000-4000-8000-000000000001/lineage"}}
+  - {name: "lineage bad id", as: mem_ann, request: {method: GET, path: "/v1/memory/not-a-uuid/lineage"}}
+  - {name: "lineage bare hex id", as: mem_ann, request: {method: GET, path: "/v1/memory/3e3a0000000040008000000000000001/lineage"}}
+  - {name: "lineage braced id", as: mem_ann, request: {method: GET, path: "/v1/memory/%7B3e3a0000-0000-4000-8000-000000000001%7D/lineage"}}
+  - {name: "lineage unknown", as: mem_ann, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-0000000000FF/lineage"}}
+  - {name: "lineage foreign", as: mem_ann, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-0000000000B1/lineage"}}
+  - {name: "lineage bad id with bad vault", as: mem_ann, request: {method: GET, path: "/v1/memory/not-a-uuid/lineage", headers: {X-Vault-ID: nope}}}
+  - {name: "lineage team memory from personal vault", as: mem_ann, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-0000000000D1/lineage"}}
+  - {name: "lineage team memory", as: mem_vie, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-0000000000D1/lineage", headers: {X-Vault-ID: 3E3C0000-0000-4000-8000-0000000000C1}}}
+  - {name: "lineage team memory byok", as: mem_cat, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-0000000000D1/lineage", headers: {X-Vault-ID: 3E3C0000-0000-4000-8000-0000000000C1}}}
+  - {name: "provenance lowercase id", as: mem_ann, request: {method: GET, path: "/v1/memory/3e3a0000-0000-4000-8000-000000000001/provenance"}}
+  - {name: "provenance bad id", as: mem_ann, request: {method: GET, path: "/v1/memory/not-a-uuid/provenance"}}
+  - {name: "provenance bare hex id", as: mem_ann, request: {method: GET, path: "/v1/memory/3e3a0000000040008000000000000001/provenance"}}
+  - {name: "provenance braced id", as: mem_ann, request: {method: GET, path: "/v1/memory/%7B3e3a0000-0000-4000-8000-000000000001%7D/provenance"}}
+  - {name: "provenance unknown", as: mem_ann, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-0000000000FF/provenance"}}
+  - {name: "provenance foreign", as: mem_ann, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-0000000000B1/provenance"}}
+  - {name: "provenance bad id with bad vault", as: mem_ann, request: {method: GET, path: "/v1/memory/not-a-uuid/provenance", headers: {X-Vault-ID: nope}}}
+  - {name: "provenance team memory from personal vault", as: mem_ann, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-0000000000D1/provenance"}}
+  - {name: "provenance team memory", as: mem_vie, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-0000000000D1/provenance", headers: {X-Vault-ID: 3E3C0000-0000-4000-8000-0000000000C1}}}
+  - {name: "provenance team memory byok", as: mem_cat, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-0000000000D1/provenance", headers: {X-Vault-ID: 3E3C0000-0000-4000-8000-0000000000C1}}}
+  - {name: "related lowercase id", as: mem_ann, request: {method: GET, path: "/v1/memory/3e3a0000-0000-4000-8000-000000000001/related"}}
+  - {name: "related bad id", as: mem_ann, request: {method: GET, path: "/v1/memory/not-a-uuid/related"}}
+  - {name: "related bare hex id", as: mem_ann, request: {method: GET, path: "/v1/memory/3e3a0000000040008000000000000001/related"}}
+  - {name: "related braced id", as: mem_ann, request: {method: GET, path: "/v1/memory/%7B3e3a0000-0000-4000-8000-000000000001%7D/related"}}
+  - {name: "related unknown", as: mem_ann, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-0000000000FF/related"}}
+  - {name: "related foreign", as: mem_ann, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-0000000000B1/related"}}
+  - {name: "related bad id with bad vault", as: mem_ann, request: {method: GET, path: "/v1/memory/not-a-uuid/related", headers: {X-Vault-ID: nope}}}
+  - {name: "related team memory from personal vault", as: mem_ann, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-0000000000D1/related"}}
+  - {name: "related team memory", as: mem_vie, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-0000000000D1/related", headers: {X-Vault-ID: 3E3C0000-0000-4000-8000-0000000000C1}}}
+  - {name: "related team memory byok", as: mem_cat, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-0000000000D1/related", headers: {X-Vault-ID: 3E3C0000-0000-4000-8000-0000000000C1}}}
+  - {name: "get byok", as: mem_cat, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-0000000000C1"}}
+  - {name: "provenance byok", as: mem_cat, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-0000000000C1/provenance"}}
+  - {name: "facets managed", as: mem_ann, request: {method: GET, path: "/v1/memory/facets"}}
+  - {name: "facets byok", as: mem_cat, request: {method: GET, path: "/v1/memory/facets"}}
+  - {name: "facets empty", as: mem_new, request: {method: GET, path: "/v1/memory/facets"}}
+  - {name: "facets team", as: mem_vie, request: {method: GET, path: "/v1/memory/facets", headers: {X-Vault-ID: 3E3C0000-0000-4000-8000-0000000000C1}}}
+  - {name: "facets ignores params", as: mem_ann, request: {method: GET, path: "/v1/memory/facets?limit=1"}}

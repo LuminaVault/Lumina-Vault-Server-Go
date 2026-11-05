@@ -1,0 +1,8 @@
+# BILLING_ENFORCEMENT_ENABLED=true: the capture gate on POST /v1/memory/upsert.
+module: memory
+steps:
+  - {name: archived user hits the paywall, as: mem_arc, request: {method: POST, path: /v1/memory/upsert, json: {content: x}}, snapshot: [memories]}
+  - {name: the paywall comes before the body, as: mem_arc, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: no token passes the gate to the 401, request: {method: POST, path: /v1/memory/upsert, json: {content: x}, headers: {X-Forwarded-For: 10.77.0.6}}}
+  - {name: trial user is entitled, as: mem_new, request: {method: POST, path: /v1/memory/upsert, json: {content: " "}}}
+  - {name: reads are not gated, as: mem_arc, request: {method: GET, path: /v1/memory}}

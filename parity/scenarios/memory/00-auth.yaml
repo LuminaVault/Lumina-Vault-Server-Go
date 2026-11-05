@@ -1,0 +1,105 @@
+# Every route without a usable token, vault or role. X-Vault-ID is read before
+# identity on vault-scoped routes (decisions.md D-identify); capture is the reverse.
+# Suggestions share the me limit, so its no-token steps carry their own IPs.
+module: memory
+steps:
+  - {name: GET /v1/memory no token, request: {method: GET, path: "/v1/memory"}}
+  - {name: GET /v1/memory bad token, request: {method: GET, path: "/v1/memory", headers: {Authorization: Bearer nope}}}
+  - {name: GET /v1/memory bad vault header, as: mem_ann, request: {method: GET, path: "/v1/memory", headers: {X-Vault-ID: nope}}}
+  - {name: GET /v1/memory no token bad vault header, request: {method: GET, path: "/v1/memory", headers: {X-Vault-ID: nope}}}
+  - {name: GET /v1/memory foreign vault, as: mem_bob, request: {method: GET, path: "/v1/memory", headers: {X-Vault-ID: 3E3C0000-0000-4000-8000-0000000000C1}}}
+  - {name: GET /v1/memory user with no vault, as: mem_nov, request: {method: GET, path: "/v1/memory"}}
+  - {name: GET /v1/memory/graph no token, request: {method: GET, path: "/v1/memory/graph"}}
+  - {name: GET /v1/memory/graph bad token, request: {method: GET, path: "/v1/memory/graph", headers: {Authorization: Bearer nope}}}
+  - {name: GET /v1/memory/graph bad vault header, as: mem_ann, request: {method: GET, path: "/v1/memory/graph", headers: {X-Vault-ID: nope}}}
+  - {name: GET /v1/memory/graph no token bad vault header, request: {method: GET, path: "/v1/memory/graph", headers: {X-Vault-ID: nope}}}
+  - {name: GET /v1/memory/graph foreign vault, as: mem_bob, request: {method: GET, path: "/v1/memory/graph", headers: {X-Vault-ID: 3E3C0000-0000-4000-8000-0000000000C1}}}
+  - {name: GET /v1/memory/graph user with no vault, as: mem_nov, request: {method: GET, path: "/v1/memory/graph"}}
+  - {name: GET /v1/memory/facets no token, request: {method: GET, path: "/v1/memory/facets"}}
+  - {name: GET /v1/memory/facets bad token, request: {method: GET, path: "/v1/memory/facets", headers: {Authorization: Bearer nope}}}
+  - {name: GET /v1/memory/facets bad vault header, as: mem_ann, request: {method: GET, path: "/v1/memory/facets", headers: {X-Vault-ID: nope}}}
+  - {name: GET /v1/memory/facets no token bad vault header, request: {method: GET, path: "/v1/memory/facets", headers: {X-Vault-ID: nope}}}
+  - {name: GET /v1/memory/facets foreign vault, as: mem_bob, request: {method: GET, path: "/v1/memory/facets", headers: {X-Vault-ID: 3E3C0000-0000-4000-8000-0000000000C1}}}
+  - {name: GET /v1/memory/facets user with no vault, as: mem_nov, request: {method: GET, path: "/v1/memory/facets"}}
+  - {name: GET /v1/memory/local-sync no token, request: {method: GET, path: "/v1/memory/local-sync"}}
+  - {name: GET /v1/memory/local-sync bad token, request: {method: GET, path: "/v1/memory/local-sync", headers: {Authorization: Bearer nope}}}
+  - {name: GET /v1/memory/local-sync bad vault header, as: mem_ann, request: {method: GET, path: "/v1/memory/local-sync", headers: {X-Vault-ID: nope}}}
+  - {name: GET /v1/memory/local-sync no token bad vault header, request: {method: GET, path: "/v1/memory/local-sync", headers: {X-Vault-ID: nope}}}
+  - {name: GET /v1/memory/local-sync foreign vault, as: mem_bob, request: {method: GET, path: "/v1/memory/local-sync", headers: {X-Vault-ID: 3E3C0000-0000-4000-8000-0000000000C1}}}
+  - {name: GET /v1/memory/local-sync user with no vault, as: mem_nov, request: {method: GET, path: "/v1/memory/local-sync"}}
+  - {name: GET /v1/memory/3E3A0000-0000-4000-8000-000000000001 no token, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000001"}}
+  - {name: GET /v1/memory/3E3A0000-0000-4000-8000-000000000001 bad token, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000001", headers: {Authorization: Bearer nope}}}
+  - {name: GET /v1/memory/3E3A0000-0000-4000-8000-000000000001 bad vault header, as: mem_ann, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000001", headers: {X-Vault-ID: nope}}}
+  - {name: GET /v1/memory/3E3A0000-0000-4000-8000-000000000001 no token bad vault header, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000001", headers: {X-Vault-ID: nope}}}
+  - {name: GET /v1/memory/3E3A0000-0000-4000-8000-000000000001 foreign vault, as: mem_bob, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000001", headers: {X-Vault-ID: 3E3C0000-0000-4000-8000-0000000000C1}}}
+  - {name: GET /v1/memory/3E3A0000-0000-4000-8000-000000000001 user with no vault, as: mem_nov, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000001"}}
+  - {name: GET /v1/memory/3E3A0000-0000-4000-8000-000000000001 no token bad id, request: {method: GET, path: "/v1/memory/not-a-uuid"}}
+  - {name: GET /v1/memory/3E3A0000-0000-4000-8000-000000000001/lineage no token, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000001/lineage"}}
+  - {name: GET /v1/memory/3E3A0000-0000-4000-8000-000000000001/lineage bad token, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000001/lineage", headers: {Authorization: Bearer nope}}}
+  - {name: GET /v1/memory/3E3A0000-0000-4000-8000-000000000001/lineage bad vault header, as: mem_ann, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000001/lineage", headers: {X-Vault-ID: nope}}}
+  - {name: GET /v1/memory/3E3A0000-0000-4000-8000-000000000001/lineage no token bad vault header, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000001/lineage", headers: {X-Vault-ID: nope}}}
+  - {name: GET /v1/memory/3E3A0000-0000-4000-8000-000000000001/lineage foreign vault, as: mem_bob, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000001/lineage", headers: {X-Vault-ID: 3E3C0000-0000-4000-8000-0000000000C1}}}
+  - {name: GET /v1/memory/3E3A0000-0000-4000-8000-000000000001/lineage user with no vault, as: mem_nov, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000001/lineage"}}
+  - {name: GET /v1/memory/3E3A0000-0000-4000-8000-000000000001/lineage no token bad id, request: {method: GET, path: "/v1/memory/not-a-uuid/lineage"}}
+  - {name: GET /v1/memory/3E3A0000-0000-4000-8000-000000000001/related no token, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000001/related"}}
+  - {name: GET /v1/memory/3E3A0000-0000-4000-8000-000000000001/related bad token, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000001/related", headers: {Authorization: Bearer nope}}}
+  - {name: GET /v1/memory/3E3A0000-0000-4000-8000-000000000001/related bad vault header, as: mem_ann, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000001/related", headers: {X-Vault-ID: nope}}}
+  - {name: GET /v1/memory/3E3A0000-0000-4000-8000-000000000001/related no token bad vault header, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000001/related", headers: {X-Vault-ID: nope}}}
+  - {name: GET /v1/memory/3E3A0000-0000-4000-8000-000000000001/related foreign vault, as: mem_bob, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000001/related", headers: {X-Vault-ID: 3E3C0000-0000-4000-8000-0000000000C1}}}
+  - {name: GET /v1/memory/3E3A0000-0000-4000-8000-000000000001/related user with no vault, as: mem_nov, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000001/related"}}
+  - {name: GET /v1/memory/3E3A0000-0000-4000-8000-000000000001/related no token bad id, request: {method: GET, path: "/v1/memory/not-a-uuid/related"}}
+  - {name: GET /v1/memory/3E3A0000-0000-4000-8000-000000000001/provenance no token, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000001/provenance"}}
+  - {name: GET /v1/memory/3E3A0000-0000-4000-8000-000000000001/provenance bad token, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000001/provenance", headers: {Authorization: Bearer nope}}}
+  - {name: GET /v1/memory/3E3A0000-0000-4000-8000-000000000001/provenance bad vault header, as: mem_ann, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000001/provenance", headers: {X-Vault-ID: nope}}}
+  - {name: GET /v1/memory/3E3A0000-0000-4000-8000-000000000001/provenance no token bad vault header, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000001/provenance", headers: {X-Vault-ID: nope}}}
+  - {name: GET /v1/memory/3E3A0000-0000-4000-8000-000000000001/provenance foreign vault, as: mem_bob, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000001/provenance", headers: {X-Vault-ID: 3E3C0000-0000-4000-8000-0000000000C1}}}
+  - {name: GET /v1/memory/3E3A0000-0000-4000-8000-000000000001/provenance user with no vault, as: mem_nov, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000001/provenance"}}
+  - {name: GET /v1/memory/3E3A0000-0000-4000-8000-000000000001/provenance no token bad id, request: {method: GET, path: "/v1/memory/not-a-uuid/provenance"}}
+  - {name: POST /v1/memory/3E3A0000-0000-4000-8000-000000000001/review no token, request: {method: POST, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000001/review"}}
+  - {name: POST /v1/memory/3E3A0000-0000-4000-8000-000000000001/review bad token, request: {method: POST, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000001/review", headers: {Authorization: Bearer nope}}}
+  - {name: POST /v1/memory/3E3A0000-0000-4000-8000-000000000001/review bad vault header, as: mem_ann, request: {method: POST, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000001/review", headers: {X-Vault-ID: nope}}}
+  - {name: POST /v1/memory/3E3A0000-0000-4000-8000-000000000001/review no token bad vault header, request: {method: POST, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000001/review", headers: {X-Vault-ID: nope}}}
+  - {name: POST /v1/memory/3E3A0000-0000-4000-8000-000000000001/review foreign vault, as: mem_bob, request: {method: POST, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000001/review", headers: {X-Vault-ID: 3E3C0000-0000-4000-8000-0000000000C1}}}
+  - {name: POST /v1/memory/3E3A0000-0000-4000-8000-000000000001/review user with no vault, as: mem_nov, request: {method: POST, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000001/review"}}
+  - {name: POST /v1/memory/3E3A0000-0000-4000-8000-000000000001/review viewer cannot write, as: mem_vie, request: {method: POST, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000001/review", headers: {X-Vault-ID: 3E3C0000-0000-4000-8000-0000000000C1}}}
+  - {name: POST /v1/memory/3E3A0000-0000-4000-8000-000000000001/review no token bad id, request: {method: POST, path: "/v1/memory/not-a-uuid/review"}}
+  - {name: DELETE /v1/memory/3E3A0000-0000-4000-8000-000000000001 no token, request: {method: DELETE, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000001"}}
+  - {name: DELETE /v1/memory/3E3A0000-0000-4000-8000-000000000001 bad token, request: {method: DELETE, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000001", headers: {Authorization: Bearer nope}}}
+  - {name: DELETE /v1/memory/3E3A0000-0000-4000-8000-000000000001 bad vault header, as: mem_ann, request: {method: DELETE, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000001", headers: {X-Vault-ID: nope}}}
+  - {name: DELETE /v1/memory/3E3A0000-0000-4000-8000-000000000001 no token bad vault header, request: {method: DELETE, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000001", headers: {X-Vault-ID: nope}}}
+  - {name: DELETE /v1/memory/3E3A0000-0000-4000-8000-000000000001 foreign vault, as: mem_bob, request: {method: DELETE, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000001", headers: {X-Vault-ID: 3E3C0000-0000-4000-8000-0000000000C1}}}
+  - {name: DELETE /v1/memory/3E3A0000-0000-4000-8000-000000000001 user with no vault, as: mem_nov, request: {method: DELETE, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000001"}}
+  - {name: DELETE /v1/memory/3E3A0000-0000-4000-8000-000000000001 viewer cannot write, as: mem_vie, request: {method: DELETE, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000001", headers: {X-Vault-ID: 3E3C0000-0000-4000-8000-0000000000C1}}}
+  - {name: DELETE /v1/memory/3E3A0000-0000-4000-8000-000000000001 no token bad id, request: {method: DELETE, path: "/v1/memory/not-a-uuid"}}
+  - {name: PATCH /v1/memory/3E3A0000-0000-4000-8000-000000000001 no token, request: {method: PATCH, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000001", json: {content: x}}}
+  - {name: PATCH /v1/memory/3E3A0000-0000-4000-8000-000000000001 bad token, request: {method: PATCH, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000001", json: {content: x}, headers: {Authorization: Bearer nope}}}
+  - {name: PATCH /v1/memory/3E3A0000-0000-4000-8000-000000000001 bad vault header, as: mem_ann, request: {method: PATCH, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000001", json: {content: x}, headers: {X-Vault-ID: nope}}}
+  - {name: PATCH /v1/memory/3E3A0000-0000-4000-8000-000000000001 no token bad vault header, request: {method: PATCH, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000001", json: {content: x}, headers: {X-Vault-ID: nope}}}
+  - {name: PATCH /v1/memory/3E3A0000-0000-4000-8000-000000000001 foreign vault, as: mem_bob, request: {method: PATCH, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000001", json: {content: x}, headers: {X-Vault-ID: 3E3C0000-0000-4000-8000-0000000000C1}}}
+  - {name: PATCH /v1/memory/3E3A0000-0000-4000-8000-000000000001 user with no vault, as: mem_nov, request: {method: PATCH, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000001", json: {content: x}}}
+  - {name: PATCH /v1/memory/3E3A0000-0000-4000-8000-000000000001 viewer cannot write, as: mem_vie, request: {method: PATCH, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000001", json: {content: x}, headers: {X-Vault-ID: 3E3C0000-0000-4000-8000-0000000000C1}}}
+  - {name: PATCH /v1/memory/3E3A0000-0000-4000-8000-000000000001 no token bad id, request: {method: PATCH, path: "/v1/memory/not-a-uuid", json: {content: x}}}
+  - {name: POST /v1/memory/upsert no token, request: {method: POST, path: "/v1/memory/upsert", json: {content: x}, headers: {X-Forwarded-For: 10.77.0.3}}}
+  - {name: POST /v1/memory/upsert bad token, request: {method: POST, path: "/v1/memory/upsert", json: {content: x}, headers: {Authorization: Bearer nope, X-Forwarded-For: 10.77.0.4}}}
+  - {name: POST /v1/memory/upsert bad vault header, as: mem_ann, request: {method: POST, path: "/v1/memory/upsert", json: {content: x}, headers: {X-Vault-ID: nope}}}
+  - {name: POST /v1/memory/upsert no token bad vault header, request: {method: POST, path: "/v1/memory/upsert", json: {content: x}, headers: {X-Vault-ID: nope, X-Forwarded-For: 10.77.0.5}}}
+  - {name: POST /v1/memory/upsert foreign vault, as: mem_bob, request: {method: POST, path: "/v1/memory/upsert", json: {content: x}, headers: {X-Vault-ID: 3E3C0000-0000-4000-8000-0000000000C1}}}
+  - {name: POST /v1/memory/upsert user with no vault, as: mem_nov, request: {method: POST, path: "/v1/memory/upsert", json: {content: x}}}
+  - {name: POST /v1/memory/upsert viewer cannot write, as: mem_vie, request: {method: POST, path: "/v1/memory/upsert", json: {content: x}, headers: {X-Vault-ID: 3E3C0000-0000-4000-8000-0000000000C1}}}
+  - {name: suggestions no token, request: {method: GET, path: /v1/me/suggestions, headers: {X-Forwarded-For: 10.77.0.1}}}
+  - {name: suggestions bad token, request: {method: GET, path: /v1/me/suggestions, headers: {Authorization: Bearer nope, X-Forwarded-For: 10.77.0.2}}}
+  - {name: suggestions signed in, as: mem_ann, request: {method: GET, path: /v1/me/suggestions}}
+  - {name: suggestions ignore a bad vault header, as: mem_ann, request: {method: GET, path: /v1/me/suggestions, headers: {X-Vault-ID: nope}}}
+  - {name: suggestions post not routed, as: mem_ann, request: {method: POST, path: /v1/me/suggestions}}
+  - {name: get upsert is an id, as: mem_ann, request: {method: GET, path: /v1/memory/upsert}}
+  - {name: get search is an id, as: mem_ann, request: {method: GET, path: /v1/memory/search}}
+  - {name: delete graph is an id, as: mem_ann, request: {method: DELETE, path: /v1/memory/graph}}
+  - {name: patch facets is an id, as: mem_ann, request: {method: PATCH, path: /v1/memory/facets, json: {content: x}}}
+  - {name: post collection not routed, as: mem_ann, request: {method: POST, path: /v1/memory, json: {content: x}}}
+  - {name: put id not routed, as: mem_ann, request: {method: PUT, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000001", json: {content: x}}}
+  - {name: get review not routed, as: mem_ann, request: {method: GET, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000001/review"}}
+  - {name: post lineage not routed, as: mem_ann, request: {method: POST, path: "/v1/memory/3E3A0000-0000-4000-8000-000000000001/lineage"}}
+  - {name: gus hits the BYO Hermes refusal, as: mem_gus, request: {method: POST, path: /v1/memory/upsert, json: {content: x}}}
+  - {name: gus refused even with a bad body, as: mem_gus, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: gus reads are not behind Hermes, as: mem_gus, request: {method: GET, path: /v1/memory}}
+  - {name: archived user saves with the gate off, as: mem_arc, request: {method: POST, path: /v1/memory/upsert, json: {content: archived}}}

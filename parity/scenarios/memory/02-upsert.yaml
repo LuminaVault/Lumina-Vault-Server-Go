@@ -1,0 +1,52 @@
+# POST /v1/memory/upsert. EMBEDDING_PROVIDER is unset in the parity env, so both
+# servers embed with the deterministic stub and memories.embedding is compared.
+module: memory
+steps:
+  - {name: "upsert malformed", as: mem_ups, request: {method: POST, path: /v1/memory/upsert, raw: "{"}, snapshot: [memories]}
+  - {name: "upsert empty body", as: mem_ups, request: {method: POST, path: /v1/memory/upsert, raw: ""}, snapshot: [memories]}
+  - {name: "upsert array", as: mem_ups, request: {method: POST, path: /v1/memory/upsert, raw: "[]"}, snapshot: [memories]}
+  - {name: "upsert string", as: mem_ups, request: {method: POST, path: /v1/memory/upsert, raw: "\"x\""}, snapshot: [memories]}
+  - {name: "upsert number", as: mem_ups, request: {method: POST, path: /v1/memory/upsert, raw: "1"}, snapshot: [memories]}
+  - {name: "upsert null", as: mem_ups, request: {method: POST, path: /v1/memory/upsert, raw: "null"}, snapshot: [memories]}
+  - {name: "upsert empty object", as: mem_ups, request: {method: POST, path: /v1/memory/upsert, raw: "{}"}, snapshot: [memories]}
+  - {name: "upsert content null", as: mem_ups, request: {method: POST, path: /v1/memory/upsert, raw: "{\"content\":null}"}, snapshot: [memories]}
+  - {name: "upsert content number", as: mem_ups, request: {method: POST, path: /v1/memory/upsert, raw: "{\"content\":1}"}, snapshot: [memories]}
+  - {name: "upsert content array", as: mem_ups, request: {method: POST, path: /v1/memory/upsert, raw: "{\"content\":[]}"}, snapshot: [memories]}
+  - {name: "upsert content object", as: mem_ups, request: {method: POST, path: /v1/memory/upsert, raw: "{\"content\":{}}"}, snapshot: [memories]}
+  - {name: "upsert lat string", as: mem_ups, request: {method: POST, path: /v1/memory/upsert, raw: "{\"content\":\"x\",\"lat\":\"y\"}"}, snapshot: [memories]}
+  - {name: "upsert lng string", as: mem_ups, request: {method: POST, path: /v1/memory/upsert, raw: "{\"content\":\"x\",\"lng\":true}"}, snapshot: [memories]}
+  - {name: "upsert accuracy string", as: mem_ups, request: {method: POST, path: /v1/memory/upsert, raw: "{\"content\":\"x\",\"accuracyM\":\"y\"}"}, snapshot: [memories]}
+  - {name: "upsert place number", as: mem_ups, request: {method: POST, path: /v1/memory/upsert, raw: "{\"content\":\"x\",\"placeName\":1}"}, snapshot: [memories]}
+  - {name: "upsert kind number", as: mem_ups, request: {method: POST, path: /v1/memory/upsert, raw: "{\"content\":\"x\",\"kind\":1}"}, snapshot: [memories]}
+  - {name: "upsert kind unknown", as: mem_ups, request: {method: POST, path: /v1/memory/upsert, raw: "{\"content\":\"x\",\"kind\":\"nope\"}"}, snapshot: [memories]}
+  - {name: "upsert kind empty", as: mem_ups, request: {method: POST, path: /v1/memory/upsert, raw: "{\"content\":\"x\",\"kind\":\"\"}"}, snapshot: [memories]}
+  - {name: "upsert kind wrong case", as: mem_ups, request: {method: POST, path: /v1/memory/upsert, raw: "{\"content\":\"x\",\"kind\":\"Fact\"}"}, snapshot: [memories]}
+  - {name: "upsert lat string beats kind", as: mem_ups, request: {method: POST, path: /v1/memory/upsert, raw: "{\"lat\":\"y\",\"kind\":\"nope\",\"content\":\"x\"}"}, snapshot: [memories]}
+  - {name: "upsert content blank", as: mem_ups, request: {method: POST, path: /v1/memory/upsert, raw: "{\"content\":\"   \"}"}, snapshot: [memories]}
+  - {name: "upsert content empty", as: mem_ups, request: {method: POST, path: /v1/memory/upsert, raw: "{\"content\":\"\"}"}, snapshot: [memories]}
+  - {name: "upsert content newlines", as: mem_ups, request: {method: POST, path: /v1/memory/upsert, raw: "{\"content\":\"\\n\\t \"}"}, snapshot: [memories]}
+  - {name: "upsert content nbsp", as: mem_ups, request: {method: POST, path: /v1/memory/upsert, raw: "{\"content\":\"\\u00a0\"}"}, snapshot: [memories]}
+  - {name: "minimal", as: mem_ups, request: {method: POST, path: "/v1/memory/upsert", json: {content: "Plain note"}}, snapshot: [memories, memory_contributions, analytics_events]}
+  - {name: "trimmed", as: mem_ups, request: {method: POST, path: "/v1/memory/upsert", json: {content: "  \n Trimmed note \t\n "}}, snapshot: [memories, memory_contributions, analytics_events]}
+  - {name: "with kind", as: mem_ups, request: {method: POST, path: "/v1/memory/upsert", json: {content: "Kind note", kind: decision}}, snapshot: [memories, memory_contributions, analytics_events]}
+  - {name: "kind null", as: mem_ups, request: {method: POST, path: "/v1/memory/upsert", raw: "{\"content\":\"Null kind\",\"kind\":null}"}, snapshot: [memories, memory_contributions, analytics_events]}
+  - {name: "geo all", as: mem_ups, request: {method: POST, path: "/v1/memory/upsert", json: {content: "Geo all", lat: 37.7749, lng: -122.4194, accuracyM: 12.5, placeName: "Golden Gate"}}, snapshot: [memories, memory_contributions, analytics_events]}
+  - {name: "geo lat only", as: mem_ups, request: {method: POST, path: "/v1/memory/upsert", json: {content: "Geo lat", lat: 1.5}}, snapshot: [memories, memory_contributions, analytics_events]}
+  - {name: "geo place only", as: mem_ups, request: {method: POST, path: "/v1/memory/upsert", json: {content: "Geo place", placeName: "Somewhere"}}, snapshot: [memories, memory_contributions, analytics_events]}
+  - {name: "geo integers", as: mem_ups, request: {method: POST, path: "/v1/memory/upsert", json: {content: "Geo ints", lat: 10, lng: 20, accuracyM: 0}}, snapshot: [memories, memory_contributions, analytics_events]}
+  - {name: "geo out of range saved as is", as: mem_ups, request: {method: POST, path: "/v1/memory/upsert", json: {content: "Geo wild", lat: 1000, lng: -1000, accuracyM: -1}}, snapshot: [memories, memory_contributions, analytics_events]}
+  - {name: "extra fields ignored", as: mem_ups, request: {method: POST, path: "/v1/memory/upsert", json: {content: "Extras", tags: [a], spaceId: nope, whatever: 1}}, snapshot: [memories, memory_contributions, analytics_events]}
+  - {name: "unicode", as: mem_ups, request: {method: POST, path: "/v1/memory/upsert", json: {content: "Olá 🌍 wörld"}}, snapshot: [memories, memory_contributions, analytics_events]}
+  - {name: "space id", as: mem_ups, request: {method: POST, path: "/v1/memory/upsert?space_id=3E355000-0000-4000-8000-0000000000AF", json: {content: "In a space"}}, snapshot: [memories, memory_contributions, analytics_events]}
+  - {name: "space id lowercase", as: mem_ups, request: {method: POST, path: "/v1/memory/upsert?space_id=3e355000-0000-4000-8000-0000000000af", json: {content: "In a space lower"}}, snapshot: [memories, memory_contributions, analytics_events]}
+  - {name: "space id empty", as: mem_ups, request: {method: POST, path: "/v1/memory/upsert?space_id=", json: {content: "Empty space id"}}, snapshot: [memories, memory_contributions, analytics_events]}
+  - {name: "space id bad", as: mem_ups, request: {method: POST, path: "/v1/memory/upsert?space_id=nope", json: {content: "Bad space id"}}, snapshot: [memories, memory_contributions, analytics_events]}
+  - {name: "space id foreign", as: mem_ups, request: {method: POST, path: "/v1/memory/upsert?space_id=3E355000-0000-4000-8000-0000000000A1", json: {content: "Foreign space id"}}, snapshot: [memories, memory_contributions, analytics_events]}
+  - {name: "space id unknown", as: mem_ups, request: {method: POST, path: "/v1/memory/upsert?space_id=3E355000-0000-4000-8000-0000000000FF", json: {content: "Unknown space id"}}, snapshot: [memories, memory_contributions, analytics_events]}
+  - {name: "blank content beats bad space", as: mem_ups, request: {method: POST, path: "/v1/memory/upsert?space_id=nope", json: {content: " "}}, snapshot: [memories, memory_contributions, analytics_events]}
+  - {name: "blank content beats bad vault", as: mem_ups, request: {method: POST, path: "/v1/memory/upsert", raw: "{\"content\":\" \"}"}, snapshot: [memories, memory_contributions, analytics_events]}
+  - {name: blank content before bad vault header, as: mem_ups, request: {method: POST, path: /v1/memory/upsert, json: {content: " "}, headers: {X-Vault-ID: nope}}}
+  - {name: malformed before bad vault header, as: mem_ups, request: {method: POST, path: /v1/memory/upsert, raw: "{", headers: {X-Vault-ID: nope}}}
+  - {name: viewer blank content, as: mem_vie, request: {method: POST, path: /v1/memory/upsert, json: {content: " "}, headers: {X-Vault-ID: 3E3C0000-0000-4000-8000-0000000000C1}}}
+  - {name: team admin saves into the vault, as: mem_ann, request: {method: POST, path: /v1/memory/upsert, json: {content: "Team upsert", kind: fact}, headers: {X-Vault-ID: 3E3C0000-0000-4000-8000-0000000000C1}}, snapshot: [memories, memory_contributions, analytics_events]}
+  - {name: the upserts are listed, as: mem_ups, request: {method: GET, path: "/v1/memory?limit=100"}}

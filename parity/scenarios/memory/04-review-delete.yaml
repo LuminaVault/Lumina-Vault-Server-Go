@@ -1,0 +1,40 @@
+# POST /v1/memory/:id/review and DELETE /v1/memory/:id, after 03-patch in name order.
+module: memory
+steps:
+  - {name: "review malformed", as: mem_wri, request: {method: POST, path: "/v1/memory/3E3A1000-0000-4000-8000-00000000000e/review", raw: "{"}, snapshot: [memories]}
+  - {name: "review array", as: mem_wri, request: {method: POST, path: "/v1/memory/3E3A1000-0000-4000-8000-00000000000e/review", raw: "[]"}, snapshot: [memories]}
+  - {name: "review string", as: mem_wri, request: {method: POST, path: "/v1/memory/3E3A1000-0000-4000-8000-00000000000e/review", raw: "\"kept\""}, snapshot: [memories]}
+  - {name: "review null", as: mem_wri, request: {method: POST, path: "/v1/memory/3E3A1000-0000-4000-8000-00000000000e/review", raw: "null"}, snapshot: [memories]}
+  - {name: "review empty object", as: mem_wri, request: {method: POST, path: "/v1/memory/3E3A1000-0000-4000-8000-00000000000e/review", raw: "{}"}, snapshot: [memories]}
+  - {name: "review action null", as: mem_wri, request: {method: POST, path: "/v1/memory/3E3A1000-0000-4000-8000-00000000000e/review", raw: "{\"action\":null}"}, snapshot: [memories]}
+  - {name: "review action number", as: mem_wri, request: {method: POST, path: "/v1/memory/3E3A1000-0000-4000-8000-00000000000e/review", raw: "{\"action\":1}"}, snapshot: [memories]}
+  - {name: "review action unknown", as: mem_wri, request: {method: POST, path: "/v1/memory/3E3A1000-0000-4000-8000-00000000000e/review", raw: "{\"action\":\"nope\"}"}, snapshot: [memories]}
+  - {name: "review action case", as: mem_wri, request: {method: POST, path: "/v1/memory/3E3A1000-0000-4000-8000-00000000000e/review", raw: "{\"action\":\"Kept\"}"}, snapshot: [memories]}
+  - {name: review bad id, as: mem_wri, request: {method: POST, path: /v1/memory/not-a-uuid/review}}
+  - {name: review bad id beats bad vault, as: mem_wri, request: {method: POST, path: /v1/memory/not-a-uuid/review, headers: {X-Vault-ID: nope}}}
+  - {name: review bad vault beats bad body, as: mem_wri, request: {method: POST, path: "/v1/memory/3E3A1000-0000-4000-8000-00000000000e/review", raw: "{", headers: {X-Vault-ID: nope}}}
+  - {name: review unknown, as: mem_wri, request: {method: POST, path: /v1/memory/3E3A1000-0000-4000-8000-0000000000FF/review}}
+  - {name: review unknown bad body, as: mem_wri, request: {method: POST, path: /v1/memory/3E3A1000-0000-4000-8000-0000000000FF/review, raw: "{"}}
+  - {name: review foreign, as: mem_wri, request: {method: POST, path: /v1/memory/3E3A0000-0000-4000-8000-0000000000B1/review}, snapshot: [memories]}
+  - {name: review over 4096 bytes, as: mem_wri, request: {method: POST, path: "/v1/memory/3E3A1000-0000-4000-8000-00000000000e/review", fill: {text: " ", size: 4097}}, snapshot: [memories]}
+  - {name: review exactly 4096 blank bytes, as: mem_wri, request: {method: POST, path: "/v1/memory/3E3A1000-0000-4000-8000-00000000000e/review", fill: {text: " ", size: 4096}}, snapshot: [memories, analytics_events]}
+  - {name: review no body is kept, as: mem_wri, request: {method: POST, path: "/v1/memory/3E3A1000-0000-4000-8000-00000000000e/review"}, snapshot: [memories, analytics_events]}
+  - {name: review blank is kept, as: mem_wri, request: {method: POST, path: "/v1/memory/3E3A1000-0000-4000-8000-00000000000e/review", raw: " \n\t "}, snapshot: [memories]}
+  - {name: review latin1 blank bytes are kept, as: mem_wri, request: {method: POST, path: "/v1/memory/3E3A1000-0000-4000-8000-00000000000e/review", base64: hYWg}, snapshot: [memories]}
+  - {name: review kept, as: mem_wri, request: {method: POST, path: "/v1/memory/3E3A1000-0000-4000-8000-00000000000e/review", json: {action: kept}}, snapshot: [memories, analytics_events]}
+  - {name: review soon, as: mem_wri, request: {method: POST, path: "/v1/memory/3E3A1000-0000-4000-8000-00000000000e/review", json: {action: soon}}, snapshot: [memories]}
+  - {name: review never mutes, as: mem_wri, request: {method: POST, path: "/v1/memory/3E3A1000-0000-4000-8000-00000000000e/review", json: {action: never}}, snapshot: [memories]}
+  - {name: review kept leaves it muted, as: mem_wri, request: {method: POST, path: "/v1/memory/3E3A1000-0000-4000-8000-00000000000e/review", json: {action: kept}}, snapshot: [memories]}
+  - {name: review later unmutes, as: mem_wri, request: {method: POST, path: "/v1/memory/3E3A1000-0000-4000-8000-00000000000e/review", json: {action: later, extra: 1}}, snapshot: [memories]}
+  - {name: review lowercase id, as: mem_wri, request: {method: POST, path: "/v1/memory/3e3a1000-0000-4000-8000-00000000000e/review", json: {action: kept}}, snapshot: [memories]}
+  - {name: the admin reviews a team memory, as: mem_ann, request: {method: POST, path: /v1/memory/3E3A0000-0000-4000-8000-0000000000D1/review, headers: {X-Vault-ID: 3E3C0000-0000-4000-8000-0000000000C1}}, snapshot: [memories, analytics_events]}
+  - {name: delete bad id, as: mem_wri, request: {method: DELETE, path: /v1/memory/not-a-uuid}}
+  - {name: delete bad id beats bad vault, as: mem_wri, request: {method: DELETE, path: /v1/memory/not-a-uuid, headers: {X-Vault-ID: nope}}}
+  - {name: delete unknown, as: mem_wri, request: {method: DELETE, path: /v1/memory/3E3A1000-0000-4000-8000-0000000000FF}, snapshot: [memory_sync_tombstones]}
+  - {name: delete foreign, as: mem_wri, request: {method: DELETE, path: /v1/memory/3E3A0000-0000-4000-8000-0000000000B1}, snapshot: [memories, memory_sync_tombstones]}
+  - {name: delete suppresses the job and leaves a tombstone, as: mem_wri, request: {method: DELETE, path: "/v1/memory/3E3A1000-0000-4000-8000-00000000000c"}, snapshot: [memories, memory_sync_tombstones, memory_index_jobs, memory_contributions]}
+  - {name: delete with no job, as: mem_wri, request: {method: DELETE, path: "/v1/memory/3e3a1000-0000-4000-8000-00000000000d"}, snapshot: [memories, memory_sync_tombstones, memory_index_jobs]}
+  - {name: delete twice, as: mem_wri, request: {method: DELETE, path: "/v1/memory/3E3A1000-0000-4000-8000-00000000000c"}, snapshot: [memory_sync_tombstones]}
+  - {name: deleted memory is gone, as: mem_wri, request: {method: GET, path: "/v1/memory/3E3A1000-0000-4000-8000-00000000000c"}}
+  - {name: delete a memory with chunks removes them, as: mem_wri, request: {method: DELETE, path: "/v1/memory/3E3A1000-0000-4000-8000-000000000001"}, snapshot: [memories, memory_chunks, memory_sync_tombstones]}
+  - {name: the admin deletes a team memory, as: mem_ann, request: {method: DELETE, path: /v1/memory/3E3A0000-0000-4000-8000-0000000000D1, headers: {X-Vault-ID: 3E3C0000-0000-4000-8000-0000000000C1}}, snapshot: [memories, memory_sync_tombstones]}

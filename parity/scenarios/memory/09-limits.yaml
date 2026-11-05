@@ -1,0 +1,128 @@
+# captureByUser (60 a minute on the trial tier) counts refused requests too, and
+# /v1/me/suggestions spends the same meTodayByUser bucket as the rest of /v1/me.
+module: memory
+steps:
+  - {name: upsert 1, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 2, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 3, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 4, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 5, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 6, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 7, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 8, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 9, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 10, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 11, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 12, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 13, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 14, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 15, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 16, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 17, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 18, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 19, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 20, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 21, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 22, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 23, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 24, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 25, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 26, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 27, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 28, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 29, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 30, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 31, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 32, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 33, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 34, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 35, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 36, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 37, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 38, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 39, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 40, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 41, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 42, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 43, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 44, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 45, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 46, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 47, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 48, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 49, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 50, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 51, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 52, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 53, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 54, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 55, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 56, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 57, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 58, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 59, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 60, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
+  - {name: upsert 61 is limited, as: mem_lim, request: {method: POST, path: /v1/memory/upsert, raw: "{"}, headers: [Retry-After]}
+  - {name: reads are not limited, as: mem_lim, request: {method: GET, path: /v1/memory}}
+  - {name: suggestions 1, as: mem_sug, request: {method: GET, path: /v1/me/suggestions}}
+  - {name: suggestions 2, as: mem_sug, request: {method: GET, path: /v1/me/suggestions}}
+  - {name: suggestions 3, as: mem_sug, request: {method: GET, path: /v1/me/suggestions}}
+  - {name: suggestions 4, as: mem_sug, request: {method: GET, path: /v1/me/suggestions}}
+  - {name: suggestions 5, as: mem_sug, request: {method: GET, path: /v1/me/suggestions}}
+  - {name: suggestions 6, as: mem_sug, request: {method: GET, path: /v1/me/suggestions}}
+  - {name: suggestions 7, as: mem_sug, request: {method: GET, path: /v1/me/suggestions}}
+  - {name: suggestions 8, as: mem_sug, request: {method: GET, path: /v1/me/suggestions}}
+  - {name: suggestions 9, as: mem_sug, request: {method: GET, path: /v1/me/suggestions}}
+  - {name: suggestions 10, as: mem_sug, request: {method: GET, path: /v1/me/suggestions}}
+  - {name: suggestions 11, as: mem_sug, request: {method: GET, path: /v1/me/suggestions}}
+  - {name: suggestions 12, as: mem_sug, request: {method: GET, path: /v1/me/suggestions}}
+  - {name: suggestions 13, as: mem_sug, request: {method: GET, path: /v1/me/suggestions}}
+  - {name: suggestions 14, as: mem_sug, request: {method: GET, path: /v1/me/suggestions}}
+  - {name: suggestions 15, as: mem_sug, request: {method: GET, path: /v1/me/suggestions}}
+  - {name: suggestions 16, as: mem_sug, request: {method: GET, path: /v1/me/suggestions}}
+  - {name: suggestions 17, as: mem_sug, request: {method: GET, path: /v1/me/suggestions}}
+  - {name: suggestions 18, as: mem_sug, request: {method: GET, path: /v1/me/suggestions}}
+  - {name: suggestions 19, as: mem_sug, request: {method: GET, path: /v1/me/suggestions}}
+  - {name: suggestions 20, as: mem_sug, request: {method: GET, path: /v1/me/suggestions}}
+  - {name: suggestions 21, as: mem_sug, request: {method: GET, path: /v1/me/suggestions}}
+  - {name: suggestions 22, as: mem_sug, request: {method: GET, path: /v1/me/suggestions}}
+  - {name: suggestions 23, as: mem_sug, request: {method: GET, path: /v1/me/suggestions}}
+  - {name: suggestions 24, as: mem_sug, request: {method: GET, path: /v1/me/suggestions}}
+  - {name: suggestions 25, as: mem_sug, request: {method: GET, path: /v1/me/suggestions}}
+  - {name: suggestions 26, as: mem_sug, request: {method: GET, path: /v1/me/suggestions}}
+  - {name: suggestions 27, as: mem_sug, request: {method: GET, path: /v1/me/suggestions}}
+  - {name: suggestions 28, as: mem_sug, request: {method: GET, path: /v1/me/suggestions}}
+  - {name: suggestions 29, as: mem_sug, request: {method: GET, path: /v1/me/suggestions}}
+  - {name: suggestions 30, as: mem_sug, request: {method: GET, path: /v1/me/suggestions}}
+  - {name: location 31, as: mem_sug, request: {method: GET, path: /v1/me/location}}
+  - {name: location 32, as: mem_sug, request: {method: GET, path: /v1/me/location}}
+  - {name: location 33, as: mem_sug, request: {method: GET, path: /v1/me/location}}
+  - {name: location 34, as: mem_sug, request: {method: GET, path: /v1/me/location}}
+  - {name: location 35, as: mem_sug, request: {method: GET, path: /v1/me/location}}
+  - {name: location 36, as: mem_sug, request: {method: GET, path: /v1/me/location}}
+  - {name: location 37, as: mem_sug, request: {method: GET, path: /v1/me/location}}
+  - {name: location 38, as: mem_sug, request: {method: GET, path: /v1/me/location}}
+  - {name: location 39, as: mem_sug, request: {method: GET, path: /v1/me/location}}
+  - {name: location 40, as: mem_sug, request: {method: GET, path: /v1/me/location}}
+  - {name: location 41, as: mem_sug, request: {method: GET, path: /v1/me/location}}
+  - {name: location 42, as: mem_sug, request: {method: GET, path: /v1/me/location}}
+  - {name: location 43, as: mem_sug, request: {method: GET, path: /v1/me/location}}
+  - {name: location 44, as: mem_sug, request: {method: GET, path: /v1/me/location}}
+  - {name: location 45, as: mem_sug, request: {method: GET, path: /v1/me/location}}
+  - {name: location 46, as: mem_sug, request: {method: GET, path: /v1/me/location}}
+  - {name: location 47, as: mem_sug, request: {method: GET, path: /v1/me/location}}
+  - {name: location 48, as: mem_sug, request: {method: GET, path: /v1/me/location}}
+  - {name: location 49, as: mem_sug, request: {method: GET, path: /v1/me/location}}
+  - {name: location 50, as: mem_sug, request: {method: GET, path: /v1/me/location}}
+  - {name: location 51, as: mem_sug, request: {method: GET, path: /v1/me/location}}
+  - {name: location 52, as: mem_sug, request: {method: GET, path: /v1/me/location}}
+  - {name: location 53, as: mem_sug, request: {method: GET, path: /v1/me/location}}
+  - {name: location 54, as: mem_sug, request: {method: GET, path: /v1/me/location}}
+  - {name: location 55, as: mem_sug, request: {method: GET, path: /v1/me/location}}
+  - {name: location 56, as: mem_sug, request: {method: GET, path: /v1/me/location}}
+  - {name: location 57, as: mem_sug, request: {method: GET, path: /v1/me/location}}
+  - {name: location 58, as: mem_sug, request: {method: GET, path: /v1/me/location}}
+  - {name: location 59, as: mem_sug, request: {method: GET, path: /v1/me/location}}
+  - {name: location 60, as: mem_sug, request: {method: GET, path: /v1/me/location}}
+  - {name: suggestions 61 is limited by the me bucket, as: mem_sug, request: {method: GET, path: /v1/me/suggestions}, headers: [Retry-After]}
+  - {name: and so is the rest of me, as: mem_sug, request: {method: GET, path: /v1/me/location}, headers: [Retry-After]}
