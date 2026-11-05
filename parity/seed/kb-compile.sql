@@ -10,7 +10,8 @@ VALUES
   ('5b000000-0000-4000-8000-0000000000a6', 'kbc_fay@parity.test', 'x', true, 'kbc_fay', 'trial', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
   ('5b000000-0000-4000-8000-0000000000a7', 'kbc_gus@parity.test', 'x', true, 'kbc_gus', 'trial', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
   ('5b000000-0000-4000-8000-0000000000a8', 'kbc_hal@parity.test', 'x', true, 'kbc_hal', 'trial', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
-  ('5b000000-0000-4000-8000-0000000000a9', 'kbc_ian@parity.test', 'x', true, 'kbc_ian', 'trial', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+  ('5b000000-0000-4000-8000-0000000000a9', 'kbc_ian@parity.test', 'x', true, 'kbc_ian', 'trial', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
+  ('5b000000-0000-4000-8000-0000000000aa', 'kbc_zed@parity.test', 'x', true, 'kbc_zed', 'trial', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
 
 INSERT INTO vaults (id, personal_owner_user_id, name, created_at, updated_at)
 VALUES
@@ -22,7 +23,8 @@ VALUES
   ('5b000000-0000-4000-8000-0000000000a6', '5b000000-0000-4000-8000-0000000000a6', 'kbc_fay''s Vault', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
   ('5b000000-0000-4000-8000-0000000000a7', '5b000000-0000-4000-8000-0000000000a7', 'kbc_gus''s Vault', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
   ('5b000000-0000-4000-8000-0000000000a8', '5b000000-0000-4000-8000-0000000000a8', 'kbc_hal''s Vault', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
-  ('5b000000-0000-4000-8000-0000000000a9', '5b000000-0000-4000-8000-0000000000a9', 'kbc_ian''s Vault', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+  ('5b000000-0000-4000-8000-0000000000a9', '5b000000-0000-4000-8000-0000000000a9', 'kbc_ian''s Vault', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
+  ('5b000000-0000-4000-8000-0000000000aa', '5b000000-0000-4000-8000-0000000000aa', 'kbc_zed''s Vault', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
 
 INSERT INTO vault_files (id, tenant_id, path, content_type, size_bytes, sha256, created_at, updated_at, processed_at)
 VALUES
@@ -42,7 +44,7 @@ SELECT tenant_id, text, normalized_text, due_at, state, memory_id, source_vault_
 FROM commitments WHERE tenant_id IN (SELECT id FROM users WHERE username LIKE 'kbc\_%');
 
 CREATE VIEW parity_kbc_usage AS
-SELECT tenant_id, metric, amount, source, metadata
+SELECT tenant_id, metric, amount, source, metadata, occurred_at
 FROM usage_events WHERE tenant_id IN (SELECT id FROM users WHERE username LIKE 'kbc\_%');
 
 CREATE VIEW parity_kbc_onboarding AS

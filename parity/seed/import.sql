@@ -53,11 +53,11 @@ SELECT id, tenant_id, content, tags, source_vault_file_id, review_state, space_i
 FROM memories WHERE tenant_id IN (SELECT id FROM users WHERE username LIKE 'imp\_%');
 
 CREATE VIEW parity_import_spaces AS
-SELECT id, tenant_id, name, slug, description, color, icon, category, note_count, created_by_user_id
+SELECT id, tenant_id, name, slug, description, color, icon, category, note_count, created_by_user_id, created_at
 FROM spaces WHERE tenant_id IN (SELECT id FROM users WHERE username LIKE 'imp\_%');
 
 CREATE VIEW parity_import_chunks AS
-SELECT tenant_id, memory_id, source_path
+SELECT tenant_id, memory_id, source_path, created_at
 FROM memory_chunks WHERE tenant_id IN (SELECT id FROM users WHERE username LIKE 'imp\_%');
 
 CREATE VIEW parity_import_pending AS

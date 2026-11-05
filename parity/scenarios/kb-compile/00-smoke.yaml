@@ -2,6 +2,6 @@
 module: kb-compile
 smoke: true
 steps:
-  - {"name": "nothing to compile", "as": "alice", "request": {"method": "POST", "path": "/v1/memory-compile", "json": {"forceFullRecompile": false}}}
-  - {"name": "missing the required flag", "as": "alice", "request": {"method": "POST", "path": "/v1/memory-compile", "json": {}}}
+  - {"name": "nothing to compile", "as": "kbc_zed", "request": {"method": "POST", "path": "/v1/memory-compile", "json": {"forceFullRecompile": false}}}
+  - {"name": "missing the required flag", "as": "kbc_zed", "request": {"method": "POST", "path": "/v1/memory-compile", "json": {}}}
   - {"name": "no token", "request": {"method": "POST", "path": "/v1/memory-compile", "json": {"forceFullRecompile": false}}}

@@ -1,4 +1,6 @@
-# Links stage through the capture pipeline, against the feeds stub.
+# Links stage through the capture pipeline, against the feeds stub. Their paths hold a
+# time and a random suffix, and the bare vault_files snapshots of other modules see every
+# tenant, so these run on a database of their own.
 module: import
 steps:
   - {"name": "stage links: dups, blanks, refused hosts, bad urls", "as": "imp_amy", "request": {"method": "POST", "path": "/v1/import", "json": {"sourceType": "", "urls": ["http://feeds:8080/capture/article", " http://feeds:8080/capture/article ", "  ", "http://feeds:8080/capture/plain", "http://localhost/x", "not a url", "ftp://a/"]}}, "capture": {"s1": "$.sessionId"}, "snapshot": ["parity_import_sessions", "parity_import_items", "parity_import_spaces"]}
