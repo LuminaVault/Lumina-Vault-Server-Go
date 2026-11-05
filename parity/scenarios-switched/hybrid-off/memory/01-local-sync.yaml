@@ -6,3 +6,5 @@ steps:
   - {name: bad vault header first, as: mem_cur, request: {method: GET, path: /v1/memory/local-sync, headers: {X-Vault-ID: nope}}}
   - {name: no token, request: {method: GET, path: /v1/memory/local-sync}}
   - {name: the rest is still mounted, as: mem_cur, request: {method: GET, path: /v1/memory}}
+  - {name: its subpaths fall to the id route too, as: mem_cur, request: {method: GET, path: /v1/memory/local-sync/lineage}}
+  - {name: delete falls to the id route, as: mem_cur, request: {method: DELETE, path: /v1/memory/local-sync}}

@@ -103,3 +103,15 @@ steps:
   - {name: gus refused even with a bad body, as: mem_gus, request: {method: POST, path: /v1/memory/upsert, raw: "{"}}
   - {name: gus reads are not behind Hermes, as: mem_gus, request: {method: GET, path: /v1/memory}}
   - {name: archived user saves with the gate off, as: mem_arc, request: {method: POST, path: /v1/memory/upsert, json: {content: archived}}}
+  - {name: no token get upsert, request: {method: GET, path: /v1/memory/upsert}}
+  - {name: no token delete graph, request: {method: DELETE, path: /v1/memory/graph}}
+  - {name: literal then lineage, as: mem_ann, request: {method: GET, path: /v1/memory/upsert/lineage}}
+  - {name: literal then related, as: mem_ann, request: {method: GET, path: /v1/memory/graph/related}}
+  - {name: literal then provenance, as: mem_ann, request: {method: GET, path: /v1/memory/facets/provenance}}
+  - {name: literal then review, as: mem_ann, request: {method: POST, path: /v1/memory/search/review}}
+  - {name: local-sync then lineage, as: mem_ann, request: {method: GET, path: /v1/memory/local-sync/lineage}}
+  - {name: delete local-sync, as: mem_ann, request: {method: DELETE, path: /v1/memory/local-sync}}
+  - {name: patch graph, as: mem_ann, request: {method: PATCH, path: /v1/memory/graph}}
+  - {name: delete facets, as: mem_ann, request: {method: DELETE, path: /v1/memory/facets}}
+  - {name: delete upsert, as: mem_ann, request: {method: DELETE, path: /v1/memory/upsert}}
+  - {name: patch search, as: mem_ann, request: {method: PATCH, path: /v1/memory/search}}
