@@ -41,6 +41,11 @@ func TestKeyToEnv(t *testing.T) {
 func TestConfigEnvNamesComeFromSwiftKeys(t *testing.T) {
 	known := map[string]bool{
 		"LV_GO_JOBS": true,
+		// Go-only: /v1/tts's switch, for a self-hosted service (internal/modules/tts).
+		"TTS_BASE_URL": true,
+		// TranscribeProviderRegistry.loadConfig builds these with key = "openai".
+		"TRANSCRIBE_RATECARD_OPENAI_MTOK_PER_SECOND":              true,
+		"TRANSCRIBE_RATECARD_OPENAI_IMPUTED_USD_PER_AUDIO_MINUTE": true,
 		// ProviderRegistry.loadConfig builds these as llm.provider.\(key).apiKey
 		// and llm.provider.\(key.lowercased()).apikey with key = "openRouter".
 		"LLM_PROVIDER_OPEN_ROUTER_API_KEY": true,

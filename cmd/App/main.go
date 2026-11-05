@@ -49,8 +49,10 @@ import (
 	"lumina/internal/modules/spaces"
 	"lumina/internal/modules/teams"
 	"lumina/internal/modules/todos"
+	"lumina/internal/modules/tts"
 	"lumina/internal/modules/vault"
 	"lumina/internal/modules/vision"
+	"lumina/internal/modules/voice"
 	"lumina/internal/onboardlatch"
 	"lumina/internal/posthog"
 	"lumina/internal/ratelimit"
@@ -227,6 +229,17 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 				entitlement.PlatformFundedMiddleware(pool, entitlement.MemoryQuery, enforcement), limits, visionConfig(cfg)),
 			kb.New(pool),
 		)
+		// Wave 5: speech to text, on the cluster's own whisper, and the 501 for spoken replies.
+		deps.Modules = append(deps.Modules, voice.New(pool, usagemeter.New(pool), identify, auth.AudioIdentify(keys, auth.PGAudioUsers(pool)),
+			entitlement.PlatformFundedMiddleware(pool, entitlement.Chat, enforcement),
+			entitlement.Middleware(pool, entitlement.Chat, enforcement, nil), limits, voiceConfig(cfg)))
+		// /v1/tts exists only for a self-hosted, OpenAI-shaped service. Unset, it isn't
+		// mounted, which matches production's 404. Open question 12: owner to confirm.
+		if strings.TrimSpace(cfg.TTSBaseURL) != "" {
+			deps.Modules = append(deps.Modules, tts.New(usagemeter.New(pool), identify,
+				entitlement.PlatformFundedMiddleware(pool, entitlement.Chat, enforcement), limits,
+				tts.Config{BaseURL: cfg.TTSBaseURL, DefaultModel: cfg.TTSDefaultModel}))
+		}
 		deps.Modules = append(deps.Modules, calendarModules(pool, cfg, identify, limits, embeddings, analytics)...)
 		if m := news.New(pool, cfg, identify, limits); m != nil { // nil without LV_SECRET_MASTER_KEY, as in Swift
 			deps.Modules = append(deps.Modules, m)
@@ -339,6 +352,17 @@ func startAchievementSink(ctx context.Context, pool *pgxpool.Pool, cfg config.Co
 // calendarModules builds calendar and mail, which share the Google grant and
 // flip together. Without a usable LV_SECRET_MASTER_KEY there is no Google side:
 // Swift then registers only /v1/calendar/sync and the brief.
+// voiceConfig maps the env onto the transcribe.* reads.
+func voiceConfig(cfg config.Config) voice.Config {
+	return voice.Config{
+		Provider: cfg.TranscribeProvider, BaseURL: cfg.TranscribeOpenAIBaseURL, APIKey: cfg.TranscribeOpenAIAPIKey,
+		Model: cfg.TranscribeOpenAIModel, MtokPerSecond: cfg.TranscribeOpenAIMtokPerSecond,
+		ImputedUSDPerAudioMinute: cfg.TranscribeOpenAIImputedPerMin,
+		StubText:                 cfg.TranscribeStubText, StubLanguage: cfg.TranscribeStubLanguage,
+		StubConfidence: cfg.TranscribeStubConfidence, StubDurationSeconds: cfg.TranscribeStubDurationSeconds,
+	}
+}
+
 // visionConfig maps the env onto App+build.swift's vision.embed.* reads.
 func visionConfig(cfg config.Config) vision.Config {
 	return vision.Config{
