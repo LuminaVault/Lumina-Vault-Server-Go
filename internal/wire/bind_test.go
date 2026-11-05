@@ -234,3 +234,20 @@ func TestBindBodyLimit(t *testing.T) {
 	require.Nil(t, out)
 	require.Equal(t, http.StatusRequestEntityTooLarge, rec.Code)
 }
+
+func TestBindNamesInt64(t *testing.T) {
+	type body struct {
+		Size *wire.Int64 `json:"size,omitempty"`
+		N    *int64      `json:"n,omitempty"`
+	}
+	got, err := bind[body](t, `{"size":5}`)
+	require.NoError(t, err)
+	require.EqualValues(t, 5, *got.Size)
+
+	_, err = bind[body](t, `{"size":"5"}`)
+	require.EqualError(t, err, "Type mismatch for `size` key, expected `Int64` type.")
+	_, err = bind[body](t, `{"n":"5"}`)
+	require.EqualError(t, err, "Type mismatch for `n` key, expected `Int` type.")
+	_, err = bind[body](t, `{"size":1.5}`)
+	require.EqualError(t, err, "The given data was not valid input: The given data was not valid JSON.")
+}
