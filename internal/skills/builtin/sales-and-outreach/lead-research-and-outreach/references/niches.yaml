@@ -1,0 +1,54 @@
+# Niche Definitions
+
+## SaaS Companies
+```yaml
+niches:
+  - name: "SaaS companies"
+    criteria:
+      - industry: "Software"
+      - type: "B2B"
+      - size_range: "50-500"
+      - growth_indicators: ["hiring", "funding", "product_launches"]
+      - keywords: ["SaaS", "software", "cloud", "platform"]
+```
+
+## AI Startups
+```yaml
+  - name: "AI startups"
+    criteria:
+      - industry: "Artificial Intelligence"
+      - keywords: ["AI", "machine learning", "LLM", "generative AI"]
+      - funding_stage: "Series A+"
+      - technology_focus: ["NLP", "computer vision", "generative models"]
+      - growth_indicators: ["funding", "hiring_engineers", "product_announcements"]
+```
+
+## FinTech Companies
+```yaml
+  - name: "FinTech companies"
+    criteria:
+      - industry: "Financial Technology"
+      - keywords: ["fintech", "payments", "blockchain", "crypto", "banking"]
+      - regulatory_focus: ["compliance", "security", "KYC"]
+      - growth_indicators: ["funding", "partnerships", "regulatory_approvals"]
+```
+
+## E-commerce Platforms
+```yaml
+  - name: "e-commerce platforms"
+    criteria:
+      - industry: "E-commerce"
+      - keywords: ["e-commerce", "ecommerce", "shopping", "retail"]
+      - business_model: ["marketplace", "DTC", "B2B"]
+      - growth_indicators: ["funding", "hiring", "expansion"]
+```
+
+## Developer Tools
+```yaml
+  - name: "developer tools"
+    criteria:
+      - industry: "Developer Tools"
+      - keywords: ["developer", "devtools", "API", "SDK", "programming"]
+      - target_audience: ["developers", "engineers", "CTO"]
+      - growth_indicators: ["github_activity", "developer_adoption", "integrations"]
+```

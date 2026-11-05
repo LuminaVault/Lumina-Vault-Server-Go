@@ -29,8 +29,10 @@ import (
 	"lumina/internal/onboardlatch"
 	"lumina/internal/posthog"
 	"lumina/internal/ratelimit"
+	"lumina/internal/soul"
 	"lumina/internal/vaultaccess"
 	"lumina/internal/vaultfiles"
+	"lumina/internal/vaultindex"
 	"lumina/internal/vaultpaths"
 	"lumina/internal/wire"
 	"net/http"
@@ -76,12 +78,13 @@ const defaultMaxFileSize = 10 * 1024 * 1024
 type Module struct {
 	pool       *pgxpool.Pool
 	q          *db.Queries
+	index      *vaultindex.Service
+	soul       *soul.Service
 	access     *vaultaccess.Service
 	store      *vaultfiles.Store
 	memories   *memorystore.Repository
 	links      *chunkindex.LinkRepository
 	paths      vaultpaths.Paths
-	hermesRoot string
 	identify   echo.MiddlewareFunc
 	limits     *ratelimit.Store
 	spaces     SpaceSeeder
@@ -99,15 +102,18 @@ func New(pool *pgxpool.Pool, opts Options) *Module {
 	if maxFile <= 0 {
 		maxFile = defaultMaxFileSize
 	}
+	store := vaultfiles.NewStore(pool, opts.Paths)
+	links := chunkindex.NewLinkRepository(pool)
 	return &Module{
 		pool:       pool,
 		q:          db.New(pool),
+		index:      vaultindex.New(pool, store, links),
+		soul:       soul.New(opts.Paths, opts.HermesDataRoot),
 		access:     vaultaccess.New(pool),
-		store:      vaultfiles.NewStore(pool, opts.Paths),
+		store:      store,
 		memories:   memorystore.New(pool, nil),
-		links:      chunkindex.NewLinkRepository(pool),
+		links:      links,
 		paths:      opts.Paths,
-		hermesRoot: opts.HermesDataRoot,
 		identify:   opts.Identify,
 		limits:     opts.Limits,
 		spaces:     opts.Spaces,
@@ -224,7 +230,7 @@ func (m *Module) create(c *echo.Context) error {
 	if err := m.paths.EnsureTenantDirectories(id); err != nil {
 		return err
 	}
-	if err := m.initSoulIfMissing(id, user.Username, m.now()); err != nil {
+	if err := m.soul.InitIfMissing(id, user.Username, m.now()); err != nil {
 		slog.ErrorContext(ctx, "vault.init soul-failed", "tenant", ids.Upper(id), "error", err)
 		return wire.NewError(http.StatusServiceUnavailable, "could not initialize SOUL.md")
 	}

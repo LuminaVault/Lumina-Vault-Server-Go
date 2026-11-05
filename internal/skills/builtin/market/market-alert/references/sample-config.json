@@ -1,0 +1,31 @@
+# Sample Configuration for Market Alert Service
+
+```json
+{
+  "market_alert_agent": {
+    "monitoring": {
+      "stocks": {
+        "enabled": true,
+        "watchlist": ["AAPL", "TSLA", "MSFT", "NVDA", "META"],
+        "thresholds": {"price_change_percent": 5.0}
+      },
+      "crypto": {
+        "enabled": true,
+        "watchlist": ["BTC", "ETH", "SOL", "DOGE"],
+        "thresholds": {"price_change_percent": 10.0}
+      },
+      "news": {
+        "enabled": true,
+        "keywords": ["earnings", "IPO", "merger", "acquisition", "FDA", "court", "lawsuit", "patent"]
+      }
+    },
+    "deployment": {
+      "telegram": false,
+      "discord": ["#stock-alerts"],
+      "slack": false
+    }
+  }
+}
+```
+
+Save this as `config.json` in the market-alerts directory.

@@ -70,3 +70,23 @@ func TestCanonicalKeyMatchesEquivalentSpellings(t *testing.T) {
 	assert.Equal(t, CanonicalKey("café"), CanonicalKey("café"))
 	assert.NotEqual(t, CanonicalKey("cafe"), CanonicalKey("café"))
 }
+
+func TestCharacterPrefix(t *testing.T) {
+	for _, tc := range []struct {
+		s    string
+		n    int
+		want string
+	}{
+		{"abc", 2, "ab"},
+		{"abc", 5, "abc"},
+		{"abc", 0, ""},
+		{"", 3, ""},
+		{"éx", 1, "é"},
+		{"\r\nx", 1, "\r\n"},
+		{"🇵🇹🇧🇷", 1, "🇵🇹"},
+	} {
+		if got := CharacterPrefix(tc.s, tc.n); got != tc.want {
+			t.Errorf("CharacterPrefix(%q, %d) = %q, want %q", tc.s, tc.n, got, tc.want)
+		}
+	}
+}

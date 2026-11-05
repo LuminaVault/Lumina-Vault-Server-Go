@@ -192,10 +192,9 @@ func TestService(t *testing.T) {
 	// Swift ApnsCategoryPrefs: gated categories read the row, the rest never do.
 	t.Run("category prefs", func(t *testing.T) {
 		tenant := newTenant(t)
-		s := NewWithSender(pool, bundle, &stubSender{})
 		suppressed := func(c Category) bool {
 			t.Helper()
-			got, err := s.isSuppressed(ctx, c, tenant)
+			got, err := isSuppressed(ctx, pool, c, tenant)
 			require.NoError(t, err)
 			return got
 		}

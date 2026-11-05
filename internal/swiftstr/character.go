@@ -335,3 +335,12 @@ func ReplaceBackslashes(s string) string {
 func CanonicalKey(s string) string {
 	return norm.NFC.String(s)
 }
+
+// CharacterPrefix is Swift's String(s.prefix(n)), exactly.
+func CharacterPrefix(s string, n int) string {
+	i := 0
+	for k := 0; k < n && i < len(s); k++ {
+		i += CharacterLen(s[i:])
+	}
+	return s[:i]
+}

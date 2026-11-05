@@ -111,6 +111,8 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Bring up Swift, Go and Postgres
         run: PARITY_SWIFT_IMAGE="$(cat parity/SWIFT_IMAGE)" scripts/parity-up.sh
+      - name: Bundled skills are byte-identical with the Swift image
+        run: scripts/check-skills-sync.sh
       - name: Self-test (Swift vs Swift, proves scenarios are deterministic)
         run: |
           go run ./parity/cmd/parity compare \
