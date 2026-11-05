@@ -1,0 +1,225 @@
+# Limits apply before the handler looks at anything. A free user's daily audio cap scales to 10.
+module: llm-voice
+steps:
+  - name: "transcribe 1"
+    as: vo_rl
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "text/plain"}}
+  - name: "transcribe 2"
+    as: vo_rl
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "text/plain"}}
+  - name: "transcribe 3"
+    as: vo_rl
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "text/plain"}}
+  - name: "transcribe 4"
+    as: vo_rl
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "text/plain"}}
+  - name: "transcribe 5"
+    as: vo_rl
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "text/plain"}}
+  - name: "transcribe 6"
+    as: vo_rl
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "text/plain"}}
+  - name: "transcribe 7"
+    as: vo_rl
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "text/plain"}}
+  - name: "transcribe 8"
+    as: vo_rl
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "text/plain"}}
+  - name: "transcribe 9"
+    as: vo_rl
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "text/plain"}}
+  - name: "transcribe 10"
+    as: vo_rl
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "text/plain"}}
+  - name: "transcribe 11"
+    as: vo_rl
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "text/plain"}}
+  - name: "transcriptions 1"
+    as: vo_arl
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "json": {}}
+  - name: "transcriptions 2"
+    as: vo_arl
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "json": {}}
+  - name: "transcriptions 3"
+    as: vo_arl
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "json": {}}
+  - name: "transcriptions 4"
+    as: vo_arl
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "json": {}}
+  - name: "transcriptions 5"
+    as: vo_arl
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "json": {}}
+  - name: "transcriptions 6"
+    as: vo_arl
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "json": {}}
+  - name: "transcriptions 7"
+    as: vo_arl
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "json": {}}
+  - name: "transcriptions 8"
+    as: vo_arl
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "json": {}}
+  - name: "transcriptions 9"
+    as: vo_arl
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "json": {}}
+  - name: "transcriptions 10"
+    as: vo_arl
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "json": {}}
+  - name: "transcriptions 11"
+    as: vo_arl
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "json": {}}
+  - name: "transcriptions 12"
+    as: vo_arl
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "json": {}}
+  - name: "transcriptions 13"
+    as: vo_arl
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "json": {}}
+  - name: "transcriptions 14"
+    as: vo_arl
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "json": {}}
+  - name: "transcriptions 15"
+    as: vo_arl
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "json": {}}
+  - name: "transcriptions 16"
+    as: vo_arl
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "json": {}}
+  - name: "transcriptions 17"
+    as: vo_arl
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "json": {}}
+  - name: "transcriptions 18"
+    as: vo_arl
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "json": {}}
+  - name: "transcriptions 19"
+    as: vo_arl
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "json": {}}
+  - name: "transcriptions 20"
+    as: vo_arl
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "json": {}}
+  - name: "transcriptions 21"
+    as: vo_arl
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "json": {}}
+  - name: "speech 1"
+    as: vo_srl
+    request: {"method": "POST", "path": "/v1/audio/speech", "json": {}}
+  - name: "speech 2"
+    as: vo_srl
+    request: {"method": "POST", "path": "/v1/audio/speech", "json": {}}
+  - name: "speech 3"
+    as: vo_srl
+    request: {"method": "POST", "path": "/v1/audio/speech", "json": {}}
+  - name: "speech 4"
+    as: vo_srl
+    request: {"method": "POST", "path": "/v1/audio/speech", "json": {}}
+  - name: "speech 5"
+    as: vo_srl
+    request: {"method": "POST", "path": "/v1/audio/speech", "json": {}}
+  - name: "speech 6"
+    as: vo_srl
+    request: {"method": "POST", "path": "/v1/audio/speech", "json": {}}
+  - name: "speech 7"
+    as: vo_srl
+    request: {"method": "POST", "path": "/v1/audio/speech", "json": {}}
+  - name: "speech 8"
+    as: vo_srl
+    request: {"method": "POST", "path": "/v1/audio/speech", "json": {}}
+  - name: "speech 9"
+    as: vo_srl
+    request: {"method": "POST", "path": "/v1/audio/speech", "json": {}}
+  - name: "speech 10"
+    as: vo_srl
+    request: {"method": "POST", "path": "/v1/audio/speech", "json": {}}
+  - name: "speech 11"
+    as: vo_srl
+    request: {"method": "POST", "path": "/v1/audio/speech", "json": {}}
+  - name: "speech 12"
+    as: vo_srl
+    request: {"method": "POST", "path": "/v1/audio/speech", "json": {}}
+  - name: "speech 13"
+    as: vo_srl
+    request: {"method": "POST", "path": "/v1/audio/speech", "json": {}}
+  - name: "speech 14"
+    as: vo_srl
+    request: {"method": "POST", "path": "/v1/audio/speech", "json": {}}
+  - name: "speech 15"
+    as: vo_srl
+    request: {"method": "POST", "path": "/v1/audio/speech", "json": {}}
+  - name: "speech 16"
+    as: vo_srl
+    request: {"method": "POST", "path": "/v1/audio/speech", "json": {}}
+  - name: "speech 17"
+    as: vo_srl
+    request: {"method": "POST", "path": "/v1/audio/speech", "json": {}}
+  - name: "speech 18"
+    as: vo_srl
+    request: {"method": "POST", "path": "/v1/audio/speech", "json": {}}
+  - name: "speech 19"
+    as: vo_srl
+    request: {"method": "POST", "path": "/v1/audio/speech", "json": {}}
+  - name: "speech 20"
+    as: vo_srl
+    request: {"method": "POST", "path": "/v1/audio/speech", "json": {}}
+  - name: "speech 21"
+    as: vo_srl
+    request: {"method": "POST", "path": "/v1/audio/speech", "json": {}}
+  - name: "speech 22"
+    as: vo_srl
+    request: {"method": "POST", "path": "/v1/audio/speech", "json": {}}
+  - name: "speech 23"
+    as: vo_srl
+    request: {"method": "POST", "path": "/v1/audio/speech", "json": {}}
+  - name: "speech 24"
+    as: vo_srl
+    request: {"method": "POST", "path": "/v1/audio/speech", "json": {}}
+  - name: "speech 25"
+    as: vo_srl
+    request: {"method": "POST", "path": "/v1/audio/speech", "json": {}}
+  - name: "speech 26"
+    as: vo_srl
+    request: {"method": "POST", "path": "/v1/audio/speech", "json": {}}
+  - name: "speech 27"
+    as: vo_srl
+    request: {"method": "POST", "path": "/v1/audio/speech", "json": {}}
+  - name: "speech 28"
+    as: vo_srl
+    request: {"method": "POST", "path": "/v1/audio/speech", "json": {}}
+  - name: "speech 29"
+    as: vo_srl
+    request: {"method": "POST", "path": "/v1/audio/speech", "json": {}}
+  - name: "speech 30"
+    as: vo_srl
+    request: {"method": "POST", "path": "/v1/audio/speech", "json": {}}
+  - name: "speech 31"
+    as: vo_srl
+    request: {"method": "POST", "path": "/v1/audio/speech", "json": {}}
+  - name: "free daily 1"
+    as: vo_free
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "json": {}}
+  - name: "free daily 2"
+    as: vo_free
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "json": {}}
+  - name: "free daily 3"
+    as: vo_free
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "json": {}}
+  - name: "free daily 4"
+    as: vo_free
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "json": {}}
+  - name: "free daily 5"
+    as: vo_free
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "json": {}}
+  - name: "free daily 6"
+    as: vo_free
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "json": {}}
+  - name: "free daily 7"
+    as: vo_free
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "json": {}}
+  - name: "free daily 8"
+    as: vo_free
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "json": {}}
+  - name: "free daily 9"
+    as: vo_free
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "json": {}}
+  - name: "free daily 10"
+    as: vo_free
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "json": {}}
+  - name: "free daily 11"
+    as: vo_free
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "json": {}}

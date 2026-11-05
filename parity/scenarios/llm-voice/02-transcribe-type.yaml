@@ -1,0 +1,44 @@
+# Rate limit: 10 a minute per user, so several users.
+module: llm-voice
+steps:
+  - name: "missing type"
+    as: vo_type
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {}}
+  - name: "text type"
+    as: vo_type
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "text/plain"}}
+  - name: "json is not accepted"
+    as: vo_type
+    request: {"method": "POST", "path": "/v1/transcribe", "json": {"audio": "x"}}
+  - name: "empty type"
+    as: vo_type
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": ""}}
+  - name: "multipart is not accepted here"
+    as: vo_type
+    request: {"method": "POST", "path": "/v1/transcribe", "raw": "--zz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.ogg\"\r\nContent-Type: audio/ogg\r\n\r\nOggS\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "aac is not accepted"
+    as: vo_type
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "audio/aac"}}
+  - name: "vorbis has a file name but isn't accepted"
+    as: vo_type
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "audio/vorbis"}}
+  - name: "only semicolons"
+    as: vo_type
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": ";;;"}}
+  - name: "parameters are stripped"
+    as: vo_type2
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "audio/ogg; codecs=opus"}}
+    snapshot: ["parity_voice_usage"]
+  - name: "case is folded"
+    as: vo_type2
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "AUDIO/WAV"}}
+  - name: "leading semicolon is skipped"
+    as: vo_type2
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": ";audio/wav"}}
+  - name: "spaces are trimmed"
+    as: vo_type2
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "audio/wav ;x=1"}}
+  - name: "an empty body still goes upstream"
+    as: vo_type2
+    request: {"method": "POST", "path": "/v1/transcribe", "raw": "", "headers": {"Content-Type": "audio/wav"}}
+    snapshot: ["parity_voice_usage"]

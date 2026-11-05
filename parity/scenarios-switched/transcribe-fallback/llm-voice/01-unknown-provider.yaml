@@ -1,0 +1,10 @@
+# groq was the default for months. An unknown name falls back with a warning.
+module: llm-voice
+steps:
+  - name: "transcribe"
+    as: vw_a
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "audio/wav"}}
+    snapshot: ["parity_voice_usage"]
+  - name: "audio"
+    as: vw_a
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.ogg\"\r\nContent-Type: audio/ogg\r\n\r\nOggS\r\n--zz\r\nContent-Disposition: form-data; name=\"response_format\"\r\n\r\nverbose_json\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
