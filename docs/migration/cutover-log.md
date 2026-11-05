@@ -936,7 +936,7 @@ Beyond the pilot gate (D-wave2-early):
   them, a re-upload's memory update deletes them, a file delete cascades.
 - Jobs: none move. `DiskSpaceMonitorService` stays in Swift. `VaultNoteMemoryUpsertQueue` has
   no caller in the controller, whose note upload is inline, so it isn't ported.
-- Swift tests: 33 in scope, 32 ported.
+- Swift tests: 32 in scope, 31 ported.
   - In scope: `VaultCRUDTests` 13, `VaultUploadSpaceTests` 6, `VaultInitTests` 3,
     `VaultExportTests` 3, `VaultLargePayloadTests` 2, `TenantVectorIndexServiceTests` 4, and
     the vault half of the `DiskSpaceGuardTests` route case.
@@ -944,7 +944,8 @@ Beyond the pilot gate (D-wave2-early):
     in `App+build.swift` saying it's wired to account deletion.
 - DTOs: `VaultFileDTO` and `VaultMoveRequest` are hand-written, because the spec has drifted
   (no `spaceId`, `updatedAt` or actor fields; `{from, to}` where the server takes
-  `{path, newPath}`). Spec conformance tests skip list, read, move and delete for that reason.
+  `{path, newPath}`). Spec conformance tests skip list and move for that reason, and read,
+  delete and export, which have no JSON body to check.
 
 ### G1 parity: met 2026-11-05
 
