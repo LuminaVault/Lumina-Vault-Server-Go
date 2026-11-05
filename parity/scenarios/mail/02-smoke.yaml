@@ -1,0 +1,14 @@
+# The G2 smoke: Gmail routes for a user with no Google grant. Connect is left out
+# on purpose: it answers 503 here (no Google client) and 200 wherever one is set,
+# and disconnect only reaches Google when a grant exists.
+module: mail
+smoke: true
+steps:
+  - {name: status no token, request: {method: GET, path: /v1/mail/gmail/status}}
+  - {name: status bad token, request: {method: GET, path: /v1/mail/gmail/status, headers: {Authorization: Bearer nope}}}
+  - {name: connect no token, request: {method: POST, path: /v1/mail/gmail/connect}}
+  - {name: disconnect no token, request: {method: POST, path: /v1/mail/gmail/disconnect}}
+  - {name: status no grant, as: cal_ben, request: {method: GET, path: /v1/mail/gmail/status}}
+  - {name: connect get not routed, as: cal_ben, request: {method: GET, path: /v1/mail/gmail/connect}}
+  - {name: disconnect no grant, as: cal_ben, request: {method: POST, path: /v1/mail/gmail/disconnect}}
+  - {name: status after, as: cal_ben, request: {method: GET, path: /v1/mail/gmail/status}}

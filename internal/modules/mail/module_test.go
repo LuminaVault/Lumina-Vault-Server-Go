@@ -14,7 +14,7 @@ import (
 // The routes run against Postgres and a stub Google in the calendar package's
 // tests: Mail is a thin view over its Google grant.
 func TestWithoutGoogleNoRouteExists(t *testing.T) {
-	e := httpserver.New(config.Config{}, httpserver.Deps{Modules: []httpserver.Module{mail.New(nil)}})
+	e := httpserver.New(config.Config{}, httpserver.Deps{Modules: []httpserver.Module{mail.New(nil, nil)}})
 	for _, route := range [][2]string{
 		{http.MethodGet, "/v1/mail/gmail/status"},
 		{http.MethodPost, "/v1/mail/gmail/connect"},

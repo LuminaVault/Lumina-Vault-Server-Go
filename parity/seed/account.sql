@@ -13,7 +13,12 @@ VALUES
   ('acc70000-0000-4000-8000-0000000000f6', 'acct-type@parity.test',   '$2b$12$asMTTkraZGgSRkkBR0CDpe.fsvorxUmu0Ue0zUG9.53O.GnHPewau', true, 'acct-type',   '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
   ('acc70000-0000-4000-8000-0000000000a7', 'acct-owner@parity.test',  '$2b$12$asMTTkraZGgSRkkBR0CDpe.fsvorxUmu0Ue0zUG9.53O.GnHPewau', true, 'acct-owner',  '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
   ('acc70000-0000-4000-8000-0000000000b8', 'acct-wrong@parity.test',  '$2b$12$asMTTkraZGgSRkkBR0CDpe.fsvorxUmu0Ue0zUG9.53O.GnHPewau', true, 'acct-wrong',  '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
-  ('acc70000-0000-4000-8000-0000000000c9', 'acct-self@parity.test',   '$2b$12$asMTTkraZGgSRkkBR0CDpe.fsvorxUmu0Ue0zUG9.53O.GnHPewau', true, 'acct-self',   '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+  ('acc70000-0000-4000-8000-0000000000c9', 'acct-self@parity.test',   '$2b$12$asMTTkraZGgSRkkBR0CDpe.fsvorxUmu0Ue0zUG9.53O.GnHPewau', true, 'acct-self',   '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
+  ('acc70000-0000-4000-8000-0000000000da', 'acct-smoke@parity.test',  '$2b$12$asMTTkraZGgSRkkBR0CDpe.fsvorxUmu0Ue0zUG9.53O.GnHPewau', true, 'acct-smoke',  '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+
+-- acct-smoke is a new signup: a user and a personal vault (05-smoke.yaml).
+INSERT INTO vaults (id, personal_owner_user_id, name, created_at, updated_at)
+VALUES ('acc70000-0000-4000-8000-0000000000da', 'acc70000-0000-4000-8000-0000000000da', 'acct-smoke''s Vault', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
 
 -- acct-del owns rows in tables reached by ON DELETE CASCADE ...
 INSERT INTO vaults (id, personal_owner_user_id, name, created_at, updated_at)

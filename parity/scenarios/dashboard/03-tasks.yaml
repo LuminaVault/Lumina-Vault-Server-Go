@@ -1,4 +1,5 @@
 module: dashboard
+smoke: true
 ignore: ["$.tasks[*].elapsedSeconds"]
 steps:
   - {name: "tasks ann", as: dash_ann, request: {method: GET, path: "/v1/tasks"}}

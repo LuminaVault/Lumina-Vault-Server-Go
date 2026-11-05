@@ -31,6 +31,7 @@ import (
 	"lumina/internal/httpserver"
 	"lumina/internal/ids"
 	"lumina/internal/modules/calendar/db"
+	"lumina/internal/posthog"
 	"lumina/internal/ratelimit"
 	"lumina/internal/swiftstr"
 	"lumina/internal/wire"
@@ -63,15 +64,18 @@ type Options struct {
 	MaxDistance float32
 	// Embeddings is the service behind the brief's live match.
 	Embeddings embedding.Service
+	// Analytics is PostHogAnalytics. Nil means analytics are off.
+	Analytics *posthog.Client
 }
 
 type Module struct {
-	q        *db.Queries
-	identify echo.MiddlewareFunc
-	limits   *ratelimit.Store
-	google   *Google
-	brief    *briefService
-	now      func() time.Time
+	q         *db.Queries
+	identify  echo.MiddlewareFunc
+	limits    *ratelimit.Store
+	google    *Google
+	brief     *briefService
+	analytics *posthog.Client
+	now       func() time.Time
 }
 
 // New builds the module. identify is auth.Identify and limits the process-wide
@@ -79,12 +83,13 @@ type Module struct {
 func New(pool *pgxpool.Pool, identify echo.MiddlewareFunc, limits *ratelimit.Store, opts Options) *Module {
 	q := db.New(pool)
 	return &Module{
-		q:        q,
-		identify: identify,
-		limits:   limits,
-		google:   opts.Google,
-		brief:    &briefService{q: q, embeddings: opts.Embeddings, maxDistance: opts.MaxDistance},
-		now:      time.Now,
+		q:         q,
+		identify:  identify,
+		limits:    limits,
+		google:    opts.Google,
+		brief:     &briefService{q: q, embeddings: opts.Embeddings, maxDistance: opts.MaxDistance},
+		analytics: opts.Analytics,
+		now:       time.Now,
 	}
 }
 
@@ -141,6 +146,8 @@ func (m *Module) connect(c *echo.Context) error {
 	case err != nil:
 		return err
 	}
+	// Despite the name, Swift fires this when consent starts, not when it is granted.
+	m.analytics.Capture("calendar_connected", ids.Upper(tenant), nil)
 	return wire.JSON(c, http.StatusOK, CalendarConnectStartResponse{AuthorizeURL: url})
 }
 
@@ -242,6 +249,7 @@ func (m *Module) createEvent(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
+	m.analytics.Capture("calendar_event_created", ids.Upper(tenant), map[string]any{"has_attendees": len(attendees) > 0})
 	return wire.JSON(c, http.StatusOK, CalendarEventDTO{
 		Id: wire.UUID{UUID: saved.ID}, Source: saved.Source, ExternalID: saved.ExternalID, Title: saved.Title,
 		Notes: saved.Notes, Location: saved.Location,
@@ -347,6 +355,9 @@ func (m *Module) appleSync(c *echo.Context) error {
 	if err := m.q.StampCalendarConsentSync(ctx, tenant); err != nil {
 		slog.WarnContext(ctx, "apple.calendar.sync stamp failed", "error", err) // try? in Swift
 	}
+	m.analytics.Capture("apple_calendar_synced", ids.Upper(tenant), map[string]any{
+		"inserted_count": inserted, "updated_count": updated, "skipped_count": skipped,
+	})
 	return wire.JSON(c, http.StatusOK, AppleSyncResponse{Inserted: inserted, Updated: updated, Skipped: skipped})
 }
 
