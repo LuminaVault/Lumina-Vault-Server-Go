@@ -1,4 +1,5 @@
 module: onboarding
+smoke: true
 steps:
   - {name: get no token, request: {method: GET, path: /v1/onboarding}}
   - {name: patch no token, request: {method: PATCH, path: /v1/onboarding, json: {signupCompleted: true}}}

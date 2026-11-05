@@ -82,7 +82,7 @@ VALUES
   ('da5b1000-0000-4000-8000-000000000001', 'da5b0000-0000-4000-8000-0000000000a1', 'builtin', 'digest', date_trunc('day', now()) + interval '4 seconds', 'OK'),
   ('da5b1000-0000-4000-8000-000000000002', 'da5b0000-0000-4000-8000-0000000000a1', 'builtin', 'digest', date_trunc('day', now()) + interval '5 seconds', 'failed'),
   ('da5b1000-0000-4000-8000-000000000003', 'da5b0000-0000-4000-8000-0000000000a1', 'vault', 'scrape', date_trunc('day', now()) + interval '6 seconds', 'running'),
-  ('da5b1000-0000-4000-8000-000000000004', 'da5b0000-0000-4000-8000-0000000000a1', 'builtin', 'digest', now() - interval '1 day 2 hours', 'completed'),
+  ('da5b1000-0000-4000-8000-000000000004', 'da5b0000-0000-4000-8000-0000000000a1', 'builtin', 'digest', date_trunc('day', now()) - interval '1 day' + interval '7 seconds', 'completed'),
   ('da5b1000-0000-4000-8000-000000000005', 'da5b0000-0000-4000-8000-0000000000a1', 'builtin', 'digest', now() - interval '8 days', 'succeeded');
 
 -- Nine enabled skills and tools (previews cap at 8) plus a disabled one.

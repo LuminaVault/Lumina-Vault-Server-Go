@@ -14,6 +14,7 @@ import (
 	"lumina/internal/migrations"
 	"lumina/internal/modules/calendar"
 	"lumina/internal/modules/mail"
+	"lumina/internal/posthog"
 	"lumina/internal/ratelimit"
 	"lumina/internal/secretbox"
 	"lumina/parity/scenario"
@@ -144,6 +145,7 @@ type opts struct {
 	unconfigured bool
 	noBox        bool
 	now          func() time.Time
+	analytics    *posthog.Client
 }
 
 func newEnv(t *testing.T, pool *pgxpool.Pool, o opts) env {
@@ -168,8 +170,9 @@ func newEnv(t *testing.T, pool *pgxpool.Pool, o opts) env {
 			calendar.New(pool, identify, ratelimit.NewStore(), calendar.Options{
 				Google: g, MaxDistance: calendar.DefaultBriefMaxDistance,
 				Embeddings: embedding.New(pool, embedding.Config{Provider: "deterministic", MonthlyCap: 2_000_000}, nil),
+				Analytics:  o.analytics,
 			}),
-			mail.New(g),
+			mail.New(g, o.analytics),
 		},
 	})
 	return env{t: t, e: e, pool: pool, box: box, google: stub}

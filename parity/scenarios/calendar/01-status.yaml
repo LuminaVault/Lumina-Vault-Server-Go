@@ -1,5 +1,6 @@
 # GET /v1/calendar/status: the row is the Google grant, shared with Gmail.
 module: calendar
+smoke: true
 steps:
   - {name: status no token, request: {method: GET, path: /v1/calendar/status}}
   - {name: status bad token, request: {method: GET, path: /v1/calendar/status, headers: {Authorization: Bearer nope}}}

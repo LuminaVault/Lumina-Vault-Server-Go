@@ -1,0 +1,21 @@
+# The G2 smoke's write path, for a user with no consent and no Google grant, next
+# to 01-status and 03-events. No step reaches Google: connect and create are left
+# out, disconnect has no grant to revoke, and the brief is left out because it can
+# call the embedding provider.
+module: calendar
+smoke: true
+steps:
+  - name: sync without consent is forbidden
+    as: cal_ben
+    request: {method: POST, path: /v1/calendar/sync, json: {events: [{externalID: smoke-1, title: Smoke, startsAt: "2099-01-01T10:00:00Z", endsAt: "2099-01-01T11:00:00Z", allDay: false}]}}
+  - {name: allow calendar, as: cal_ben, request: {method: PUT, path: /v1/apple/consent, json: {domain: calendar, allowed: true}}}
+  - name: sync inserts
+    as: cal_ben
+    request: {method: POST, path: /v1/calendar/sync, json: {events: [{externalID: smoke-1, title: Smoke, startsAt: "2099-01-01T10:00:00Z", endsAt: "2099-01-01T11:00:00Z", allDay: false}]}}
+  - name: sync updates
+    as: cal_ben
+    request: {method: POST, path: /v1/calendar/sync, json: {events: [{externalID: smoke-1, title: Smoke again, startsAt: "2099-01-01T10:00:00Z", endsAt: "2099-01-01T11:00:00Z", allDay: false}]}}
+  - {name: the event is listed, as: cal_ben, request: {method: GET, path: /v1/calendar/events}}
+  - {name: disconnect without a grant, as: cal_ben, request: {method: POST, path: /v1/calendar/disconnect}}
+  - {name: the synced event stays, as: cal_ben, request: {method: GET, path: /v1/calendar/events}}
+  - {name: status, as: cal_ben, request: {method: GET, path: /v1/calendar/status}}
