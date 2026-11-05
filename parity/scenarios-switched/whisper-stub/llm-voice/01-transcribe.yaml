@@ -1,0 +1,43 @@
+# Swift and Go send their form to the stub and read the verbose shape back.
+module: llm-voice
+steps:
+  - name: "wav"
+    as: vw_a
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "audio/wav"}}
+    snapshot: ["parity_voice_usage"]
+  - name: "ogg names the channel"
+    as: vw_a
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "audio/ogg", "X-Lumina-Channel": "telegram"}}
+    snapshot: ["parity_voice_usage"]
+  - name: "opus"
+    as: vw_a
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "audio/opus"}}
+  - name: "m4a"
+    as: vw_a
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "audio/x-m4a"}}
+  - name: "mpeg"
+    as: vw_a
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "audio/mpeg"}}
+  - name: "webm"
+    as: vw_a
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "audio/webm"}}
+  - name: "flac"
+    as: vw_a
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "audio/x-flac"}}
+  - name: "slashes and non-ASCII in the text"
+    as: vw_a
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "W1tzdHViOnJlcGx5OmEvYiA8Yz4gJiDDqV1d", "headers": {"Content-Type": "audio/wav"}}
+  - name: "transient upstream"
+    as: vw_b
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "W1tzdHViOmVycm9yOjUwM11d", "headers": {"Content-Type": "audio/ogg"}}
+    snapshot: ["parity_voice_usage"]
+  - name: "rate limited upstream"
+    as: vw_b
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "W1tzdHViOmVycm9yOjQyOV1d", "headers": {"Content-Type": "audio/ogg"}}
+  - name: "permanent upstream"
+    as: vw_b
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "W1tzdHViOmVycm9yOjQwMF1d", "headers": {"Content-Type": "audio/ogg"}}
+    snapshot: ["parity_voice_usage"]
+  - name: "an empty body is the upstream's to refuse"
+    as: vw_b
+    request: {"method": "POST", "path": "/v1/transcribe", "raw": "", "headers": {"Content-Type": "audio/wav"}}

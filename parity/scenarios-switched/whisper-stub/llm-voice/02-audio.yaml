@@ -1,0 +1,57 @@
+# The OpenAI-shaped surface on the same service. Every response_format, and the envelope on upstream failures.
+module: llm-voice
+steps:
+  - name: "json by default"
+    as: vw_c
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.ogg\"\r\nContent-Type: audio/ogg\r\n\r\nOggS\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+    snapshot: ["parity_voice_usage"]
+  - name: "json"
+    as: vw_c
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.ogg\"\r\nContent-Type: audio/ogg\r\n\r\nOggS\r\n--zz\r\nContent-Disposition: form-data; name=\"response_format\"\r\n\r\njson\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "text"
+    as: vw_c
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.ogg\"\r\nContent-Type: audio/ogg\r\n\r\nOggS\r\n--zz\r\nContent-Disposition: form-data; name=\"response_format\"\r\n\r\ntext\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "verbose_json"
+    as: vw_c
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.ogg\"\r\nContent-Type: audio/ogg\r\n\r\nOggS\r\n--zz\r\nContent-Disposition: form-data; name=\"response_format\"\r\n\r\nverbose_json\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "srt"
+    as: vw_c
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.ogg\"\r\nContent-Type: audio/ogg\r\n\r\nOggS\r\n--zz\r\nContent-Disposition: form-data; name=\"response_format\"\r\n\r\nsrt\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "vtt"
+    as: vw_c
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.ogg\"\r\nContent-Type: audio/ogg\r\n\r\nOggS\r\n--zz\r\nContent-Disposition: form-data; name=\"response_format\"\r\n\r\nvtt\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "case is folded"
+    as: vw_c
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.ogg\"\r\nContent-Type: audio/ogg\r\n\r\nOggS\r\n--zz\r\nContent-Disposition: form-data; name=\"response_format\"\r\n\r\nVERBOSE_JSON\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "an unknown format is json"
+    as: vw_c
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.ogg\"\r\nContent-Type: audio/ogg\r\n\r\nOggS\r\n--zz\r\nContent-Disposition: form-data; name=\"response_format\"\r\n\r\nyaml\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "the format isn't trimmed"
+    as: vw_c
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.ogg\"\r\nContent-Type: audio/ogg\r\n\r\nOggS\r\n--zz\r\nContent-Disposition: form-data; name=\"response_format\"\r\n\r\n text\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "the first format wins"
+    as: vw_c
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"response_format\"\r\n\r\ntext\r\n--zz\r\nContent-Disposition: form-data; name=\"response_format\"\r\n\r\njson\r\n--zz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.ogg\"\r\nContent-Type: audio/ogg\r\n\r\nOggS\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "binary holding the boundary-like run"
+    as: vw_c
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "base64": "LS16eg0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJmaWxlIjsgZmlsZW5hbWU9ImF1ZGlvLm9nZyINCkNvbnRlbnQtVHlwZTogYXVkaW8vb2dnDQoNCk9nZ1MAAkJJTkFSWQ0KLS1ub3RhYm91bmRhcnn//g0KLS16ei0tDQo=", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "slashes in json"
+    as: vw_c
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "base64": "LS16eg0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJmaWxlIjsgZmlsZW5hbWU9ImF1ZGlvLm9nZyINCkNvbnRlbnQtVHlwZTogYXVkaW8vb2dnDQoNCltbc3R1YjpyZXBseTphL2IgPGM+ICYgw6ldXQ0KLS16ei0tDQo=", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "slashes in verbose_json"
+    as: vw_c
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "base64": "LS16eg0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJmaWxlIjsgZmlsZW5hbWU9ImF1ZGlvLm9nZyINCkNvbnRlbnQtVHlwZTogYXVkaW8vb2dnDQoNCltbc3R1YjpyZXBseTphL2IgPGM+ICYgw6ldXQ0KLS16eg0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJyZXNwb25zZV9mb3JtYXQiDQoNCnZlcmJvc2VfanNvbg0KLS16ei0tDQo=", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "slashes in text"
+    as: vw_c
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "base64": "LS16eg0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJmaWxlIjsgZmlsZW5hbWU9ImF1ZGlvLm9nZyINCkNvbnRlbnQtVHlwZTogYXVkaW8vb2dnDQoNCltbc3R1YjpyZXBseTphL2IgPGM+ICYgw6ldXQ0KLS16eg0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJyZXNwb25zZV9mb3JtYXQiDQoNCnRleHQNCi0tenotLQ0K", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "a transient upstream is the envelope"
+    as: vw_c
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "base64": "LS16eg0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJmaWxlIjsgZmlsZW5hbWU9ImF1ZGlvLm9nZyINCkNvbnRlbnQtVHlwZTogYXVkaW8vb2dnDQoNCltbc3R1YjplcnJvcjo1MDNdXQ0KLS16ei0tDQo=", "headers": {"Content-Type": "multipart/form-data; boundary=zz", "X-Lumina-Channel": "telegram"}}
+    snapshot: ["parity_voice_usage"]
+  - name: "a permanent upstream is the envelope"
+    as: vw_c
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "base64": "LS16eg0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJmaWxlIjsgZmlsZW5hbWU9ImF1ZGlvLm9nZyINCkNvbnRlbnQtVHlwZTogYXVkaW8vb2dnDQoNCltbc3R1YjplcnJvcjo0MDBdXQ0KLS16ei0tDQo=", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+    snapshot: ["parity_voice_usage"]
+  - name: "the scoped token transcribes"
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "base64": "LS16eg0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSJmaWxlIjsgZmlsZW5hbWU9ImF1ZGlvLm9nZyINCkNvbnRlbnQtVHlwZTogYXVkaW8vb2dnDQoNCk9nZ1MNCi0tenotLQ0K", "headers": {"Content-Type": "multipart/form-data; boundary=zz", "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InBhcml0eSJ9.eyJzdWIiOiI3MENFMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwQUYiLCJleHAiOjQxMDI0NDQ4MDAsImlhdCI6MTc2NzIyNTYwMCwianRpIjoiNzBDRTAwMDAtMDAwMC00MDAwLTkwMDAtMDAwMDAwMDAwMDAxIiwic2NwIjoiYXVkaW8ifQ.qeYZ2jbPHMEjojIn80lZcLH0pwaAFwTxu7pc1sB-j0w"}}
+    snapshot: ["parity_voice_usage"]

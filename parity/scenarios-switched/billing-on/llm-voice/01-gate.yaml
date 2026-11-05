@@ -1,0 +1,65 @@
+# /v1/transcribe is platform funded: a floor of trial. /v1/audio isn't: every tier but archived, in the envelope.
+module: llm-voice
+steps:
+  - name: "transcribe no token"
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "text/plain", "X-Forwarded-For": "10.77.0.11"}}
+  - name: "audio no token"
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "json": {}, "headers": {"X-Forwarded-For": "10.77.0.12"}}
+  - name: "speech no token"
+    request: {"method": "POST", "path": "/v1/audio/speech", "json": {}, "headers": {"X-Forwarded-For": "10.77.0.13"}}
+  - name: "transcribe vb_free"
+    as: vb_free
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "text/plain"}}
+  - name: "transcribe vb_lapsed"
+    as: vb_lapsed
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "text/plain"}}
+  - name: "transcribe vb_arch"
+    as: vb_arch
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "text/plain"}}
+  - name: "transcribe vb_trial"
+    as: vb_trial
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "text/plain"}}
+  - name: "transcribe vb_pro"
+    as: vb_pro
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "text/plain"}}
+  - name: "transcribe vb_over"
+    as: vb_over
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "text/plain"}}
+  - name: "transcriptions vb_free"
+    as: vb_free
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "json": {}}
+  - name: "transcriptions vb_lapsed"
+    as: vb_lapsed
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "json": {}}
+  - name: "transcriptions vb_arch"
+    as: vb_arch
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "json": {}}
+  - name: "transcriptions vb_trial"
+    as: vb_trial
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "json": {}}
+  - name: "transcriptions vb_pro"
+    as: vb_pro
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "json": {}}
+  - name: "transcriptions vb_over"
+    as: vb_over
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "json": {}}
+  - name: "speech vb_free"
+    as: vb_free
+    request: {"method": "POST", "path": "/v1/audio/speech", "json": {}}
+  - name: "speech vb_lapsed"
+    as: vb_lapsed
+    request: {"method": "POST", "path": "/v1/audio/speech", "json": {}}
+  - name: "speech vb_arch"
+    as: vb_arch
+    request: {"method": "POST", "path": "/v1/audio/speech", "json": {}}
+  - name: "speech vb_trial"
+    as: vb_trial
+    request: {"method": "POST", "path": "/v1/audio/speech", "json": {}}
+  - name: "speech vb_pro"
+    as: vb_pro
+    request: {"method": "POST", "path": "/v1/audio/speech", "json": {}}
+  - name: "speech vb_over"
+    as: vb_over
+    request: {"method": "POST", "path": "/v1/audio/speech", "json": {}}
+  - name: "scoped token on speech"
+    request: {"method": "POST", "path": "/v1/audio/speech", "json": {}, "headers": {"Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InBhcml0eSJ9.eyJzdWIiOiI3MENFMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwQUYiLCJleHAiOjQxMDI0NDQ4MDAsImlhdCI6MTc2NzIyNTYwMCwianRpIjoiNzBDRTAwMDAtMDAwMC00MDAwLTkwMDAtMDAwMDAwMDAwMDAxIiwic2NwIjoiYXVkaW8ifQ.qeYZ2jbPHMEjojIn80lZcLH0pwaAFwTxu7pc1sB-j0w"}}

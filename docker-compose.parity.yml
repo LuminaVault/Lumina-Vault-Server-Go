@@ -68,6 +68,11 @@ x-common-env: &common-env
   LLM_PROVIDER_OLLAMA_BASE_URL: ${SWITCH_LLM_BASE_URL:-http://127.0.0.1:9}
   # Swift's default, which has no DNS here. The base URL carries the version prefix.
   TRANSCRIBE_PROVIDER_OPENAI_BASE_URL: ${SWITCH_TRANSCRIBE_BASE_URL:-http://whisper.horus.svc.cluster.local:8000/v1}
+  TRANSCRIBE_PROVIDER: ${SWITCH_TRANSCRIBE_PROVIDER:-openai_compatible}
+  # /v1/tts's two switches. Swift mounts it on a key, always a fake one here, with its
+  # base URL on SWITCH_LLM_BASE_URL. Go mounts it on a self-hosted service's base URL.
+  LLM_PROVIDER_OPENAI_API_KEY: ${SWITCH_OPENAI_API_KEY:-}
+  TTS_BASE_URL: ${SWITCH_TTS_BASE_URL:-}
   # Each server has its own container filesystem and no volume, so this one path
   # is a separate tree per server. `parity compare --swift-files/--go-files` reads
   # it with `docker cp`; recreating a container (scripts/parity-up.sh) empties it.

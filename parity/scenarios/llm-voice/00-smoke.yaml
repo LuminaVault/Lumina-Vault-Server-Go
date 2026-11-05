@@ -1,0 +1,13 @@
+# Nothing here reaches whisper, so it can run on staging with a fresh user.
+module: llm-voice
+smoke: true
+steps:
+  - name: "unsupported type never reaches a provider"
+    as: alice
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "text/plain"}}
+  - name: "no boundary never reaches a provider"
+    as: alice
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "json": {"model": "whisper-1"}}
+  - name: "spoken replies are refused"
+    as: alice
+    request: {"method": "POST", "path": "/v1/audio/speech", "json": {"model": "tts-1", "input": "hi", "voice": "alloy"}}

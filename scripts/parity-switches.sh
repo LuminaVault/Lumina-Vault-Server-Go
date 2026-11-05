@@ -16,6 +16,12 @@
 #   vision-stub     VISION_EMBED_PROVIDER=stub: Swift's test adapter answers
 #   vision-cohere   a Cohere key, with the base URL on the feeds stub (POST /v2/embed)
 #   billing-on      BILLING_ENFORCEMENT_ENABLED=true: the /v1/knowledge and /v1/vision paywalls, the capture gate on memory upsert
+#   whisper-stub    TRANSCRIBE_PROVIDER_OPENAI_BASE_URL on the LLM stub: transcripts come back
+#   transcribe-fallback  TRANSCRIBE_PROVIDER=groq, which is no kind: falls back to the same stub
+#   transcribe-stub TRANSCRIBE_PROVIDER=stub: Swift's test adapter answers
+#   whisper-none    a blank base URL: no adapter, so 503
+#   tts-on          /v1/tts mounted: Swift on a fake OpenAI key, Go on TTS_BASE_URL, both on the LLM stub
+#   tts-billing     tts-on with BILLING_ENFORCEMENT_ENABLED=true
 #   no-master-key   LV_SECRET_MASTER_KEY empty: /v1/grok is not mounted
 #
 #   llm             HERMES_GATEWAY_URL on the LLM stub, and capture.autoFile.enabled on:
@@ -120,6 +126,32 @@ EXPECT
   "${COMPOSE[@]}" stop swift-switched swift2-switched llmstub >/dev/null 2>&1 || true
 }
 
+# Voice's states, against the LLM stub. Zero differences alone would also pass if both
+# servers failed the same way, so the stub's counters have to show the calls happened.
+voice_states() {
+  local stats route calls
+  "${COMPOSE[@]}" up -d --build --force-recreate llmstub
+  for _ in $(seq 1 60); do
+    curl -fsS http://localhost:18085/health >/dev/null 2>&1 && break
+    sleep 1
+  done
+  run_state whisper-stub SWITCH_TRANSCRIBE_BASE_URL=http://llmstub:8080/v1
+  run_state transcribe-fallback SWITCH_TRANSCRIBE_PROVIDER=groq SWITCH_TRANSCRIBE_BASE_URL=http://llmstub:8080/v1
+  run_state transcribe-stub SWITCH_TRANSCRIBE_PROVIDER=stub
+  run_state whisper-none 'SWITCH_TRANSCRIBE_BASE_URL= '
+  run_state tts-on SWITCH_OPENAI_API_KEY=parity-openai-not-a-real-key SWITCH_LLM_BASE_URL=http://llmstub:8080 SWITCH_TTS_BASE_URL=http://llmstub:8080/v1
+  run_state tts-billing SWITCH_OPENAI_API_KEY=parity-openai-not-a-real-key SWITCH_LLM_BASE_URL=http://llmstub:8080 SWITCH_TTS_BASE_URL=http://llmstub:8080/v1 SWITCH_BILLING_ENFORCEMENT_ENABLED=true
+  stats=$(curl -fsS http://localhost:18085/stub/stats)
+  for route in /v1/audio/transcriptions /v1/audio/speech; do
+    calls=$(printf '%s' "$stats" | sed -n "s|.*\"$route\":\([0-9]*\).*|\1|p")
+    echo "stub answered ${calls:-0} on $route"
+    if [ "${calls:-0}" -lt 2 ]; then
+      echo "the servers never reached the stub on $route"
+      failed=1
+    fi
+  done
+}
+
 failed=0
 run_state community-off SWITCH_COMMUNITY_ENABLED=false
 run_state posting-off SWITCH_COMMUNITY_POSTING_ENABLED=false
@@ -133,6 +165,7 @@ run_state vision-stub SWITCH_VISION_EMBED_PROVIDER=stub
 run_state vision-cohere SWITCH_VISION_COHERE_API_KEY=parity-cohere-key SWITCH_VISION_COHERE_BASE_URL=http://feeds:8080
 run_state vision-cohere-down SWITCH_VISION_COHERE_API_KEY=parity-cohere-key SWITCH_VISION_COHERE_BASE_URL=http://feeds:9
 run_state billing-on SWITCH_BILLING_ENFORCEMENT_ENABLED=true
+voice_states
 run_state no-master-key SWITCH_LV_SECRET_MASTER_KEY=
 "${COMPOSE[@]}" up -d --build --force-recreate llmstub
 for _ in $(seq 1 60); do
