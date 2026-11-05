@@ -12,6 +12,62 @@ import (
 	"github.com/google/uuid"
 )
 
+const adjacentEdges = `-- name: AdjacentEdges :many
+SELECT id, from_node_id, to_node_id, predicate, state, confidence, rationale, counter_evidence
+FROM knowledge_edges
+WHERE tenant_id = $1
+  AND state IN ('asserted', 'suggested', 'confirmed')
+  AND (from_node_id = ANY($2::uuid[]) OR to_node_id = ANY($2::uuid[]))
+ORDER BY confidence DESC, updated_at DESC
+LIMIT $3
+`
+
+type AdjacentEdgesParams struct {
+	TenantID uuid.UUID
+	NodeIds  []uuid.UUID
+	RowLimit int32
+}
+
+type AdjacentEdgesRow struct {
+	ID              uuid.UUID
+	FromNodeID      uuid.UUID
+	ToNodeID        uuid.UUID
+	Predicate       string
+	State           string
+	Confidence      float64
+	Rationale       *string
+	CounterEvidence *string
+}
+
+func (q *Queries) AdjacentEdges(ctx context.Context, arg AdjacentEdgesParams) ([]AdjacentEdgesRow, error) {
+	rows, err := q.db.Query(ctx, adjacentEdges, arg.TenantID, arg.NodeIds, arg.RowLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdjacentEdgesRow
+	for rows.Next() {
+		var i AdjacentEdgesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.FromNodeID,
+			&i.ToNodeID,
+			&i.Predicate,
+			&i.State,
+			&i.Confidence,
+			&i.Rationale,
+			&i.CounterEvidence,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const connectionPaths = `-- name: ConnectionPaths :many
 WITH RECURSIVE paths(current_id, node_ids, edge_ids, path_confidence, depth) AS (
     SELECT $2::uuid, ARRAY[$2::uuid], ARRAY[]::uuid[], 1.0::double precision, 0
@@ -354,6 +410,66 @@ func (q *Queries) NodesByID(ctx context.Context, arg NodesByIDParams) ([]NodesBy
 	return items, nil
 }
 
+const reasoningPaths = `-- name: ReasoningPaths :many
+WITH RECURSIVE paths(start_id, current_id, node_ids, edge_ids, path_confidence, depth) AS (
+    SELECT seed, seed, ARRAY[seed], ARRAY[]::uuid[], 1.0::double precision, 0
+    FROM unnest($1::uuid[]) AS seed
+    UNION ALL
+    SELECT
+        p.start_id,
+        CASE WHEN e.from_node_id = p.current_id THEN e.to_node_id ELSE e.from_node_id END,
+        p.node_ids || CASE WHEN e.from_node_id = p.current_id THEN e.to_node_id ELSE e.from_node_id END,
+        p.edge_ids || e.id,
+        p.path_confidence * e.confidence,
+        p.depth + 1
+    FROM paths p
+    JOIN knowledge_edges e
+      ON e.tenant_id = $2
+     AND (e.from_node_id = p.current_id OR e.to_node_id = p.current_id)
+     AND e.state IN ('asserted', 'suggested', 'confirmed')
+    WHERE p.depth < $3::integer
+      AND NOT (CASE WHEN e.from_node_id = p.current_id THEN e.to_node_id ELSE e.from_node_id END = ANY(p.node_ids))
+)
+SELECT node_ids::uuid[] AS node_ids, edge_ids::uuid[] AS edge_ids, path_confidence::double precision AS path_confidence
+FROM paths
+WHERE current_id = ANY($1::uuid[])
+  AND start_id < current_id
+ORDER BY path_confidence DESC, array_length(edge_ids, 1) ASC
+LIMIT 5
+`
+
+type ReasoningPathsParams struct {
+	SeedIds  []uuid.UUID
+	TenantID uuid.UUID
+	MaxDepth int32
+}
+
+type ReasoningPathsRow struct {
+	NodeIds        []uuid.UUID
+	EdgeIds        []uuid.UUID
+	PathConfidence float64
+}
+
+func (q *Queries) ReasoningPaths(ctx context.Context, arg ReasoningPathsParams) ([]ReasoningPathsRow, error) {
+	rows, err := q.db.Query(ctx, reasoningPaths, arg.SeedIds, arg.TenantID, arg.MaxDepth)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ReasoningPathsRow
+	for rows.Next() {
+		var i ReasoningPathsRow
+		if err := rows.Scan(&i.NodeIds, &i.EdgeIds, &i.PathConfidence); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const reviewEdge = `-- name: ReviewEdge :one
 UPDATE knowledge_edges
 SET state = $1, review_note = $2, reviewed_at = NOW(), updated_at = NOW()
@@ -398,6 +514,63 @@ func (q *Queries) ReviewEdge(ctx context.Context, arg ReviewEdgeParams) (ReviewE
 		&i.CounterEvidence,
 	)
 	return i, err
+}
+
+const seedNodes = `-- name: SeedNodes :many
+WITH query AS (
+    SELECT to_tsquery('simple', $3) AS value
+)
+SELECT id, kind, label, summary, occurred_at, confidence
+FROM knowledge_nodes, query
+WHERE tenant_id = $1
+  AND to_tsvector('simple', coalesce(label, '') || ' ' || coalesce(summary, '')) @@ query.value
+ORDER BY ts_rank_cd(
+    to_tsvector('simple', coalesce(label, '') || ' ' || coalesce(summary, '')),
+    query.value
+) DESC, confidence DESC, updated_at DESC
+LIMIT $2
+`
+
+type SeedNodesParams struct {
+	TenantID         uuid.UUID
+	RowLimit         int32
+	SearchExpression string
+}
+
+type SeedNodesRow struct {
+	ID         uuid.UUID
+	Kind       string
+	Label      string
+	Summary    *string
+	OccurredAt *time.Time
+	Confidence float64
+}
+
+func (q *Queries) SeedNodes(ctx context.Context, arg SeedNodesParams) ([]SeedNodesRow, error) {
+	rows, err := q.db.Query(ctx, seedNodes, arg.TenantID, arg.RowLimit, arg.SearchExpression)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SeedNodesRow
+	for rows.Next() {
+		var i SeedNodesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Kind,
+			&i.Label,
+			&i.Summary,
+			&i.OccurredAt,
+			&i.Confidence,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const userTier = `-- name: UserTier :one

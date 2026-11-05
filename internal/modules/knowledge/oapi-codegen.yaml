@@ -5,7 +5,7 @@ output: internal/modules/knowledge/models.gen.go
 generate:
   models: true
 output-options:
-  include-operation-ids: [knowledgeGraph, explainKnowledgeConnection, confirmKnowledgeEdge, dismissKnowledgeEdge]
+  include-operation-ids: [knowledgeGraph, explainKnowledgeConnection, confirmKnowledgeEdge, dismissKnowledgeEdge, knowledgeReason, knowledgeReasonStream]
   type-mapping:
     number:
       default: { type: wire.Float64, import: lumina/internal/wire }

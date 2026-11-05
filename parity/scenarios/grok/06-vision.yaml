@@ -1,0 +1,11 @@
+# vision: chat completions with one user message of a text part and image_url parts.
+module: grok
+steps:
+  - {name: one image, as: grok_ann, request: {method: POST, path: /v1/grok/vision, json: {prompt: describe, imageURLs: ["https://x.test/a.png"]}}, snapshot: [hermes_tenant_containers]}
+  - {name: several images keep their order, as: grok_ann, request: {method: POST, path: /v1/grok/vision, json: {prompt: compare, imageURLs: ["https://x.test/b.png", "data:image/png;base64,AAAA", "not a url"]}}}
+  - {name: empty prompt goes upstream, as: grok_ann, request: {method: POST, path: /v1/grok/vision, json: {prompt: "", imageURLs: [u]}}}
+  - {name: no model in the reply, as: grok_ann, request: {method: POST, path: /v1/grok/vision, json: {prompt: "[[grok:no-model]]", imageURLs: [u]}}}
+  - {name: usage is not returned, as: grok_ann, request: {method: POST, path: /v1/grok/vision, json: {prompt: "[[grok:usage-extra]]", imageURLs: [u]}}}
+  - {name: upstream status, as: grok_ann, request: {method: POST, path: /v1/grok/vision, json: {prompt: "[[grok:status:400]]", imageURLs: [u]}}}
+  - {name: no choices, as: grok_ann, request: {method: POST, path: /v1/grok/vision, json: {prompt: "[[grok:empty-choices]]", imageURLs: [u]}}}
+  - {name: null content, as: grok_ann, request: {method: POST, path: /v1/grok/vision, json: {prompt: "[[grok:null-content]]", imageURLs: [u]}}}

@@ -1,0 +1,59 @@
+# Everything a container can answer that isn't a good reply, on chat. AsyncHTTPClient's
+# rules decide most of it: an HTTPParserError reaches Hummingbird's server as a bare 400
+# that closes the connection, and any other client error is a bare 500.
+module: grok
+steps:
+  - {name: status 204, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:status:204]]"}]}}}
+  - {name: status 300, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:status:300]]"}]}}}
+  - {name: status 304, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:status:304]]"}]}}}
+  - {name: status 400, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:status:400]]"}]}}}
+  - {name: status 401, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:status:401]]"}]}}}
+  - {name: status 402, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:status:402]]"}]}}}
+  - {name: status 403, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:status:403]]"}]}}}
+  - {name: status 404, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:status:404]]"}]}}}
+  - {name: status 409, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:status:409]]"}]}}}
+  - {name: status 429, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:status:429]]"}]}}}
+  - {name: status 500, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:status:500]]"}]}}}
+  - {name: status 502, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:status:502]]"}]}}}
+  - {name: status 503, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:status:503]]"}]}}}
+  - {name: status 504, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:status:504]]"}]}}}
+  - {name: no-choices, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:no-choices]]"}]}}}
+  - {name: null-choices, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:null-choices]]"}]}}}
+  - {name: empty-choices, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:empty-choices]]"}]}}}
+  - {name: no-message, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:no-message]]"}]}}}
+  - {name: null-content, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:null-content]]"}]}}}
+  - {name: no-content, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:no-content]]"}]}}}
+  - {name: content-parts, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:content-parts]]"}]}}}
+  - {name: bad-second-choice, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:bad-second-choice]]"}]}}}
+  - {name: usage-partial, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:usage-partial]]"}]}}}
+  - {name: usage-string, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:usage-string]]"}]}}}
+  - {name: usage-fraction, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:usage-fraction]]"}]}}}
+  - {name: model-number, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:model-number]]"}]}}}
+  - {name: upper-choices, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:upper-choices]]"}]}}}
+  - {name: leading-underscore, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:leading-underscore]]"}]}}}
+  - {name: not-json, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:not-json]]"}]}}}
+  - {name: empty, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:empty]]"}]}}}
+  - {name: array, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:array]]"}]}}}
+  - {name: a null body, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:null]]"}]}}}
+  - {name: string, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:string]]"}]}}}
+  - {name: truncated-json, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:truncated-json]]"}]}}}
+  - {name: over the 8 MiB limit, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:oversize]]"}]}}}
+  - {name: over the limit on a 500, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:oversize-500]]"}]}}}
+  - {name: body cut short, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:short-body]]"}]}}}
+  - {name: connection dropped, as: grok_ann, headers: [Connection, Content-Length], request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:hangup]]"}]}}}
+  - {name: redirect 301, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:redirect:301]]"}]}}}
+  - {name: redirect 302, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:redirect:302]]"}]}}}
+  - {name: redirect 303, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:redirect:303]]"}]}}}
+  - {name: redirect 307, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:redirect:307]]"}]}}}
+  - {name: redirect 308, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:redirect:308]]"}]}}}
+  - {name: redirect loop, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:redirect-loop]]"}]}}}
+  - {name: connection reset, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:reset]]"}]}}}
+  - {name: not http, as: grok_ann, headers: [Connection, Content-Length], request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:garbage]]"}]}}}
+  - {name: a bad header line, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:garbage-header]]"}]}}}
+  - {name: 304 with a Location is followed, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:redirect:304]]"}]}}}
+  - {name: 305 with a Location is followed, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:redirect:305]]"}]}}}
+  - {name: 302 with no Location, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:redirect-no-location]]"}]}}}
+  - {name: redirect to another scheme, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:redirect-scheme]]"}]}}}
+  - {name: redirect to another origin drops the bearer, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:redirect-other-host]]"}]}}}
+  - {name: 20 redirects are allowed, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:redirect-chain:20]]"}]}}}
+  - {name: 21 redirects are not, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:redirect-chain:21]]"}]}}}

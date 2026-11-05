@@ -4,9 +4,7 @@
 // vault_files row plus a file under <vault>/tenants/<vault id>/raw on the shared PVC.
 //
 // The Skills EventBus event vault_file_created is dropped: its one subscriber
-// only logs (docs/migration/coupling.md). So is the note upload's Space
-// suggestion, which needs CAPTURE_AUTOFILE_ENABLED and an LLM: the switch is off
-// in production and the suggestion arrives with group 4F.
+// only logs (docs/migration/coupling.md).
 package vault
 
 //go:generate sh -c "cd ../../.. && go tool oapi-codegen -config internal/modules/vault/oapi-codegen.yaml api/openapi.yaml"
@@ -68,7 +66,10 @@ type Options struct {
 	Guard          *diskguard.Guard
 	Sink           *achievementsink.Sink
 	Latches        *onboardlatch.Latches
-	Analytics      *posthog.Client
+	// CaptureFiling suggests a Space for an unfiled note after upload. Nil, the default
+	// and whenever capture.autoFile.enabled is off, means no suggestion.
+	CaptureFiling func(tenant, file uuid.UUID)
+	Analytics     *posthog.Client
 	// MaxFileSize is VaultController.maxFileSize, 10 MiB unless a test lowers it.
 	MaxFileSize int64
 }
@@ -93,6 +94,7 @@ type Module struct {
 	sink       *achievementsink.Sink
 	latches    *onboardlatch.Latches
 	analytics  *posthog.Client
+	filing     func(tenant, file uuid.UUID)
 	maxFile    int64
 	now        func() time.Time
 }
@@ -122,6 +124,7 @@ func New(pool *pgxpool.Pool, opts Options) *Module {
 		sink:       opts.Sink,
 		latches:    opts.Latches,
 		analytics:  opts.Analytics,
+		filing:     opts.CaptureFiling,
 		maxFile:    maxFile,
 		now:        time.Now,
 	}
