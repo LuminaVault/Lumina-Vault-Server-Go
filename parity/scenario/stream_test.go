@@ -335,7 +335,8 @@ func TestWSFraming(t *testing.T) {
 	require.Equal(t, map[string]any{"text": medium}, got[2])
 	require.Equal(t, map[string]any{"text": long}, got[3])
 	require.Equal(t, map[string]any{"close": 1009, "reason": "too big"}, got[4])
-	require.Equal(t, "are you there", pong.Load(), "a ping is answered with its payload")
+	// The server's goroutine reads the pong after the client has finished reading.
+	require.Eventually(t, func() bool { return pong.Load() == "are you there" }, 2*time.Second, 5*time.Millisecond, "a ping is answered with its payload")
 }
 
 func TestWSRefusesBadServerFrames(t *testing.T) {
