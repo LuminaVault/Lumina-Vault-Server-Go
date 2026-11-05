@@ -99,6 +99,9 @@ services:
       PLUGIN_RUNNER_TOKEN: ${SWITCH_RUNNER_TOKEN-parity-runner-token}
       HYBRID_EXECUTION_ENABLED: ${SWITCH_HYBRID_EXECUTION_ENABLED:-true}
       BILLING_ENFORCEMENT_ENABLED: ${SWITCH_BILLING_ENFORCEMENT_ENABLED:-false}
+      VISION_EMBED_PROVIDER: ${SWITCH_VISION_EMBED_PROVIDER:-cohere}
+      VISION_EMBED_PROVIDER_COHERE_API_KEY: ${SWITCH_VISION_COHERE_API_KEY-}
+      VISION_EMBED_PROVIDER_COHERE_BASE_URL: ${SWITCH_VISION_COHERE_BASE_URL:-https://api.cohere.com}
     ports: ["18083:8080"]
     depends_on: { pg: { condition: service_healthy }, feeds: { condition: service_started } }
     profiles: [switched]
@@ -117,6 +120,9 @@ services:
       PLUGIN_RUNNER_TOKEN: ${SWITCH_RUNNER_TOKEN-parity-runner-token}
       HYBRID_EXECUTION_ENABLED: ${SWITCH_HYBRID_EXECUTION_ENABLED:-true}
       BILLING_ENFORCEMENT_ENABLED: ${SWITCH_BILLING_ENFORCEMENT_ENABLED:-false}
+      VISION_EMBED_PROVIDER: ${SWITCH_VISION_EMBED_PROVIDER:-cohere}
+      VISION_EMBED_PROVIDER_COHERE_API_KEY: ${SWITCH_VISION_COHERE_API_KEY-}
+      VISION_EMBED_PROVIDER_COHERE_BASE_URL: ${SWITCH_VISION_COHERE_BASE_URL:-https://api.cohere.com}
     ports: ["18084:8080"]
     depends_on: { pg: { condition: service_healthy }, feeds: { condition: service_started } }
     profiles: [switched]

@@ -1,0 +1,43 @@
+# VISION_EMBED_PROVIDER=stub: Swift's test adapter, 1024 values of 0.1 padded to 1536.
+module: vision
+steps:
+  - name: "embed answers with the stub's vector"
+    as: vis_oth
+    request: {method: POST, path: "/v1/vision/embed", base64: "iVBORw0KGgo=", headers: {"Content-Type": "image/png"}}
+  - name: "jpeg"
+    as: vis_oth
+    request: {method: POST, path: "/v1/vision/embed", base64: "iVBORw0KGgo=", headers: {"Content-Type": "image/jpeg; charset=binary"}}
+  - name: "an empty body embeds"
+    as: vis_oth
+    request: {method: POST, path: "/v1/vision/embed", raw: "", headers: {"Content-Type": "image/png"}}
+  - name: "index a memory"
+    as: vis_srch
+    request: {method: POST, path: "/v1/vision/embed?indexAs=memory&memoryId=6B0E0000-0000-4000-8000-0000000000E7", base64: "iVBORw0KGgo=", headers: {"Content-Type": "image/png"}}
+    snapshot: ["memories"]
+  - name: "index another tenant's memory"
+    as: vis_srch
+    request: {method: POST, path: "/v1/vision/embed?indexAs=memory&memoryId=6B0E0000-0000-4000-8000-0000000000E8", base64: "iVBORw0KGgo=", headers: {"Content-Type": "image/png"}}
+    snapshot: ["memories"]
+  - name: "index an unknown memory"
+    as: vis_srch
+    request: {method: POST, path: "/v1/vision/embed?indexAs=memory&memoryId=00000000-0000-4000-8000-000000000000", base64: "iVBORw0KGgo=", headers: {"Content-Type": "image/png"}}
+  - name: "search finds the nearest"
+    as: vis_srch
+    request: {method: POST, path: "/v1/vision/search", base64: "iVBORw0KGgo=", headers: {"Content-Type": "image/png"}}
+    snapshot: ["memories"]
+  - name: "search limit 1"
+    as: vis_srch
+    request: {method: POST, path: "/v1/vision/search?limit=1", base64: "iVBORw0KGgo=", headers: {"Content-Type": "image/png"}}
+  - name: "search limit 2: outputs have a quota"
+    as: vis_srch
+    request: {method: POST, path: "/v1/vision/search?limit=2", base64: "iVBORw0KGgo=", headers: {"Content-Type": "image/png"}}
+  - name: "search of a tenant with one embedded memory"
+    as: vis_oth
+    request: {method: POST, path: "/v1/vision/search", base64: "iVBORw0KGgo=", headers: {"Content-Type": "image/png"}}
+  - name: "search with nothing embedded"
+    as: vis_coh
+    request: {method: POST, path: "/v1/vision/search", base64: "iVBORw0KGgo=", headers: {"Content-Type": "image/png"}}
+  - name: "searching counts no hits, and every embed is metered"
+    as: vis_oth
+    request: {method: GET, path: "/v1/knowledge/graph"}
+    snapshot: ["parity_vision_usage"]

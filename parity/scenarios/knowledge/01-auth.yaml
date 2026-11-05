@@ -1,0 +1,67 @@
+module: knowledge
+steps:
+  - name: "graph no token"
+    request: {method: GET, path: "/v1/knowledge/graph", headers: {"X-Forwarded-For": "10.76.0.1"}}
+  - name: "graph bad token"
+    request: {method: GET, path: "/v1/knowledge/graph", headers: {"X-Forwarded-For": "10.76.0.1", "Authorization": "Bearer not.a.jwt"}}
+  - name: "graph bad vault header before identity"
+    request: {method: GET, path: "/v1/knowledge/graph", headers: {"X-Forwarded-For": "10.76.0.1", "X-Vault-ID": "nope"}}
+  - name: "explain no token, bad body: the body is read first"
+    request: {method: POST, path: "/v1/knowledge/connections/explain", raw: "{", headers: {"X-Forwarded-For": "10.76.0.1"}}
+  - name: "explain no token, good body"
+    request: {method: POST, path: "/v1/knowledge/connections/explain", json: {"fromNodeID": "6B100000-0000-4000-8000-00000000000B", "toNodeID": "6B100000-0000-4000-8000-00000000000C"}, headers: {"X-Forwarded-For": "10.76.0.1"}}
+  - name: "explain no token, bad vault header, good body"
+    request: {method: POST, path: "/v1/knowledge/connections/explain", json: {"fromNodeID": "6B100000-0000-4000-8000-00000000000B", "toNodeID": "6B100000-0000-4000-8000-00000000000C"}, headers: {"X-Forwarded-For": "10.76.0.1", "X-Vault-ID": "nope"}}
+  - name: "confirm no token, bad id: the id is read first"
+    request: {method: POST, path: "/v1/knowledge/edges/nope/confirm", raw: "{", headers: {"X-Forwarded-For": "10.76.0.1"}}
+  - name: "confirm no token, bad body"
+    request: {method: POST, path: "/v1/knowledge/edges/6B200000-0000-4000-8000-000000000032/confirm", raw: "{", headers: {"X-Forwarded-For": "10.76.0.1"}}
+  - name: "confirm no token, good body"
+    request: {method: POST, path: "/v1/knowledge/edges/6B200000-0000-4000-8000-000000000032/confirm", json: {}, headers: {"X-Forwarded-For": "10.76.0.1"}}
+  - name: "dismiss bad token, good body"
+    request: {method: POST, path: "/v1/knowledge/edges/6B200000-0000-4000-8000-000000000032/dismiss", json: {}, headers: {"X-Forwarded-For": "10.76.0.1", "Authorization": "Bearer not.a.jwt"}}
+  - name: "wrong method on graph"
+    as: kg_empty
+    request: {method: POST, path: "/v1/knowledge/graph", json: {}}
+  - name: "wrong method on explain"
+    as: kg_empty
+    request: {method: GET, path: "/v1/knowledge/connections/explain"}
+  - name: "wrong method on confirm"
+    as: kg_empty
+    request: {method: GET, path: "/v1/knowledge/edges/6B200000-0000-4000-8000-000000000032/confirm"}
+  - name: "unknown edge action"
+    as: kg_empty
+    request: {method: POST, path: "/v1/knowledge/edges/6B200000-0000-4000-8000-000000000032/archive", json: {}}
+  - name: "fresh tenant has an empty graph"
+    as: kg_empty
+    request: {method: GET, path: "/v1/knowledge/graph"}
+  - name: "bad vault header"
+    as: kg_empty
+    request: {method: GET, path: "/v1/knowledge/graph", headers: {"X-Vault-ID": "1234"}}
+  - name: "empty vault header"
+    as: kg_empty
+    request: {method: GET, path: "/v1/knowledge/graph", headers: {"X-Vault-ID": ""}}
+  - name: "unknown vault"
+    as: kg_empty
+    request: {method: GET, path: "/v1/knowledge/graph", headers: {"X-Vault-ID": "00000000-0000-4000-8000-000000000000"}}
+  - name: "a vault the caller is not in"
+    as: kg_empty
+    request: {method: GET, path: "/v1/knowledge/graph", headers: {"X-Vault-ID": "6B0C0000-0000-4000-8000-0000000000C1"}}
+  - name: "another tenant's personal vault"
+    as: kg_empty
+    request: {method: GET, path: "/v1/knowledge/graph", headers: {"X-Vault-ID": "6B000000-0000-4000-8000-0000000000A1"}}
+  - name: "viewer reads the team vault"
+    as: kg_view
+    request: {method: GET, path: "/v1/knowledge/graph", headers: {"X-Vault-ID": "6B0C0000-0000-4000-8000-0000000000C1"}}
+  - name: "lowercase vault id"
+    as: kg_view
+    request: {method: GET, path: "/v1/knowledge/graph", headers: {"X-Vault-ID": "6b0c0000-0000-4000-8000-0000000000c1"}}
+  - name: "viewer's personal graph has none of it"
+    as: kg_view
+    request: {method: GET, path: "/v1/knowledge/graph"}
+  - name: "viewer explains in the team vault"
+    as: kg_view
+    request: {method: POST, path: "/v1/knowledge/connections/explain", json: {"fromNodeID": "6B100000-0000-4000-8000-00000000003C", "toNodeID": "6B100000-0000-4000-8000-00000000003D"}, headers: {"X-Vault-ID": "6B0C0000-0000-4000-8000-0000000000C1"}}
+  - name: "viewer without the vault header finds no path"
+    as: kg_view
+    request: {method: POST, path: "/v1/knowledge/connections/explain", json: {"fromNodeID": "6B100000-0000-4000-8000-00000000003C", "toNodeID": "6B100000-0000-4000-8000-00000000003D"}}

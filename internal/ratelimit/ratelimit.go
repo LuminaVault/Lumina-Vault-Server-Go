@@ -84,6 +84,13 @@ var MeTodayByUser = Policy{Name: "meTodayByUser", Max: 60, Window: 60 * time.Sec
 var QueryByUser = Policy{Name: "queryByUser", Max: 30, Window: 60 * time.Second, TierScale: StandardTierScale}
 
 // ErrLimited is the Swift 429 body.
+// VisionEmbedByUserPerMinute and VisionEmbedByUserDaily are
+// RateLimitPolicy.visionEmbedByUser*: stacked on /v1/vision, keyed by user or IP.
+var (
+	VisionEmbedByUserPerMinute = Policy{Name: "visionEmbedByUserPerMinute", Max: 10, Window: 60 * time.Second}
+	VisionEmbedByUserDaily     = Policy{Name: "visionEmbedByUserDaily", Max: 200, Window: 86400 * time.Second}
+)
+
 var ErrLimited = wire.NewError(http.StatusTooManyRequests, "rate limit exceeded")
 
 type bucket struct {

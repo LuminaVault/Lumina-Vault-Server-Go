@@ -91,6 +91,14 @@ type paywall struct {
 	RequiredTier string `json:"requiredTier"`
 }
 
+// paywallFor is EntitlementMiddleware.paywallResponse(for:).
+func paywallFor(c Capability) paywall {
+	if c.RequiresUltimate() {
+		return paywall{Paywall: true, PaywallID: "ultimate_upsell", RequiredTier: "ultimate"}
+	}
+	return paywall{Paywall: true, PaywallID: "default", RequiredTier: "pro"}
+}
+
 // HasUsableCredential answers BYOEntitlementPolicy's "own key" question.
 type HasUsableCredential func(ctx context.Context, tenant uuid.UUID) bool
 
@@ -131,13 +139,43 @@ func MiddlewareWithHermes(pool *pgxpool.Pool, c Capability, enforcementEnabled b
 					return next(ctx)
 				}
 			}
-			p := paywall{Paywall: true, PaywallID: "default", RequiredTier: "pro"}
-			if c.RequiresUltimate() {
-				p.PaywallID, p.RequiredTier = "ultimate_upsell", "ultimate"
-			}
-			return wire.JSON(ctx, http.StatusPaymentRequired, p)
+			return wire.JSON(ctx, http.StatusPaymentRequired, paywallFor(c))
 		}
 	}
+}
+
+// PlatformFundedMiddleware is EntitlementMiddleware with platformFunded true: the
+// route spends our key whoever calls it, so there is no bring-your-own exemption,
+// and on top of the capability the effective tier must be trial or better. An
+// override clears the floor. Mount it after auth, as Middleware.
+func PlatformFundedMiddleware(pool *pgxpool.Pool, c Capability, enforcementEnabled bool) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		if !enforcementEnabled {
+			return next
+		}
+		return func(ctx *echo.Context) error {
+			tenant, ok := auth.Identity(ctx)
+			if !ok {
+				return wire.ErrUnauthenticated
+			}
+			var tier, override string
+			if err := pool.QueryRow(ctx.Request().Context(), `SELECT tier, tier_override FROM users WHERE id = $1`, tenant).Scan(&tier, &override); err != nil {
+				return err
+			}
+			if Entitled(tier, override, c) && meetsPlatformFundedFloor(tier, override) {
+				return next(ctx)
+			}
+			return wire.JSON(ctx, http.StatusPaymentRequired, paywallFor(c))
+		}
+	}
+}
+
+func meetsPlatformFundedFloor(tier, override string) bool {
+	switch EffectiveTier(tier, override) {
+	case "trial", "pro", "ultimate":
+		return true
+	}
+	return false
 }
 
 // EnforcementEnabled parses billing.enforcementEnabled as Swift does:
