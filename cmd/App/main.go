@@ -432,9 +432,6 @@ func selfImprovementModule(pool *pgxpool.Pool, cfg config.Config, box *secretbox
 		EconomyModel:    cfg.SelfImprovementEconomyModel,
 		GloballyEnabled: cfg.SelfImprovementEnabled,
 	}
-	if opts.EconomyModel == "" {
-		opts.EconomyModel = cfg.UsageDegradeModel
-	}
 	if resolver := hermesResolver(pool, cfg, box); resolver != nil {
 		opts.IsUserOverride = selfimprove.ResolverOverride(resolver)
 	}
