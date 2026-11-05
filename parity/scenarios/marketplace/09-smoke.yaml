@@ -1,0 +1,17 @@
+# The G2 smoke, for a user with no publisher application. Steps name no seeded
+# plugin, so they answer the same whatever the catalog holds, and nothing reaches
+# the plugin runner. 01-browsing and the rest need the parity catalog.
+# Anonymous steps send their own X-Forwarded-For (settingsByUser, 30/min by IP).
+module: marketplace
+smoke: true
+steps:
+  - {name: list no token, request: {method: GET, path: /v1/marketplace/plugins, headers: {X-Forwarded-For: 10.77.9.1}}}
+  - {name: list bad token, request: {method: GET, path: /v1/marketplace/plugins, headers: {Authorization: Bearer nope, X-Forwarded-For: 10.77.9.1}}}
+  - {name: list, as: mkt_none, request: {method: GET, path: /v1/marketplace/plugins}}
+  - {name: list with a query that matches nothing, as: mkt_none, request: {method: GET, path: "/v1/marketplace/plugins?query=zzzzzz"}}
+  - {name: detail unknown, as: mkt_none, request: {method: GET, path: /v1/marketplace/plugins/nope}}
+  - {name: reviews unknown, as: mkt_none, request: {method: GET, path: /v1/marketplace/plugins/nope/reviews}}
+  - {name: no publisher application, as: mkt_none, request: {method: GET, path: /v1/marketplace/publisher}}
+  - {name: no submissions, as: mkt_none, request: {method: GET, path: /v1/marketplace/publisher/submissions}}
+  - {name: a non publisher cannot list, as: mkt_none, request: {method: POST, path: /v1/marketplace/publisher/plugins, json: {slug: smoke-plugin, name: N, summary: S, description: D, category: skill}}}
+  - {name: not an admin, as: mkt_none, request: {method: GET, path: /v1/marketplace/admin/submissions}}

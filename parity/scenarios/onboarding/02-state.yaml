@@ -1,4 +1,5 @@
 module: onboarding
+smoke: true
 steps:
   - {name: get creates the row, as: onb_ann, request: {method: GET, path: /v1/onboarding}, snapshot: [onboarding_state]}
   - {name: get is stable, as: onb_ann, request: {method: GET, path: /v1/onboarding}, snapshot: [onboarding_state]}
