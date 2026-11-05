@@ -841,6 +841,7 @@ func TestResources(t *testing.T) {
 	t.Run("path parameters are not percent-decoded, as in Hummingbird", func(t *testing.T) {
 		requireError(t, pin(tenant, "skill", "al%70ha", `{"pinned":true}`), http.StatusBadRequest, "invalid_resource_name")
 		requireError(t, pin(tenant, "skill", "a%2Fb", `{"pinned":true}`), http.StatusBadRequest, "invalid_resource_name")
+		requireError(t, pin(tenant, "skill", "caf%C3%A9", `{"pinned":true}`), http.StatusBadRequest, "invalid_resource_name")
 		requireError(t, pin(tenant, "ski%6C", "alpha", `{"pinned":true}`), http.StatusBadRequest, "invalid_resource")
 		requireError(t, v.do(tenant, http.MethodGet, base+"/runs/%35"+uuid.NewString()[1:], ""), http.StatusBadRequest, "invalid_id")
 	})

@@ -570,7 +570,10 @@ func (m *Module) pinResource(c *echo.Context) error {
 	if !kind.Valid() {
 		return errInvalidResource
 	}
-	name := c.Param("name")
+	// From the raw path, because the router decodes an escape it can re-encode the
+	// same way (caf%C3%A9) and Hummingbird decodes none.
+	segments := wire.PathSegments(c.Request())
+	name := segments[len(segments)-1]
 	body, err := wire.Bind[pinRequest](c)
 	if err != nil {
 		return err
