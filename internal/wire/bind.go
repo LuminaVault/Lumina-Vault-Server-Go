@@ -262,7 +262,7 @@ func mapErr(key string, err error) error {
 	if errors.As(err, &typeErr) {
 		// A number that is not an integer is dataCorrupted in Foundation, not a
 		// type mismatch (parity CI).
-		if strings.HasPrefix(typeErr.Value, "number") && swiftType(typeErr.Type) == "Int" {
+		if name := swiftType(typeErr.Type); strings.HasPrefix(typeErr.Value, "number") && (name == "Int" || name == "Int64") {
 			return notJSON
 		}
 		return mismatch(key, swiftType(typeErr.Type))
@@ -274,10 +274,17 @@ func mismatch(key, typ string) *Error {
 	return NewError(http.StatusBadRequest, fmt.Sprintf("Type mismatch for `%s` key, expected `%s` type.", key, typ))
 }
 
+// Int64 is a request field Swift declares as Int64. Its type-mismatch message
+// says so, where a plain int64 reads as Int.
+type Int64 int64
+
 // swiftType names a Go type as Foundation's DecodingError does.
 func swiftType(t reflect.Type) string {
 	for t.Kind() == reflect.Pointer {
 		t = t.Elem()
+	}
+	if t == reflect.TypeFor[Int64]() {
+		return "Int64"
 	}
 	switch t.Kind() {
 	case reflect.String:

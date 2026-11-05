@@ -111,10 +111,11 @@ steps:
   - {name: quota beats an unknown space, as: ing_zed, request: {method: POST, path: /v1/ingestions, json: {spaceID: 00000000-0000-4000-8000-000000000000, items: [{kind: file, sizeBytes: 1}]}}}
   - {name: lapsed may add what has no size, as: ing_zed, request: {method: POST, path: /v1/ingestions, json: {items: [{kind: url, url: "https://example.test"}]}}}
   - {name: lapsed with a negative size stays allowed, as: ing_zed, request: {method: POST, path: /v1/ingestions, json: {items: [{kind: url, url: "https://example.test", sizeBytes: -1}]}}}
-  - {name: free at its ceiling, as: ing_fay, request: {method: POST, path: /v1/ingestions, json: {items: [{kind: file, fileName: a.txt, contentType: text/plain, sizeBytes: 825}]}}}
-  - {name: free just under its ceiling, as: ing_fay, request: {method: POST, path: /v1/ingestions, json: {items: [{kind: file, fileName: a.txt, contentType: text/plain, sizeBytes: 824}]}}}
-  - {name: pro over its ceiling, as: ing_pam, request: {method: POST, path: /v1/ingestions, json: {items: [{kind: file, fileName: a.txt, contentType: text/plain, sizeBytes: 2147483648}]}}}
-  - name: the quota refusals wrote nothing
+  - {name: what free already stores doesn't count, as: ing_fay, request: {method: POST, path: /v1/ingestions, json: {items: [{kind: file, fileName: a.txt, contentType: text/plain, sizeBytes: 825}]}}}
+  - {name: nor a second time, as: ing_fay, request: {method: POST, path: /v1/ingestions, json: {items: [{kind: file, fileName: a.txt, contentType: text/plain, sizeBytes: 824}]}}}
+  - {name: free over on the new bytes alone, as: ing_fay, request: {method: POST, path: /v1/ingestions, json: {items: [{kind: file, fileName: a.txt, contentType: text/plain, sizeBytes: 1073741825}]}}}
+  - {name: what pro already stores doesn't count, as: ing_pam, request: {method: POST, path: /v1/ingestions, json: {items: [{kind: file, fileName: a.txt, contentType: text/plain, sizeBytes: 2147483648}]}}}
+  - name: only the refused batches were left out
     as: ing_zed
     request: {method: GET, path: /v1/ingestions}
     snapshot: *tables

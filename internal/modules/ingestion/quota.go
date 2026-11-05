@@ -3,7 +3,6 @@ package ingestion
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"lumina/internal/config"
 
 	"github.com/google/uuid"
@@ -70,16 +69,12 @@ func QuotaFromConfig(cfg config.Config) Quota {
 	}
 }
 
-// usedBytes is the SUM over vault_files. A failed sum reads as 0 and is logged, so
-// a metering blip never blocks an upload: the check fails open.
-func (m *Module) usedBytes(ctx context.Context, tenant uuid.UUID) int64 {
-	total, err := m.q.StoredBytes(ctx, tenant)
-	if err != nil {
-		slog.ErrorContext(ctx, "storage quota sum failed", "tenant_id", tenant.String(), "error", err)
-		return 0
-	}
-	return total
-}
+// usedBytes is what StorageQuotaService.usedBytes answers in production: always
+// 0. Swift decodes COALESCE(SUM(size_bytes), 0), a numeric, as Int64; the decode
+// fails under try? and reads as 0, so what a tenant already stores never counts.
+// Parity pins it (ingestion/02-create). Counting it is an owner decision: a
+// bigint SUM here, and the same fix in Swift if Swift still serves the route.
+func usedBytes() int64 { return 0 }
 
 // quotaDenied is StorageQuotaService.check; it returns what the message needs.
 func (m *Module) quotaDenied(ctx context.Context, tenant uuid.UUID, tier string, incoming int64) (used, limit int64, denied bool) {
@@ -90,7 +85,7 @@ func (m *Module) quotaDenied(ctx context.Context, tenant uuid.UUID, tier string,
 	if ceiling == nil {
 		return 0, 0, false
 	}
-	used = m.usedBytes(ctx, tenant)
+	used = usedBytes()
 	if used+max(0, incoming) <= *ceiling {
 		return 0, 0, false
 	}

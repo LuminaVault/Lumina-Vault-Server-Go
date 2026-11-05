@@ -577,17 +577,6 @@ func (q *Queries) SpaceSlug(ctx context.Context, arg SpaceSlugParams) (string, e
 	return slug, err
 }
 
-const storedBytes = `-- name: StoredBytes :one
-SELECT COALESCE(SUM(size_bytes), 0)::bigint AS total FROM vault_files WHERE tenant_id = $1
-`
-
-func (q *Queries) StoredBytes(ctx context.Context, tenantID uuid.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, storedBytes, tenantID)
-	var total int64
-	err := row.Scan(&total)
-	return total, err
-}
-
 const userTier = `-- name: UserTier :one
 SELECT tier FROM users WHERE id = $1 LIMIT 1
 `

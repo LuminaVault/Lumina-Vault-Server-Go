@@ -33,12 +33,20 @@ func (k *sourceKind) UnmarshalJSON(b []byte) error {
 
 // createItemRequest is IngestionCreateItemRequest.
 type createItemRequest struct {
-	Kind        sourceKind `json:"kind"`
-	FileName    *string    `json:"fileName,omitempty"`
-	ContentType *string    `json:"contentType,omitempty"`
-	SizeBytes   *int64     `json:"sizeBytes,omitempty"`
-	SHA256      *string    `json:"sha256,omitempty"`
-	URL         *string    `json:"url,omitempty"`
+	Kind        sourceKind  `json:"kind"`
+	FileName    *string     `json:"fileName,omitempty"`
+	ContentType *string     `json:"contentType,omitempty"`
+	SizeBytes   *wire.Int64 `json:"sizeBytes,omitempty"`
+	SHA256      *string     `json:"sha256,omitempty"`
+	URL         *string     `json:"url,omitempty"`
+}
+
+func (r createItemRequest) sizeBytes() *int64 {
+	if r.SizeBytes == nil {
+		return nil
+	}
+	size := int64(*r.SizeBytes)
+	return &size
 }
 
 // createRequest is IngestionCreateRequest.

@@ -79,7 +79,7 @@ func (m *Module) create(c *echo.Context) error {
 		}
 		if err := m.q.InsertItem(ctx, db.InsertItemParams{
 			ID: uuid.New(), TenantID: acc.VaultID, BatchID: batchID, Kind: string(input.Kind), State: state,
-			FileName: input.FileName, ContentType: input.ContentType, SizeBytes: input.SizeBytes,
+			FileName: input.FileName, ContentType: input.ContentType, SizeBytes: input.sizeBytes(),
 			ExpectedSha256: sha, Url: input.URL, CreatedAt: m.now(),
 		}); err != nil {
 			return err
@@ -97,7 +97,7 @@ func declaredBytes(items []createItemRequest) int64 {
 		if item.SizeBytes == nil {
 			continue
 		}
-		size := *item.SizeBytes
+		size := int64(*item.SizeBytes)
 		switch {
 		case size > 0 && total > math.MaxInt64-size:
 			total = math.MaxInt64
@@ -124,7 +124,7 @@ func (m *Module) tenantTier(ctx context.Context, tenant uuid.UUID) (string, erro
 func validateItem(item createItemRequest) error {
 	if item.Kind == kindFile {
 		if item.FileName == nil || *item.FileName == "" || item.ContentType == nil ||
-			item.SizeBytes == nil || *item.SizeBytes <= 0 || *item.SizeBytes > maxFileBytes {
+			item.SizeBytes == nil || *item.SizeBytes <= 0 || int64(*item.SizeBytes) > maxFileBytes {
 			return wire.NewError(http.StatusBadRequest, "file metadata is incomplete or too large")
 		}
 		return nil

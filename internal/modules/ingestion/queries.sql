@@ -76,9 +76,6 @@ ORDER BY edge.id, evidence.created_at LIMIT 200;
 -- name: ItemByTokenHash :one
 SELECT * FROM ingestion_items WHERE source_token_hash = $1 LIMIT 1;
 
--- name: StoredBytes :one
-SELECT COALESCE(SUM(size_bytes), 0)::bigint AS total FROM vault_files WHERE tenant_id = $1;
-
 -- name: UserTier :one
 SELECT tier FROM users WHERE id = $1 LIMIT 1;
 

@@ -524,3 +524,57 @@ func TestResponsesConformToSpec(t *testing.T) {
 		require.NoError(t, openapi3filter.ValidateResponse(ctx, out), "%s %s: %s", c.method, c.path, r.body)
 	}
 }
+
+// Swift's usedBytes reads as 0 (see usedBytes), so only the new bytes meet the
+// ceiling. ing_fay stores 1073741000 B of her 1 GiB, ing_pam 99 GiB of his 100.
+func TestWhatATenantStoresDoesNotCountAgainstTheCeiling(t *testing.T) {
+	v := setup(t, plentyOfDisk)
+	fay := uuid.MustParse("1A6E0000-0000-4000-8000-0000000000A4")
+	pam := uuid.MustParse("1A6E0000-0000-4000-8000-0000000000A5")
+	create := func(user uuid.UUID, size string) resp {
+		return v.do(user, http.MethodPost, "/v1/ingestions",
+			`{"items":[{"kind":"file","fileName":"a.txt","contentType":"text/plain","sizeBytes":`+size+`}]}`)
+	}
+	require.Equal(t, http.StatusOK, create(fay, "825").code)
+	require.Equal(t, http.StatusOK, create(pam, "2147483648").code)
+
+	r := create(fay, "1073741825")
+	require.Equal(t, http.StatusRequestEntityTooLarge, r.code)
+	require.JSONEq(t, `{"error":{"message":"storage quota exceeded: 0 B of 1.0 GiB used"}}`, string(r.body))
+}
+
+// Over a real connection: the recorder never sets net/http's Content-Length.
+func TestSourceLengthUnderGzip(t *testing.T) {
+	v := setup(t, plentyOfDisk)
+	const itemPath = "/v1/ingestions/1A6E3000-0000-4000-8000-0000000000B1/items/1A6E4000-0000-4000-8000-0000000000B1"
+	const token = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	require.Equal(t, http.StatusNoContent, v.do(src, http.MethodPut, itemPath+"/chunks/0", strings.Repeat("x", 1024)).code)
+	require.Equal(t, http.StatusOK, v.do(src, http.MethodPost, itemPath+"/complete", "").code)
+	srv := httptest.NewServer(v.e)
+	defer srv.Close()
+	get := func(method string, hdr ...string) (int, http.Header) {
+		req, err := http.NewRequest(method, srv.URL+"/v1/ingestion-sources/"+token, http.NoBody)
+		require.NoError(t, err)
+		req.Header.Set("Accept-Encoding", "gzip")
+		for i := 0; i+1 < len(hdr); i += 2 {
+			req.Header.Set(hdr[i], hdr[i+1])
+		}
+		res, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer func() { _ = res.Body.Close() }()
+		return res.StatusCode, res.Header
+	}
+	_, whole := get(http.MethodGet)
+	require.Equal(t, "gzip", whole.Get("Content-Encoding"))
+	require.Empty(t, whole.Get("Content-Length"))
+	status, ranged := get(http.MethodGet, "Range", "bytes=0-599")
+	require.Equal(t, http.StatusPartialContent, status)
+	require.Equal(t, "gzip", ranged.Get("Content-Encoding"))
+	require.Empty(t, ranged.Get("Content-Length"))
+	_, short := get(http.MethodGet, "Range", "bytes=0-9")
+	require.Empty(t, short.Get("Content-Encoding"))
+	require.Equal(t, "10", short.Get("Content-Length"))
+	_, head := get(http.MethodHead)
+	require.Empty(t, head.Get("Content-Encoding"))
+	require.Equal(t, "1024", head.Get("Content-Length"))
+}

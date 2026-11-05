@@ -87,8 +87,10 @@ func (m *Module) source(c *echo.Context) error {
 	h.Set("Content-Disposition", `attachment; filename="`+strings.ReplaceAll(name, `"`, "")+`"`)
 	switch {
 	case head:
-		h.Set("Content-Length", strconv.FormatInt(size, 10))
+		// Gzip's WriteHeader drops the length and holds the status until the
+		// handler returns. A HEAD has no body to compress, so it stays, as in Swift.
 		c.Response().WriteHeader(http.StatusOK)
+		h.Set("Content-Length", strconv.FormatInt(size, 10))
 		return nil
 	case ranged:
 		h.Set("Content-Length", strconv.FormatInt(last-first+1, 10))
@@ -99,6 +101,9 @@ func (m *Module) source(c *echo.Context) error {
 		return streamFile(c, target, http.StatusOK, 0, size)
 	}
 }
+
+// gzipMinLength is httpserver's gzip threshold.
+const gzipMinLength = 512
 
 func streamFile(c *echo.Context, path string, status int, offset, length int64) error {
 	f, err := os.Open(path) //nolint:gosec // vault_files.path under the tenant root, unsanitised as in Swift; see source.
@@ -111,8 +116,16 @@ func streamFile(c *echo.Context, path string, status int, offset, length int64) 
 	defer func() { _ = f.Close() }()
 	w := c.Response()
 	w.WriteHeader(status)
-	_, err = io.Copy(w, io.NewSectionReader(f, offset, length))
-	return err
+	if _, err = io.Copy(w, io.NewSectionReader(f, offset, length)); err != nil {
+		return err
+	}
+	// A compressed body short enough for net/http's buffer would gain a
+	// Content-Length; Swift's compressed body is chunked. Below gzip's minimum
+	// nothing is compressed, and a flush would force it to be.
+	if length >= gzipMinLength {
+		return http.NewResponseController(w).Flush()
+	}
+	return nil
 }
 
 // parseRange is MultimodalIngestionController.parseRange: one range, inclusive,

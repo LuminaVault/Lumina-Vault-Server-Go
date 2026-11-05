@@ -143,7 +143,7 @@ func TestIsHTTPURL(t *testing.T) {
 }
 
 func TestDeclaredBytesCountsEveryItemAndSaturates(t *testing.T) {
-	size := func(n int64) *int64 { return &n }
+	size := func(n wire.Int64) *wire.Int64 { return &n }
 	require.Zero(t, declaredBytes([]createItemRequest{{}, {Kind: kindURL}}))
 	require.EqualValues(t, 3, declaredBytes([]createItemRequest{{SizeBytes: size(1)}, {}, {Kind: kindURL, SizeBytes: size(2)}}))
 	require.EqualValues(t, -1, declaredBytes([]createItemRequest{{SizeBytes: size(-1)}}))
