@@ -339,3 +339,26 @@ func encodeColumn(m *Metadata) (*string, error) {
 	s := string(b)
 	return &s, nil
 }
+
+// UpdateIngested is VaultIngestService's save over an existing row: space, size, hash
+// and metadata whole, processed now. The content type stays.
+func (s *Store) UpdateIngested(ctx context.Context, id, spaceID uuid.UUID, sizeBytes int64, sha256 string, m *Metadata) error {
+	metadata, err := encodeColumn(m)
+	if err != nil {
+		return err
+	}
+	now := time.Now()
+	_, err = s.pool.Exec(ctx, `
+		UPDATE vault_files
+		SET space_id = $2, size_bytes = $3, sha256 = $4, processed_at = $5, metadata = $6::jsonb, updated_at = $5
+		WHERE id = $1`, id, spaceID, sizeBytes, sha256, now, metadata)
+	return err
+}
+
+// UpdateFiled is ImportService.approve's save: a filed row's path and Space. Moving the
+// bytes is the caller's.
+func (s *Store) UpdateFiled(ctx context.Context, id uuid.UUID, path string, spaceID uuid.UUID) error {
+	_, err := s.pool.Exec(ctx, `UPDATE vault_files SET path = $2, space_id = $3, updated_at = $4 WHERE id = $1`,
+		id, path, spaceID, time.Now())
+	return err
+}

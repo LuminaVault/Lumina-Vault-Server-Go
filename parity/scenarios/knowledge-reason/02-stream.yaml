@@ -1,0 +1,19 @@
+module: knowledge-reason
+steps:
+  - {"name": "no token", "request": {"method": "POST", "path": "/v1/knowledge/reason/stream", "json": {"query": "atlas"}}}
+  - {"name": "bad token", "request": {"method": "POST", "path": "/v1/knowledge/reason/stream", "json": {"query": "atlas"}, "headers": {"Authorization": "Bearer not.a.jwt"}}}
+  - {"name": "malformed json", "as": "kr_vie", "request": {"method": "POST", "path": "/v1/knowledge/reason/stream", "raw": "{\"query\":"}}
+  - {"name": "empty body", "as": "kr_vie", "request": {"method": "POST", "path": "/v1/knowledge/reason/stream", "raw": ""}}
+  - {"name": "array body", "as": "kr_vie", "request": {"method": "POST", "path": "/v1/knowledge/reason/stream", "raw": "[]"}}
+  - {"name": "missing field", "as": "kr_vie", "request": {"method": "POST", "path": "/v1/knowledge/reason/stream", "json": {}}}
+  - {"name": "null query", "as": "kr_vie", "request": {"method": "POST", "path": "/v1/knowledge/reason/stream", "raw": "{\"query\":null}"}}
+  - {"name": "bad vault header", "as": "kr_vie", "request": {"method": "POST", "path": "/v1/knowledge/reason/stream", "json": {"query": "atlas"}, "headers": {"X-Vault-ID": "nope"}}}
+  - {"name": "foreign vault", "as": "kr_vie", "request": {"method": "POST", "path": "/v1/knowledge/reason/stream", "json": {"query": "atlas"}, "headers": {"X-Vault-ID": "6C000000-0000-4000-8000-0000000000A1"}}}
+  - {"name": "empty query is a frame after the 200", "as": "kr_vie", "request": {"method": "POST", "path": "/v1/knowledge/reason/stream", "json": {"query": ""}}, "ignore": ["$.payload.latencyMs"], "stream": true, "frames": 5, "framesTimeout": "20s"}
+  - {"name": "no searchable words is a frame after the 200", "as": "kr_vie", "request": {"method": "POST", "path": "/v1/knowledge/reason/stream", "json": {"query": "what is the"}}, "ignore": ["$.payload.latencyMs"], "stream": true, "frames": 5, "framesTimeout": "20s"}
+  - {"name": "nothing matches", "as": "kr_vie", "request": {"method": "POST", "path": "/v1/knowledge/reason/stream", "json": {"query": "atlas"}}, "ignore": ["$.payload.latencyMs"], "stream": true, "frames": 10, "framesTimeout": "20s"}
+  # Only the context frame: with the gateway's port closed, Swift's stream call holds the
+  # next frame for a long time (over the 20 s here) and Go fails straight away. Tokens,
+  # including the fallback after an upstream error, are compared in the llm state.
+  - {"name": "the context frame, one matching node", "as": "kr_two", "request": {"method": "POST", "path": "/v1/knowledge/reason/stream", "json": {"query": "orion"}}, "ignore": ["$.payload.latencyMs"], "stream": true, "frames": 1, "framesTimeout": "20s"}
+  - {"name": "the context frame, several matching nodes", "as": "kr_kim", "request": {"method": "POST", "path": "/v1/knowledge/reason/stream", "json": {"query": "atlas beacon launch"}}, "ignore": ["$.payload.latencyMs"], "stream": true, "frames": 1, "framesTimeout": "20s"}

@@ -4,6 +4,8 @@ import (
 	"context"
 	"lumina/internal/hermesresolve"
 
+	"github.com/labstack/echo/v5"
+
 	"github.com/google/uuid"
 )
 
@@ -129,4 +131,15 @@ func WithValues(ctx context.Context, mutate func(*Values)) context.Context {
 	next := RoutingValues(ctx)
 	mutate(&next)
 	return context.WithValue(ctx, valuesKey{}, next)
+}
+
+// RequestContext is the request's context with the BYO Hermes middleware's resolution
+// bound, as Swift's middleware does around next: a call made with it reaches the
+// tenant's own Hermes when they have one.
+func RequestContext(c *echo.Context) context.Context {
+	ctx := c.Request().Context()
+	if res, ok := hermesresolve.FromContext(c); ok {
+		return WithValues(ctx, func(v *Values) { v.CurrentResolution = &res })
+	}
+	return ctx
 }

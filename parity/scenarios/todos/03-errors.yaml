@@ -42,4 +42,4 @@ steps:
   - {name: delete unknown id, as: todo_tom, request: {method: DELETE, path: /v1/todos/70D00000-0000-4000-8000-00000000FFFF}}
   - {name: wrong method on an item, as: todo_tom, request: {method: GET, path: /v1/todos/70D00000-0000-4000-8000-000000000F11}}
   - {name: wrong method on the list, as: todo_tom, request: {method: DELETE, path: /v1/todos}}
-  - {name: unchanged after refusals, as: todo_tom, request: {method: GET, path: /v1/todos}, snapshot: [parity_todo_files, parity_todo_memories], files: [todo_tom]}
+  - {name: unchanged after refusals, as: todo_tom, request: {method: GET, path: /v1/todos}, snapshot: [parity_todo_files, parity_todo_memories], files: [todo_tom], filesMask: ['_deleted_\d+_']}

@@ -279,6 +279,23 @@ type KnowledgePathDTO struct {
 // free models), distinct from the container-scoped Nous OAuth flow.
 type ProviderID string
 
+// ReasoningQueryRequest defines model for ReasoningQueryRequest.
+type ReasoningQueryRequest struct {
+	Limit    *int   `json:"limit,omitempty"`
+	MaxDepth *int   `json:"maxDepth,omitempty"`
+	Query    string `json:"query"`
+}
+
+// ReasoningQueryResponse defines model for ReasoningQueryResponse.
+type ReasoningQueryResponse struct {
+	Answer      string                 `json:"answer"`
+	Caveats     []string               `json:"caveats"`
+	Confidence  wire.Float64           `json:"confidence"`
+	Evidence    []KnowledgeEvidenceDTO `json:"evidence"`
+	Paths       []KnowledgePathDTO     `json:"paths"`
+	Suggestions []KnowledgeEdgeDTO     `json:"suggestions"`
+}
+
 // RouterBindingScope defines model for RouterBindingScope.
 type RouterBindingScope string
 
@@ -320,3 +337,9 @@ type ConfirmKnowledgeEdgeJSONRequestBody = InferenceReviewRequest
 
 // DismissKnowledgeEdgeJSONRequestBody defines body for DismissKnowledgeEdge for application/json ContentType.
 type DismissKnowledgeEdgeJSONRequestBody = InferenceReviewRequest
+
+// KnowledgeReasonJSONRequestBody defines body for KnowledgeReason for application/json ContentType.
+type KnowledgeReasonJSONRequestBody = ReasoningQueryRequest
+
+// KnowledgeReasonStreamJSONRequestBody defines body for KnowledgeReasonStream for application/json ContentType.
+type KnowledgeReasonStreamJSONRequestBody = ReasoningQueryRequest
