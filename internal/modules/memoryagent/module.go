@@ -145,7 +145,7 @@ func (m *Module) Register(r httpserver.Router, _ echo.MiddlewareFunc) {
 		ratelimit.TieredMiddleware(m.opts.Limits, ratelimit.CaptureByUser, ratelimit.UserOrIPKey, m.tier))...)
 
 	query := stack(ratelimit.TieredMiddleware(m.opts.Limits, ratelimit.QueryByUser, ratelimit.UserOrIPKey, m.tier),
-		m.opts.QueryGate, ratelimit.InFlightMiddleware(ratelimit.NewInFlight(), m.opts.MaxStreams, ratelimit.UserOrIPKey))
+		m.opts.QueryGate, ratelimit.InFlightLimit(m.opts.MaxStreams, ratelimit.UserOrIPKey))
 	r.POST("/v1/query", m.query, query...)
 	r.POST("/v1/query/stream", m.queryStream, query...)
 

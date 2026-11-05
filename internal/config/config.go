@@ -144,11 +144,10 @@ type Config struct {
 	// because Swift's depends on LV_ENVIRONMENT; use its method.
 	HermesGatewayURL string `env:"HERMES_GATEWAY_URL" envDefault:"http://hermes:8642"`
 	// Wave 4F. Strings where Swift reads lowercased() != "false" or == "true".
-	HermesAPIKey                string `env:"HERMES_API_KEY"`
-	HermesStreamIdleTimeout     int    `env:"HERMES_STREAM_IDLE_TIMEOUT" envDefault:"60"`
-	HermesToolVaultMapEnabled   string `env:"HERMES_TOOL_VAULT_MAP_ENABLED" envDefault:"true"`
-	RetrievalTelemetryEnabled   string `env:"RETRIEVAL_TELEMETRY_ENABLED" envDefault:"true"`
-	MaxConcurrentStreamsPerUser int    `env:"HTTP_MAX_CONCURRENT_STREAMS_PER_USER" envDefault:"3"`
+	HermesAPIKey              string `env:"HERMES_API_KEY"`
+	HermesStreamIdleTimeout   int    `env:"HERMES_STREAM_IDLE_TIMEOUT" envDefault:"60"`
+	HermesToolVaultMapEnabled string `env:"HERMES_TOOL_VAULT_MAP_ENABLED" envDefault:"true"`
+	RetrievalTelemetryEnabled string `env:"RETRIEVAL_TELEMETRY_ENABLED" envDefault:"true"`
 	// capture.autoFile.enabled. Swift's key encodes as CAPTURE_AUTO_FILE_ENABLED, whatever
 	// its comment says about CAPTURE_AUTOFILE_ENABLED, which it never reads.
 	CaptureAutoFileEnabled string `env:"CAPTURE_AUTO_FILE_ENABLED"`
