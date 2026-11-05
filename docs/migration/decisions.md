@@ -568,3 +568,68 @@ Each PR's body has the full list. Recorded here: what later waves need, and what
   times aren't compared.
 - `CAPTURE_AUTOFILE_ENABLED` is off in production and moves with 4F. Turning it on before then does nothing
   on Go.
+
+## D-wave5-prep: facts from the wave 5 prep PRs (#39, #40, #41, #42, #43, merged as #46 and #41)
+
+**Auth and hermesprofile**
+
+- `auth.Verify` refuses `"scp":""`.
+- `hermesprofile` provisions rows and directories before the slug check. Call `EnsureProfilesWritable` at boot
+  and mount the Hermes volume in the Go pod. Neither is checked yet.
+- `soulByUser`, `kbCompileByUser`, `memoryCompileByUser` and the auth policies aren't in `ratelimit`.
+- `net/http` needs the request body read before a streaming response starts. Workflow events SSE fits neither
+  `internal/sse` writer.
+
+**Chunks and soul**
+
+- `VaultLinkRepository` is already a `chunkindex.LinkRepository`.
+- `ChunkBackfillService` is unbuilt. It blocks the MCP `index` tool and `POST /chunks/backfill/:userID`. Quirks to
+  keep: `alreadyIndexed` is 0, and `isComplete` ignores `review_state`.
+- `hermescontainers` is built and unwired. Real soul bodies have no parity until wave 8 or 5H.
+
+**Skills**
+
+- `internal/skills/builtin` holds 518 files; only each SKILL.md is embedded. `scripts/check-skills-sync.sh` runs in
+  the parity job and goes away at archive.
+- The local Swift checkout has an untracked `stock-trading` skill and is on `fix/chat-source-citations`. Compare
+  against the image, not the checkout.
+- The catalog follows symlinks. Open decision.
+
+**Harness and stubs**
+
+- `coalesce` on frames, a `ws` step, stubs, image `ghcr.io/luminavault/lumina-hermes-stub:<sha>`.
+- Paid chat reaches the gateway only when the OpenRouter key loads; otherwise `free_lane_unavailable`.
+- `/v1/ws` with no token is 400 with an empty body.
+- Holds: batch 5-4 `/v1/memory-compile`, `/v1/devices/command`; batch 5-3b `/v1/reminders/detect`,
+  `/v1/me/recap/period`, `/v1/admin/community`. `/v1/dashboard/home` isn't in `heldPaths`.
+- The stub's infra PR needs a Deployment and Service, NetworkPolicy peers, `HERMES_GATEWAY_URL` with a scheme, a
+  fake non-empty OpenRouter key with `LLM_PROVIDER_OPEN_ROUTER_BASE_URL`, blanked provider keys, and a watch on
+  `/stub/stats`.
+- `free-lane.yaml`'s `latencyMs` is real elapsed time: `ignore: ["$.payload.latencyMs"]`. Stream scenarios need
+  the same.
+
+**Job runner**
+
+- Metrics go through OTel only with `OTEL_ENABLED=true`, with a `service` label. `ErrSkipped` exists. Z11 needs
+  `max_over_time`.
+- `LV_GO_JOBS` isn't set in infra. Any value fails boot until a job is registered.
+
+**Configuration in production**
+
+- Both servers read `HERMES_GATEWAY_URL` (key `hermes.gatewayUrl`), not `HERMES_BASE_URL`. Staging's sealed value
+  is the dead host `hermes.staging.svc.cluster.local:8642` with no scheme.
+- Swift reads `CAPTURE_AUTO_FILE_ENABLED`; sealed `*_APIKEY` names aren't read (Swift reads `_API_KEY`).
+- Absent from the production secret: `EMBEDDING_PROVIDER`, `JINA_API_KEY`, `STORAGE_QUOTA_ENABLED`,
+  `CAPTURE_AUTOFILE_ENABLED`, `OAUTH_GOOGLE_CALENDAR_*`.
+- `CERBERUS_EXECUTION_MODE=active`, `CERBERUS_ENSEMBLES_ENABLED=false`, `CERBERUS_PARALLEL_ENABLED=false`.
+
+**Coverage**
+
+- At Swift `fdbed9b0`, 214 of 332 test files aren't cited by a Go test (1385 of 2218 tests). `make
+  swift-test-coverage`; job `swift-test-coverage` doesn't fail CI. Waivers go in `test-waivers.md`.
+
+**Watch**
+
+- `vision-cohere` failed once on #39 attempt 1 (`parity_vision_usage$[1].mtok_in` 3 vs 2) and passed on rerun.
+  Suspected fire-and-forget goroutine; not proven.
+- One local `modules/profiles` failure is unexplained.
