@@ -160,7 +160,7 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 			profiles.New(pool),
 			sessions.New(pool),
 			// apple, devices and reminders flip together (D-shared-prefixes).
-			apple.New(pool, apple.Options{Embedder: embeddings}),
+			apple.New(pool, apple.Options{Embedder: embeddings, Analytics: analytics}),
 			devices.New(pool, cfg.APNSBundleID),
 			reminders.New(pool, nil, cfg.HermesDefaultModel),
 			achievements.New(pool, identify, limits),
@@ -181,7 +181,7 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 			onboarding.New(pool),
 			health.New(pool, healthGate, analytics),
 		)
-		deps.Modules = append(deps.Modules, calendarModules(pool, cfg, identify, limits, embeddings)...)
+		deps.Modules = append(deps.Modules, calendarModules(pool, cfg, identify, limits, embeddings, analytics)...)
 		if m := news.New(pool, cfg, identify, limits); m != nil { // nil without LV_SECRET_MASTER_KEY, as in Swift
 			deps.Modules = append(deps.Modules, m)
 		}
@@ -227,7 +227,7 @@ func embeddingConfig(cfg config.Config) embedding.Config {
 	}
 }
 
-func calendarModules(pool *pgxpool.Pool, cfg config.Config, identify echo.MiddlewareFunc, limits *ratelimit.Store, embeddings embedding.Service) []httpserver.Module {
+func calendarModules(pool *pgxpool.Pool, cfg config.Config, identify echo.MiddlewareFunc, limits *ratelimit.Store, embeddings embedding.Service, analytics *posthog.Client) []httpserver.Module {
 	var google *calendar.Google
 	if box, err := secretbox.New(cfg.LVSecretMasterKey); err == nil {
 		google = calendar.NewGoogle(pool, calendar.GoogleOptions{
@@ -240,7 +240,8 @@ func calendarModules(pool *pgxpool.Pool, cfg config.Config, identify echo.Middle
 			Google:      google,
 			MaxDistance: float32(cfg.MeetingBriefMaxDistance),
 			Embeddings:  embeddings,
+			Analytics:   analytics,
 		}),
-		mail.New(google),
+		mail.New(google, analytics),
 	}
 }
