@@ -167,6 +167,25 @@ func notAllowedInSegment(r rune) bool {
 	return !unicode.IsLetter(r) && !unicode.IsMark(r) && !unicode.IsNumber(r)
 }
 
+// SafeFileName is MultimodalIngestionService.safeFileName: each run of characters
+// that aren't allowed in a segment becomes one "-", the result is cut to 180
+// characters, and "-" is trimmed from both ends. So "---" is empty, and SanitizePath
+// or ValidateContentType refuses what the caller builds from it.
+func SafeFileName(value string) string {
+	var b strings.Builder
+	dashed := false
+	for _, r := range value {
+		if !notAllowedInSegment(r) {
+			b.WriteRune(r)
+			dashed = false
+		} else if !dashed {
+			b.WriteByte('-')
+			dashed = true
+		}
+	}
+	return strings.Trim(swiftstr.Prefix(b.String(), 180), "-")
+}
+
 // isWhitespace is CharacterSet.whitespaces as CoreFoundation implements it:
 // swiftstr.IsWhitespaceOrNewline less the newlines.
 func isWhitespace(r rune) bool {
