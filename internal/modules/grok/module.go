@@ -226,14 +226,14 @@ func (m *Module) post(ctx context.Context, h *hermescontainers.Handle, path stri
 	return nil
 }
 
-// decodeUpstream is the proxy's JSONDecoder: Foundation's rules, through wire.Decode,
+// decodeUpstream is the proxy's JSONDecoder: Foundation's rules, through wire.DecodeInto,
 // on keys put through .convertFromSnakeCase.
 func decodeUpstream(raw []byte, dst any) error {
 	if !json.Valid(raw) {
-		return wire.Decode(raw, dst) // names the failure
+		return wire.DecodeInto(raw, dst) // names the failure
 	}
 	dec := json.NewDecoder(bytes.NewReader(raw))
-	dec.UseNumber() // 1.0 and big integers reach wire.Decode as written
+	dec.UseNumber() // 1.0 and big integers reach wire.DecodeInto as written
 	var tree any
 	if err := dec.Decode(&tree); err != nil {
 		return err
@@ -242,7 +242,7 @@ func decodeUpstream(raw []byte, dst any) error {
 	if err != nil {
 		return err
 	}
-	return wire.Decode(converted, dst)
+	return wire.DecodeInto(converted, dst)
 }
 
 func camelKeys(v any) any {

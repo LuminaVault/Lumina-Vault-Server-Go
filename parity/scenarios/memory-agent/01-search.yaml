@@ -1,0 +1,20 @@
+# The gateway is unroutable here, so what the model would do lands in scenarios-switched/llm.
+module: memory-agent
+steps:
+  - {"name": "no token", "request": {"method": "POST", "path": "/v1/memory/search", "json": {"query": "x"}}}
+  - {"name": "bad token", "request": {"method": "POST", "path": "/v1/memory/search", "json": {"query": "x"}, "headers": {"Authorization": "Bearer not.a.jwt"}}}
+  - {"name": "malformed json", "as": "ma_ben", "request": {"method": "POST", "path": "/v1/memory/search", "raw": "{\"query\":"}}
+  - {"name": "empty body", "as": "ma_ben", "request": {"method": "POST", "path": "/v1/memory/search", "raw": ""}}
+  - {"name": "array body", "as": "ma_ben", "request": {"method": "POST", "path": "/v1/memory/search", "raw": "[]"}}
+  - {"name": "missing field", "as": "ma_ben", "request": {"method": "POST", "path": "/v1/memory/search", "json": {}}}
+  - {"name": "null query", "as": "ma_ben", "request": {"method": "POST", "path": "/v1/memory/search", "raw": "{\"query\":null}"}}
+  - {"name": "query wrong type", "as": "ma_ben", "request": {"method": "POST", "path": "/v1/memory/search", "raw": "{\"query\":7}"}}
+  - {"name": "limit wrong type", "as": "ma_ben", "request": {"method": "POST", "path": "/v1/memory/search", "raw": "{\"query\":\"x\",\"limit\":\"5\"}"}}
+  - {"name": "limit a float", "as": "ma_ben", "request": {"method": "POST", "path": "/v1/memory/search", "raw": "{\"query\":\"x\",\"limit\":1.5}"}}
+  - {"name": "empty query", "as": "ma_ben", "request": {"method": "POST", "path": "/v1/memory/search", "raw": "{\"query\":\"\"}"}}
+  - {"name": "whitespace is not empty, and reaches the gateway", "as": "ma_ben", "request": {"method": "POST", "path": "/v1/memory/search", "raw": "{\"query\":\"  \"}"}}
+  - {"name": "bad vault header", "as": "ma_ben", "request": {"method": "POST", "path": "/v1/memory/search", "json": {"query": "x"}, "headers": {"X-Vault-ID": "nope"}}}
+  - {"name": "foreign vault", "as": "ma_ben", "request": {"method": "POST", "path": "/v1/memory/search", "json": {"query": "x"}, "headers": {"X-Vault-ID": "3A000000-0000-4000-8000-0000000000A1"}}}
+  - {"name": "gateway down", "as": "ma_ben", "request": {"method": "POST", "path": "/v1/memory/search", "json": {"query": "hello", "limit": 3}}}
+  - {"name": "wrong method", "as": "ma_ben", "request": {"method": "GET", "path": "/v1/memory/search"}}
+  - {"name": "delete is the literal node", "as": "ma_ben", "request": {"method": "DELETE", "path": "/v1/memory/search"}}

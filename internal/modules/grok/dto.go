@@ -83,7 +83,7 @@ type visionImage struct {
 	URL string `json:"url"`
 }
 
-// Upstream replies, after decodeUpstream has camelCased the keys. Fields wire.Decode
+// Upstream replies, after decodeUpstream has camelCased the keys. Fields wire.DecodeInto
 // treats as required are the non-optional ones in HermesGrokProxy.
 
 type chatCompletion struct {

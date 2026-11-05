@@ -57,13 +57,11 @@ import (
 	"lumina/internal/posthog"
 	"lumina/internal/ratelimit"
 	"lumina/internal/secretbox"
-	"lumina/internal/ssrfguard"
 	"lumina/internal/telemetry"
 	"lumina/internal/usagemeter"
 	"lumina/internal/vaultfiles"
 	"lumina/internal/vaultpaths"
 	"net"
-	"net/url"
 	"os"
 	"os/signal"
 	"strconv"
@@ -247,6 +245,9 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		// One disk guard for wave 4's writers.
 		disk := diskguard.New(paths.Root, cfg.StorageMinFreeBytes, cfg.StorageMinFreeRatio, diskguard.Options{})
 		memories := memorystore.New(pool, nil)
+		agent, stopAgent := newAgent(ctx, pool, cfg, box, paths, identify, limits, embeddings, sink, meModule, disk)
+		defer stopAgent()
+		links, enrichment := linkCaptureService(pool, cfg, paths, embeddings, memories, disk, sink)
 		deps.Modules = append(deps.Modules,
 			vault.New(pool, vault.Options{
 				Paths: paths, HermesDataRoot: cfg.HermesDataRoot, Identify: identify, Limits: limits,
@@ -254,10 +255,12 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 				Guard:   disk,
 				Sink:    sink,
 				Latches: onboardlatch.New(pool), Analytics: analytics,
+				CaptureFiling: agent.captureFiling(),
 			}),
 			todos.New(pool, paths, todos.Options{Disk: disk, Memories: memories, Embeddings: embeddings}),
-			captureModule(pool, cfg, paths, box, limits, embeddings, memories, disk, sink, analytics),
+			captureModule(pool, cfg, box, limits, links, analytics),
 		)
+		deps.Modules = append(deps.Modules, agent.modules(links, enrichment)...)
 	}
 	// Deferred after the sink and the pool, so jobs stop first and can still use both.
 	stopJobs, err := startJobs(ctx, cfg, registered)
@@ -299,23 +302,29 @@ func startJobs(ctx context.Context, cfg config.Config, registered []jobs.Job) (s
 	}, nil
 }
 
-// captureModule builds POST /v1/capture/safari. internal/capture holds the service
-// because wave 4F's vault import uses it too.
-func captureModule(pool *pgxpool.Pool, cfg config.Config, paths vaultpaths.Paths, box *secretbox.Box, limits *ratelimit.Store,
-	embeddings embedding.Service, memories *memorystore.Repository, disk *diskguard.Guard, unlocks *achievementsink.Sink, analytics *posthog.Client,
-) httpserver.Module {
+// linkCaptureService builds the one link-capture pipeline: POST /v1/capture/safari and
+// /v1/import both stage through it. internal/capture holds the service because import
+// shares it.
+func linkCaptureService(pool *pgxpool.Pool, cfg config.Config, paths vaultpaths.Paths,
+	embeddings embedding.Service, memories *memorystore.Repository, disk *diskguard.Guard, unlocks *achievementsink.Sink,
+) (*linkcapture.Service, *linkcapture.EnrichmentService) {
 	store := vaultfiles.NewStore(pool, paths)
-	service := linkcapture.New(pool, linkcapture.Options{
-		Paths: paths, Store: store, Disk: disk, Achievements: unlocks, Latches: onboardlatch.New(pool),
-		Enrichment: linkcapture.NewEnrichmentService(linkcapture.EnrichmentOptions{
-			Paths: paths, Store: store, Embeddings: embeddings, Memories: memories,
-			Jina: &linkcapture.JinaEnricher{APIKey: cfg.JinaAPIKey},
-			Hooks: &linkcapture.HookDispatcher{
-				Registry:  linkcapture.NewHookRegistry(linkcapture.ReadingTimeHook{}),
-				Installed: linkcapture.InstalledSlugsFrom(pool),
-			},
-		}),
+	enrichment := linkcapture.NewEnrichmentService(linkcapture.EnrichmentOptions{
+		Paths: paths, Store: store, Embeddings: embeddings, Memories: memories,
+		Jina: &linkcapture.JinaEnricher{APIKey: cfg.JinaAPIKey},
+		Hooks: &linkcapture.HookDispatcher{
+			Registry:  linkcapture.NewHookRegistry(linkcapture.ReadingTimeHook{}),
+			Installed: linkcapture.InstalledSlugsFrom(pool),
+		},
 	})
+	return linkcapture.New(pool, linkcapture.Options{
+		Paths: paths, Store: store, Disk: disk, Achievements: unlocks, Latches: onboardlatch.New(pool),
+		Enrichment: enrichment,
+	}), enrichment
+}
+
+// captureModule builds POST /v1/capture/safari over the shared pipeline.
+func captureModule(pool *pgxpool.Pool, cfg config.Config, box *secretbox.Box, limits *ratelimit.Store, service *linkcapture.Service, analytics *posthog.Client) httpserver.Module {
 	gate := entitlement.Middleware(pool, entitlement.Capture,
 		entitlement.EnforcementEnabled(cfg.BillingEnforcementEnabled), entitlement.PGCredentials(pool, box))
 	return capture.New(pool, service, gate, limits, analytics)
@@ -395,15 +404,7 @@ func memoryModule(pool *pgxpool.Pool, cfg config.Config, box *secretbox.Box, ide
 		HybridExecutionEnabled: strings.EqualFold(cfg.HybridExecutionEnabled, "true"),
 		RelatedMaxDistance:     float32(cfg.MemoryRelatedMaxDistance),
 	}
-	if box != nil {
-		if gateway, err := url.Parse(cfg.HermesGatewayURL); err == nil {
-			opts.Hermes = hermesresolve.New(pool, box, ssrfguard.Guard{
-				AllowPrivateRanges: strings.EqualFold(cfg.BYOHermesAllowPrivate, "true"),
-				RequireHTTPS:       cfg.BYOHermesRequireHTTPS(),
-				AllowTailnetHTTP:   strings.EqualFold(cfg.BYOHermesAllowTailnet, "true"),
-			}, gateway).Middleware()
-		}
-	}
+	opts.Hermes = byoHermes(pool, cfg, box)
 	return memory.New(pool, memorystore.New(pool, nil), opts)
 }
 

@@ -1272,6 +1272,153 @@ Beyond the pilot gate (D-wave2-early):
 - Holds on Swift: `/v1/memory/search` and `/v1/memory-compile`. `/v1/memory-compile/pending` goes to Go.
   `/v1/knowledge/reason` stays on Swift because only three knowledge sub-paths move.
 
+## memory-agent (wave 4)
+
+### G0 entry: met 2026-11-05
+
+- Routes: 5: `POST /v1/memory/search`, `POST /v1/query`, `POST /v1/query/stream`, and
+  `GET`+`POST /v1/memos`. `/v1/memory/search` stays in `memory`'s
+  `heldPaths` until the ingress flip.
+- Coupling: writes `memories` hit counts through `HitCountQueue` (one instance, in
+  `cmd/App/agent.go`, on the agent's repositories only), `retrieval_telemetry_events` and
+  `analytics_events`. A memo writes a vault file through `vaultfiles` and its own slug path.
+  No PostHog captures in these routes.
+- Paid calls: `/v1/query`, `/v1/query/stream` and `POST /v1/memos` call Hermes, and search
+  embeds its query. The `smoke: true` scenario stops at validation or an empty result, so
+  no smoke step spends money.
+- Jobs: `RetrievalTelemetryWorker` stays in Swift. Go inserts telemetry directly
+  (`PGTelemetry`), so the worker's inbox isn't used.
+- Route middleware: `Identify` and the BYO Hermes check on all. Search adds the `MemoryQuery`
+  gate and tiered `CaptureByUser`. Query and stream add tiered `QueryByUser`, the same gate
+  and `ratelimit.InFlightLimit`. Memos add the `MemoGenerator` gate.
+- Paths: memo persist builds its own slug path and skips `SanitizePath`, as Swift does.
+- Spec drift: `QueryRequest` lacks `session_id`, `MemorySearchResponse` says `results` where
+  Swift sends `{hits, summary}`, and the memo DTOs differ. Hand-written DTOs; spec
+  conformance covers `GET /v1/memos` only, and parity pins the other bodies.
+- Swift tests: 30 ported. `Memory/HermesMemoryServiceTests` 8, `FollowUpGeneratorTests` 9,
+  `QueryStreamTests` 5, `MemoGeneratorTests` 4, `MemoControllerTitleTests` 4.
+- Differences: hit counts and telemetry are asynchronous, so parity snapshots leave them out;
+  Go tests cover them. The parallel executor isn't ported: `CERBERUS_PARALLEL_ENABLED` is
+  false in production and the stack warns if it is set.
+
+### G1 parity: met 2026-11-05
+
+- CI run 42066861088 on head e5cc4ea: self-test (Swift vs Swift) and Swift vs Go give
+  **169 scenarios, 0 differences**, and every switch state has 0 differences, including `llm`
+  (8 scenarios) and `import-links` (1). `parity`, `lint`, `test` and `vuln` pass
+  (https://github.com/LuminaVault/Lumina-Vault-Server-Go/actions/runs/42066861088).
+- `parity/scenarios/memory-agent` has 5 files and 73 steps;
+  `parity/scenarios-switched/llm/memory-agent` has 46 steps against the deterministic
+  `parity/stubs/llm`, whose `[[stub:echo]]` replies with the canonical request so prompts
+  and tool schemas are compared.
+- Go tests: `internal/modules/memoryagent` has 36 tests, on Postgres where they need it.
+
+## knowledge-reason (wave 4)
+
+### G0 entry: met 2026-11-05
+
+- Routes: 2: `POST /v1/knowledge/reason`, `/reason/stream`, under the module's own prefix, so
+  the ingress flip moves them.
+- Coupling: reads the knowledge graph and evidence through `internal/modules/knowledge`.
+  Writes nothing. No PostHog captures.
+- Paid calls: both call Hermes. Its scenarios that can run on staging stop at validation or
+  an empty graph.
+- Jobs: none.
+- Route middleware: the same stack as the rest of `/v1/knowledge`: `Identify`, the
+  `MemoryQuery` gate and tiered `CaptureByUser`.
+- Swift tests: 3 ported, `Knowledge/KnowledgeReasoningPathTests`.
+- Differences: with the gateway port closed, Swift holds the frame after `context` for more
+  than 20 s, up to its 180 s deadline (inferred: AsyncHTTPClient retries the connect), and
+  Go falls back to the grounded answer at once. `parity/scenarios` therefore compares the
+  `context` frame only, and the frames after it are compared in the `llm` state.
+
+### G1 parity: met 2026-11-05
+
+- CI run 42066861088 on head e5cc4ea: self-test (Swift vs Swift) and Swift vs Go give
+  **169 scenarios, 0 differences**, and every switch state has 0 differences, including `llm`
+  (8 scenarios) and `import-links` (1). `parity`, `lint`, `test` and `vuln` pass
+  (https://github.com/LuminaVault/Lumina-Vault-Server-Go/actions/runs/42066861088).
+- `parity/scenarios/knowledge-reason` has 3 files and 45 steps;
+  `parity/scenarios-switched/llm/knowledge-reason` has 10 steps.
+- Go tests: `internal/modules/knowledge/reason_test.go` has 3 and `reason_http_test.go` 5,
+  including conformance for `/reason`, not for the stream.
+
+## kb-compile (wave 4)
+
+### G0 entry: met 2026-11-05
+
+- Routes: 1: `POST /v1/memory-compile`. `heldPaths` keep it on Swift, and they release at the
+  flip below. `LegacyCompileAliasTests` stays with `app`, which owns the alias.
+- Coupling: `internal/memorycompile` writes `memories`, `commitments`, `usage_events`,
+  `vault_files.processed_at` and the `spaces` counters, and reads wiki files (no
+  `SanitizePath`, as Swift). No PostHog captures.
+- Paid calls: the compile calls Hermes and embeds. The smoke uses a user with no files, so
+  it spends nothing.
+- Jobs: none here. Commitment parsing runs inside the compile, so 4F took
+  `Me/CommitmentsTests`' parse and compile cases.
+- Route middleware: `Identify`, idempotency, the BYO Hermes check, the `MemoryCompile` gate and
+  tiered `ratelimit.MemoryCompileByUser`.
+- Flip needs: Go's `/v1/ws`, a `ConnectionManager` behind `BroadcastPublisher.Broadcast`, and
+  `DeviceCommandBroker` callers. Flip `/v1/memory-compile`, `/v1/ws`, `/v1/devices/command`,
+  `mcp` and `skills` in one infra PR at the end of wave 5, after `/v1/ws` is split from `app`.
+  Until then Go publishes through `NoopPublisher`.
+- Spec drift: `forceFullRecompile` is required by Swift.
+- Swift tests: 22 ported, plus 7 from `Me/CommitmentsTests` (5 parse, 2 compile) and 2 from
+  `Onboarding/GuidedStartTests`, whose stranded-latch case relies on `internal/onboardlatch`.
+  `KB/KBCompileControllerTests` 5, `MemoryCompileControllerTests` 6 (duplicates merged, 6 Go
+  tests), `HappyPath` 1, `MemoryUpsert` 1, `ProgressPublisher` 2, `ProgressService` 3,
+  `SpaceCounters` 4. The first publisher test asserts the `Broadcast` message, as Go has no
+  `ConnectionManager` yet; the commitments test reads the rows in SQL, not through
+  `CommitmentsService.list`.
+- Differences: progress frames are not sent until the flip. `durationMs` is ignored where
+  rows exist, and Go tests assert it is positive.
+
+### G1 parity: met 2026-11-05
+
+- CI run 42066861088 on head e5cc4ea: self-test (Swift vs Swift) and Swift vs Go give
+  **169 scenarios, 0 differences**, and every switch state has 0 differences, including `llm`
+  (8 scenarios) and `import-links` (1). `parity`, `lint`, `test` and `vuln` pass
+  (https://github.com/LuminaVault/Lumina-Vault-Server-Go/actions/runs/42066861088).
+- `parity/scenarios/kb-compile` has 2 files and 28 steps, with snapshots;
+  `parity/scenarios-switched/llm/kb-compile` has 11 steps.
+- Go tests: `internal/modules/kbcompile` has 10 and `internal/memorycompile` 23.
+
+## import (wave 4)
+
+### G0 entry: met 2026-11-05
+
+- Routes: 7: `POST /v1/import`, `/bookmarks`, `/files`, `/vault-bulk`, `GET /v1/import/{id}`,
+  `POST /{id}/categorize`, `/{id}/approve`. `GET /v1/import/files`, `/bookmarks` and
+  `/vault-bulk` answer 404, which reproduces Hummingbird's trie.
+- Coupling: writes `import_sessions`, `import_items`, `vault_files` and the files; approve
+  moves files and may create Spaces through `spaces.Module.CreateSpace`. Links stage through
+  the shared `linkcapture.Service`, the one `POST /v1/capture/safari` uses. No PostHog captures.
+- Paid calls: categorize calls Hermes, and staged links reach enrichment. The smoke stops at
+  validation.
+- Jobs: none. Enrichment runs in the shared link pipeline.
+- Route middleware: `Identify` only, as in Swift.
+- Paths that skip `SanitizePath`, as Swift does: approve (moves from `rawRoot + vf.path`, new
+  path from the last component), the categorize snippet read, and vault-bulk (`SafePath` plus
+  `ResolveInside`).
+- Swift tests: 13 ported, `Import/ImportLogicTests`. This group also ported the note-upload
+  Space suggestion and `Capture/CaptureFilingServiceTests` 3 (`internal/capture/filing.go`,
+  which skips `SanitizePath` as Swift does). It runs behind `CAPTURE_AUTO_FILE_ENABLED`, off in
+  production, and the `llm` state turns it on.
+- Differences: the categorize mapping can't be pinned in parity because item ids are random; a
+  Go test reads them out of the prompt, and covers the cap of 6 new Spaces. Links get their
+  own `import-links` state because their paths hold a time and a random suffix.
+
+### G1 parity: met 2026-11-05
+
+- CI run 42066861088 on head e5cc4ea: self-test (Swift vs Swift) and Swift vs Go give
+  **169 scenarios, 0 differences**, and every switch state has 0 differences, including `llm`
+  (8 scenarios) and `import-links` (1). `parity`, `lint`, `test` and `vuln` pass
+  (https://github.com/LuminaVault/Lumina-Vault-Server-Go/actions/runs/42066861088).
+- `parity/scenarios/import` has 4 files and 74 steps, with snapshots;
+  `parity/scenarios-switched/llm/import` has 9 steps and `import-links/import` 18.
+- Go tests: `internal/modules/imports` has 14 tests, including conformance for `/files`,
+  `/vault-bulk`, status, categorize and approve.
+
 ## grok (wave 5)
 
 ### G0 entry: met 2026-11-05
