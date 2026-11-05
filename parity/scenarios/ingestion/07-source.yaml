@@ -1,0 +1,69 @@
+# The public, token-gated source route Hermes reads from. Nothing but the token
+# gates it, and no route can mint a token (the worker does), so the tokens are
+# seeded on items a scenario then uploads (parity/seed/ingestion.sql).
+module: ingestion
+steps:
+  - {name: before the upload the item has no file, request: {method: GET, path: /v1/ingestion-sources/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}}
+  - {name: head before the upload, request: {method: HEAD, path: /v1/ingestion-sources/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}, headers: [Content-Length]}
+  - {name: upload the source, as: ing_src, request: {method: PUT, path: /v1/ingestions/1A6E3000-0000-4000-8000-0000000000B1/items/1A6E4000-0000-4000-8000-0000000000B1/chunks/0, fill: {text: 0123456789abcdef, size: 1024}}}
+  - {name: complete the source, as: ing_src, request: {method: POST, path: /v1/ingestions/1A6E3000-0000-4000-8000-0000000000B1/items/1A6E4000-0000-4000-8000-0000000000B1/complete}, snapshot: [ingestion_items, vault_files], files: [ing_src]}
+  - {name: upload the small source, as: ing_src, request: {method: PUT, path: /v1/ingestions/1A6E3000-0000-4000-8000-0000000000B1/items/1A6E4000-0000-4000-8000-0000000000B5/chunks/0, raw: small}}
+  - {name: complete the small source, as: ing_src, request: {method: POST, path: /v1/ingestions/1A6E3000-0000-4000-8000-0000000000B1/items/1A6E4000-0000-4000-8000-0000000000B5/complete}, files: [ing_src]}
+
+  -
+    name: whole file
+    request: {method: GET, path: /v1/ingestion-sources/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}
+    binary: true
+    headers: &sourceHeaders [Cache-Control, Accept-Ranges, ETag, Content-Disposition, Content-Length, Content-Range, Content-Encoding]
+  - {name: head, request: {method: HEAD, path: /v1/ingestion-sources/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}, binary: true, headers: *sourceHeaders}
+  - {name: head ignores a bad range, request: {method: HEAD, path: /v1/ingestion-sources/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, headers: {Range: nonsense}}, binary: true, headers: *sourceHeaders}
+  - {name: a token needs no bearer, as: bob, request: {method: GET, path: /v1/ingestion-sources/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}, binary: true, headers: *sourceHeaders}
+  - {name: an invalid bearer changes nothing, request: {method: GET, path: /v1/ingestion-sources/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, headers: {Authorization: "Bearer not.a.jwt"}}, binary: true, headers: *sourceHeaders}
+  - {name: small file, request: {method: GET, path: /v1/ingestion-sources/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee}, binary: true, headers: *sourceHeaders}
+
+  # Ranges, all parsed by parseRange
+  - {name: first bytes, request: {method: GET, path: /v1/ingestion-sources/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, headers: {Range: bytes=0-9}}, binary: true, headers: *sourceHeaders}
+  - {name: one byte, request: {method: GET, path: /v1/ingestion-sources/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, headers: {Range: bytes=7-7}}, binary: true, headers: *sourceHeaders}
+  - {name: open end, request: {method: GET, path: /v1/ingestion-sources/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, headers: {Range: bytes=1000-}}, binary: true, headers: *sourceHeaders}
+  - {name: end past the size, request: {method: GET, path: /v1/ingestion-sources/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, headers: {Range: bytes=1000-5000}}, binary: true, headers: *sourceHeaders}
+  - {name: suffix, request: {method: GET, path: /v1/ingestion-sources/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, headers: {Range: bytes=-10}}, binary: true, headers: *sourceHeaders}
+  - {name: suffix over the size, request: {method: GET, path: /v1/ingestion-sources/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, headers: {Range: bytes=-5000}}, binary: true, headers: *sourceHeaders}
+  - {name: plus signs parse, request: {method: GET, path: /v1/ingestion-sources/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, headers: {Range: bytes=+1-+2}}, binary: true, headers: *sourceHeaders}
+  - {name: last byte, request: {method: GET, path: /v1/ingestion-sources/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, headers: {Range: bytes=1023-}}, binary: true, headers: *sourceHeaders}
+  - {name: start at the size, request: {method: GET, path: /v1/ingestion-sources/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, headers: {Range: bytes=1024-}}, headers: *sourceHeaders}
+  - {name: reversed, request: {method: GET, path: /v1/ingestion-sources/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, headers: {Range: bytes=5-2}}, headers: *sourceHeaders}
+  - {name: a bad end, request: {method: GET, path: /v1/ingestion-sources/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, headers: {Range: bytes=0-x}}, headers: *sourceHeaders}
+  - {name: a bad start, request: {method: GET, path: /v1/ingestion-sources/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, headers: {Range: bytes=x-1}}, headers: *sourceHeaders}
+  - {name: suffix zero, request: {method: GET, path: /v1/ingestion-sources/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, headers: {Range: bytes=-0}}, headers: *sourceHeaders}
+  - {name: nothing at all, request: {method: GET, path: /v1/ingestion-sources/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, headers: {Range: bytes=-}}, headers: *sourceHeaders}
+  - {name: several ranges, request: {method: GET, path: /v1/ingestion-sources/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, headers: {Range: "bytes=0-1,2-3"}}, headers: *sourceHeaders}
+  - {name: three parts, request: {method: GET, path: /v1/ingestion-sources/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, headers: {Range: bytes=0-1-2}}, headers: *sourceHeaders}
+  - {name: another unit, request: {method: GET, path: /v1/ingestion-sources/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, headers: {Range: items=0-1}}, headers: *sourceHeaders}
+  - {name: an empty range header, request: {method: GET, path: /v1/ingestion-sources/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, headers: {Range: ""}}, headers: *sourceHeaders}
+
+  # Compression. stream reads the headers only: the two gzip encoders differ.
+  - {name: gzip whole file, request: {method: GET, path: /v1/ingestion-sources/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, headers: {Accept-Encoding: gzip}}, stream: true, headers: *sourceHeaders}
+  - {name: gzip range, request: {method: GET, path: /v1/ingestion-sources/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, headers: {Accept-Encoding: gzip, Range: bytes=0-599}}, stream: true, headers: *sourceHeaders}
+  - {name: gzip short range, request: {method: GET, path: /v1/ingestion-sources/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, headers: {Accept-Encoding: gzip, Range: bytes=0-9}}, stream: true, headers: *sourceHeaders}
+  - {name: gzip head, request: {method: HEAD, path: /v1/ingestion-sources/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, headers: {Accept-Encoding: gzip}}, stream: true, headers: *sourceHeaders}
+  - {name: gzip small file, request: {method: GET, path: /v1/ingestion-sources/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee, headers: {Accept-Encoding: gzip}}, stream: true, headers: *sourceHeaders}
+  - {name: gzip head of a small file, request: {method: HEAD, path: /v1/ingestion-sources/eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee, headers: {Accept-Encoding: gzip}}, stream: true, headers: *sourceHeaders}
+
+  # Every way a token fails is the same 404, except a missing file.
+  - {name: expired, request: {method: GET, path: /v1/ingestion-sources/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb}}
+  - {name: head of an expired token, request: {method: HEAD, path: /v1/ingestion-sources/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb}}
+  - {name: file missing from the volume, request: {method: GET, path: /v1/ingestion-sources/cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc}}
+  - {name: head of a missing file, request: {method: HEAD, path: /v1/ingestion-sources/cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc}}
+  - {name: the row is another tenant's, request: {method: GET, path: /v1/ingestion-sources/dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd}}
+  - {name: unknown token, request: {method: GET, path: /v1/ingestion-sources/ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff}}
+  - {name: uppercase is another token, request: {method: GET, path: /v1/ingestion-sources/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA}}
+  - {name: short token, request: {method: GET, path: /v1/ingestion-sources/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}}
+  - {name: long token, request: {method: GET, path: /v1/ingestion-sources/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}}
+  - {name: a token with escapes, request: {method: GET, path: /v1/ingestion-sources/%C3%A9}}
+  - {name: two segments, request: {method: GET, path: /v1/ingestion-sources/a/b}}
+  - {name: no segment, request: {method: GET, path: /v1/ingestion-sources}}
+  - {name: post, request: {method: POST, path: /v1/ingestion-sources/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}}
+  - name: reads wrote nothing
+    request: {method: GET, path: /health}
+    snapshot: [ingestion_items]
+    files: [ing_src]

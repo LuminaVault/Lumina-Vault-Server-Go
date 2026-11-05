@@ -1,0 +1,27 @@
+# The whole write path a fresh user has, short of `complete`: that would queue
+# work for staging's worker, and name a vault file after a generated id
+# (parity/seed/ingestion.sql). Everything here runs on staging with a new user.
+module: ingestion
+smoke: true
+steps:
+  - {name: list starts empty, as: ing_new, request: {method: GET, path: /v1/ingestions}}
+  - name: create a file batch
+    as: ing_new
+    request: {method: POST, path: /v1/ingestions, json: {items: [{kind: file, fileName: smoke.txt, contentType: text/plain, sizeBytes: 5}]}}
+    capture: {batch: "$.id", item: "$.items[0].id"}
+  - {name: detail, as: ing_new, request: {method: GET, path: "/v1/ingestions/{{batch}}"}}
+  - {name: list has it, as: ing_new, request: {method: GET, path: /v1/ingestions}}
+  - name: upload a chunk
+    as: ing_new
+    request: {method: PUT, path: "/v1/ingestions/{{batch}}/items/{{item}}/chunks/0", raw: hello, headers: {Content-Type: application/octet-stream}}
+    files: [ing_new]
+  - name: event stream opens
+    as: ing_new
+    request: {method: GET, path: "/v1/ingestions/{{batch}}/events"}
+    stream: true
+    headers: [Cache-Control, X-Accel-Buffering]
+  - name: cancel discards the chunks
+    as: ing_new
+    request: {method: DELETE, path: "/v1/ingestions/{{batch}}/items/{{item}}"}
+    files: [ing_new]
+  - {name: an unknown source token, request: {method: GET, path: /v1/ingestion-sources/0000000000000000000000000000000000000000000000000000000000000000}}
