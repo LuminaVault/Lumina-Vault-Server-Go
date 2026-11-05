@@ -69,6 +69,26 @@ jobs:
           cache-from: type=gha,scope=stub-image
           cache-to: type=gha,mode=max,scope=stub-image
 
+  # Prints how many Swift test files have no Go test, parity scenario or waiver. Not a
+  # gate yet (`make swift-test-coverage` is): it fails until the end of the migration.
+  # The Swift repo is public, so the default token can read it at the pinned commit.
+  swift-test-coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - id: swift
+        run: |
+          echo "sha=$(cut -d: -f2 parity/SWIFT_IMAGE)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          repository: LuminaVault/LuminaVaultServer
+          ref: ${{ steps.swift.outputs.sha }}
+          path: swift-checkout
+          sparse-checkout: Tests/AppTests
+      - run: python3 scripts/swift-test-coverage.py --swift-tests swift-checkout/Tests/AppTests --count | tee -a "$GITHUB_STEP_SUMMARY"
+
   # Gate G1 (roadmap): every scenario under parity/scenarios must show zero
   # differences between the Swift image pinned in parity/SWIFT_IMAGE and this
   # commit's Go server. Swift transcripts are kept for the G2 staging smoke.
