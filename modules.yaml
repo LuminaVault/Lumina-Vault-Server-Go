@@ -146,7 +146,7 @@ modules:
   capture:
     wave: 4
     swiftDir: Sources/App/Capture
-    status: staging
+    status: production
     prefixes: [/v1/capture]
     jobs: []
   import:
@@ -158,13 +158,13 @@ modules:
   ingestion:
     wave: 4
     swiftDir: Sources/App/Ingestion
-    status: staging
+    status: production
     prefixes: [/v1/ingestion-sources, /v1/ingestions]
     jobs: []
   kb:
     wave: 4
     swiftDir: Sources/App/KB
-    status: staging
+    status: production
     prefixes: [/v1/memory-compile/pending]
     jobs: []
   kb-compile:
@@ -179,7 +179,7 @@ modules:
   knowledge:
     wave: 4
     swiftDir: Sources/App/Knowledge
-    status: staging
+    status: production
     prefixes: [/v1/knowledge/connections, /v1/knowledge/edges, /v1/knowledge/graph]
     jobs: []
   knowledge-reason:
@@ -191,7 +191,7 @@ modules:
   memory:
     wave: 4
     swiftDir: Sources/App/Memory
-    status: staging
+    status: production
     prefixes: [/v1/me/suggestions, /v1/memory]
     stringPrefixCatches: [/v1/memory-compile, /v1/memory-compile/pending]
     heldPaths:
@@ -207,20 +207,20 @@ modules:
   todos:
     wave: 4
     swiftDir: Sources/App/Todos
-    status: staging
+    status: production
     prefixes: [/v1/todos]
     jobs: []
   vault:
     wave: 4
     swiftDir: Sources/App/Vault
-    status: staging
+    status: production
     prefixes: [/v1/vault]
     stringPrefixCatches: [/v1/vaults]
     jobs: []
   vision:
     wave: 4
     swiftDir: Sources/App/Vision
-    status: staging
+    status: production
     prefixes: [/v1/vision]
     jobs: []
   agents:
