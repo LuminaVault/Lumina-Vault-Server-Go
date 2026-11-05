@@ -1,0 +1,66 @@
+# captureByUser is 60 a minute scaled by tier: 20 for free, so the 21st is a 429.
+module: knowledge
+steps:
+  - name: "free tier request 1"
+    as: kg_free
+    request: {method: GET, path: "/v1/knowledge/graph?limit=1"}
+  - name: "free tier request 2"
+    as: kg_free
+    request: {method: GET, path: "/v1/knowledge/graph?limit=1"}
+  - name: "free tier request 3"
+    as: kg_free
+    request: {method: GET, path: "/v1/knowledge/graph?limit=1"}
+  - name: "free tier request 4"
+    as: kg_free
+    request: {method: GET, path: "/v1/knowledge/graph?limit=1"}
+  - name: "free tier request 5"
+    as: kg_free
+    request: {method: GET, path: "/v1/knowledge/graph?limit=1"}
+  - name: "free tier request 6"
+    as: kg_free
+    request: {method: GET, path: "/v1/knowledge/graph?limit=1"}
+  - name: "free tier request 7"
+    as: kg_free
+    request: {method: GET, path: "/v1/knowledge/graph?limit=1"}
+  - name: "free tier request 8"
+    as: kg_free
+    request: {method: GET, path: "/v1/knowledge/graph?limit=1"}
+  - name: "free tier request 9"
+    as: kg_free
+    request: {method: GET, path: "/v1/knowledge/graph?limit=1"}
+  - name: "free tier request 10"
+    as: kg_free
+    request: {method: GET, path: "/v1/knowledge/graph?limit=1"}
+  - name: "free tier request 11"
+    as: kg_free
+    request: {method: GET, path: "/v1/knowledge/graph?limit=1"}
+  - name: "free tier request 12"
+    as: kg_free
+    request: {method: GET, path: "/v1/knowledge/graph?limit=1"}
+  - name: "free tier request 13"
+    as: kg_free
+    request: {method: GET, path: "/v1/knowledge/graph?limit=1"}
+  - name: "free tier request 14"
+    as: kg_free
+    request: {method: GET, path: "/v1/knowledge/graph?limit=1"}
+  - name: "free tier request 15"
+    as: kg_free
+    request: {method: GET, path: "/v1/knowledge/graph?limit=1"}
+  - name: "free tier request 16"
+    as: kg_free
+    request: {method: GET, path: "/v1/knowledge/graph?limit=1"}
+  - name: "free tier request 17"
+    as: kg_free
+    request: {method: GET, path: "/v1/knowledge/graph?limit=1"}
+  - name: "free tier request 18"
+    as: kg_free
+    request: {method: GET, path: "/v1/knowledge/graph?limit=1"}
+  - name: "free tier request 19"
+    as: kg_free
+    request: {method: GET, path: "/v1/knowledge/graph?limit=1"}
+  - name: "free tier request 20"
+    as: kg_free
+    request: {method: GET, path: "/v1/knowledge/graph?limit=1"}
+  - name: "free tier request 21"
+    as: kg_free
+    request: {method: GET, path: "/v1/knowledge/graph?limit=1"}

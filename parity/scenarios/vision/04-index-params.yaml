@@ -1,0 +1,30 @@
+module: vision
+steps:
+  - name: "no provider: embed"
+    as: vis_idx
+    request: {method: POST, path: "/v1/vision/embed", base64: "iVBORw0KGgo=", headers: {"Content-Type": "image/png"}}
+  - name: "no provider: a valid pair writes nothing"
+    as: vis_idx
+    request: {method: POST, path: "/v1/vision/embed?indexAs=memory&memoryId=6B0E0000-0000-4000-8000-0000000000E7", base64: "iVBORw0KGgo=", headers: {"Content-Type": "image/png"}}
+    snapshot: ["parity_vision_usage"]
+  - name: "indexAs alone"
+    as: vis_idx
+    request: {method: POST, path: "/v1/vision/embed?indexAs=memory", base64: "iVBORw0KGgo=", headers: {"Content-Type": "image/png"}}
+  - name: "memoryId alone"
+    as: vis_idx
+    request: {method: POST, path: "/v1/vision/embed?memoryId=6B0E0000-0000-4000-8000-0000000000E7", base64: "iVBORw0KGgo=", headers: {"Content-Type": "image/png"}}
+  - name: "indexAs of another kind"
+    as: vis_idx
+    request: {method: POST, path: "/v1/vision/embed?indexAs=note&memoryId=6B0E0000-0000-4000-8000-0000000000E7", base64: "iVBORw0KGgo=", headers: {"Content-Type": "image/png"}}
+  - name: "bad memoryId"
+    as: vis_idx
+    request: {method: POST, path: "/v1/vision/embed?indexAs=memory&memoryId=nope", base64: "iVBORw0KGgo=", headers: {"Content-Type": "image/png"}}
+  - name: "indexAs empty"
+    as: vis_idx
+    request: {method: POST, path: "/v1/vision/embed?indexAs=&memoryId=6B0E0000-0000-4000-8000-0000000000E7", base64: "iVBORw0KGgo=", headers: {"Content-Type": "image/png"}}
+  - name: "search ignores indexAs"
+    as: vis_idx
+    request: {method: POST, path: "/v1/vision/search?indexAs=bogus", base64: "iVBORw0KGgo=", headers: {"Content-Type": "image/png"}}
+  - name: "bad type beats bad indexAs"
+    as: vis_idx
+    request: {method: POST, path: "/v1/vision/embed?indexAs=bogus", base64: "iVBORw0KGgo=", headers: {"Content-Type": "text/plain"}}

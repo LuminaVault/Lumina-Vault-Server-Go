@@ -1,0 +1,86 @@
+module: knowledge
+steps:
+  - name: "confirm with a note"
+    as: kg_rae
+    request: {method: POST, path: "/v1/knowledge/edges/6B200000-0000-4000-8000-000000000032/confirm", json: {"note": "looks right"}}
+    snapshot: ["knowledge_edges"]
+  - name: "confirm again: no longer suggested"
+    as: kg_rae
+    request: {method: POST, path: "/v1/knowledge/edges/6B200000-0000-4000-8000-000000000032/confirm", json: {}}
+    snapshot: ["knowledge_edges"]
+  - name: "dismiss after confirm"
+    as: kg_rae
+    request: {method: POST, path: "/v1/knowledge/edges/6B200000-0000-4000-8000-000000000032/dismiss", json: {}}
+  - name: "dismiss with an empty object"
+    as: kg_rae
+    request: {method: POST, path: "/v1/knowledge/edges/6B200000-0000-4000-8000-000000000033/dismiss", json: {}}
+    snapshot: ["knowledge_edges"]
+  - name: "confirm with a null note"
+    as: kg_rae
+    request: {method: POST, path: "/v1/knowledge/edges/6B200000-0000-4000-8000-000000000034/confirm", raw: "{\"note\":null}"}
+    snapshot: ["knowledge_edges"]
+  - name: "asserted can't be reviewed"
+    as: kg_rae
+    request: {method: POST, path: "/v1/knowledge/edges/6B200000-0000-4000-8000-000000000035/confirm", json: {}}
+  - name: "confirmed can't be reviewed"
+    as: kg_rae
+    request: {method: POST, path: "/v1/knowledge/edges/6B200000-0000-4000-8000-000000000036/dismiss", json: {}}
+  - name: "dismissed can't be reviewed"
+    as: kg_rae
+    request: {method: POST, path: "/v1/knowledge/edges/6B200000-0000-4000-8000-000000000037/confirm", json: {}}
+  - name: "stale can't be reviewed"
+    as: kg_rae
+    request: {method: POST, path: "/v1/knowledge/edges/6B200000-0000-4000-8000-000000000038/confirm", json: {}}
+  - name: "another tenant's edge"
+    as: kg_rae
+    request: {method: POST, path: "/v1/knowledge/edges/6B200000-0000-4000-8000-000000000028/confirm", json: {}}
+    snapshot: ["knowledge_edges"]
+  - name: "unknown edge"
+    as: kg_rae
+    request: {method: POST, path: "/v1/knowledge/edges/00000000-0000-4000-8000-000000000000/dismiss", json: {}}
+  - name: "lowercase id"
+    as: kg_rae
+    request: {method: POST, path: "/v1/knowledge/edges/6b200000-0000-4000-8000-000000000039/dismiss", json: {"note": ""}}
+    snapshot: ["knowledge_edges"]
+  - name: "bad id"
+    as: kg_rae
+    request: {method: POST, path: "/v1/knowledge/edges/nope/confirm", json: {}}
+  - name: "bad id wins over a bad body"
+    as: kg_rae
+    request: {method: POST, path: "/v1/knowledge/edges/nope/dismiss", raw: "{"}
+  - name: "id without hyphens"
+    as: kg_rae
+    request: {method: POST, path: "/v1/knowledge/edges/6B200000000040008000000000000032/confirm", json: {}}
+  - name: "empty body"
+    as: kg_rae
+    request: {method: POST, path: "/v1/knowledge/edges/6B200000-0000-4000-8000-000000000035/confirm", raw: ""}
+  - name: "not json"
+    as: kg_rae
+    request: {method: POST, path: "/v1/knowledge/edges/6B200000-0000-4000-8000-000000000035/confirm", raw: "{"}
+  - name: "array body"
+    as: kg_rae
+    request: {method: POST, path: "/v1/knowledge/edges/6B200000-0000-4000-8000-000000000035/confirm", raw: "[]"}
+  - name: "note of the wrong type"
+    as: kg_rae
+    request: {method: POST, path: "/v1/knowledge/edges/6B200000-0000-4000-8000-000000000035/confirm", raw: "{\"note\":5}"}
+  - name: "bad vault header after a good body"
+    as: kg_rae
+    request: {method: POST, path: "/v1/knowledge/edges/6B200000-0000-4000-8000-000000000035/confirm", json: {}, headers: {"X-Vault-ID": "1234"}}
+  - name: "a viewer can't review"
+    as: kg_view
+    request: {method: POST, path: "/v1/knowledge/edges/6B200000-0000-4000-8000-00000000003C/confirm", json: {}, headers: {"X-Vault-ID": "6B0C0000-0000-4000-8000-0000000000C1"}}
+    snapshot: ["knowledge_edges"]
+  - name: "no vault header: the edge is not in the personal vault"
+    as: kg_edit
+    request: {method: POST, path: "/v1/knowledge/edges/6B200000-0000-4000-8000-00000000003C/confirm", json: {}}
+  - name: "an editor confirms in the team vault"
+    as: kg_edit
+    request: {method: POST, path: "/v1/knowledge/edges/6B200000-0000-4000-8000-00000000003C/confirm", json: {"note": "team"}, headers: {"X-Vault-ID": "6B0C0000-0000-4000-8000-0000000000C1"}}
+    snapshot: ["knowledge_edges"]
+  - name: "an editor dismisses in the team vault"
+    as: kg_edit
+    request: {method: POST, path: "/v1/knowledge/edges/6B200000-0000-4000-8000-00000000003D/dismiss", json: {}, headers: {"X-Vault-ID": "6B0C0000-0000-4000-8000-0000000000C1"}}
+    snapshot: ["knowledge_edges"]
+  - name: "the graph shows the reviewed states"
+    as: kg_rae
+    request: {method: GET, path: "/v1/knowledge/graph?states=confirmed,dismissed"}

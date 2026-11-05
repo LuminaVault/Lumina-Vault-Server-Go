@@ -1,0 +1,7 @@
+module: kb
+steps:
+  - name: "pending has no gate: archived"
+    as: kg_arch
+    request: {method: GET, path: "/v1/memory-compile/pending"}
+  - name: "pending no token"
+    request: {method: GET, path: "/v1/memory-compile/pending", headers: {"X-Forwarded-For": "10.76.0.4"}}

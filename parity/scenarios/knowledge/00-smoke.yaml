@@ -1,0 +1,24 @@
+module: knowledge
+smoke: true
+steps:
+  - name: "graph, no seed ids"
+    as: alice
+    request: {method: GET, path: "/v1/knowledge/graph"}
+  - name: "graph with filters"
+    as: alice
+    request: {method: GET, path: "/v1/knowledge/graph?limit=5&kinds=claim&states=confirmed&minimumConfidence=0.5"}
+  - name: "explain two unknown nodes"
+    as: alice
+    request: {method: POST, path: "/v1/knowledge/connections/explain", json: {"fromNodeID": "00000000-0000-4000-8000-000000000000", "toNodeID": "00000000-0000-4000-8000-000000000001"}}
+  - name: "explain the same node twice"
+    as: alice
+    request: {method: POST, path: "/v1/knowledge/connections/explain", json: {"fromNodeID": "00000000-0000-4000-8000-000000000000", "toNodeID": "00000000-0000-4000-8000-000000000000"}}
+  - name: "confirm an unknown edge"
+    as: alice
+    request: {method: POST, path: "/v1/knowledge/edges/00000000-0000-4000-8000-000000000000/confirm", json: {}}
+  - name: "dismiss an unknown edge"
+    as: alice
+    request: {method: POST, path: "/v1/knowledge/edges/00000000-0000-4000-8000-000000000000/dismiss", json: {"note": "no"}}
+  - name: "bad edge id"
+    as: alice
+    request: {method: POST, path: "/v1/knowledge/edges/nope/confirm", json: {}}
