@@ -10,6 +10,10 @@
 #                   (a short key with a runner token refuses to boot, in both servers)
 #   runner-off      no runner token
 #   catalog-unseeded  no "luminavault" publisher: the first read tries to seed the catalog
+#
+# A state for LLM success paths, once Go serves them (group 4F), is one more
+# run_state with SWITCH_HERMES_GATEWAY_URL=http://llmstub:8080 and the stub up.
+# Until then llm_selftest proves the stub on Swift alone.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -43,7 +47,43 @@ run_state() {
   go run ./parity/cmd/parity compare \
     --swift http://localhost:18083 --swift-db postgres://lv:lv@localhost:15432/parity_swift_switched \
     --go http://localhost:18084 --go-db postgres://lv:lv@localhost:15432/parity_go_switched \
+    --swift-files docker:lvparity-swift-switched-1:/tmp/luminavault \
+    --go-files docker:lvparity-go-switched-1:/tmp/luminavault \
     --scenarios "parity/scenarios-switched/$state" || failed=1
+}
+
+# Swift against Swift with HERMES_GATEWAY_URL on the stub: zero differences shows
+# the stub is deterministic, and its counter shows both servers really reached it
+# rather than failing closed the same way.
+llm_selftest() {
+  local db port calls
+  "${COMPOSE[@]}" stop swift-switched go-switched swift2-switched >/dev/null 2>&1 || true
+  for db in parity_swift_switched parity_swift2_switched; do
+    "${COMPOSE[@]}" exec -T pg psql -v ON_ERROR_STOP=1 -q -U lv -d postgres -c "DROP DATABASE IF EXISTS $db WITH (FORCE)"
+    "${COMPOSE[@]}" exec -T pg psql -v ON_ERROR_STOP=1 -q -U lv -d postgres -c "CREATE DATABASE $db TEMPLATE parity_template"
+  done
+  "${COMPOSE[@]}" up -d --build --force-recreate llmstub
+  SWITCH_HERMES_GATEWAY_URL=http://llmstub:8080 "${COMPOSE[@]}" up -d --force-recreate swift-switched swift2-switched
+  for port in 18083 18086 18085; do
+    for _ in $(seq 1 60); do
+      curl -fsS "http://localhost:$port/health" >/dev/null 2>&1 && break
+      sleep 1
+    done
+    curl -fsS "http://localhost:$port/health" >/dev/null || { echo "server on :$port did not become healthy"; "${COMPOSE[@]}" logs --tail 40 swift-switched swift2-switched llmstub; exit 1; }
+  done
+  echo "==> LLM stub self-test (Swift vs Swift)"
+  go run ./parity/cmd/parity compare \
+    --swift http://localhost:18083 --swift-db postgres://lv:lv@localhost:15432/parity_swift_switched \
+    --go http://localhost:18086 --go-db postgres://lv:lv@localhost:15432/parity_swift2_switched \
+    --save-swift-transcripts swift-transcripts/llm-stub \
+    --scenarios parity/scenarios-llm || failed=1
+  calls=$(curl -fsS http://localhost:18085/stub/stats | sed -n 's/.*"\/v1\/chat\/completions":\([0-9]*\).*/\1/p')
+  echo "stub answered ${calls:-0} chat completions"
+  if [ "${calls:-0}" -lt 2 ]; then
+    echo "the servers never reached the LLM stub"
+    failed=1
+  fi
+  "${COMPOSE[@]}" stop swift-switched swift2-switched llmstub >/dev/null 2>&1 || true
 }
 
 failed=0
@@ -52,5 +92,6 @@ run_state posting-off SWITCH_COMMUNITY_POSTING_ENABLED=false
 run_state unconfigured SWITCH_ADMIN_TOKEN= SWITCH_SIGNING_KEY=too-short SWITCH_RUNNER_TOKEN=
 run_state runner-off SWITCH_RUNNER_TOKEN=
 run_state catalog-unseeded SWITCH_NONE=
+llm_selftest
 "${COMPOSE[@]}" stop swift-switched go-switched >/dev/null 2>&1 || true
 exit "$failed"

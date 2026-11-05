@@ -14,6 +14,7 @@ import (
 	"lumina/internal/auth"
 	"lumina/internal/ids"
 	"lumina/internal/wire"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -23,11 +24,45 @@ import (
 	"github.com/labstack/echo/v5"
 )
 
-// Policy is Swift's RateLimitPolicy without tierScale (no ported policy uses one yet).
+// Policy is Swift's RateLimitPolicy. TierScale nil means every tier gets Max.
 type Policy struct {
-	Name   string
-	Max    int
-	Window time.Duration
+	Name      string
+	Max       int
+	Window    time.Duration
+	TierScale func(tier string) float64
+}
+
+// EffectiveMax is RateLimitPolicy.effectiveMax for a caller with a user row:
+// max(1, (Max * scale).rounded()). rounded() is away from zero, as math.Round.
+func (p Policy) EffectiveMax(tier string) int {
+	if p.TierScale == nil {
+		return p.Max
+	}
+	return max(1, int(math.Round(float64(p.Max)*p.TierScale(tier))))
+}
+
+// ForTier is p with Max set to its EffectiveMax. The name is unchanged, so every
+// tier counts against one bucket per caller, as in Swift.
+func (p Policy) ForTier(tier string) Policy {
+	p.Max = p.EffectiveMax(tier)
+	return p
+}
+
+// StandardTierScale is RateLimitPolicy.standardTierScale over users.tier. A
+// value that is no UserTier reads as lapsed (User.tierEnum, EntitlementChecker.swift).
+func StandardTierScale(tier string) float64 {
+	switch tier {
+	case "ultimate":
+		return 4
+	case "pro":
+		return 2
+	case "trial":
+		return 1
+	case "archived":
+		return 0.1
+	default: // free, lapsed, unknown
+		return 0.34
+	}
 }
 
 // SettingsByUser is RateLimitPolicy.settingsByUser: 30 per 60 s, keyed by user or IP.
@@ -35,6 +70,18 @@ var SettingsByUser = Policy{Name: "settingsByUser", Max: 30, Window: 60 * time.S
 
 // AchievementsByUser is RateLimitPolicy.achievementsByUser: 60 per 60 s, keyed by user or IP.
 var AchievementsByUser = Policy{Name: "achievementsByUser", Max: 60, Window: 60 * time.Second}
+
+// CaptureByUser is RateLimitPolicy.captureByUser: 60 per 60 s on the standard
+// tier scale. Capture, memory upsert, memory search and knowledge share it.
+var CaptureByUser = Policy{Name: "captureByUser", Max: 60, Window: 60 * time.Second, TierScale: StandardTierScale}
+
+// MeTodayByUser is RateLimitPolicy.meTodayByUser: 60 per 60 s, keyed by user or
+// IP. `me` and /v1/me/suggestions share it.
+var MeTodayByUser = Policy{Name: "meTodayByUser", Max: 60, Window: 60 * time.Second}
+
+// QueryByUser is RateLimitPolicy.queryByUser: 30 per 60 s on the standard tier
+// scale. The calendar brief and /v1/query share it.
+var QueryByUser = Policy{Name: "queryByUser", Max: 30, Window: 60 * time.Second, TierScale: StandardTierScale}
 
 // ErrLimited is the Swift 429 body.
 var ErrLimited = wire.NewError(http.StatusTooManyRequests, "rate limit exceeded")
@@ -106,6 +153,25 @@ func Middleware(s *Store, p Policy, key func(*echo.Context) string) echo.Middlew
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c *echo.Context) error {
 			if limited, retry := s.Hit(p, key(c)); limited {
+				c.Response().Header().Set("Retry-After", strconv.Itoa(retry))
+				return ErrLimited
+			}
+			return next(c)
+		}
+	}
+}
+
+// TieredMiddleware limits requests under p scaled to the caller's tier. tier
+// reports false when there is no user row to read a tier from: an unidentified
+// caller, as in Swift's `context.identity?.tierEnum`, gets the baseline Max.
+func TieredMiddleware(s *Store, p Policy, key func(*echo.Context) string, tier func(*echo.Context) (string, bool)) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c *echo.Context) error {
+			policy := p
+			if t, ok := tier(c); ok {
+				policy = p.ForTier(t)
+			}
+			if limited, retry := s.Hit(policy, key(c)); limited {
 				c.Response().Header().Set("Retry-After", strconv.Itoa(retry))
 				return ErrLimited
 			}

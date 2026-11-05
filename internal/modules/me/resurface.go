@@ -26,7 +26,7 @@ func (m *Module) getResurface(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	limit, err := parseResurfaceLimit(c.QueryParam("limit"))
+	limit, err := parseResurfaceLimit(wire.Query(c, "limit"))
 	if err != nil {
 		return err
 	}

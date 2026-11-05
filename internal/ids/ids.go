@@ -4,7 +4,11 @@
 // is lowercase, so never call it at those points; use Upper instead.
 package ids
 
-import "github.com/google/uuid"
+import (
+	"errors"
+
+	"github.com/google/uuid"
+)
 
 // Upper returns id in the Swift form, e.g. "11111111-2222-3333-4444-55555555ABCD".
 func Upper(id uuid.UUID) string {
@@ -24,7 +28,15 @@ func Upper(id uuid.UUID) string {
 	return string(b[:])
 }
 
-// Parse accepts either case, as Swift's UUID(uuidString:) does.
+// ErrNotCanonical is Parse's answer to a form uuid.Parse takes and Swift doesn't.
+var ErrNotCanonical = errors.New("ids: not a 36-character UUID string")
+
+// Parse is Swift's UUID(uuidString:): only the 36-character form, in either
+// case. uuid.Parse also takes bare hex, braces and a urn: prefix, which Swift
+// refuses.
 func Parse(s string) (uuid.UUID, error) {
+	if len(s) != 36 {
+		return uuid.Nil, ErrNotCanonical
+	}
 	return uuid.Parse(s)
 }

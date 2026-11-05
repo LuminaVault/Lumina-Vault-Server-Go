@@ -21,7 +21,7 @@ func (m *Module) getLearned(c *echo.Context) error {
 		return err
 	}
 	now := m.now()
-	since, err := parseSince(c.QueryParam("since"), now)
+	since, err := parseSince(wire.Query(c, "since"), now)
 	if err != nil {
 		return err
 	}

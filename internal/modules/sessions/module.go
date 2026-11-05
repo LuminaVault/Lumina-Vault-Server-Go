@@ -44,8 +44,8 @@ func (m *Module) Register(r httpserver.Router, authMW echo.MiddlewareFunc) {
 func (m *Module) list(c *echo.Context) error {
 	rows, err := m.q.ListSessions(c.Request().Context(), db.ListSessionsParams{
 		TenantID:    auth.UserID(c),
-		WorkspaceID: parseWorkspace(c.QueryParam("workspace")),
-		RowLimit:    parseLimit(c.QueryParam("limit")),
+		WorkspaceID: parseWorkspace(wire.Query(c, "workspace")),
+		RowLimit:    parseLimit(wire.Query(c, "limit")),
 	})
 	if err != nil {
 		return err
@@ -83,9 +83,6 @@ func parseLimit(raw string) int32 {
 // parseWorkspace mirrors `UUID(uuidString:)`: only the 36-character form, any
 // letter case. Anything else means "every workspace", not an error.
 func parseWorkspace(raw string) *uuid.UUID {
-	if len(raw) != 36 {
-		return nil
-	}
 	id, err := ids.Parse(raw)
 	if err != nil {
 		return nil

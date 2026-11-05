@@ -65,7 +65,7 @@ func (m *Module) listCommitments(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	filter := c.QueryParam("state")
+	filter := wire.Query(c, "state")
 	if filter == "" {
 		filter = "open"
 	}
@@ -112,7 +112,7 @@ func (m *Module) patchCommitment(c *echo.Context) error {
 	}
 	raw := c.Param("id")
 	id, err := ids.Parse(raw)
-	if err != nil || len(raw) != 36 {
+	if err != nil {
 		return badRequest("invalid commitment id")
 	}
 	body, err := wire.Bind[commitmentUpdateRequest](c)

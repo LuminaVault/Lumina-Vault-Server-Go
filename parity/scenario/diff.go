@@ -11,9 +11,11 @@ import (
 type Difference struct {
 	Scenario string `json:"scenario"`
 	Step     string `json:"step"`
-	Field    string `json:"field"` // "status", "content-type", "$.body.path" or "snapshot:<table>$.path"
-	Swift    string `json:"swift"`
-	Go       string `json:"go"`
+	// Field is "status", "content-type", "trigger-status", "header:<name>",
+	// "$.body.path", "snapshot:<table>$.path" or "files:<tree>$[n].path".
+	Field string `json:"field"`
+	Swift string `json:"swift"`
+	Go    string `json:"go"`
 }
 
 // Diff compares two transcripts of the same scenario step by step.
@@ -33,6 +35,9 @@ func Diff(swift, goT Transcript) []Difference {
 		if a.ContentType != b.ContentType {
 			add(a.Name, "content-type", a.ContentType, b.ContentType)
 		}
+		if a.TriggerStatus != b.TriggerStatus {
+			add(a.Name, "trigger-status", a.TriggerStatus, b.TriggerStatus)
+		}
 		for _, h := range sortedKeys(headerNames(a.Headers, b.Headers)) {
 			if a.Headers[h] != b.Headers[h] {
 				add(a.Name, "header:"+h, a.Headers[h], b.Headers[h])
@@ -48,6 +53,16 @@ func Diff(swift, goT Transcript) []Difference {
 		}
 		for _, t := range sortedKeys(tables) {
 			walk("snapshot:"+t+"$", a.Snapshots[t], b.Snapshots[t], func(path string, x, y any) { add(a.Name, path, x, y) })
+		}
+		trees := map[string]bool{}
+		for t := range a.Files {
+			trees[t] = true
+		}
+		for t := range b.Files {
+			trees[t] = true
+		}
+		for _, t := range sortedKeys(trees) {
+			walk("files:"+t+"$", a.Files[t], b.Files[t], func(path string, x, y any) { add(a.Name, path, x, y) })
 		}
 	}
 	return out

@@ -1,0 +1,18 @@
+# Self-test of the LLM stub (scripts/parity-switches.sh, llm_selftest). The
+# classifier must parse the directive's JSON into a proposal, and its default
+# reply into "not a reminder". Group 4F's success paths rest on the same stub.
+module: reminders
+steps:
+  - name: a directive reply reaches the classifier
+    as: alice
+    request:
+      method: POST
+      path: /v1/reminders/detect
+      json:
+        text: 'call mom [[stub:reply:{"isReminder":true,"title":"Call mom","body":"","fireAt":"2030-01-01T09:00:00Z","scheduleHuman":"Tomorrow"}]]'
+  - name: the default reply isn't JSON
+    as: alice
+    request: {method: POST, path: /v1/reminders/detect, json: {text: remind me to call mom}}
+  - name: an upstream error fails closed
+    as: alice
+    request: {method: POST, path: /v1/reminders/detect, json: {text: "[[stub:error:400]]"}}

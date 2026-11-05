@@ -47,3 +47,5 @@ steps:
     snapshot: [skills_state]
   - {name: bad card id, as: kanban_ann, request: {method: POST, path: /v1/cards/not-a-uuid/promote}}
   - {name: random card, as: kanban_ann, request: {method: POST, path: /v1/cards/00000000-0000-4000-8000-000000000000/promote}}
+  # Each promote wrote skills/<slug>/SKILL.md: compare the bytes.
+  - {name: vault tree after promotes, request: {method: GET, path: /health}, files: [kanban_ann]}

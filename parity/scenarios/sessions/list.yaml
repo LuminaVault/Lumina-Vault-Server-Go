@@ -67,3 +67,12 @@ steps:
     request: {method: GET, path: /v1/sessions, headers: {Authorization: "Bearer not.a.jwt"}}
   - name: basic scheme
     request: {method: GET, path: /v1/sessions, headers: {Authorization: "Basic YWxpY2U6eA=="}}
+  - name: limit with a literal plus
+    as: alice
+    request: {method: GET, path: "/v1/sessions?limit=+2"}
+  - name: encoded limit key is no key
+    as: alice
+    request: {method: GET, path: "/v1/sessions?%6Cimit=2"}
+  - name: first duplicate limit wins
+    as: alice
+    request: {method: GET, path: "/v1/sessions?limit=1&limit=2"}

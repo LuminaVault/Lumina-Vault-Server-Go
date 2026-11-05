@@ -71,3 +71,11 @@ func TestBadPath(t *testing.T) {
 	_, err := normalize.Body([]byte(`{}`), []string{"items"})
 	require.Error(t, err)
 }
+
+func TestTextPlaceholdersInsideStrings(t *testing.T) {
+	n := normalize.New()
+	const id = "A11CE000-0000-4000-8000-000000000001"
+	require.Equal(t, "raw/<uuid#1:upper>.md", n.UUIDs("raw/"+id+".md"))
+	require.Equal(t, "id: <uuid#1:lower>\nat: <ts:iso-s>\n", n.Text("id: a11ce000-0000-4000-8000-000000000001\nat: 2026-01-01T00:00:00Z\n"))
+	require.Equal(t, "2026-01-01T00:00:00Z", n.UUIDs("2026-01-01T00:00:00Z"))
+}

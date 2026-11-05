@@ -1,0 +1,14 @@
+# ids.Parse is Swift's UUID(uuidString:): only the 36-character form, either
+# case. uuid.Parse alone also takes bare hex, braces and urn:. Those forms must
+# not reach a query through a path id, the X-Vault-ID header or a query value.
+module: base
+steps:
+  - {name: path id canonical, as: strict_ann, request: {method: PATCH, path: /v1/projects/57C70000-0000-4000-8000-0000000000B1, json: {name: Counted}}}
+  - {name: path id lowercase, as: strict_ann, request: {method: PATCH, path: /v1/projects/57c70000-0000-4000-8000-0000000000b1, json: {name: Counted}}}
+  - {name: path id bare hex, as: strict_ann, request: {method: PATCH, path: /v1/projects/57c700000000400080000000000000b1, json: {name: x}}}
+  - {name: path id braces, as: strict_ann, request: {method: PATCH, path: "/v1/projects/%7B57c70000-0000-4000-8000-0000000000b1%7D", json: {name: x}}}
+  - {name: path id urn, as: strict_ann, request: {method: PATCH, path: "/v1/projects/urn:uuid:57c70000-0000-4000-8000-0000000000b1", json: {name: x}}}
+  - {name: X-Vault-ID bare hex, as: strict_ann, request: {method: GET, path: /v1/spaces, headers: {X-Vault-ID: 57c700000000400080000000000000a1}}}
+  - {name: X-Vault-ID braces, as: strict_ann, request: {method: GET, path: /v1/spaces, headers: {X-Vault-ID: "{57c70000-0000-4000-8000-0000000000a1}"}}}
+  - {name: workspace query bare hex means every workspace, as: strict_ann, request: {method: GET, path: "/v1/sessions?workspace=57c700000000400080000000000000a1"}}
+  - {name: the project list still reads its todo, as: strict_ann, request: {method: GET, path: /v1/projects}}

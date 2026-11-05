@@ -57,3 +57,9 @@ steps:
   - name: list after delete
     as: alice
     request: {method: GET, path: /v1/projects}
+  - name: limit with a literal plus
+    as: alice
+    request: {method: GET, path: "/v1/projects?limit=+1"}
+  - name: encoded limit key is no key
+    as: alice
+    request: {method: GET, path: "/v1/projects?%6Cimit=1"}

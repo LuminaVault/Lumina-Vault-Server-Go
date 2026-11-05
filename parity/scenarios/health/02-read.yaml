@@ -38,3 +38,7 @@ steps:
   - {name: daily days not a number, as: hea_hal, request: {method: GET, path: "/v1/health/daily?type=steps&days=abc"}}
   - {name: daily days with plus sign, as: hea_hal, request: {method: GET, path: "/v1/health/daily?type=steps&days=+3"}}
   - {name: daily other tenant, as: hea_bea, request: {method: GET, path: "/v1/health/daily?type=steps"}}
+  - {name: limit with a literal plus, as: hea_hal, request: {method: GET, path: "/v1/health?limit=+1"}}
+  - {name: type with a literal plus, as: hea_hal, request: {method: GET, path: "/v1/health?type=steps+"}}
+  - {name: invalid UTF-8 is repaired per byte, as: hea_hal, request: {method: GET, path: "/v1/health/daily?type=%FF%FF&days=1"}}
+  - {name: a truncated sequence is repaired once, as: hea_hal, request: {method: GET, path: "/v1/health/daily?type=%E2%82&days=1"}}

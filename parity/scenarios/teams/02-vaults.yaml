@@ -19,6 +19,9 @@ steps:
     as: team_olga
     request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/vaults, json: {name: " Design "}}
     snapshot: [vaults, vault_memberships, vault_activity_events]
+    capture: {design_vault: $.id}
+  # A new vault gets its folders on disk: raw, wiki and memories.
+  - {name: new vault tree, request: {method: GET, path: /health}, files: ["{{design_vault}}"]}
   - name: admin creates a vault
     as: team_adam
     request: {method: POST, path: /v1/teams/7EA51000-0000-4000-8000-000000000001/vaults, json: {name: Adam Space}}

@@ -71,3 +71,9 @@ steps:
   - name: list after deletes
     as: alice
     request: {method: GET, path: /v1/spaces}
+  # The space folders on the volume, compared after everything above. The stamp in
+  # `_deleted_<seconds>_<slug>` is the only value that may differ.
+  - name: vault tree after creates and deletes
+    request: {method: GET, path: /health}
+    files: [alice]
+    filesMask: ['_deleted_\d+']

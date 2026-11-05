@@ -159,6 +159,22 @@ func TestLowercaseSubjectAccepted(t *testing.T) {
 	require.Equal(t, http.StatusOK, code)
 }
 
+func TestNonCanonicalSubjectsRejected(t *testing.T) {
+	// Swift's UUID(uuidString:) takes only the 36-character form.
+	user := uuid.New()
+	keys := NewKeyset(Key{Kid: "a", Secret: []byte(secretA)})
+	for _, sub := range []string{
+		strings.ReplaceAll(user.String(), "-", ""),
+		"{" + user.String() + "}",
+		"urn:uuid:" + user.String(),
+	} {
+		c := session(user)
+		c.Subject = sub
+		code, _ := serve(t, keys, fakeUsers{user: true}, mint(t, "a", secretA, c, jwt.SigningMethodHS256))
+		require.Equal(t, http.StatusUnauthorized, code, sub)
+	}
+}
+
 func TestLoadKeysErrors(t *testing.T) {
 	for csv, want := range map[string]string{
 		"k:short":                        "minimum 32",

@@ -292,7 +292,7 @@ func (m *Module) recommendations(ctx context.Context, vault, user uuid.UUID, h M
 // overview is AnalyticsController.overview.
 func (m *Module) overview(c *echo.Context) error {
 	ctx := requestContext(c)
-	rng, scope := parseRange(query(c, "range")), parseScope(query(c, "scope"))
+	rng, scope := parseRange(wire.Query(c, "range")), parseScope(wire.Query(c, "scope"))
 	access, err := m.resolveScope(c, scope)
 	if err != nil {
 		return err
@@ -327,7 +327,7 @@ func (m *Module) overview(c *echo.Context) error {
 // is BYOK (ModelDisclosure.forBrainMode); a missing preference row means managed.
 func (m *Module) models(c *echo.Context) error {
 	ctx := requestContext(c)
-	rng, scope := parseRange(query(c, "range")), parseScope(query(c, "scope"))
+	rng, scope := parseRange(wire.Query(c, "range")), parseScope(wire.Query(c, "scope"))
 	access, err := m.resolveScope(c, scope)
 	if err != nil {
 		return err
@@ -374,7 +374,7 @@ func (m *Module) models(c *echo.Context) error {
 // team is AnalyticsController.team. Members are for vault admins only.
 func (m *Module) team(c *echo.Context) error {
 	ctx := requestContext(c)
-	rng := parseRange(query(c, "range"))
+	rng := parseRange(wire.Query(c, "range"))
 	access, err := m.vaults.Resolve(c, vaultaccess.Read)
 	if err != nil {
 		return err

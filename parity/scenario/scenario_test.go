@@ -200,3 +200,16 @@ func TestStreamStepReadsHeadersOnly(t *testing.T) {
 	require.Len(t, diffs, 1)
 	require.Equal(t, "header:Cache-Control", diffs[0].Field)
 }
+
+// Every checked-in scenario parses under the current schema.
+func TestCheckedInScenariosLoad(t *testing.T) {
+	for _, pattern := range []string{"../scenarios/*", "../scenarios-llm/*", "../scenarios-switched/*/*"} {
+		dirs, err := filepath.Glob(pattern)
+		require.NoError(t, err)
+		require.NotEmpty(t, dirs, pattern)
+		for _, d := range dirs {
+			_, err := Load(d)
+			require.NoError(t, err, d)
+		}
+	}
+}

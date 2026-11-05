@@ -36,7 +36,6 @@ import (
 	"lumina/internal/swiftstr"
 	"lumina/internal/wire"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -157,25 +156,12 @@ func ReturnToParam(c *echo.Context) *string {
 	return queryParam(c, "returnTo")
 }
 
-// queryParam is the first `name=` of the query, percent-decoded and nil when
-// absent. It reads the raw query as Hummingbird does: a `+` stays a `+`, where
-// c.QueryParam would hand back a space.
+// queryParam is the first `name=` of the query, nil when absent.
 func queryParam(c *echo.Context, name string) *string {
-	for pair := range strings.SplitSeq(c.Request().URL.RawQuery, "&") {
-		key, value, _ := strings.Cut(pair, "=")
-		if unescaped(key) == name {
-			v := unescaped(value)
-			return &v
-		}
+	if v, ok := wire.QueryParam(c, name); ok {
+		return &v
 	}
 	return nil
-}
-
-func unescaped(s string) string {
-	if out, err := url.PathUnescape(s); err == nil {
-		return out
-	}
-	return s
 }
 
 func (m *Module) disconnect(c *echo.Context) error {
@@ -419,40 +405,23 @@ func attendeesJSON(attendees *[]syncAttendee) *string {
 
 // MARK: GET /v1/calendar/events/{id}/brief
 
-// queryLimit is RateLimitMiddleware(.queryByUser): 30 per 60 s for a trial or
-// an unidentified caller, on Swift's standardTierScale. The bucket is shared
-// with /v1/query once that moves.
+// queryLimit is RateLimitMiddleware(.queryByUser), reading the caller's tier.
+// The bucket is shared with /v1/query once that moves.
 func (m *Module) queryLimit(next echo.HandlerFunc) echo.HandlerFunc {
-	return func(c *echo.Context) error {
-		limit := 30
-		if id, ok := auth.Identity(c); ok {
-			if u, err := m.q.UserForBrief(c.Request().Context(), id); err == nil {
-				limit = queryLimitFor(u.Tier)
-			}
-		}
-		policy := ratelimit.Policy{Name: "queryByUser", Max: limit, Window: 60 * time.Second}
-		if limited, retry := m.limits.Hit(policy, ratelimit.UserOrIPKey(c)); limited {
-			c.Response().Header().Set("Retry-After", strconv.Itoa(retry))
-			return ratelimit.ErrLimited
-		}
-		return next(c)
-	}
+	return ratelimit.TieredMiddleware(m.limits, ratelimit.QueryByUser, ratelimit.UserOrIPKey, m.queryTier)(next)
 }
 
-// queryLimitFor is RateLimitPolicy.effectiveMax for queryByUser.
-func queryLimitFor(tier string) int {
-	switch tier {
-	case "ultimate":
-		return 120
-	case "pro":
-		return 60
-	case "free", "lapsed":
-		return 10 // (30 * 0.34).rounded()
-	case "archived":
-		return 3
-	default:
-		return 30
+// queryTier is the identified caller's users.tier.
+func (m *Module) queryTier(c *echo.Context) (string, bool) {
+	id, ok := auth.Identity(c)
+	if !ok {
+		return "", false
 	}
+	u, err := m.q.UserForBrief(c.Request().Context(), id)
+	if err != nil {
+		return "", false
+	}
+	return u.Tier, true
 }
 
 func (m *Module) getBrief(c *echo.Context) error {
@@ -462,7 +431,7 @@ func (m *Module) getBrief(c *echo.Context) error {
 	}
 	raw := c.Param("id")
 	eventID, err := ids.Parse(raw)
-	if err != nil || len(raw) != 36 { // uuid.Parse also takes braces, urn: and bare hex
+	if err != nil {
 		return wire.NewError(http.StatusBadRequest, "invalid event id")
 	}
 	resp, ok, err := m.brief.brief(c.Request().Context(), tenant, eventID)
