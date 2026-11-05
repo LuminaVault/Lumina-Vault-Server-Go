@@ -119,6 +119,14 @@ type Config struct {
 	HermesDataRoot            string `env:"HERMES_DATA_ROOT" envDefault:"/app/data/hermes"`
 	BillingEnforcementEnabled string `env:"BILLING_ENFORCEMENT_ENABLED" envDefault:"false"`
 
+	// Daily caps in million tokens, and the model the trial tier's soft cap degrades
+	// to (usagemeter.Budgets). SelfImprovementEnabled is the operator's switch
+	// (selfimprove.Activity).
+	UsageFreeMtokDaily     float64 `env:"USAGE_FREE_MTOK_DAILY" envDefault:"1.0"`
+	UsagePerSkillMtokDaily float64 `env:"USAGE_PER_SKILL_MTOK_DAILY" envDefault:"0.2"`
+	UsageDegradeModel      string  `env:"USAGE_DEGRADE_MODEL" envDefault:"hermes-3-small"`
+	SelfImprovementEnabled bool    `env:"SELF_IMPROVEMENT_ENABLED" envDefault:"true"`
+
 	// JinaAPIKey is Jina's reader, tier-2 of link enrichment. Unset still calls it,
 	// without the header, as in Swift.
 	JinaAPIKey string `env:"JINA_API_KEY"`
@@ -134,10 +142,15 @@ type Config struct {
 	// BYO Hermes resolution (hermesresolve, ssrfguard). Strings, read with
 	// Swift's lowercased() == "true". BYOHermesRequireHTTPS has no default here
 	// because Swift's depends on LV_ENVIRONMENT; use its method.
-	HermesGatewayURL         string `env:"HERMES_GATEWAY_URL" envDefault:"http://hermes:8642"`
+	HermesGatewayURL string `env:"HERMES_GATEWAY_URL" envDefault:"http://hermes:8642"`
+	// HermesGatewayKind picks hermesprofile.NewGateway: "filesystem" or "logging".
+	HermesGatewayKind        string `env:"HERMES_GATEWAY_KIND" envDefault:"filesystem"`
 	BYOHermesAllowPrivate    string `env:"BYO_HERMES_ALLOW_PRIVATE" envDefault:"false"`
 	BYOHermesRequireHTTPSRaw string `env:"BYO_HERMES_REQUIRE_HTTPS"`
 	BYOHermesAllowTailnet    string `env:"BYO_HERMES_ALLOW_TAILNET_HTTP" envDefault:"true"`
+
+	// MaxConcurrentStreamsPerUser is the ceiling on ratelimit.InFlightLimit for /v1/llm and /v1/query.
+	MaxConcurrentStreamsPerUser int `env:"HTTP_MAX_CONCURRENT_STREAMS_PER_USER" envDefault:"3"`
 
 	// Memory routes. HybridExecutionEnabled stays a string, read with Swift's
 	// lowercased() == "true"; it mounts /v1/memory/local-sync.

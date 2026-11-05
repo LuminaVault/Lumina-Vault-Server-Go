@@ -63,6 +63,13 @@ func TestConfigEnvNamesComeFromSwiftKeys(t *testing.T) {
 	}
 }
 
+func TestRequestPathDefaults(t *testing.T) {
+	cfg, err := config.LoadFrom(map[string]string{})
+	require.NoError(t, err)
+	require.Equal(t, 3, cfg.MaxConcurrentStreamsPerUser)
+	require.Equal(t, "filesystem", cfg.HermesGatewayKind)
+}
+
 func TestLoadCSVAndDefaults(t *testing.T) {
 	cfg, err := config.LoadFrom(map[string]string{
 		"CORS_ALLOWED_ORIGINS": "https://app.luminavault.fyi, https://luminavault.fyi,,",
@@ -74,6 +81,15 @@ func TestLoadCSVAndDefaults(t *testing.T) {
 	require.True(t, cfg.FluentEnabled)
 	require.True(t, cfg.JobEnabled("achievements"))
 	require.False(t, cfg.JobEnabled("calendar-sync"))
+}
+
+func TestLoadUsageAndSelfImprovementDefaults(t *testing.T) {
+	cfg, err := config.LoadFrom(map[string]string{})
+	require.NoError(t, err)
+	require.InDelta(t, 1.0, cfg.UsageFreeMtokDaily, 0)
+	require.InDelta(t, 0.2, cfg.UsagePerSkillMtokDaily, 0)
+	require.Equal(t, "hermes-3-small", cfg.UsageDegradeModel)
+	require.True(t, cfg.SelfImprovementEnabled)
 }
 
 func TestLoadEmptyOriginsMeansNone(t *testing.T) {

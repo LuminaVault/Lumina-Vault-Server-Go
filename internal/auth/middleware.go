@@ -19,6 +19,13 @@ type Claims struct {
 	SCP  string `json:"scp,omitempty"`
 }
 
+// sessionClaims tells a token with no scope from one with an empty scope, which
+// Claims can't: Swift's `scp == nil` guard refuses `"scp":""`. Scope shadows Claims.SCP.
+type sessionClaims struct {
+	Claims
+	Scope *string `json:"scp"`
+}
+
 // UserLoader reports whether the token's user still exists. Swift's
 // JWTAuthenticator loads the User row and treats a missing row as
 // unauthenticated, so a deleted account's live token gets 401.
@@ -98,14 +105,25 @@ func Identity(c *echo.Context) (uuid.UUID, bool) {
 var errNoBearer = errors.New("auth: no bearer token")
 
 // Verify checks the header value and returns the claims of a general session
-// token. Scoped tokens (scp set) are machine credentials for one route group
-// and never pass here. opts are extra parser options (tests pin the clock).
+// token. Scoped tokens (any scp, even empty) are machine credentials for one
+// route group and never pass here; AudioIdentify is the one place that takes one. opts are extra parser options (tests pin the clock).
 func Verify(keys Keyset, header string, opts ...jwt.ParserOption) (*Claims, error) {
+	claims := &sessionClaims{}
+	if err := parse(keys, header, claims, opts...); err != nil {
+		return nil, err
+	}
+	if claims.Scope != nil {
+		return nil, errors.New("auth: scoped token")
+	}
+	return &claims.Claims, nil
+}
+
+// parse checks the header value's signature and expiry and decodes its payload into claims.
+func parse(keys Keyset, header string, claims jwt.Claims, opts ...jwt.ParserOption) error {
 	token, ok := strings.CutPrefix(header, "Bearer ")
 	if !ok || token == "" {
-		return nil, errNoBearer
+		return errNoBearer
 	}
-	claims := &Claims{}
 	_, err := jwt.ParseWithClaims(token, claims, func(t *jwt.Token) (any, error) {
 		kid, _ := t.Header["kid"].(string)
 		key, ok := keys.lookup(kid)
@@ -114,13 +132,7 @@ func Verify(keys Keyset, header string, opts ...jwt.ParserOption) (*Claims, erro
 		}
 		return key.Secret, nil
 	}, append([]jwt.ParserOption{jwt.WithValidMethods([]string{"HS256"}), jwt.WithExpirationRequired()}, opts...)...)
-	if err != nil {
-		return nil, err
-	}
-	if claims.SCP != "" {
-		return nil, errors.New("auth: scoped token")
-	}
-	return claims, nil
+	return err
 }
 
 // UserID returns the authenticated user. It panics if the route is not behind

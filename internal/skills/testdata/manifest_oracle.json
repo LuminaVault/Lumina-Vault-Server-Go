@@ -1,0 +1,3367 @@
+[
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nn: &n ev\nname: x\ndescription: d\nmetadata:\n  capability: low\n  on_event: [*n, *n]\n---\nbody",
+"description": "d",
+"id": "alias/elem",
+"name": "x",
+"onEvent": [
+"ev",
+"ev"
+],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "high",
+"contents": "---\nm: &m {capability: high}\nname: x\ndescription: d\nmetadata: *m\n---\nbody",
+"description": "d",
+"id": "alias/map_as_metadata",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"contents": "---\nn: &n ~\nname: *n\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"detail": "name",
+"error": "missing_required_field",
+"id": "alias/null_value"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\na: &n one\nb: &n two\nname: *n\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "alias/redefined",
+"name": "two",
+"onEvent": [],
+"outputs": []
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\nother: &a {x: *a}\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "alias/self_map"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\nother: &a [*a]\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "alias/self_seq"
+},
+{
+"allowedTools": [
+"a",
+"b"
+],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nm: &m [a, b]\nname: x\ndescription: d\nallowed-tools: *m\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "alias/seq_as_tools",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\nother: *nope\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "alias/undefined"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nn: &n x\nname: *n\ndescription: *n\nmetadata:\n  capability: low\n---\nbody",
+"description": "x",
+"id": "alias/value",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "043764df773ac7ceea6175e1498893e6ee33e79885288417cc1d75cba6094827",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n---\ncaf\u00e9 \ud83d\ude00\n",
+"description": "d",
+"id": "body/unicode",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "c8687a08aa5d6ed2044328fa6a697ab8e96dc34291e8c2034ae8c38e6fcc6d65",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n---\n \t\n\n a b \n\u00a0\n\n",
+"description": "d",
+"id": "body/ws",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n---\n\u200b\u00a0x\u2028\u2029",
+"description": "d",
+"id": "body/zwsp_nbsp",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: yes\n---\nbody",
+"detail": "yes",
+"error": "invalid_capability",
+"id": "cap/bool"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: \n---\nbody",
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "cap/empty"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "high",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: high\n---\nbody",
+"description": "d",
+"id": "cap/high",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: [low]\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "cap/list"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: {a: 1}\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "cap/map"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "medium",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: medium\n---\nbody",
+"description": "d",
+"id": "cap/medium",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: ~\n---\nbody",
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "cap/null"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: 1\n---\nbody",
+"detail": "1",
+"error": "invalid_capability",
+"id": "cap/number"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: \"low\"\n---\nbody",
+"description": "d",
+"id": "cap/quoted",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: \" low\"\n---\nbody",
+"detail": " low",
+"error": "invalid_capability",
+"id": "cap/space"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: !!str low\n---\nbody",
+"description": "d",
+"id": "cap/tagged",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: LOW\n---\nbody",
+"detail": "LOW",
+"error": "invalid_capability",
+"id": "cap/upper"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap: {trial: x}\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "dcap/bad_and_missing"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap: {}\n---\nbody",
+"detail": "trial",
+"error": "missing_required_field",
+"id": "dcap/empty"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"cap": [
+1,
+2,
+3
+],
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap: {trial: 1, pro: 2, ultimate: 3, x: y}\n---\nbody",
+"description": "d",
+"id": "dcap/extra",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"cap": [
+1,
+2,
+3
+],
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap: {trial: 1, pro: 2, ultimate: 3}\n---\nbody",
+"description": "d",
+"id": "dcap/full",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap: [1, 2, 3]\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "dcap/list"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap: {pro: x}\n---\nbody",
+"detail": "trial",
+"error": "missing_required_field",
+"id": "dcap/missing_then_bad"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap: {trial: 1, ultimate: 3}\n---\nbody",
+"detail": "pro",
+"error": "missing_required_field",
+"id": "dcap/no_pro"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap: {pro: 2, ultimate: 3}\n---\nbody",
+"detail": "trial",
+"error": "missing_required_field",
+"id": "dcap/no_trial"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap: {trial: 1, pro: 2}\n---\nbody",
+"detail": "ultimate",
+"error": "missing_required_field",
+"id": "dcap/no_ult"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap: ~\n---\nbody",
+"description": "d",
+"id": "dcap/null",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap: 3\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "dcap/scalar"
+},
+{
+"contents": "---\nname: x\nmetadata:\n  capability: bogus\n---\nbody",
+"detail": "description",
+"error": "missing_required_field",
+"id": "desc/absent_and_bad_cap"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: |\n   a\n   b\n\nmetadata:\n  capability: low\n---\nbody",
+"description": "a\nb",
+"id": "desc/block",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"contents": "---\nname: x\ndescription: \"\"\n---\nbody",
+"detail": "description",
+"error": "missing_required_field",
+"id": "desc/empty_and_no_meta"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: 5\nmetadata:\n  capability: low\n---\nbody",
+"description": "5",
+"id": "desc/number",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\nother:\n  a: 1\n  A: 2\n---\nbody",
+"description": "d",
+"id": "dup/case_differs",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\nother:\n  ? [a, b]\n  : 1\n  ? [a, b]\n  : 2\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "dup/complex_seq"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\nother:\n  - {a: 1, a: 2}\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "dup/in_list"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\nother:\n  123: a\n  \"123\": b\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "dup/int_vs_str"
+},
+{
+"contents": "---\na: &a {name: x}\nb: &b {description: d}\n<<: *a\n<<: *b\nmetadata:\n  capability: low\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "dup/merge_twice"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  capability: high\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "dup/meta"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\nother:\n  caf\u00e9: 1\n  cafe\u0301: 2\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "dup/nfc_nfd"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\nother:\n  ~: a\n  \"~\": b\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "dup/null_vs_empty"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\nother:\n  !!str a: 1\n  a: 2\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "dup/tagged_diff"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\nother:\n  !!int 1: 1\n  1: 2\n---\nbody",
+"description": "d",
+"id": "dup/tagged_int",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"contents": "---\nname: x\nname: y\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "dup/top"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\nother:\n  true: a\n  \"true\": b\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "dup/true_vs_str"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\nother:\n  deep:\n    a: 1\n    a: 2\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "dup/unread"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  on_event: []\n---\nbody",
+"description": "d",
+"id": "event/empty",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  on_event: [a, b]\n---\nbody",
+"description": "d",
+"id": "event/list",
+"name": "x",
+"onEvent": [
+"a",
+"b"
+],
+"outputs": []
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  on_event: {a: 1}\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "event/map"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  on_event: [[a]]\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "event/nested"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  on_event: ~\n---\nbody",
+"description": "d",
+"id": "event/null",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  on_event: [~, null, \"\"]\n---\nbody",
+"description": "d",
+"id": "event/nulls",
+"name": "x",
+"onEvent": [
+"~",
+"null",
+""
+],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  on_event: [1, 2]\n---\nbody",
+"description": "d",
+"id": "event/nums",
+"name": "x",
+"onEvent": [
+"1",
+"2"
+],
+"outputs": []
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  on_event: \"a\"\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "event/quoted"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  on_event: a\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "event/scalar"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: 0X10\n    pro: 2\n    ultimate: 3\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "int/HEX"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"cap": [
+3,
+2,
+3
+],
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: 0b11\n    pro: 2\n    ultimate: 3\n---\nbody",
+"description": "d",
+"id": "int/bin",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: 0b12\n    pro: 2\n    ultimate: 3\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "int/bin2"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: true\n    pro: 2\n    ultimate: 3\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "int/bool"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: --1\n    pro: 2\n    ultimate: 3\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "int/dbl_sign"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"cap": [
+0,
+2,
+3
+],
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: 00\n    pro: 2\n    ultimate: 3\n---\nbody",
+"description": "d",
+"id": "int/double_zero",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: \n    pro: 2\n    ultimate: 3\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "int/empty"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: 1e3\n    pro: 2\n    ultimate: 3\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "int/exp"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: 1.5\n    pro: 2\n    ultimate: 3\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "int/float"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"cap": [
+16,
+2,
+3
+],
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: 0x10\n    pro: 2\n    ultimate: 3\n---\nbody",
+"description": "d",
+"id": "int/hex",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: 0x\n    pro: 2\n    ultimate: 3\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "int/hex_empty"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"cap": [
+5,
+2,
+3
+],
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: 0x+5\n    pro: 2\n    ultimate: 3\n---\nbody",
+"description": "d",
+"id": "int/hex_plus",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"cap": [
+-5,
+2,
+3
+],
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: 0x-5\n    pro: 2\n    ultimate: 3\n---\nbody",
+"description": "d",
+"id": "int/hex_sign",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"cap": [
+255,
+2,
+3
+],
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: 0xFF\n    pro: 2\n    ultimate: 3\n---\nbody",
+"description": "d",
+"id": "int/hex_upper_digits",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: 99999999999999999999\n    pro: 2\n    ultimate: 3\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "int/huge"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: [1]\n    pro: 2\n    ultimate: 3\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "int/list"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: |\n      3\n    pro: 2\n    ultimate: 3\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "int/literal"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: {a: 1}\n    pro: 2\n    ultimate: 3\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "int/map"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"cap": [
+9223372036854775807,
+2,
+3
+],
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: 9223372036854775807\n    pro: 2\n    ultimate: 3\n---\nbody",
+"description": "d",
+"id": "int/max",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"cap": [
+-9223372036854775808,
+2,
+3
+],
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: -9223372036854775808\n    pro: 2\n    ultimate: 3\n---\nbody",
+"description": "d",
+"id": "int/min",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: -\n    pro: 2\n    ultimate: 3\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "int/minus_only"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: -0\n    pro: 2\n    ultimate: 3\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "int/minus_zero"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"cap": [
+-1,
+2,
+3
+],
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: -1\n    pro: 2\n    ultimate: 3\n---\nbody",
+"description": "d",
+"id": "int/neg",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"cap": [
+-16,
+2,
+3
+],
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: -0x10\n    pro: 2\n    ultimate: 3\n---\nbody",
+"description": "d",
+"id": "int/neghex",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: ~\n    pro: 2\n    ultimate: 3\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "int/null"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"cap": [
+8,
+2,
+3
+],
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: 010\n    pro: 2\n    ultimate: 3\n---\nbody",
+"description": "d",
+"id": "int/oct",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"cap": [
+15,
+2,
+3
+],
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: 0o17\n    pro: 2\n    ultimate: 3\n---\nbody",
+"description": "d",
+"id": "int/oct0o",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: 09\n    pro: 2\n    ultimate: 3\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "int/oct9"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"cap": [
+5,
+2,
+3
+],
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: 0+5\n    pro: 2\n    ultimate: 3\n---\nbody",
+"description": "d",
+"id": "int/oct_sign",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: 9223372036854775808\n    pro: 2\n    ultimate: 3\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "int/over"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"cap": [
+3,
+2,
+3
+],
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: +3\n    pro: 2\n    ultimate: 3\n---\nbody",
+"description": "d",
+"id": "int/plus",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: +\n    pro: 2\n    ultimate: 3\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "int/plus_only"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: +0\n    pro: 2\n    ultimate: 3\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "int/plus_zero"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: \"3\"\n    pro: 2\n    ultimate: 3\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "int/quoted"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"cap": [
+90,
+2,
+3
+],
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: 1:30\n    pro: 2\n    ultimate: 3\n---\nbody",
+"description": "d",
+"id": "int/sexa",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"cap": [
+3723,
+2,
+3
+],
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: 1:2:3\n    pro: 2\n    ultimate: 3\n---\nbody",
+"description": "d",
+"id": "int/sexa3",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"cap": [
+150,
+2,
+3
+],
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: 1:90\n    pro: 2\n    ultimate: 3\n---\nbody",
+"description": "d",
+"id": "int/sexa_big",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: 1:\n    pro: 2\n    ultimate: 3\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "int/sexa_empty"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: :1\n    pro: 2\n    ultimate: 3\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "int/sexa_empty2"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"cap": [
+62,
+2,
+3
+],
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: 1:+2\n    pro: 2\n    ultimate: 3\n---\nbody",
+"description": "d",
+"id": "int/sexa_inner",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"cap": [
+58,
+2,
+3
+],
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: 1:-2\n    pro: 2\n    ultimate: 3\n---\nbody",
+"description": "d",
+"id": "int/sexa_inner_neg",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"cap": [
+-90,
+2,
+3
+],
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: -1:30\n    pro: 2\n    ultimate: 3\n---\nbody",
+"description": "d",
+"id": "int/sexa_neg",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"cap": [
+90,
+2,
+3
+],
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: +1:30\n    pro: 2\n    ultimate: 3\n---\nbody",
+"description": "d",
+"id": "int/sexa_plus",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: 1:a\n    pro: 2\n    ultimate: 3\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "int/sexa_word"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: '3'\n    pro: 2\n    ultimate: 3\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "int/single"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: \" 3\"\n    pro: 2\n    ultimate: 3\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "int/space"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"cap": [
+3,
+2,
+3
+],
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: !!float 3\n    pro: 2\n    ultimate: 3\n---\nbody",
+"description": "d",
+"id": "int/tag_float",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"cap": [
+3,
+2,
+3
+],
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: !!int 3\n    pro: 2\n    ultimate: 3\n---\nbody",
+"description": "d",
+"id": "int/tag_int",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"cap": [
+3,
+2,
+3
+],
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: !!str 3\n    pro: 2\n    ultimate: 3\n---\nbody",
+"description": "d",
+"id": "int/tag_str",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"cap": [
+1000,
+2,
+3
+],
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: 1_000\n    pro: 2\n    ultimate: 3\n---\nbody",
+"description": "d",
+"id": "int/under",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"cap": [
+1,
+2,
+3
+],
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: _1\n    pro: 2\n    ultimate: 3\n---\nbody",
+"description": "d",
+"id": "int/under2",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: _\n    pro: 2\n    ultimate: 3\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "int/under_only"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: \u0663\n    pro: 2\n    ultimate: 3\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "int/unicode_digit"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: abc\n    pro: 2\n    ultimate: 3\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "int/word"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"cap": [
+0,
+2,
+3
+],
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    trial: 0\n    pro: 2\n    ultimate: 3\n---\nbody",
+"description": "d",
+"id": "int/zero",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\na: &k name\n*k : x\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "key/alias",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"contents": "---\nName: x\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"detail": "name",
+"error": "missing_required_field",
+"id": "key/case"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\n? name\n: x\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "key/complex",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\n? {a: 1}\n: x\nname: x\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "key/complex_map",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\n~: 1\nname: x\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "key/null",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\n\"name\": x\n'description': d\n\"metadata\":\n  \"capability\": low\n---\nbody",
+"description": "d",
+"id": "key/quoted",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"contents": "---\n!!int name: x\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"detail": "name",
+"error": "missing_required_field",
+"id": "key/tagged_int"
+},
+{
+"contents": "---\n!foo name: x\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"detail": "name",
+"error": "missing_required_field",
+"id": "key/tagged_other"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\n!!str name: x\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "key/tagged_str",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"cap": [
+1,
+2,
+3
+],
+"capability": "low",
+"contents": "---\no: &o {trial: 1, pro: 2}\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap:\n    <<: *o\n    ultimate: 3\n---\nbody",
+"description": "d",
+"id": "merge/in_cap",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "medium",
+"contents": "---\nc: &c {capability: medium, schedule: \"1 2 3 4 5\"}\nname: x\ndescription: d\nmetadata:\n  <<: *c\n  schedule: \"5 4 3 2 1\"\n---\nbody",
+"description": "d",
+"id": "merge/in_metadata",
+"name": "x",
+"onEvent": [],
+"outputs": [],
+"schedule": "5 4 3 2 1"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\no: &o {kind: memo}\nname: x\ndescription: d\nmetadata:\n  capability: low\n  outputs:\n    - <<: *o\n      path: p\n---\nbody",
+"description": "d",
+"id": "merge/in_output",
+"name": "x",
+"onEvent": [],
+"outputs": [
+{
+"kind": "memo",
+"path": "p"
+}
+]
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\n<<: {name: x, description: d}\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "merge/inline_map",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\na: &a {name: first}\nb: &b {name: second, description: d}\n<<: [*a, *b]\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "merge/list_first_wins",
+"name": "first",
+"onEvent": [],
+"outputs": []
+},
+{
+"contents": "---\na: &a {name: x}\n<<: [[*a]]\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"detail": "name",
+"error": "missing_required_field",
+"id": "merge/list_of_list"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\na: &a {name: x}\n<<: [nope, *a]\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "merge/list_with_scalar",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\na: &a {name: x}\nb: &b {<<: *a, description: d}\n<<: *b\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "merge/nested",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\n<<: ~\nname: x\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "merge/null_value",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nbase: &b {name: base, description: d}\nname: own\n<<: *b\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "merge/own_wins",
+"name": "own",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\na: &a {name: y}\n\"<<\": *a\nname: x\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "merge/quoted_not_merge",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\n<<: nope\nname: x\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "merge/scalar_ignored",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\na: &a {name: x}\n!!merge foo: *a\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "merge/tag_explicit",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nbase: &b {name: x, description: d}\n<<: *b\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "merge/top",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"contents": "---\nname: x\ndescription: d\n---\nbody",
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "meta/absent"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata: {}\n---\nbody",
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "meta/empty"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata: [a]\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "meta/list"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata: ~\n---\nbody",
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "meta/null"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata: nope\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "meta/scalar"
+},
+{
+"contents": "---\ndescription: d\nmetadata: nope\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "meta/scalar_and_no_name"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\nlicense: MIT\ndescription: d\nmetadata:\n  capability: low\n  maxInputTokens: 8000\n  whatever: {a: [1, 2]}\n---\nbody",
+"description": "d",
+"id": "meta/unknown_fields",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"contents": "---\nname: Null\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"detail": "name",
+"error": "missing_required_field",
+"id": "name/Null"
+},
+{
+"contents": "---\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"detail": "name",
+"error": "missing_required_field",
+"id": "name/absent"
+},
+{
+"contents": "---\nname: &a\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"detail": "name",
+"error": "missing_required_field",
+"id": "name/amp_only"
+},
+{
+"contents": "---\nname: \"a\\q\"\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "name/bad_escape"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: |\n  multi\n  line\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "name/block_literal",
+"name": "multi\nline",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: true\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "name/bool",
+"name": "true",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: a:b\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "name/colon",
+"name": "a:b",
+"onEvent": [],
+"outputs": []
+},
+{
+"contents": "---\nname: a: b\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "name/colon_space"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: 2026-01-01\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "name/date",
+"name": "2026-01-01",
+"onEvent": [],
+"outputs": []
+},
+{
+"contents": "---\nname: \ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"detail": "name",
+"error": "missing_required_field",
+"id": "name/empty"
+},
+{
+"contents": "---\nname: \"\"\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"detail": "name",
+"error": "missing_required_field",
+"id": "name/empty_q"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: \"a\\tb\"\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "name/esc",
+"name": "a\tb",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: 1.50\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "name/float",
+"name": "1.50",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: >\n  multi\n  line\n\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "name/folded",
+"name": "multi line",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: a #c\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "name/hash",
+"name": "a",
+"onEvent": [],
+"outputs": []
+},
+{
+"contents": "---\nname: [a]\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "name/list"
+},
+{
+"contents": "---\nname: {a: 1}\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "name/map"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: \"\\u00A0x\"\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "name/nbsp",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: \"a\\n\"\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "name/nl_q",
+"name": "a",
+"onEvent": [],
+"outputs": []
+},
+{
+"contents": "---\nname: ~\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"detail": "name",
+"error": "missing_required_field",
+"id": "name/null_tilde"
+},
+{
+"contents": "---\nname: null\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"detail": "name",
+"error": "missing_required_field",
+"id": "name/null_word"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: 123\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "name/number",
+"name": "123",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: a\n  b\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "name/plain_multiline",
+"name": "a b",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: 'null'\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "name/quoted_null",
+"name": "null",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: \"~\"\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "name/quoted_tilde",
+"name": "~",
+"onEvent": [],
+"outputs": []
+},
+{
+"contents": "---\nname: ''\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"detail": "name",
+"error": "missing_required_field",
+"id": "name/single_q_empty"
+},
+{
+"contents": "---\nname: \"   \"\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"detail": "name",
+"error": "missing_required_field",
+"id": "name/spaces_q"
+},
+{
+"contents": "---\nname: *nope\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "name/star"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: !!binary aGk=\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "name/tag_bin",
+"name": "aGk=",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: !foo bar\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "name/tag_custom",
+"name": "bar",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: !!int abc\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "name/tag_int",
+"name": "abc",
+"onEvent": [],
+"outputs": []
+},
+{
+"contents": "---\nname: !!null \"\"\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"detail": "name",
+"error": "missing_required_field",
+"id": "name/tag_null"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: !!str 123\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "name/tag_str",
+"name": "123",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: \"  pad  \"\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "name/trail",
+"name": "pad",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: caf\u00e9\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "name/unicode",
+"name": "caf\u00e9",
+"onEvent": [],
+"outputs": []
+},
+{
+"contents": "---\nname: \"abc\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "name/unterminated"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: yes\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "name/yes",
+"name": "yes",
+"onEvent": [],
+"outputs": []
+},
+{
+"contents": "---\nname: \"\\u200B\"\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"detail": "name",
+"error": "missing_required_field",
+"id": "name/zwsp"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  outputs: [{kind: memo},{kind: apns_digest},{kind: apns_nudge},{kind: memory_emit},{kind: vault_rewrite},{kind: chat_message, path: a, category: b}]\n---\nbody",
+"description": "d",
+"id": "out/all",
+"name": "x",
+"onEvent": [],
+"outputs": [
+{
+"kind": "memo"
+},
+{
+"kind": "apns_digest"
+},
+{
+"kind": "apns_nudge"
+},
+{
+"kind": "memory_emit"
+},
+{
+"kind": "vault_rewrite"
+},
+{
+"category": "b",
+"kind": "chat_message",
+"path": "a"
+}
+]
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  outputs: [{kind: bad, path: [a]}]\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "out/bad_and_path_list"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  outputs: [{kind: telegram}]\n---\nbody",
+"detail": "telegram",
+"error": "invalid_output_kind",
+"id": "out/bad_kind"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  outputs: [{kind: bad}, {path: p}]\n---\nbody",
+"detail": "kind",
+"error": "missing_required_field",
+"id": "out/bad_then_nokind"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  outputs: [{kind: memo, category: {a: 1}}]\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "out/cat_map"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  outputs: []\n---\nbody",
+"description": "d",
+"id": "out/empty",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  outputs: [[memo]]\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "out/entry_list"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  outputs: [~]\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "out/entry_null"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  outputs: [memo]\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "out/entry_scalar"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  outputs: [{kind: }]\n---\nbody",
+"detail": "",
+"error": "invalid_output_kind",
+"id": "out/kind_blank"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  outputs: [{kind: \"\"}]\n---\nbody",
+"detail": "",
+"error": "invalid_output_kind",
+"id": "out/kind_empty"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  outputs: [{kind: [memo]}]\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "out/kind_list"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  outputs: [{kind: ~}]\n---\nbody",
+"detail": "~",
+"error": "invalid_output_kind",
+"id": "out/kind_null"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  outputs: [{kind: 1}]\n---\nbody",
+"detail": "1",
+"error": "invalid_output_kind",
+"id": "out/kind_num"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  outputs: [{kind: MEMO}]\n---\nbody",
+"detail": "MEMO",
+"error": "invalid_output_kind",
+"id": "out/kind_upper"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  outputs: {kind: memo}\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "out/map"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  outputs: [{path: p}]\n---\nbody",
+"detail": "kind",
+"error": "missing_required_field",
+"id": "out/no_kind"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  outputs: ~\n---\nbody",
+"description": "d",
+"id": "out/null",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  outputs: [{kind: memo, path: \"\"}]\n---\nbody",
+"description": "d",
+"id": "out/path_empty_q",
+"name": "x",
+"onEvent": [],
+"outputs": [
+{
+"kind": "memo",
+"path": ""
+}
+]
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  outputs: [{kind: memo, path: [a]}]\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "out/path_list"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  outputs: [{kind: memo, path: ~}]\n---\nbody",
+"description": "d",
+"id": "out/path_null",
+"name": "x",
+"onEvent": [],
+"outputs": [
+{
+"kind": "memo"
+}
+]
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  outputs: [{kind: memo, path: 1}]\n---\nbody",
+"description": "d",
+"id": "out/path_num",
+"name": "x",
+"onEvent": [],
+"outputs": [
+{
+"kind": "memo",
+"path": "1"
+}
+]
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  outputs: a\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "out/scalar"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: bogus\n  outputs: [{kind: bad}]\n---\nbody",
+"detail": "bogus",
+"error": "invalid_capability",
+"id": "prec/bad_cap_vs_bad_output"
+},
+{
+"contents": "---\ndescription: d\nmetadata:\n  capability: low\n  outputs: [{kind: bad}]\n---\nbody",
+"detail": "name",
+"error": "missing_required_field",
+"id": "prec/bad_kind_vs_no_name"
+},
+{
+"contents": "---\nallowed-tools: {a: 1}\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "prec/bad_tools_before_name"
+},
+{
+"contents": "---\ndescription: d\nmetadata:\n  capability: {a: 1}\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "prec/cap_map_vs_no_name"
+},
+{
+"contents": "---\ndescription: d\nx: 1\nx: 2\nmetadata:\n  capability: low\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "prec/dup_vs_no_name"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  outputs: [{kind: bad}]\n---\nbody",
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "prec/no_cap_vs_bad_output"
+},
+{
+"contents": "---\ndescription: d\nmetadata:\n  capability: low\n  outputs: [{path: p}]\n---\nbody",
+"detail": "kind",
+"error": "missing_required_field",
+"id": "prec/no_kind_vs_no_name"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap: {pro: 1}\n  outputs: [{path: p}]\n---\nbody",
+"detail": "kind",
+"error": "missing_required_field",
+"id": "prec/no_kind_vs_no_trial"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  on_event: a\n  daily_run_cap: {pro: 1}\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "prec/no_trial_vs_bad_events"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\n{name: x, description: d, metadata: {capability: low}}\n---\nbody",
+"description": "d",
+"id": "root/flow",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"contents": "---\n~\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "root/null"
+},
+{
+"contents": "---\njust text\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "root/scalar"
+},
+{
+"contents": "---\n- a\n- b\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "root/seq"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  schedule: \"  \"\n---\nbody",
+"description": "d",
+"id": "sched/blank",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  schedule: \"0 7 * * *\"\n---\nbody",
+"description": "d",
+"id": "sched/cron",
+"name": "x",
+"onEvent": [],
+"outputs": [],
+"schedule": "0 7 * * *"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  schedule: \"\"\n---\nbody",
+"description": "d",
+"id": "sched/empty",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  schedule: [a]\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "sched/list"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  schedule: {a: 1}\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "sched/map"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  schedule: \"\\n\"\n---\nbody",
+"description": "d",
+"id": "sched/nl",
+"name": "x",
+"onEvent": [],
+"outputs": [],
+"schedule": "\n"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  schedule: ~\n---\nbody",
+"description": "d",
+"id": "sched/null",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  schedule: \n---\nbody",
+"description": "d",
+"id": "sched/null_empty",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  schedule: 5\n---\nbody",
+"description": "d",
+"id": "sched/number",
+"name": "x",
+"onEvent": [],
+"outputs": [],
+"schedule": "5"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  schedule: \" 1 2 \"\n---\nbody",
+"description": "d",
+"id": "sched/pad",
+"name": "x",
+"onEvent": [],
+"outputs": [],
+"schedule": " 1 2 "
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  schedule: 0 7 * * 1\n---\nbody",
+"description": "d",
+"id": "sched/plain",
+"name": "x",
+"onEvent": [],
+"outputs": [],
+"schedule": "0 7 * * 1"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  schedule: \"\\t\"\n---\nbody",
+"description": "d",
+"id": "sched/tab",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  schedule: \"\\u200B\"\n---\nbody",
+"description": "d",
+"id": "sched/zwsp",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"contents": "---\nname: x\ndescription: |\n  a\n---\n  b\nmetadata:\n  capability: low\n---\nbody",
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "struct/block_scalar_closes_early"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n--- x\nbody",
+"error": "malformed_frontmatter",
+"id": "struct/closer_with_text_is_not_delim"
+},
+{
+"contents": "---\n# nothing\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "struct/comment_only"
+},
+{
+"contents": "--- title\nname: x\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"error": "missing_frontmatter",
+"id": "struct/dash_title_is_not_delim"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n...\n---\nbody",
+"description": "d",
+"id": "struct/dots_end",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"contents": "",
+"error": "missing_frontmatter",
+"id": "struct/empty"
+},
+{
+"contents": "---\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "struct/empty_frontmatter"
+},
+{
+"contents": "\n---\nname: x\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"error": "missing_frontmatter",
+"id": "struct/leading_blank"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "  ---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  ---\nbody",
+"description": "d",
+"id": "struct/leading_space_delim",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n---",
+"description": "d",
+"id": "struct/no_body",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n---\n",
+"description": "d",
+"id": "struct/no_body_newline",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"contents": "---",
+"error": "malformed_frontmatter",
+"id": "struct/only_open"
+},
+{
+"allowedTools": [],
+"bodySHA256": "e5d18d4806e8f7a15060781d36800315bb25712aa8210a1cd9edb73c9e8ccede",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n---\nfoo\n---\nbar\n",
+"description": "d",
+"id": "struct/second_dashes_in_body",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n--- second\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "struct/second_doc_inline"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n--- {a: 1}\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "struct/second_doc_mapping_like"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---  \nname: x\ndescription: d\nmetadata:\n  capability: low\n---\t\nbody",
+"description": "d",
+"id": "struct/trailing_space_delims",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"contents": "---\n%YAML 1.1\n--- \nname: x\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "struct/yaml_directive"
+},
+{
+"contents": "---\nname: x\n  description: d\nmetadata:\n  capability: low\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "syntax/bad_indent"
+},
+{
+"contents": "---\nname: \"a\u0007b\"\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "syntax/bell_quoted"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\n# head\nname: x # tail\n# mid\ndescription: d\nmetadata: # here\n  # in\n  capability: low\n# end\n---\nbody",
+"description": "d",
+"id": "syntax/comments",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"contents": "---\nname: a\u0001b\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "syntax/control_char"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: -x\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "syntax/dash_plain",
+"name": "-x",
+"onEvent": [],
+"outputs": []
+},
+{
+"contents": "---\nname: a\u007fb\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "syntax/del"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: \"a\n  b\"\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "syntax/dq_folded",
+"name": "a b",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  on_event:\n    -\n    - a\n---\nbody",
+"description": "d",
+"id": "syntax/empty_seq_item",
+"name": "x",
+"onEvent": [
+"",
+"a"
+],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: a\ufeffb\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "syntax/feff_mid",
+"name": "a\ufeffb",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"cap": [
+1,
+2,
+3
+],
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  daily_run_cap: {\n    trial: 1,\n    pro: 2,\n    ultimate: 3\n  }\n---\nbody",
+"description": "d",
+"id": "syntax/flow_map_multiline",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  on_event: [a, b,]\n---\nbody",
+"description": "d",
+"id": "syntax/flow_trailing_comma",
+"name": "x",
+"onEvent": [
+"a",
+"b"
+],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\n  name: x\n  description: d\n  metadata:\n    capability: low\n---\nbody",
+"description": "d",
+"id": "syntax/indented_top",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [
+"session_search",
+"vault_read",
+"weather_forecast",
+"mail_inbox_recent"
+],
+"bodySHA256": "adaaa533d0aa0337d22a6270735ecdaa1acd3145067742b8d1607a95d6490ea9",
+"cap": [
+1,
+6,
+24
+],
+"capability": "medium",
+"contents": "---\nname: job-dry-week\ndescription: Dry week watch\nlicense: MIT\nallowed-tools: session_search vault_read weather_forecast mail_inbox_recent\nmetadata:\n  capability: medium\n  schedule: \"0 8 * * *\"\n  on_event: []\n  daily_run_cap: { trial: 1, pro: 6, ultimate: 24 }\n  maxInputTokens: 8000\n  outputs:\n    - kind: chat_message\n---\nYou are a LuminaVault job: \"Dry week watch\".\nDomain: weather.\n",
+"description": "Dry week watch",
+"id": "syntax/job_authoring",
+"name": "job-dry-week",
+"onEvent": [],
+"outputs": [
+{
+"kind": "chat_message"
+}
+],
+"schedule": "0 8 * * *"
+},
+{
+"contents": "---\nname: @x\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "syntax/leading_at"
+},
+{
+"contents": "---\nname: `x\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "syntax/leading_backtick"
+},
+{
+"contents": "---\nname: %x\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "syntax/leading_percent"
+},
+{
+"contents": "---\nname: a\u2028b\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "syntax/ls_plain"
+},
+{
+"contents": "---\nname: a\u0085b\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "syntax/nel_plain"
+},
+{
+"contents": "---\nname: a: b\ndescription: d\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "syntax/nested_colon"
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  on_event:\n    - - a\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "syntax/nested_seq_block"
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: https://x.y/z\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "syntax/plain_url",
+"name": "https://x.y/z",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: ?x\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "syntax/question_plain",
+"name": "?x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  outputs:\n  - kind: memo\n  - kind: apns_nudge\n---\nbody",
+"description": "d",
+"id": "syntax/seq_no_indent",
+"name": "x",
+"onEvent": [],
+"outputs": [
+{
+"kind": "memo"
+},
+{
+"kind": "apns_nudge"
+}
+]
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: 'it''s'\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "syntax/single_quote_esc",
+"name": "it's",
+"onEvent": [],
+"outputs": []
+},
+{
+"contents": "---\nname: x\ndescription: d\nmetadata:\n\tcapability: low\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "syntax/tab_indent"
+},
+{
+"contents": "---\n%TAG !e! tag:example.com,2000:\n---\nname: !e!foo x\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "syntax/tag_directive"
+},
+{
+"contents": "---\nname: [x\ndescription: d\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "syntax/unbalanced"
+},
+{
+"contents": "---\nname: !e!foo x\ndescription: d\nmetadata:\n  capability: low\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "syntax/undefined_tag_handle"
+},
+{
+"allowedTools": [
+"a",
+"b"
+],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nallowed-tools:\n  - a\n  - b\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "tools/block",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [
+"true"
+],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nallowed-tools: true\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "tools/bool",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [
+"a",
+"b"
+],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nallowed-tools: \"a \\u0301b\"\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "tools/combining",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [
+"a",
+"b"
+],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nallowed-tools: \"a\\r\\nb\"\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "tools/crlf_escape",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nallowed-tools: \"\"\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "tools/empty",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nallowed-tools: []\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "tools/empty_list",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [
+"a",
+"b"
+],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nallowed-tools: \"a\\u3000b\"\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "tools/ideographic",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [
+"a",
+"b c"
+],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nallowed-tools: [a, b c]\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "tools/list",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"contents": "---\nname: x\ndescription: d\nallowed-tools: [a, {b: c}]\nmetadata:\n  capability: low\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "tools/list_map"
+},
+{
+"contents": "---\nname: x\ndescription: d\nallowed-tools: [a, [b]]\nmetadata:\n  capability: low\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "tools/list_nested"
+},
+{
+"allowedTools": [
+"a",
+"~",
+"null",
+""
+],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nallowed-tools: [a, ~, null, \"\"]\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "tools/list_null",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [
+"1",
+"true",
+"2.5"
+],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nallowed-tools: [1, true, 2.5]\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "tools/list_num",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [
+"a",
+"b"
+],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nallowed-tools: \"a\\u2028b\"\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "tools/ls",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"contents": "---\nname: x\ndescription: d\nallowed-tools: {a: b}\nmetadata:\n  capability: low\n---\nbody",
+"error": "malformed_frontmatter",
+"id": "tools/map"
+},
+{
+"allowedTools": [
+"a",
+"b"
+],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nallowed-tools: \"a\\u00A0b\"\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "tools/nbsp",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [
+"a",
+"b"
+],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nallowed-tools: \"a\\u0085b\"\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "tools/nel",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nallowed-tools: ~\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "tools/null",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [
+"123"
+],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nallowed-tools: 123\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "tools/number",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nallowed-tools: \"   \"\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "tools/spaces",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [
+"a",
+"b",
+"c"
+],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nallowed-tools: a b  c\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "tools/string",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [
+"a",
+"b",
+"c"
+],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nallowed-tools: \"a\\tb\\nc\"\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "tools/tabs",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [
+"a\u200bb"
+],
+"bodySHA256": "230d8358dc8e8890b4c58deeb62912ee2f20357ae92a5cc861b98e68fe31acb5",
+"capability": "low",
+"contents": "---\nname: x\ndescription: d\nallowed-tools: \"a\\u200Bb\"\nmetadata:\n  capability: low\n---\nbody",
+"description": "d",
+"id": "tools/zwsp",
+"name": "x",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [
+"session_search",
+"vault_read"
+],
+"bodySHA256": "180ab1e4cd3afb4a82ee15f203f828c786455fcbe578cb67f3fad2289be8049c",
+"cap": [
+3,
+3,
+0
+],
+"capability": "high",
+"description": "Trace how the user's stance on a specific topic shifted over time. Requires a topic. Read-only.",
+"id": "real/belief-evolution/SKILL.md",
+"name": "belief-evolution",
+"onEvent": [],
+"outputs": [
+{
+"kind": "memo",
+"path": "reflections/{date}/beliefs-{slug}.md"
+}
+]
+},
+{
+"allowedTools": [
+"vault_read"
+],
+"bodySHA256": "35b74339092ba15bbfb7b1144ab9a9798d814882e5b82ce2949243e328b99fd8",
+"capability": "low",
+"description": "Enrich newly captured URLs with oEmbed metadata, summary, and topic tags written back to the source vault file.",
+"id": "real/capture-enrich/SKILL.md",
+"name": "capture-enrich",
+"onEvent": [
+"vault_file_created"
+],
+"outputs": [
+{
+"kind": "vault_rewrite"
+}
+]
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/content/ai-cohort-scoreboard-marketing/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/content/ai-scoreboard/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/content/content-digests/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/content/external-content-ingestion/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/content/founder-content-engine/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/content/url-ingestor-enhanced/SKILL.md"
+},
+{
+"error": "malformed_frontmatter",
+"id": "real/content/x-post-ingestor/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/content/youtube-link-ingestor/SKILL.md"
+},
+{
+"allowedTools": [
+"session_search",
+"vault_read"
+],
+"bodySHA256": "4f21dab586d262f26c1dbf9a4ed79673a2b25539cd6608504d5a9895b87ff8a5",
+"cap": [
+3,
+3,
+0
+],
+"capability": "high",
+"description": "Find pairs of memories where the user took materially incompatible positions. Read-only. Optional topic filter.",
+"id": "real/contradiction-detector/SKILL.md",
+"name": "contradiction-detector",
+"onEvent": [],
+"outputs": [
+{
+"kind": "memo",
+"path": "reflections/{date}/contradicts-{slug}.md"
+}
+]
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/creative/architecture-diagram/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/creative/ascii-art/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/creative/ascii-video/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/creative/baoyu-comic/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/creative/baoyu-infographic/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/creative/claude-design/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/creative/comfyui/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/creative/creative-ideation/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/creative/design-md/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/creative/excalidraw/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/creative/humanizer/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/creative/hyperframes/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/creative/knowledge-graph-animation/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/creative/manim-video/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/creative/p5js/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/creative/pixel-art/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/creative/popular-web-designs/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/creative/pretext/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/creative/sketch/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/creative/songwriting-and-ai-music/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/creative/touchdesigner-mcp/SKILL.md"
+},
+{
+"allowedTools": [
+"session_search",
+"vault_read",
+"reminders_list",
+"calendar_query",
+"weather_forecast",
+"mail_inbox_recent"
+],
+"bodySHA256": "d7122ab832d0c8235ba5e4c0814b9094e614f280e71515716fdf10f03b22d72e",
+"capability": "low",
+"description": "Morning brief of pending threads, due reminders, today's schedule, the weather, recent captures, and the inbox for the user.",
+"id": "real/daily-brief/SKILL.md",
+"name": "daily-brief",
+"onEvent": [],
+"outputs": [
+{
+"kind": "memo",
+"path": "memos/{date}/daily-brief.md"
+},
+{
+"kind": "chat_message"
+}
+],
+"schedule": "0 7 * * *"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/finance/market-alert-agent/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/gaming/minecraft-modpack-server/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/gaming/pokemon-player/SKILL.md"
+},
+{
+"allowedTools": [
+"session_search",
+"vault_read",
+"memory_upsert"
+],
+"bodySHA256": "010ed761c4769183eaa8ca44dac87ae525870a0bb62021d003c40aff42781028",
+"capability": "high",
+"description": "Correlate HealthKit signals (sleep, HRV, workouts) with notes and memories to surface mood and energy patterns.",
+"id": "real/health-correlate/SKILL.md",
+"name": "health-correlate",
+"onEvent": [],
+"outputs": [
+{
+"kind": "memory_emit"
+},
+{
+"kind": "apns_nudge"
+}
+]
+},
+{
+"allowedTools": [],
+"bodySHA256": "e0b2a322a1675ac7d074fe01ce87aab722f3f418455fa0ccea90e08bfe9505f8",
+"capability": "medium",
+"description": "\u6a2a\u7eb5\u5206\u6790\u6cd5\uff08Horizontal-Vertical Analysis\uff09\u6df1\u5ea6\u7814\u7a76Skill\u3002\u7531\u6570\u5b57\u751f\u547d\u5361\u5179\u514b\u63d0\u51fa\uff0c\u878d\u5408\u4e86\u7d22\u7eea\u5c14\u7684\u5386\u65f6-\u5171\u65f6\u5206\u6790\u3001\u793e\u4f1a\u79d1\u5b66\u7684\u7eb5\u5411-\u6a2a\u622a\u9762\u7814\u7a76\u8bbe\u8ba1\u3001\u5546\u5b66\u9662\u6848\u4f8b\u7814\u7a76\u6cd5\u4e0e\u7ade\u4e89\u6218\u7565\u5206\u6790\u7684\u6838\u5fc3\u601d\u60f3\u3002\n \u5f53\u7528\u6237\u60f3\u8981\u7cfb\u7edf\u6027\u7814\u7a76\u4e00\u4e2a\u4ea7\u54c1\u3001\u516c\u53f8\u3001\u6982\u5ff5\u3001\u6280\u672f\u6216\u4eba\u7269\u65f6\u4f7f\u7528\u3002\u6838\u5fc3\u662f\u53cc\u8f74\u5206\u6790\uff1a\u7eb5\u8f74\u8ffd\u8e2a\u4ece\u8bde\u751f\u5230\u5f53\u4e0b\u7684\u5b8c\u5907\u6f14\u8fdb\u8def\u5f84\uff1b\u6a2a\u8f74\u540c\u65f6\u8003\u5bdf\u4ea7\u54c1\u3001\u6280\u672f\u3001\u5e02\u573a\u3001\u7528\u6237\u3001\u7ade\u4e89\u53ca\u8d22\u7ecf\u7b49\u516d\u5927\u7ef4\u5ea6\u3002",
+"id": "real/hv-analyses/SKILL.md",
+"name": "hv-analyses",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "6e27299e8734747f9a879c17fa1338e7a1190e03491e5eb97251d4aae5ce1f72",
+"capability": "medium",
+"description": "Compile all uncompiled raw/ content into the wiki. Writes source summaries, creates/updates concept articles with Obsidian backlinks, and updates the index. Run after /kb-ingest to process new content.",
+"id": "real/kb-compile/SKILL.md",
+"name": "kb-compile",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "acd28ec9ab80152aa1eeffeb2b83d25b222dae055b4fa6ff03ea84f7c52af19e",
+"capability": "medium",
+"description": "Import an existing Obsidian vault into the knowledge base. Inspects each note and routes it intelligently \u2014 structured concept articles go to wiki/concepts/, raw research notes go to raw/notes/ for later compilation. Usage: /kb-import <vault-path>",
+"id": "real/kb-import/SKILL.md",
+"name": "kb-import",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "4a291d53ec5082acb674c5dabce4604cbd81281a9fdc926b002dd4b0932fc45c",
+"capability": "medium",
+"description": "Ingest a URL, PDF, image path, or plain text note into your personal knowledge base Raw directory. This skill adapts to the actual Hermes knowledge base structure.",
+"id": "real/kb-ingest/SKILL.md",
+"name": "kb-ingest",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "28bbdfb16e8ba30b84287af26582c84511cf438847b6d1350cc281c15b0ce393",
+"capability": "medium",
+"description": "Merge a second KB vault into the current one. Copies non-conflicting content, auto-merges conflicting concept articles using LLM synthesis, merges manifests and index, and resets reflect state for a full re-synthesis. Usage: /kb-merge-vault <vault-path>",
+"id": "real/kb-merge-vault/SKILL.md",
+"name": "kb-merge-vault",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "c888bc149ac7f7e022953e2bbd4baeae5c26fc5c5ea44534b24b736fb9014a54",
+"capability": "medium",
+"description": "Render knowledge base content as a Marp slideshow or matplotlib chart. Accepts a question (researches the wiki) or an existing outputs/ file path. Usage: /kb-output --slides <question|file> or /kb-output --chart <question|file>",
+"id": "real/kb-output/SKILL.md",
+"name": "kb-output",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [],
+"bodySHA256": "6ea2e639cffa51f360a1d6c85167a4a434ad35ff7c187bdf6712233b7c11453e",
+"capability": "medium",
+"description": "Scan vault raw/ folder for hyperlinks embedded in markdown notes; POST each unseen URL to LuminaVault server /v1/capture/safari so Hermes ingests + memorizes. Usage: /kb-vacuum [folder=raw/]",
+"id": "real/kb-vacuum/SKILL.md",
+"name": "kb-vacuum",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [
+"vault_read",
+"vault_write"
+],
+"bodySHA256": "fa1bd07d269c75acd2d4d51c2c73cae5b1d3325c568ad205c4018fe38765cd58",
+"capability": "low",
+"description": "Nightly billing housekeeping for expired trials, lapsed accounts, cold archival, and GDPR hard delete.",
+"id": "real/lapse-archiver/SKILL.md",
+"name": "lapse-archiver",
+"onEvent": [],
+"outputs": [],
+"schedule": "0 3 * * *"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/market/market-alert/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/market/market-alert-service/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/market/market-data-fetching/SKILL.md"
+},
+{
+"allowedTools": [],
+"bodySHA256": "36acd21ebef4357e763b11cbbb0cddaec8eb2cd03728a08953762c544af6af3a",
+"capability": "medium",
+"description": "Comprehensive media monitoring and content ingestion system for tracking TV shows, movies, YouTube videos, and social media.",
+"id": "real/media/SKILL.md",
+"name": "media",
+"onEvent": [],
+"outputs": []
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/media/gif-search/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/media/heartmula/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/media/songsee/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/media/spotify/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/media/trakt-watcher/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/media/youtube-content/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/monitoring/monitoring-alert-orchestrator/SKILL.md"
+},
+{
+"allowedTools": [
+"session_search",
+"vault_read"
+],
+"bodySHA256": "4cc6fc3cf35ee9860b33290907201b9859eb0e4810ab5dd526e22d86cd5b75a5",
+"cap": [
+3,
+3,
+0
+],
+"capability": "high",
+"description": "Find 3-5 recurring themes across the user's memories. Optional topic filter or time-window narrows scope. Read-only.",
+"id": "real/pattern-detector/SKILL.md",
+"name": "pattern-detector",
+"onEvent": [],
+"outputs": [
+{
+"kind": "memo",
+"path": "reflections/{date}/patterns-{slug}.md"
+}
+]
+},
+{
+"allowedTools": [],
+"bodySHA256": "555d2bd4739ff1604af07be06365db875cba9ed2eff45c80a1e0a0b2286bb0c3",
+"capability": "medium",
+"description": "Strategic analytical skills for product decisions: assessing brand legitimacy and mapping product features to monetization tiers.",
+"id": "real/product-strategy/SKILL.md",
+"name": "product-strategy",
+"onEvent": [],
+"outputs": []
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/product-strategy/references/brand-legitimacy-investigation/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/product-strategy/references/freemium-tier-mapping/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/sales-and-outreach/lead-research-and-outreach/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/scheduled-reports/news-digest-delivery/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/scheduled-reports/visual-reports/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/smart-home/openhue/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/social-media/social-media-content-aggregation/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/social-media/tweet-monitoring/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/social-media/xurl/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/software-development/debugging-hermes-tui-commands/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/software-development/plan/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/software-development/python-debugpy/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/software-development/subagent-driven-development/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/software-development/vapor-production-hardening/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/software-development/writing-plans/SKILL.md"
+},
+{
+"allowedTools": [],
+"bodySHA256": "6aa2af51e193208f90aef2505bfccc297c162f6f6c24d109ebaf6974c97bf5b2",
+"capability": "medium",
+"description": "Comprehensive Swift expertise umbrella covering UI, data, concurrency, testing, architecture, and production hardening across the Apple ecosystem.",
+"id": "real/swift-development/SKILL.md",
+"name": "swift-development",
+"onEvent": [],
+"outputs": []
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/swift-development/references/core-data-expert/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/swift-development/references/swift-concurrency-pro/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/swift-development/references/swift-http-client-sendable-fixes/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/swift-development/references/swift-pagination-cursor-based/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/swift-development/references/swift-property-wrapper-keypath-debugging/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/swift-development/references/swift-protocol-default-args-resolution/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/swift-development/references/swift-testing-pro/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/swift-development/references/swift-vapor-pagination-concurrency/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/swift-development/references/swiftdata-pro/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/swift-development/references/swiftui-pro/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/swift-development/references/swiftui-subscription-gating/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/swift-development/references/swiftui-ui-testing-setup/SKILL.md"
+},
+{
+"detail": "metadata.capability",
+"error": "missing_required_field",
+"id": "real/swift-development/swift-concurrency-under-the-hood/SKILL.md"
+},
+{
+"allowedTools": [],
+"bodySHA256": "251c0b47c0d4b8ca5485f66c02bd6868e621ca230c161e9e144bc3dcb8fe9f96",
+"capability": "medium",
+"description": "Route URL reading requests across Hermes tools and platform-specific skills. Use when a user shares a URL or asks to read, summarize, extract, inspect, or diagnose content from a webpage, article, post, document link, or similar web resource, especially when a simple fetch may fail or the best tool path is unclear.",
+"id": "real/web-reading-router/SKILL.md",
+"name": "web-reading-router",
+"onEvent": [],
+"outputs": []
+},
+{
+"allowedTools": [
+"session_search",
+"vault_read",
+"memory_upsert"
+],
+"bodySHA256": "35b74339092ba15bbfb7b1144ab9a9798d814882e5b82ce2949243e328b99fd8",
+"capability": "medium",
+"description": "Sunday-evening synthesis of the past week \u2014 themes, accomplishments, open loops, next-week priors.",
+"id": "real/weekly-memo/SKILL.md",
+"name": "weekly-memo",
+"onEvent": [],
+"outputs": [
+{
+"kind": "memo",
+"path": "memos/weekly/{year}-W{week}.md"
+},
+{
+"kind": "apns_digest"
+}
+]
+},
+{
+"allowedTools": [],
+"bodySHA256": "23f87f43f450ede00cf1498eb1a22b9354f6921c845dd0f70f782aca932b7c9e",
+"capability": "medium",
+"description": "OCR images received via WhatsApp with Tesseract and save extracted text to the Obsidian vault. Use when an inbound WhatsApp message has an image attachment that should be transcribed and archived.",
+"id": "real/whatsapp-image-ocr/SKILL.md",
+"name": "whatsapp-image-ocr",
+"onEvent": [],
+"outputs": []
+}
+]

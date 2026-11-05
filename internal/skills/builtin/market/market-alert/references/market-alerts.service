@@ -1,0 +1,18 @@
+[Unit]
+Description=Market Alert Service - Continuous market monitoring and alerting
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/hermes/market-alerts
+ExecStart=/usr/bin/python3 /root/hermes/market-alerts/market_alert_service.py
+Restart=always
+RestartSec=10
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=market-alert-service
+KillSignal=SIGINT
+
+[Install]
+WantedBy=multi-user.target
