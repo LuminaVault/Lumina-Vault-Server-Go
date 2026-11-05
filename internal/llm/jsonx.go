@@ -100,6 +100,16 @@ func intOf(v any) (int, bool) {
 	return 0, false
 }
 
+// doubleOf is `as? Double` on a JSONSerialization number.
+func doubleOf(v any) (float64, bool) {
+	n, ok := v.(json.Number)
+	if !ok {
+		return 0, false
+	}
+	f, err := n.Float64()
+	return f, err == nil
+}
+
 func isBlank(s string) bool { return swiftstr.TrimWhitespacesAndNewlines(s) == "" }
 
 // trimWhitespaces is trimmingCharacters(in: .whitespaces): spaces and tabs, not
