@@ -3,6 +3,7 @@
 # newest 100 listed). The stream is in-process SSE with no initial frame, so a
 # space created through `trigger` produces the frame that gets compared.
 module: teams
+smoke: true
 steps:
   - {name: newest first with the scenario writes, as: team_kim, request: {method: GET, path: /v1/vaults/7EA53000-0000-4000-8000-000000000001/activity}}
   - {name: at most 100 rows, as: team_kim, request: {method: GET, path: /v1/vaults/7EA53000-0000-4000-8000-000000000002/activity}}

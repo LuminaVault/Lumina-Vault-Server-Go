@@ -35,7 +35,7 @@ modules:
   kanban:
     wave: 2
     swiftDir: Sources/App/Kanban
-    status: parity
+    status: production
     prefixes: [/v1/boards, /v1/cards]
     jobs: []
   news:
@@ -68,7 +68,7 @@ modules:
   spaces:
     wave: 2
     swiftDir: Sources/App/Spaces
-    status: parity
+    status: production
     prefixes: [/v1/spaces]
     jobs: []
   account:
@@ -130,7 +130,7 @@ modules:
   teams:
     wave: 3
     swiftDir: Sources/App/Teams
-    status: parity
+    status: production
     prefixes: [/v1/team-invitations, /v1/teams, /v1/vaults]
     jobs: []
   capture:
