@@ -4,7 +4,7 @@
 module: import
 steps:
   - {"name": "stage links: dups, blanks, refused hosts, bad urls", "as": "imp_amy", "request": {"method": "POST", "path": "/v1/import", "json": {"sourceType": "", "urls": ["http://feeds:8080/capture/article", " http://feeds:8080/capture/article ", "  ", "http://feeds:8080/capture/plain", "http://localhost/x", "not a url", "ftp://a/"]}}, "capture": {"s1": "$.sessionId"}, "snapshot": ["parity_import_sessions", "parity_import_items", "parity_import_spaces"]}
-  - {"name": "enriched", "as": "imp_amy", "request": {"method": "GET", "path": "/health"}, "waitEmpty": "parity_import_pending", "snapshot": ["parity_import_files", "parity_import_items", "parity_import_memories"], "files": ["imp_amy"], "filesMask": ["\\d{4}-\\d{2}-\\d{2}-\\d{6}", "-[0-9a-f]{8}\\.md"]}
+  - {"name": "enriched", "as": "imp_amy", "request": {"method": "GET", "path": "/health"}, "waitEmpty": "parity_import_pending", "snapshot": ["parity_import_files", "parity_import_items", "parity_import_link_memories"], "files": ["imp_amy"], "filesMask": ["\\d{4}-\\d{2}-\\d{2}-\\d{6}", "-[0-9a-f]{8}\\.md"]}
   - {"name": "status", "as": "imp_amy", "request": {"method": "GET", "path": "/v1/import/{{s1}}"}}
   - {"name": "another tenant cannot see it", "as": "imp_ben", "request": {"method": "GET", "path": "/v1/import/{{s1}}"}}
   - {"name": "a url seen before is a skip", "as": "imp_amy", "request": {"method": "POST", "path": "/v1/import", "json": {"sourceType": "links", "urls": ["http://feeds:8080/capture/plain", "http://feeds:8080/capture/empty"]}}, "capture": {"s2": "$.sessionId"}, "snapshot": ["parity_import_sessions", "parity_import_items", "parity_import_spaces"]}

@@ -52,6 +52,12 @@ CREATE VIEW parity_import_memories AS
 SELECT id, tenant_id, content, tags, source_vault_file_id, review_state, space_id, origin_kind, created_at
 FROM memories WHERE tenant_id IN (SELECT id FROM users WHERE username LIKE 'imp\_%');
 
+-- Links enrich concurrently, so which memory is written first is a race. Without id and
+-- created_at, the rows sort by their content.
+CREATE VIEW parity_import_link_memories AS
+SELECT tenant_id, content, tags, source_vault_file_id, review_state, space_id, origin_kind
+FROM memories WHERE tenant_id IN (SELECT id FROM users WHERE username LIKE 'imp\_%');
+
 CREATE VIEW parity_import_spaces AS
 SELECT id, tenant_id, name, slug, description, color, icon, category, note_count, created_by_user_id, created_at
 FROM spaces WHERE tenant_id IN (SELECT id FROM users WHERE username LIKE 'imp\_%');
