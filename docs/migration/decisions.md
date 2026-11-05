@@ -509,3 +509,62 @@ nothing about the new packages, which are covered by Go tests against stubs.
 indirect `golang-jwt/jwt/v4` v4.5.2. The Sonatype check hasn't been run. `govulncheck`
 lists `x/net` v0.61.0 (GO-2026-6866, GO-2026-6860) and `x/crypto` v0.58.0
 (GO-2026-5932) as uncalled; bump them separately.
+
+## D-wave4-ports: facts from the wave 4 ports (4A #34, 4B #36, 4C #37, 4D #33, 4E #35)
+
+Each PR's body has the full list. Recorded here: what later waves need, and what the owner must decide.
+
+**Open owner decisions. Swift has each of these today; Go copies it for parity.**
+
+- **SSRF in `URLEnricherGuard`.** It checks literal hosts only: no DNS check, and it passes `127.1`,
+  `2130706433`, `0x7f.0.0.1`, `[::ffff:127.0.0.1]` and short in-cluster names such as `whisper.horus.svc`.
+  Any logged-in user reaches it through capture, and the RSS connector, news ticker and URL extraction
+  use the same guard. Recommended: use `internal/ssrfguard` in Go when capture flips.
+- **Storage quota never counts stored bytes.** `usedBytes` decodes a numeric `SUM` as `Int64` under `try?`,
+  so it reads 0 and only one batch's declared size meets the ceiling. The 413 always says "0 B of ...". Go:
+  `internal/modules/ingestion/quota.go`, pinned by `ingestion/02-create`.
+- **Path weaknesses** (`TestSwiftWeakness*`, D-wave4-prep) are still open. Call sites that skip
+  `SanitizePath` and use `ResolveInside` only: lint's stored paths, `MoveFile` and `moveToSpace` sources
+  (`vault_files.path`), `CaptureLink`, `enrichAndRewrite`, `todos.delete`, the ingestion source route.
+- **`/v1/memory/graph` skips the disclosure scrub**, so origin models reach managed tenants there.
+- **Enrichment deletes the note** a user typed in the share sheet.
+- **Vision keys.** `/v1/vision/*` answers 503 on both servers because the sealed names are misspelled
+  (`*_APIKEY`; Swift reads `_API_KEY`). Sealing the right name starts paid Cohere calls.
+
+**Facts for later waves**
+
+- Hummingbird never decodes path parameters. `/v1/vault/files/inbox/caf%C3%A9.md` is a 400, though an upload
+  via `?path=` can store that file.
+- Over 32 MiB with an Idempotency-Key, Swift's handler sees an empty body. `internal/idempotency` does the
+  same for every module, which corrects the prep behaviour.
+- `String(data:encoding:)` and `String(contentsOf:encoding:)` drop one leading BOM.
+- Literal paths given a method they lack return an empty 404 (`registerLiteralShadows`). Deeper paths such
+  as `/v1/memory/graph/lineage` reach `:id` and return 400.
+- Lists with no `ORDER BY` tie in scan order, so scenarios and seeds keep sort positions unique.
+- Enrichment and todo memory writes don't call `InvalidateToday`. Whether Swift publishes `memory_upserted`
+  there wasn't checked, so `me`'s cache is covered only by the flip-blockers check or its 300 s gap.
+- `/v1/vault` is a string prefix of `/v1/vaults`: a flip entry must name both.
+- `/v1/vault/export` ignores `X-Vault-ID`, so a team vault can't be exported.
+- `dropIndex` has no Swift caller. The `App+build.swift` comment saying account deletion uses it is stale.
+- `INGESTION_PUBLIC_BASE_URL` is read only by the worker, which stays in Swift and reaches Go through the
+  ingress after the flip.
+- `DiskSpaceMonitorService`'s periodic sample isn't wired in Go. The guard checks the disk on each request.
+
+**Deliberate differences from Swift**
+
+- A vault over 65,535 entries traps the whole Swift process; in Go only that export fails.
+- Fetch timeout covers the whole request (URLSession's is idle), and fetched pages are capped at 32 MiB.
+- oEmbed requests carry Go's default User-Agent. EventBus `vault_file_created` is dropped: its only
+  subscriber logs.
+- Graph Space hubs are sorted by id (Swift's order is random). `?offset=` near `Int.max` doesn't trap.
+
+**Not proven by parity**
+
+- The `URL(string:)` golden file (1143 cases) was captured on Darwin; production runs Foundation on Linux.
+  Only the odd URLs in `capture/01-flow` were compared on Linux. IDNA tables also differ (x/net vs ICU).
+- X, YouTube and Jina enrichers run only against stubs, and capture's smoke sends only refusals. A real
+  fetch needs a manual check at G2. `JINA_API_KEY` must reach `api-go`, or Jina's lower keyless limit applies.
+- Hermes profile copy of `SOUL.md`, the 507, the sink, PostHog and mid-stream aborts: Go tests only. Zip entry
+  times aren't compared.
+- `CAPTURE_AUTOFILE_ENABLED` is off in production and moves with 4F. Turning it on before then does nothing
+  on Go.

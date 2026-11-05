@@ -1226,3 +1226,42 @@ Beyond the pilot gate (D-wave2-early):
   `/v1/vault/files` and moves its memory, with `files` steps on the tenant tree.
 - Go tests: `internal/modules/memory` has 70 tests, on Postgres where they need it,
   including spec conformance. `internal/memorystore/provenance_test.go` has 2.
+
+## Flip batches 3 and 4: account, onboarding, marketplace, calendar, mail
+
+### G2 staging deploy: smoke met 2026-11-05, on `aaad82e`
+
+- Image: `api-go-staging` ran `aaad82e` for about 4 h with 0 restarts and 0 errors or 5xx in 2,625 log lines.
+- Smoke: a throwaway staging user per server against Swift transcripts from that commit's CI run, with
+  Swift staging as the control: 0 mismatches. `account` needs its own user and a token under 5 minutes old.
+
+### Production flip: 2026-11-05
+
+- Infra #557 merged 07:08:11Z. `api-go-production` runs `aaad82e`; its pod started 07:10:48Z. All five paths
+  are on `api-go-production` in the live ingress.
+
+### G3 production watch: running, 72 h ends 2026-11-08 07:11Z
+
+- To 11:00Z: 0 restarts and 0 errors, but only `/health` in Go's log. Swift logged `/health`, `/v1/mcp` and
+  scanner noise in the same hours. This shows the deploy is healthy, not that real clients behave the same.
+- Not yet observed: `health_events_synced` in PostHog, and a marketplace plugin tool run.
+
+## Flip batch 5: vault, todos, capture, ingestion, memory, knowledge, vision, kb
+
+### G2 staging deploy: met 2026-11-05, on `cda9718`
+
+- CI run 41977996741 on that commit: 155 scenarios, 0 differences.
+- Image: `api-go-staging` ran `cda9718` from 06:19Z to at least 10:59Z: 0 restarts, 0 5xx, 2,936 log lines.
+  One ERROR: OpenRouter 402 on a todo create, because staging's key is out of credits. The todo saved without
+  an embedding. Swift staging logged the same failure 110 times in 24 h.
+- Smoke: a fresh throwaway user per module and server, Swift staging as the control, 22 modules. 17 had
+  0 mismatches. projects, profiles, news, spaces and teams report the same mismatches on both servers
+  (seed-ID steps), with identical output.
+- Real capture of `https://example.com/` on staging: 202 and the same enriched 555-byte file on both
+  servers, through the keyless Jina path, which is also production's: `JINA_API_KEY` isn't in
+  `api-env-production`.
+
+### Production flip: waiting on infra #563
+
+- Holds on Swift: `/v1/memory/search` and `/v1/memory-compile`. `/v1/memory-compile/pending` goes to Go.
+  `/v1/knowledge/reason` stays on Swift because only three knowledge sub-paths move.
