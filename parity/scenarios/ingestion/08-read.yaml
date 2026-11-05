@@ -1,0 +1,13 @@
+# GET detail and list: every DTO field, and the graph projection.
+module: ingestion
+steps:
+  - {name: detail with memory graph and credibility, as: ing_gra, request: {method: GET, path: /v1/ingestions/1A6E3000-0000-4000-8000-0000000000D1}}
+  - {name: list with one batch, as: ing_gra, request: {method: GET, path: /v1/ingestions}}
+  - {name: the list stops at the newest 50, as: ing_lis, request: {method: GET, path: /v1/ingestions}}
+  - {name: a lowercase id, as: ing_gra, request: {method: GET, path: /v1/ingestions/1a6e3000-0000-4000-8000-0000000000d1}}
+  - {name: a bad id, as: ing_gra, request: {method: GET, path: /v1/ingestions/nope}}
+  - {name: a bare hex id, as: ing_gra, request: {method: GET, path: /v1/ingestions/1a6e30000000400080000000000000d1}}
+  - {name: braces are no id, as: ing_gra, request: {method: GET, path: "/v1/ingestions/{1a6e3000-0000-4000-8000-0000000000d1}"}}
+  - {name: an unknown id, as: ing_gra, request: {method: GET, path: /v1/ingestions/00000000-0000-4000-8000-000000000000}}
+  - {name: another tenant, as: bob, request: {method: GET, path: /v1/ingestions/1A6E3000-0000-4000-8000-0000000000D1}}
+  - {name: an empty list, as: ing_vic, request: {method: GET, path: /v1/ingestions}}

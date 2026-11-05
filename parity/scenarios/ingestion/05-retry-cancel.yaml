@@ -1,0 +1,57 @@
+# POST retry and DELETE on seeded states. Only the worker can reach failed,
+# blocked_capability, extracting and saving, so those rows are seeded. b3 starts
+# attention, b4 active. Neither route records an event.
+module: ingestion
+steps:
+  - {name: retry a bad batch id, as: ing_ann, request: {method: POST, path: /v1/ingestions/nope/items/1A6E4000-0000-4000-8000-000000000020/retry}}
+  - {name: retry a bad item id, as: ing_ann, request: {method: POST, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000003/items/nope/retry}}
+  - {name: retry an unknown batch names the batch, as: ing_ann, request: {method: POST, path: /v1/ingestions/00000000-0000-4000-8000-000000000000/items/1A6E4000-0000-4000-8000-000000000020/retry}}
+  - {name: retry an unknown item, as: ing_ann, request: {method: POST, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000003/items/00000000-0000-4000-8000-000000000000/retry}}
+  - {name: retry through another batch, as: ing_ann, request: {method: POST, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000001/items/1A6E4000-0000-4000-8000-000000000020/retry}}
+  - {name: retry another tenant's batch, as: bob, request: {method: POST, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000003/items/1A6E4000-0000-4000-8000-000000000020/retry}}
+  - {name: retry a busy item, as: ing_ann, request: {method: POST, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000003/items/1A6E4000-0000-4000-8000-000000000022/retry}}
+  - {name: retry an awaiting item, as: ing_ann, request: {method: POST, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000004/items/1A6E4000-0000-4000-8000-000000000030/retry}}
+  - {name: retry a completed item, as: ing_ann, request: {method: POST, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000004/items/1A6E4000-0000-4000-8000-000000000031/retry}}
+  - name: retry a failed item clears the worker's state
+    as: ing_ann
+    request: {method: POST, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000003/items/1A6E4000-0000-4000-8000-000000000020/retry}
+    snapshot: &tables [ingestion_batches, ingestion_items, ingestion_events]
+  - {name: retry it again conflicts, as: ing_ann, request: {method: POST, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000003/items/1A6E4000-0000-4000-8000-000000000020/retry}}
+  - name: retry a blocked item
+    as: ing_ann
+    request: {method: POST, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000003/items/1A6E4000-0000-4000-8000-000000000021/retry}
+    snapshot: *tables
+
+  - {name: cancel a bad batch id, as: ing_ann, request: {method: DELETE, path: /v1/ingestions/nope/items/1A6E4000-0000-4000-8000-000000000030}}
+  - {name: cancel a bad item id, as: ing_ann, request: {method: DELETE, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000004/items/nope}}
+  - {name: cancel an unknown batch names the item, as: ing_ann, request: {method: DELETE, path: /v1/ingestions/00000000-0000-4000-8000-000000000000/items/1A6E4000-0000-4000-8000-000000000030}}
+  - {name: cancel an unknown item, as: ing_ann, request: {method: DELETE, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000004/items/00000000-0000-4000-8000-000000000000}}
+  - {name: cancel another tenant's item, as: bob, request: {method: DELETE, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000004/items/1A6E4000-0000-4000-8000-000000000030}}
+  - name: a chunk to discard
+    as: ing_ann
+    request: {method: PUT, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000004/items/1A6E4000-0000-4000-8000-000000000030/chunks/0, raw: abc}
+    files: [ing_ann]
+  - name: cancel discards the chunks
+    as: ing_ann
+    request: {method: DELETE, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000004/items/1A6E4000-0000-4000-8000-000000000030}
+    snapshot: *tables
+    files: [ing_ann]
+  - name: cancel again is a no-op
+    as: ing_ann
+    request: {method: DELETE, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000004/items/1A6E4000-0000-4000-8000-000000000030}
+    snapshot: *tables
+  - name: cancel a completed item is a no-op
+    as: ing_ann
+    request: {method: DELETE, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000004/items/1A6E4000-0000-4000-8000-000000000031}
+    snapshot: *tables
+  - name: cancel a failed item clears the lease but not the notice
+    as: ing_ann
+    request: {method: DELETE, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000004/items/1A6E4000-0000-4000-8000-000000000032}
+    snapshot: *tables
+  - name: cancel the last open item turns the batch to attention
+    as: ing_ann
+    request: {method: DELETE, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000004/items/1A6E4000-0000-4000-8000-000000000033}
+    snapshot: *tables
+  - name: retry a cancelled item conflicts
+    as: ing_ann
+    request: {method: POST, path: /v1/ingestions/1A6E3000-0000-4000-8000-000000000004/items/1A6E4000-0000-4000-8000-000000000033/retry}

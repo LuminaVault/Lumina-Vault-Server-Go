@@ -1,0 +1,121 @@
+# POST /v1/ingestions. Validation of an item runs after the batch row and the
+# items before it are written, with no transaction: the snapshots show the rows
+# a refused request leaves behind.
+module: ingestion
+steps:
+  - name: a url and a file
+    as: alice
+    request:
+      method: POST
+      path: /v1/ingestions
+      json:
+        items:
+          - {kind: url, url: "https://example.test/article?x=1#frag"}
+          - {kind: file, fileName: "Report.PDF", contentType: application/pdf, sizeBytes: 2048, sha256: ABCDEF, url: "https://ignored.test"}
+    snapshot: &tables [ingestion_batches, ingestion_items, ingestion_events]
+    capture: {batch: $.id}
+  - {name: detail of it, as: alice, request: {method: GET, path: "/v1/ingestions/{{batch}}"}}
+  - name: both item extras are stored on a url item
+    as: alice
+    request:
+      method: POST
+      path: /v1/ingestions
+      json: {items: [{kind: url, url: "HTTP://EXAMPLE.test", fileName: f, contentType: t, sizeBytes: -5, sha256: AA}]}
+    snapshot: *tables
+  - name: in a space
+    as: ing_ann
+    request: {method: POST, path: /v1/ingestions, json: {spaceID: 1A6E1000-0000-4000-8000-000000000001, items: [{kind: url, url: "https://example.test"}]}}
+    snapshot: *tables
+  - name: a lowercase space id
+    as: ing_ann
+    request: {method: POST, path: /v1/ingestions, json: {spaceID: 1a6e1000-0000-4000-8000-000000000001, items: [{kind: url, url: "https://example.test"}]}}
+  - {name: a null space id, as: alice, request: {method: POST, path: /v1/ingestions, json: {spaceID: null, items: [{kind: url, url: "https://example.test"}]}}}
+  - {name: unknown space, as: ing_ann, request: {method: POST, path: /v1/ingestions, json: {spaceID: 00000000-0000-4000-8000-000000000000, items: [{kind: url, url: "https://example.test"}]}}}
+  - {name: another tenant's space, as: ing_ann, request: {method: POST, path: /v1/ingestions, json: {spaceID: 1A6E1000-0000-4000-8000-000000000002, items: [{kind: url, url: "https://example.test"}]}}}
+  - {name: bad space id, as: ing_ann, request: {method: POST, path: /v1/ingestions, json: {spaceID: nope, items: [{kind: url, url: "https://example.test"}]}}}
+  - {name: wrong type space id, as: ing_ann, request: {method: POST, path: /v1/ingestions, json: {spaceID: 7, items: [{kind: url, url: "https://example.test"}]}}}
+
+  # Body shapes
+  - {name: malformed, as: alice, request: {method: POST, path: /v1/ingestions, raw: "{"}}
+  - {name: empty, as: alice, request: {method: POST, path: /v1/ingestions, raw: ""}}
+  - {name: array, as: alice, request: {method: POST, path: /v1/ingestions, raw: "[]"}}
+  - {name: "null", as: alice, request: {method: POST, path: /v1/ingestions, raw: "null"}}
+  - {name: no items key, as: alice, request: {method: POST, path: /v1/ingestions, json: {}}}
+  - {name: null items, as: alice, request: {method: POST, path: /v1/ingestions, json: {items: null}}}
+  - {name: items of the wrong type, as: alice, request: {method: POST, path: /v1/ingestions, json: {items: nope}}}
+  - {name: an item of the wrong type, as: alice, request: {method: POST, path: /v1/ingestions, json: {items: [7]}}}
+  - {name: no items, as: alice, request: {method: POST, path: /v1/ingestions, json: {items: []}}}
+  - {name: item without kind, as: alice, request: {method: POST, path: /v1/ingestions, json: {items: [{url: "https://example.test"}]}}}
+  - {name: null kind, as: alice, request: {method: POST, path: /v1/ingestions, json: {items: [{kind: null}]}}}
+  - {name: unknown kind, as: alice, request: {method: POST, path: /v1/ingestions, json: {items: [{kind: audio}]}}}
+  - {name: kind of the wrong type, as: alice, request: {method: POST, path: /v1/ingestions, json: {items: [{kind: 1}]}}}
+  - {name: file name of the wrong type, as: alice, request: {method: POST, path: /v1/ingestions, json: {items: [{kind: file, fileName: 1}]}}}
+  - {name: size of the wrong type, as: alice, request: {method: POST, path: /v1/ingestions, json: {items: [{kind: file, sizeBytes: big}]}}}
+  - {name: a fractional size, as: alice, request: {method: POST, path: /v1/ingestions, json: {items: [{kind: file, sizeBytes: 1.5}]}}}
+  - {name: sha of the wrong type, as: alice, request: {method: POST, path: /v1/ingestions, json: {items: [{kind: file, sha256: 1}]}}}
+  - {name: url of the wrong type, as: alice, request: {method: POST, path: /v1/ingestions, json: {items: [{kind: url, url: 1}]}}}
+  - name: 51 items
+    as: alice
+    request:
+      method: POST
+      path: /v1/ingestions
+      raw: '{"items":[{"kind":"url"},{"kind":"url"},{"kind":"url"},{"kind":"url"},{"kind":"url"},{"kind":"url"},{"kind":"url"},{"kind":"url"},{"kind":"url"},{"kind":"url"},{"kind":"url"},{"kind":"url"},{"kind":"url"},{"kind":"url"},{"kind":"url"},{"kind":"url"},{"kind":"url"},{"kind":"url"},{"kind":"url"},{"kind":"url"},{"kind":"url"},{"kind":"url"},{"kind":"url"},{"kind":"url"},{"kind":"url"},{"kind":"url"},{"kind":"url"},{"kind":"url"},{"kind":"url"},{"kind":"url"},{"kind":"url"},{"kind":"url"},{"kind":"url"},{"kind":"url"},{"kind":"url"},{"kind":"url"},{"kind":"url"},{"kind":"url"},{"kind":"url"},{"kind":"url"},{"kind":"url"},{"kind":"url"},{"kind":"url"},{"kind":"url"},{"kind":"url"},{"kind":"url"},{"kind":"url"},{"kind":"url"},{"kind":"url"},{"kind":"url"},{"kind":"url"}]}'
+  - name: 50 items
+    as: alice
+    request:
+      method: POST
+      path: /v1/ingestions
+      raw: '{"items":[{"kind":"url","url":"https://e.test/"},{"kind":"url","url":"https://e.test/"},{"kind":"url","url":"https://e.test/"},{"kind":"url","url":"https://e.test/"},{"kind":"url","url":"https://e.test/"},{"kind":"url","url":"https://e.test/"},{"kind":"url","url":"https://e.test/"},{"kind":"url","url":"https://e.test/"},{"kind":"url","url":"https://e.test/"},{"kind":"url","url":"https://e.test/"},{"kind":"url","url":"https://e.test/"},{"kind":"url","url":"https://e.test/"},{"kind":"url","url":"https://e.test/"},{"kind":"url","url":"https://e.test/"},{"kind":"url","url":"https://e.test/"},{"kind":"url","url":"https://e.test/"},{"kind":"url","url":"https://e.test/"},{"kind":"url","url":"https://e.test/"},{"kind":"url","url":"https://e.test/"},{"kind":"url","url":"https://e.test/"},{"kind":"url","url":"https://e.test/"},{"kind":"url","url":"https://e.test/"},{"kind":"url","url":"https://e.test/"},{"kind":"url","url":"https://e.test/"},{"kind":"url","url":"https://e.test/"},{"kind":"url","url":"https://e.test/"},{"kind":"url","url":"https://e.test/"},{"kind":"url","url":"https://e.test/"},{"kind":"url","url":"https://e.test/"},{"kind":"url","url":"https://e.test/"},{"kind":"url","url":"https://e.test/"},{"kind":"url","url":"https://e.test/"},{"kind":"url","url":"https://e.test/"},{"kind":"url","url":"https://e.test/"},{"kind":"url","url":"https://e.test/"},{"kind":"url","url":"https://e.test/"},{"kind":"url","url":"https://e.test/"},{"kind":"url","url":"https://e.test/"},{"kind":"url","url":"https://e.test/"},{"kind":"url","url":"https://e.test/"},{"kind":"url","url":"https://e.test/"},{"kind":"url","url":"https://e.test/"},{"kind":"url","url":"https://e.test/"},{"kind":"url","url":"https://e.test/"},{"kind":"url","url":"https://e.test/"},{"kind":"url","url":"https://e.test/"},{"kind":"url","url":"https://e.test/"},{"kind":"url","url":"https://e.test/"},{"kind":"url","url":"https://e.test/"},{"kind":"url","url":"https://e.test/"}]}'
+    snapshot: *tables
+
+  # An invalid item fails after the batch and the items before it were written.
+  - name: second item invalid leaves the batch and the first item
+    as: alice
+    request: {method: POST, path: /v1/ingestions, json: {items: [{kind: url, url: "https://kept.test"}, {kind: url, url: "ftp://nope.test"}, {kind: url, url: "https://never.test"}]}}
+    snapshot: *tables
+  - name: first item invalid leaves an empty batch
+    as: alice
+    request: {method: POST, path: /v1/ingestions, json: {items: [{kind: file}]}}
+    snapshot: *tables
+  - {name: the list shows the empty batch, as: alice, request: {method: GET, path: /v1/ingestions}}
+
+  # File metadata
+  - {name: file without a name, as: bob, request: {method: POST, path: /v1/ingestions, json: {items: [{kind: file, contentType: text/plain, sizeBytes: 1}]}}}
+  - {name: file with an empty name, as: bob, request: {method: POST, path: /v1/ingestions, json: {items: [{kind: file, fileName: "", contentType: text/plain, sizeBytes: 1}]}}}
+  - {name: file without a type, as: bob, request: {method: POST, path: /v1/ingestions, json: {items: [{kind: file, fileName: a.txt, sizeBytes: 1}]}}}
+  - {name: file without a size, as: bob, request: {method: POST, path: /v1/ingestions, json: {items: [{kind: file, fileName: a.txt, contentType: text/plain}]}}}
+  - {name: file of size zero, as: bob, request: {method: POST, path: /v1/ingestions, json: {items: [{kind: file, fileName: a.txt, contentType: text/plain, sizeBytes: 0}]}}}
+  - {name: file of a negative size, as: bob, request: {method: POST, path: /v1/ingestions, json: {items: [{kind: file, fileName: a.txt, contentType: text/plain, sizeBytes: -1}]}}}
+  - {name: file over 2 GiB, as: bob, request: {method: POST, path: /v1/ingestions, json: {items: [{kind: file, fileName: a.txt, contentType: text/plain, sizeBytes: 2147483649}]}}}
+  - {name: an empty content type is fine, as: bob, request: {method: POST, path: /v1/ingestions, json: {items: [{kind: file, fileName: a.txt, contentType: "", sizeBytes: 1}]}}}
+
+  # URLs. URL(string:) encodes what is invalid instead of failing.
+  - {name: url missing, as: bob, request: {method: POST, path: /v1/ingestions, json: {items: [{kind: url}]}}}
+  - {name: url empty, as: bob, request: {method: POST, path: /v1/ingestions, json: {items: [{kind: url, url: ""}]}}}
+  - {name: url without a scheme, as: bob, request: {method: POST, path: /v1/ingestions, json: {items: [{kind: url, url: example.test}]}}}
+  - {name: url with another scheme, as: bob, request: {method: POST, path: /v1/ingestions, json: {items: [{kind: url, url: "file:///etc/passwd"}]}}}
+  - {name: url with spaces and unicode, as: bob, request: {method: POST, path: /v1/ingestions, json: {items: [{kind: url, url: "https://example.test/a b/é"}]}}}
+  - {name: url with only a scheme, as: bob, request: {method: POST, path: /v1/ingestions, json: {items: [{kind: url, url: "http:"}]}}}
+  - {name: url with a bad port, as: bob, request: {method: POST, path: /v1/ingestions, json: {items: [{kind: url, url: "http://a:b/"}]}}}
+  - {name: url with a bad bracket, as: bob, request: {method: POST, path: /v1/ingestions, json: {items: [{kind: url, url: "http://[x"}]}}}
+  - name: bob's rows
+    as: bob
+    request: {method: GET, path: /v1/ingestions}
+    snapshot: *tables
+
+  # Sizes and quotas, checked in this order before any row is written.
+  - {name: batch over 5 GiB, as: alice, request: {method: POST, path: /v1/ingestions, json: {items: [{kind: file, fileName: a.txt, contentType: text/plain, sizeBytes: 2147483648}, {kind: file, fileName: b.txt, contentType: text/plain, sizeBytes: 2147483648}, {kind: file, fileName: c.txt, contentType: text/plain, sizeBytes: 2147483648}]}}}
+  - {name: url sizes count against the batch, as: alice, request: {method: POST, path: /v1/ingestions, json: {items: [{kind: url, url: "https://example.test", sizeBytes: 5368709121}]}}}
+  - {name: over 5 GiB beats an unknown space, as: ing_ann, request: {method: POST, path: /v1/ingestions, json: {spaceID: 00000000-0000-4000-8000-000000000000, items: [{kind: url, sizeBytes: 5368709121}]}}}
+  - {name: lapsed cannot grow, as: ing_zed, request: {method: POST, path: /v1/ingestions, json: {items: [{kind: file, fileName: a.txt, contentType: text/plain, sizeBytes: 1}]}}}
+  - {name: quota beats an unknown space, as: ing_zed, request: {method: POST, path: /v1/ingestions, json: {spaceID: 00000000-0000-4000-8000-000000000000, items: [{kind: file, sizeBytes: 1}]}}}
+  - {name: lapsed may add what has no size, as: ing_zed, request: {method: POST, path: /v1/ingestions, json: {items: [{kind: url, url: "https://example.test"}]}}}
+  - {name: lapsed with a negative size stays allowed, as: ing_zed, request: {method: POST, path: /v1/ingestions, json: {items: [{kind: url, url: "https://example.test", sizeBytes: -1}]}}}
+  - {name: what free already stores doesn't count, as: ing_fay, request: {method: POST, path: /v1/ingestions, json: {items: [{kind: file, fileName: a.txt, contentType: text/plain, sizeBytes: 825}]}}}
+  - {name: nor a second time, as: ing_fay, request: {method: POST, path: /v1/ingestions, json: {items: [{kind: file, fileName: a.txt, contentType: text/plain, sizeBytes: 824}]}}}
+  - {name: free over on the new bytes alone, as: ing_fay, request: {method: POST, path: /v1/ingestions, json: {items: [{kind: file, fileName: a.txt, contentType: text/plain, sizeBytes: 1073741825}]}}}
+  - {name: what pro already stores doesn't count, as: ing_pam, request: {method: POST, path: /v1/ingestions, json: {items: [{kind: file, fileName: a.txt, contentType: text/plain, sizeBytes: 2147483648}]}}}
+  - name: only the refused batches were left out
+    as: ing_zed
+    request: {method: GET, path: /v1/ingestions}
+    snapshot: *tables
