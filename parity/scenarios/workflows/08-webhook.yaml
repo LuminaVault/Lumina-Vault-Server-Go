@@ -37,6 +37,27 @@ steps:
   - name: "cancel the types run"
     as: "wf_hok"
     request: {"method": "POST", "path": "/v1/workflows/runs/{{r2}}/cancel"}
+  - name: "every shape of number"
+    request: {"method": "POST", "path": "{{hook}}", "raw": "{\"a\":1.0,\"b\":0.1,\"c\":1e16,\"d\":1e-5,\"e\":0.0001,\"f\":9007199254740992.0,\"g\":9007199254740994.0,\"h\":1.5e300,\"i\":1E3,\"j\":-0,\"k\":-0.0,\"l\":1.0e2,\"m\":18446744073709551615,\"n\":18446744073709551616,\"o\":-9223372036854775808,\"p\":-9223372036854775809,\"q\":123456789012345678901234567890,\"r\":0.12345678901234567890,\"s\":1.7976931348623157e308,\"t\":1234567890123456.5,\"u\":-2.5,\"v\":12345678901234567.0,\"w\":1.5e2,\"x\":100000000000000000000e2,\"y\":0.000000000000000000001}", "sign": {"secret": "{{secret}}"}, "headers": {"Idempotency-Key": "numbers"}}
+    capture: {"r2b": "$.id"}
+    snapshot: ["workflow_runs"]
+  - name: "cancel the numbers run"
+    as: "wf_hok"
+    request: {"method": "POST", "path": "/v1/workflows/runs/{{r2b}}/cancel"}
+  - name: "numbers inside an array"
+    request: {"method": "POST", "path": "{{hook}}", "raw": "{\"l\":[1.0,1e3,1.5,0,-7,1e16,0.1],\"o\":{\"a\":1.5},\"b\":[true,false],\"s\":[\"a/b\",\"é\\n\"]}", "sign": {"secret": "{{secret}}"}, "headers": {"Idempotency-Key": "nested"}}
+    capture: {"r2c": "$.id"}
+    snapshot: ["workflow_runs"]
+  - name: "cancel the nested run"
+    as: "wf_hok"
+    request: {"method": "POST", "path": "/v1/workflows/runs/{{r2c}}/cancel"}
+  - name: "a number too big for anything"
+    request: {"method": "POST", "path": "{{hook}}", "raw": "{\"x\":1e400,\"y\":\"kept\"}", "sign": {"secret": "{{secret}}"}, "headers": {"Idempotency-Key": "huge"}}
+    capture: {"r2d": "$.id"}
+    snapshot: ["workflow_runs"]
+  - name: "cancel the huge run"
+    as: "wf_hok"
+    request: {"method": "POST", "path": "/v1/workflows/runs/{{r2d}}/cancel"}
   - name: "a raw key replaces the body"
     request: {"method": "POST", "path": "{{hook}}", "raw": "{\"raw\":\"mine\"}", "sign": {"secret": "{{secret}}"}, "headers": {"Idempotency-Key": "raw"}}
     capture: {"r3": "$.id"}

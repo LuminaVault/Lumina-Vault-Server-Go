@@ -24,6 +24,7 @@ import (
 	"lumina/internal/sse"
 	"lumina/internal/wire"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -107,10 +108,24 @@ func (m *Module) Register(r httpserver.Router, _ echo.MiddlewareFunc) {
 	r.POST("/v1/workflows/runs/:runID/retry", m.retry, studio...)
 	r.POST("/v1/workflows/runs/:runID/resume", m.resume, studio...)
 	r.POST("/v1/workflows/approvals/:approvalID/decision", m.decide, studio...)
-	r.GET("/v1/workflows/:id", m.detail, studio...)
-	r.PUT("/v1/workflows/:id/draft", m.update, studio...)
-	r.POST("/v1/workflows/:id/publish", m.publish, studio...)
-	r.POST("/v1/workflows/:id/runs", m.run, studio...)
+	// Hummingbird resolves the path, then the method. A literal segment that matches
+	// wins the path even with no route for this method, so these are 404s, where Echo
+	// would fall back to :id and answer invalid_id.
+	shadowedBy := func(names ...string) []echo.MiddlewareFunc {
+		guard := func(next echo.HandlerFunc) echo.HandlerFunc {
+			return func(c *echo.Context) error {
+				if slices.Contains(names, c.Param("id")) {
+					return echo.ErrNotFound
+				}
+				return next(c)
+			}
+		}
+		return append([]echo.MiddlewareFunc{guard}, studio...)
+	}
+	r.GET("/v1/workflows/:id", m.detail, shadowedBy("validate")...)
+	r.PUT("/v1/workflows/:id/draft", m.update, shadowedBy("runs")...)
+	r.POST("/v1/workflows/:id/publish", m.publish, shadowedBy("runs")...)
+	r.POST("/v1/workflows/:id/runs", m.run, shadowedBy("runs")...)
 	r.POST("/v1/workflows/:id/webhook/rotate", m.rotate, studio...)
 	r.GET("/v1/workflows/:id/runs", m.workflowRuns, studio...)
 	r.GET("/v1/workflows/:id/versions", m.versions, studio...)

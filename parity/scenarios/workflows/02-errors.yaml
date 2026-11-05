@@ -608,6 +608,57 @@ steps:
   - name: "route shape: GET /v1/workflows/approvals/F1070000-0000-4000-8000-0000000000A1"
     as: "wf_err"
     request: {"method": "GET", "path": "/v1/workflows/approvals/F1070000-0000-4000-8000-0000000000A1"}
+  - name: "route shape: POST /v1/workflows/runs/publish"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/runs/publish"}
+  - name: "route shape: PUT /v1/workflows/runs/draft"
+    as: "wf_err"
+    request: {"method": "PUT", "path": "/v1/workflows/runs/draft"}
+  - name: "route shape: GET /v1/workflows/runs/versions"
+    as: "wf_err"
+    request: {"method": "GET", "path": "/v1/workflows/runs/versions"}
+  - name: "route shape: POST /v1/workflows/runs/webhook/rotate"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/runs/webhook/rotate"}
+  - name: "route shape: POST /v1/workflows/runs/versions/1/restore"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/runs/versions/1/restore"}
+  - name: "route shape: GET /v1/workflows/approvals/runs"
+    as: "wf_err"
+    request: {"method": "GET", "path": "/v1/workflows/approvals/runs"}
+  - name: "route shape: POST /v1/workflows/approvals/runs"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/approvals/runs"}
+  - name: "route shape: POST /v1/workflows/approvals/publish"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/approvals/publish"}
+  - name: "route shape: PUT /v1/workflows/approvals/draft"
+    as: "wf_err"
+    request: {"method": "PUT", "path": "/v1/workflows/approvals/draft"}
+  - name: "route shape: GET /v1/workflows/approvals/versions"
+    as: "wf_err"
+    request: {"method": "GET", "path": "/v1/workflows/approvals/versions"}
+  - name: "route shape: PUT /v1/workflows/limits/draft"
+    as: "wf_err"
+    request: {"method": "PUT", "path": "/v1/workflows/limits/draft"}
+  - name: "route shape: POST /v1/workflows/limits/runs"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/limits/runs"}
+  - name: "route shape: POST /v1/workflows/validate/runs"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/validate/runs"}
+  - name: "route shape: GET /v1/workflows/validate/runs"
+    as: "wf_err"
+    request: {"method": "GET", "path": "/v1/workflows/validate/runs"}
+  - name: "route shape: POST /v1/workflows/validate/publish"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/validate/publish"}
+  - name: "route shape: POST /v1/workflows/approvals/webhook/rotate"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/approvals/webhook/rotate"}
+  - name: "route shape: POST /v1/workflows/approvals/versions/1/restore"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/approvals/versions/1/restore"}
   - name: "route shape: GET /v1/workflows/"
     as: "wf_err"
     request: {"method": "GET", "path": "/v1/workflows/"}

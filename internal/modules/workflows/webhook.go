@@ -11,6 +11,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"lumina/internal/ids"
 	"lumina/internal/modules/workflows/db"
@@ -28,6 +29,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/labstack/echo/v5"
 )
+
+const maxDecimalDigits = 38
 
 const (
 	maxHookBodyBytes  = 1024 * 1024
@@ -248,31 +251,100 @@ func boolString(v bool) string {
 	return "0"
 }
 
-// numberString is NSNumber.stringValue for what JSONSerialization parses a number
-// to: an integer when it fits, otherwise a Double.
+// numberString is NSNumber.stringValue for what corelibs' JSONSerialization parses a
+// number to: an Int64 or UInt64 if it has no "." or "e", then a Decimal if it has
+// more digits than a Double holds and its exponent fits one, then a Double.
 func numberString(n json.Number) string {
 	raw := n.String()
-	if !strings.ContainsAny(raw, ".eE") {
-		if _, err := strconv.ParseInt(raw, 10, 64); err == nil {
-			return raw
+	expAt := strings.IndexByte(raw, 'e')
+	digits := len(raw)
+	if expAt >= 0 {
+		digits = expAt
+	}
+	if expAt < 0 && !strings.Contains(raw, ".") {
+		if strings.HasPrefix(raw, "-") {
+			if v, err := strconv.ParseInt(raw, 10, 64); digits <= 19 && err == nil {
+				return strconv.FormatInt(v, 10)
+			}
+		} else if v, err := strconv.ParseUint(raw, 10, 64); digits <= 20 && err == nil {
+			return strconv.FormatUint(v, 10)
 		}
-		if _, err := strconv.ParseUint(raw, 10, 64); err == nil {
-			return raw
-		}
+	}
+	exponent := 0
+	if expAt >= 0 {
+		// The JSON grammar has already checked this.
+		exponent, _ = strconv.Atoi(raw[expAt+1:])
+	}
+	if digits > 17 && exponent >= -128 && exponent <= 127 {
+		return decimalString(raw[:digits], exponent)
 	}
 	f, err := n.Float64()
 	if err != nil {
 		return raw
 	}
-	return string(wireDouble(f))
+	return swiftDouble(f)
 }
 
-func wireDouble(f float64) []byte {
-	b, err := wire.Double(f).MarshalJSON()
-	if err != nil {
-		return nil
+// decimalString is Decimal(string:).description: no exponent, no trailing zeros
+// after the point, and at most Decimal's 38 significant digits.
+func decimalString(mantissa string, exponent int) string {
+	negative := strings.HasPrefix(mantissa, "-")
+	mantissa = strings.TrimPrefix(mantissa, "-")
+	whole, fraction, _ := strings.Cut(strings.ToUpper(mantissa), ".")
+	if at := strings.IndexByte(fraction, 'E'); at >= 0 {
+		fraction = fraction[:at]
 	}
-	return b
+	digits := whole + fraction
+	point := len(whole) + exponent
+	trimmed := strings.TrimLeft(digits, "0")
+	point -= len(digits) - len(trimmed)
+	digits = trimmed
+	if len(digits) > maxDecimalDigits {
+		digits = digits[:maxDecimalDigits]
+	}
+	digits = strings.TrimRight(digits, "0")
+	if digits == "" {
+		return "0"
+	}
+	var out string
+	switch {
+	case point <= 0:
+		out = "0." + strings.Repeat("0", -point) + digits
+	case point >= len(digits):
+		out = digits + strings.Repeat("0", point-len(digits))
+	default:
+		out = digits[:point] + "." + digits[point:]
+	}
+	if negative {
+		return "-" + out
+	}
+	return out
+}
+
+// swiftDouble is Double.description: shortest digits that round-trip, as a plain
+// decimal with ".0" unless the value is above 2^53 or below 0.0001.
+func swiftDouble(f float64) string {
+	if f == 0 {
+		if math.Signbit(f) {
+			return "-0.0"
+		}
+		return "0.0"
+	}
+	sign := ""
+	if f < 0 {
+		sign, f = "-", -f
+	}
+	scientific := strconv.FormatFloat(f, 'e', -1, 64)
+	mantissa, power, _ := strings.Cut(scientific, "e")
+	exponent, _ := strconv.Atoi(power)
+	if exponent < -4 || f > 1<<53 {
+		return fmt.Sprintf("%s%se%+03d", sign, mantissa, exponent)
+	}
+	plain := strconv.FormatFloat(f, 'f', -1, 64)
+	if !strings.Contains(plain, ".") {
+		plain += ".0"
+	}
+	return sign + plain
 }
 
 // serializeJSON is JSONSerialization.data(withJSONObject:) over a nested value:
