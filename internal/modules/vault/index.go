@@ -16,7 +16,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v5"
@@ -418,14 +417,15 @@ func (m *Module) fileChecks(ctx context.Context, tenant uuid.UUID) ([]VaultLintC
 			continue
 		}
 		data, err := os.ReadFile(target) //nolint:gosec // target comes from ResolveInside
-		if err != nil || !utf8.Valid(data) {
-			if err != nil {
-				slog.DebugContext(ctx, "vault lint: unreadable", "tenant", ids.Upper(tenant), "error", err)
-			}
+		if err != nil {
+			slog.DebugContext(ctx, "vault lint: unreadable", "tenant", ids.Upper(tenant), "error", err)
+		}
+		text, ok := decodeUTF8(data)
+		if err != nil || !ok {
 			unreadable = append(unreadable, VaultLintFinding{Path: ptr(file.Path), Message: "missing, unreadable, or not valid UTF-8"})
 			continue
 		}
-		if len(chunkindex.Chunk(string(data))) == 0 {
+		if len(chunkindex.Chunk(text)) == 0 {
 			empty = append(empty, VaultLintFinding{Path: ptr(file.Path), Message: "no body content — nothing to retrieve"})
 		}
 	}

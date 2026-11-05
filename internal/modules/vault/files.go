@@ -271,8 +271,9 @@ func (m *Module) upsertNoteMemory(ctx context.Context, tenant, fileID uuid.UUID,
 	return &wire.UUID{UUID: id}
 }
 
-// decodeUTF8 is `String(data:encoding: .utf8)`, which on Linux drops one leading
-// byte order mark (parity: vault/05-notes).
+// decodeUTF8 is `String(data:encoding: .utf8)` and `String(contentsOf:encoding:
+// .utf8)`, which on Linux drop one leading byte order mark (parity: vault/05-notes,
+// vault/07-index).
 func decodeUTF8(data []byte) (string, bool) {
 	if !utf8.Valid(data) {
 		return "", false

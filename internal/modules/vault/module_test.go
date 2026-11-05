@@ -695,6 +695,34 @@ func TestVaultExport(t *testing.T) {
 		require.Equal(t, http.StatusTooManyRequests, v.do(trial, http.MethodGet, "/v1/vault/export", nil, nil).code)
 	})
 
+	// The 200 is already out, so a failure has to break the connection: a clean
+	// end of the chunked body would read as a whole archive.
+	t.Run("a failure mid-stream cuts the connection", func(t *testing.T) {
+		if os.Geteuid() == 0 {
+			t.Skip("root reads a file with no permissions")
+		}
+		u := v.user("pro")
+		path := filepath.Join(v.module.paths.Raw(u), v.upload(u, "locked.md", "x"))
+		require.NoError(t, os.Chmod(path, 0))
+		t.Cleanup(func() { _ = os.Chmod(path, 0o600) })
+
+		srv := httptest.NewServer(v.e)
+		t.Cleanup(srv.Close)
+		req, err := http.NewRequest(http.MethodGet, srv.URL+"/v1/vault/export", nil)
+		require.NoError(t, err)
+		token, err := scenario.Mint(testKeys, u)
+		require.NoError(t, err)
+		req.Header.Set("Authorization", "Bearer "+token)
+		// With so little written, the cut can come before net/http flushed the head.
+		resp, err := http.DefaultClient.Do(req)
+		if err == nil {
+			defer func() { _ = resp.Body.Close() }()
+			require.Equal(t, http.StatusOK, resp.StatusCode)
+			_, err = io.ReadAll(resp.Body)
+		}
+		require.Error(t, err)
+	})
+
 	t.Run("no token is 401, not an archive", func(t *testing.T) {
 		require.Equal(t, http.StatusUnauthorized, v.do(uuid.Nil, http.MethodGet, "/v1/vault/export", nil, nil).code)
 	})
@@ -948,6 +976,7 @@ func TestIndexRoutes(t *testing.T) {
 			($3, $2, 'inbox/big.md', 'text/markdown', 6291456, 'b', now(), now())`, uuid.New(), u, uuid.New())
 		require.NoError(t, err)
 		v.upload(u, "blank.md", "  \n")
+		v.upload(u, "bom.md", "\ufeff")
 
 		r := v.do(u, http.MethodGet, "/v1/vault/lint", nil, nil)
 		require.Equal(t, http.StatusOK, r.code, string(r.body))
@@ -969,6 +998,7 @@ func TestIndexRoutes(t *testing.T) {
 		require.Equal(t, Warning, byName[OversizedFiles].Severity)
 		require.Equal(t, "6 MiB — chunking and embedding this is slow and expensive", byName[OversizedFiles].Findings[0].Message)
 		require.Equal(t, Warning, byName[EmptyDocuments].Severity)
+		require.Equal(t, "2 document(s) have no body content", byName[EmptyDocuments].Message)
 		require.Equal(t, Error, byName[UnreadableFiles].Severity)
 		messages := map[string]bool{}
 		for _, finding := range byName[UnreadableFiles].Findings {
