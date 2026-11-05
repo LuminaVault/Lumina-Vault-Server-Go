@@ -259,16 +259,25 @@ func (m *Module) readFile(r *http.Request) ([]byte, error) {
 // no vault route writes memory_chunks, and a re-upload's UpdateContent deletes the
 // note's chunks until something rebuilds them.
 func (m *Module) upsertNoteMemory(ctx context.Context, tenant, fileID uuid.UUID, spaceID *uuid.UUID, path string, data []byte, sidecar *vaultfiles.Metadata) *wire.UUID {
-	if m.embeddings == nil || len(data) == 0 || !utf8.Valid(data) {
+	content, ok := decodeUTF8(data)
+	if m.embeddings == nil || !ok || content == "" {
 		return nil
 	}
-	content := string(data)
 	id, err := m.writeNoteMemory(ctx, tenant, fileID, spaceID, content, sidecar)
 	if err != nil {
 		slog.ErrorContext(ctx, "note memory upsert failed", "tenant", ids.Upper(tenant), "path", path, "error", err)
 		return nil
 	}
 	return &wire.UUID{UUID: id}
+}
+
+// decodeUTF8 is `String(data:encoding: .utf8)`, which on Linux drops one leading
+// byte order mark (parity: vault/05-notes).
+func decodeUTF8(data []byte) (string, bool) {
+	if !utf8.Valid(data) {
+		return "", false
+	}
+	return strings.TrimPrefix(string(data), "\ufeff"), true
 }
 
 func (m *Module) writeNoteMemory(ctx context.Context, tenant, fileID uuid.UUID, spaceID *uuid.UUID, content string, sidecar *vaultfiles.Metadata) (uuid.UUID, error) {

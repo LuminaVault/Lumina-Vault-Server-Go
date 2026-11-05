@@ -41,6 +41,9 @@ steps:
   - name: give a new one bad bytes
     as: vault_idx
     request: {method: POST, path: "/v1/vault/files?path=bad.md", base64: "/////w==", headers: {Content-Type: text/markdown}}
+  - name: give a new one only a byte order mark
+    as: vault_idx
+    request: {method: POST, path: "/v1/vault/files?path=bom.md", base64: "77u/", headers: {Content-Type: text/markdown}}
   - name: lint with files
     as: vault_idx
     request: {method: GET, path: /v1/vault/lint}
