@@ -64,8 +64,11 @@ func newTenant(t *testing.T, pool *pgxpool.Pool) uuid.UUID {
 func newTenantWithID(t *testing.T, pool *pgxpool.Pool, id uuid.UUID) uuid.UUID {
 	t.Helper()
 	_, err := pool.Exec(context.Background(),
-		`INSERT INTO users (id, email, password_hash, is_verified, username, created_at, updated_at) VALUES ($1, $2, 'x', true, $3, NOW(), NOW())`,
+		`INSERT INTO users (id, email, password_hash, is_verified, username, created_at, updated_at) VALUES ($1, $2, 'x', true, $3, NOW(), NOW()) ON CONFLICT DO NOTHING`,
 		id, id.String()+"@test.luminavault", "u"+id.String()[:8])
+	require.NoError(t, err)
+	_, err = pool.Exec(context.Background(),
+		`INSERT INTO vaults (id, personal_owner_user_id, name, created_at, updated_at) VALUES ($1, $1, 'v', NOW(), NOW()) ON CONFLICT DO NOTHING`, id)
 	require.NoError(t, err)
 	return id
 }
@@ -318,11 +321,7 @@ func testMemoryWithoutPath(t *testing.T, pool *pgxpool.Pool) {
 			want = *g.Want.Str
 			tenant := uuid.MustParse(g.Case.T)
 			memory := uuid.MustParse(*g.Case.S)
-			var exists bool
-			require.NoError(t, pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM users WHERE id = $1)`, tenant).Scan(&exists))
-			if !exists {
-				newTenantWithID(t, pool, tenant)
-			}
+			newTenantWithID(t, pool, tenant)
 			_, err := pool.Exec(ctx, `INSERT INTO memories (id, tenant_id, content, created_at) VALUES ($1, $2, 'x', NOW())`, memory, tenant)
 			require.NoError(t, err)
 			_, err = NewIndexer(NewChunkRepository(pool), embedding.Deterministic{}, nil).Index(ctx, IndexParams{Tenant: tenant, MemoryID: memory, Content: "# T\n\nbody"})

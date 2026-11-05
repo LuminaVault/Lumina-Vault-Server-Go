@@ -58,6 +58,9 @@ func newTenant(t *testing.T, pool *pgxpool.Pool) uuid.UUID {
 		`INSERT INTO users (id, email, password_hash, is_verified, username, created_at, updated_at) VALUES ($1, $2, 'x', true, $3, NOW(), NOW())`,
 		id, id.String()+"@test.luminavault", "u"+id.String()[:8])
 	require.NoError(t, err)
+	_, err = pool.Exec(context.Background(),
+		`INSERT INTO vaults (id, personal_owner_user_id, name, created_at, updated_at) VALUES ($1, $1, 'v', NOW(), NOW())`, id)
+	require.NoError(t, err)
 	return id
 }
 
