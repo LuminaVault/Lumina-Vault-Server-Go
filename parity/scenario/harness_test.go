@@ -5,7 +5,10 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -599,4 +603,46 @@ func TestZipBodiesCompareByEntry(t *testing.T) {
 	// Garbage reports an error instead of aborting the run.
 	bad := zipBody([]byte("not a zip"), normalize.New()).(map[string]any)
 	require.Contains(t, bad, "error")
+}
+
+func TestSignedRequests(t *testing.T) {
+	var got []http.Header
+	var bodies []string
+	s := serve(t, func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		got = append(got, r.Header.Clone())
+		bodies = append(bodies, string(b))
+		w.WriteHeader(http.StatusNoContent)
+	})
+	raw := `{"a":1}`
+	_, err := Run(context.Background(), scenarioOf(
+		Step{Name: "signed", Request: Request{Method: "POST", Path: "/x", Raw: &raw, Sign: &Sign{Secret: "shh"}}},
+		Step{Name: "old", Request: Request{Method: "POST", Path: "/x", Raw: &raw, Sign: &Sign{Secret: "shh", Offset: -400}}},
+		Step{Name: "override", Request: Request{Method: "POST", Path: "/x", Raw: &raw, Sign: &Sign{Secret: "shh"}, Headers: map[string]string{"X-Lumina-Signature": "bad"}}},
+		Step{Name: "no body", Request: Request{Method: "POST", Path: "/x", Sign: &Sign{Secret: "shh"}}},
+	), target(s.URL))
+	require.NoError(t, err)
+	require.Len(t, got, 4)
+	sign := func(ts, body string) string {
+		mac := hmac.New(sha256.New, []byte("shh"))
+		mac.Write([]byte(ts + "." + body))
+		return hex.EncodeToString(mac.Sum(nil))
+	}
+	ts := got[0].Get("X-Lumina-Timestamp")
+	unix, err := strconv.ParseInt(ts, 10, 64)
+	require.NoError(t, err)
+	require.InDelta(t, time.Now().Unix(), unix, 5)
+	require.Equal(t, sign(ts, raw), got[0].Get("X-Lumina-Signature"))
+	require.Equal(t, raw, bodies[0], "signing reads the body without consuming it")
+
+	old, err := strconv.ParseInt(got[1].Get("X-Lumina-Timestamp"), 10, 64)
+	require.NoError(t, err)
+	require.InDelta(t, time.Now().Unix()-400, old, 5)
+	require.Equal(t, "bad", got[2].Get("X-Lumina-Signature"))
+	require.Equal(t, sign(got[3].Get("X-Lumina-Timestamp"), ""), got[3].Get("X-Lumina-Signature"))
+}
+
+func TestSignNeedsASecret(t *testing.T) {
+	require.Error(t, Request{Sign: &Sign{}}.validate())
+	require.NoError(t, Request{Sign: &Sign{Secret: "x"}}.validate())
 }

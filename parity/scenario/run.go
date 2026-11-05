@@ -3,6 +3,7 @@ package scenario
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
@@ -15,6 +16,7 @@ import (
 	"net/http"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -267,6 +269,11 @@ func buildRequest(ctx context.Context, t Target, as string, r Request, vars map[
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
 	}
+	if r.Sign != nil {
+		if err := signWebhook(req, r.Sign, vars); err != nil {
+			return nil, err
+		}
+	}
 	for k, v := range r.Headers {
 		req.Header.Set(k, substitute(v, vars))
 	}
@@ -374,4 +381,29 @@ func (t Transcript) JSON() ([]byte, error) {
 	enc.SetIndent("", "  ")
 	err := enc.Encode(t)
 	return buf.Bytes(), err
+}
+
+// signWebhook sets the two headers a workflow webhook checks: the current Unix time
+// plus Offset seconds, and the hex HMAC-SHA256 of "<time>.<body>" under Secret. The
+// signature covers a timestamp the server compares to its own clock, so no fixed
+// value in a scenario could carry it. It runs before the step's own headers so a
+// step can still replace either one with something wrong.
+func signWebhook(req *http.Request, s *Sign, vars map[string]string) error {
+	var body []byte
+	if req.GetBody != nil {
+		rc, err := req.GetBody()
+		if err != nil {
+			return err
+		}
+		if body, err = io.ReadAll(rc); err != nil {
+			return err
+		}
+	}
+	timestamp := strconv.FormatInt(time.Now().Unix()+s.Offset, 10)
+	mac := hmac.New(sha256.New, []byte(substitute(s.Secret, vars)))
+	mac.Write([]byte(timestamp + "."))
+	mac.Write(body)
+	req.Header.Set("X-Lumina-Timestamp", timestamp)
+	req.Header.Set("X-Lumina-Signature", hex.EncodeToString(mac.Sum(nil)))
+	return nil
 }

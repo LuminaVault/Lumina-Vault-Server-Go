@@ -89,7 +89,15 @@ type Request struct {
 	Base64  *string           `yaml:"base64"` // decoded and sent (binary uploads)
 	Fill    *Fill             `yaml:"fill"`   // a generated body (limits, large uploads)
 	Chunked bool              `yaml:"chunked"`
+	Sign    *Sign             `yaml:"sign"` // a workflow webhook's signature headers
 	Headers map[string]string `yaml:"headers"`
+}
+
+// Sign signs the body as a workflow webhook sender does, at the current time plus
+// Offset seconds. Secret takes {{vars}}, so a captured secret works.
+type Sign struct {
+	Secret string `yaml:"secret"`
+	Offset int64  `yaml:"offset"`
 }
 
 // Fill is Text repeated and cut to exactly Size bytes.
@@ -224,6 +232,9 @@ func (r Request) validate() error {
 	}
 	if r.Chunked && bodies == 0 {
 		return errors.New("chunked needs a body")
+	}
+	if r.Sign != nil && r.Sign.Secret == "" {
+		return errors.New("sign needs a secret")
 	}
 	return nil
 }
