@@ -75,6 +75,12 @@ func Bind[T any](c *echo.Context) (*T, error) {
 	return &out, nil
 }
 
+// Decode decodes raw into *dst by Bind's rules, for a body that isn't the request's:
+// an upstream reply a Swift Codable would have decoded.
+func Decode(raw []byte, dst any) error {
+	return decode(raw, dst)
+}
+
 func invalid(detail string) *Error {
 	return NewError(http.StatusBadRequest, "The given data was not valid input: "+detail)
 }

@@ -17,6 +17,7 @@ import (
 	"lumina/internal/diskguard"
 	"lumina/internal/embedding"
 	"lumina/internal/entitlement"
+	"lumina/internal/hermescontainers"
 	"lumina/internal/hermesresolve"
 	"lumina/internal/httpserver"
 	"lumina/internal/jobs"
@@ -31,6 +32,7 @@ import (
 	"lumina/internal/modules/community"
 	"lumina/internal/modules/dashboard"
 	"lumina/internal/modules/devices"
+	"lumina/internal/modules/grok"
 	"lumina/internal/modules/health"
 	"lumina/internal/modules/ingestion"
 	"lumina/internal/modules/kanban"
@@ -235,6 +237,10 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 			Enabled: community.ParseFlag(cfg.CommunityEnabled), PostingEnabled: community.ParseFlag(cfg.CommunityPostingEnabled),
 			AdminToken: cfg.AdminToken,
 		}, identify, limits, nil))
+		// Wave 5: Swift builds grokController in the SecretBox branch, so no key, no routes.
+		if box != nil {
+			deps.Modules = append(deps.Modules, grok.New(hermescontainers.New(pool, box), entitlement.PremiumGuardMiddleware(pool), nil))
+		}
 		if m := marketplace.New(pool, cfg.LVSecretMasterKey, pluginOptions, identify, limits, paths); m != nil { // nil without LV_SECRET_MASTER_KEY, as in Swift
 			deps.Modules = append(deps.Modules, m)
 		}
