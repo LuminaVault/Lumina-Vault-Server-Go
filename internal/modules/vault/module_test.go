@@ -509,7 +509,7 @@ func TestVaultInit(t *testing.T) {
 
 		second := status(u, http.MethodPost, "/v1/vault/create")
 		require.True(t, second.Initialized)
-		require.Equal(t, first.CreatedAt.Time.UTC(), second.CreatedAt.Time.UTC())
+		require.Equal(t, first.CreatedAt.UTC(), second.CreatedAt.UTC())
 	})
 
 	t.Run("status is true after create", func(t *testing.T) {
