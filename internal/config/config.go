@@ -127,6 +127,10 @@ type Config struct {
 	UsageDegradeModel      string  `env:"USAGE_DEGRADE_MODEL" envDefault:"hermes-3-small"`
 	SelfImprovementEnabled bool    `env:"SELF_IMPROVEMENT_ENABLED" envDefault:"true"`
 
+	// CerberusStudioEnabled is raw: workflows.Enabled reads it as Swift's reader.bool
+	// does. Off unmounts /v1/workflows, /v1/workflow-templates and /v1/workflow-hooks.
+	CerberusStudioEnabled string `env:"CERBERUS_STUDIO_ENABLED" envDefault:"true"`
+
 	// JinaAPIKey is Jina's reader, tier-2 of link enrichment. Unset still calls it,
 	// without the header, as in Swift.
 	JinaAPIKey string `env:"JINA_API_KEY"`
