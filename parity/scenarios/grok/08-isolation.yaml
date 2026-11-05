@@ -8,5 +8,5 @@ steps:
   - {name: ben on search, as: grok_ben, request: {method: POST, path: /v1/grok/x-search, json: {query: same}}}
   - {name: ann on vision, as: grok_ann, request: {method: POST, path: /v1/grok/vision, json: {prompt: same, imageURLs: [u]}}}
   - {name: ben on vision, as: grok_ben, request: {method: POST, path: /v1/grok/vision, json: {prompt: same, imageURLs: [u]}}}
-  - {name: bob has no container of his own, as: bob, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: same}]}}}
+  - {name: bob stops at the guard, as: bob, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: same}]}}}
   - {name: nothing was written, as: grok_ann, request: {method: POST, path: /v1/grok/tts}, snapshot: [hermes_tenant_containers]}

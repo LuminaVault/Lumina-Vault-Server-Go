@@ -1,4 +1,6 @@
-# Everything a container can answer that isn't a good reply, on chat.
+# Everything a container can answer that isn't a good reply, on chat. AsyncHTTPClient's
+# rules decide most of it: an HTTPParserError reaches Hummingbird's server as a bare 400
+# that closes the connection, and any other client error is a bare 500.
 module: grok
 steps:
   - {name: status 204, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:status:204]]"}]}}}
@@ -38,7 +40,7 @@ steps:
   - {name: over the 8 MiB limit, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:oversize]]"}]}}}
   - {name: over the limit on a 500, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:oversize-500]]"}]}}}
   - {name: body cut short, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:short-body]]"}]}}}
-  - {name: connection dropped, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:hangup]]"}]}}}
+  - {name: connection dropped, as: grok_ann, headers: [Connection, Content-Length], request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:hangup]]"}]}}}
   - {name: redirect 301, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:redirect:301]]"}]}}}
   - {name: redirect 302, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:redirect:302]]"}]}}}
   - {name: redirect 303, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:redirect:303]]"}]}}}
@@ -46,7 +48,7 @@ steps:
   - {name: redirect 308, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:redirect:308]]"}]}}}
   - {name: redirect loop, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:redirect-loop]]"}]}}}
   - {name: connection reset, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:reset]]"}]}}}
-  - {name: not http, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:garbage]]"}]}}}
+  - {name: not http, as: grok_ann, headers: [Connection, Content-Length], request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:garbage]]"}]}}}
   - {name: a bad header line, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:garbage-header]]"}]}}}
   - {name: 304 with a Location is followed, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:redirect:304]]"}]}}}
   - {name: 305 with a Location is followed, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:redirect:305]]"}]}}}

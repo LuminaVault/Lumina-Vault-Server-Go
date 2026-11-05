@@ -1271,3 +1271,52 @@ Beyond the pilot gate (D-wave2-early):
 
 - Holds on Swift: `/v1/memory/search` and `/v1/memory-compile`. `/v1/memory-compile/pending` goes to Go.
   `/v1/knowledge/reason` stays on Swift because only three knowledge sub-paths move.
+
+## grok (wave 5)
+
+### G0 entry: met 2026-11-05
+
+- Routes: 4 in `docs/migration/routes.json`: `POST /v1/grok/chat`, `/x-search`, `/vision`, `/tts`.
+- Prefix: `/v1/grok`.
+- Coupling: reads `users` through `entitlement.PremiumGuardMiddleware` and
+  `hermes_tenant_containers` through `hermescontainers.Handle`. No writes, no vault paths, no
+  PostHog captures, no rate limit. `/tts` is always 501, so no speech provider is involved.
+- Jobs: none.
+- Paid path: the tenant's own xAI OAuth, confirmed in code. The server sends the container's
+  `API_SERVER_KEY`; the xAI token stays in the container (`hermes auth add xai-oauth`). The
+  `smoke: true` scenario stops at 401 and 402.
+- Mounting: only with `LV_SECRET_MASTER_KEY` set, as in Swift (state `no-master-key`).
+- Swift tests: `GrokControllerTests` 4 and `PremiumGuardMiddlewareTests` 2, all ported.
+- Quirks kept:
+  - Order is 402, then 400 (decode, validation), then 409, then the upstream call.
+  - A reply that isn't valid HTTP, including a connection closed mid-reply, is a bare 400 that
+    closes the client's connection: Hummingbird's server treats AsyncHTTPClient's
+    `HTTPParserError` as its own.
+  - An upstream body over 8 MiB is a bare 413, on any status.
+  - A key that won't open, a reset, a redirect cycle and a 21st redirect are bare 500s.
+  - Redirects follow AsyncHTTPClient, not net/http: 304 and 305 with a `Location` are followed,
+    and a redirect to another origin drops the bearer but keeps the body.
+  - `stream` is validated and never sent. x-search has no missing-answer failure. Vision drops
+    `usage`. Upstream keys go through `convertFromSnakeCase`, so camelCase keys match too.
+
+### G1 parity: met 2026-11-05
+
+- CI run 42067436288 on head 9f772a4: self-test (Swift vs Swift) and Swift vs Go give
+  **164 scenarios, 0 differences** (whole suite), and every switch state has 0 differences.
+  `parity/scenarios/grok` has 9 files and 201 steps, 4 with snapshots, plus 6 steps in
+  `no-master-key`. `parity`, `lint`, `test` and `vuln` pass
+  (https://github.com/LuminaVault/Lumina-Vault-Server-Go/actions/runs/42067436288/job/127385406130).
+- Upstream calls are compared: the stub's default answer repeats the host, bearer and canonical
+  body it received. Swift's transcript shows 200s with the seeded host and key for each tenant.
+- Go tests: `internal/modules/grok` has 11 tests, 10 on Postgres, including spec conformance on
+  the 200s and the 402.
+- Not compared:
+  - An unreachable container. Swift doesn't answer within the runner's 30 s timeout, so the step
+    was removed. Go answers 500 at once. Swift's final status is read from code as a 500.
+  - The value of `publishedAt`: the runner masks timestamps, so only the format is compared. A Go
+    test pins an offset date to UTC.
+  - The 60-second upstream deadline.
+  - Compressed replies. Swift's client negotiates decompression with a 25x limit; Go uses
+    net/http's transparent gzip.
+- Spec: the 409, 501 and 502 responses point at `ErrorEnvelope`, whose `error` is a string. Both
+  servers send `{"error":{"message":...}}`. That schema has 107 uses, so it wasn't changed here.

@@ -238,7 +238,7 @@ modules:
   grok:
     wave: 5
     swiftDir: Sources/App/Grok
-    status: swift
+    status: parity
     prefixes: [/v1/grok]
     jobs: []
   llm-admin:
