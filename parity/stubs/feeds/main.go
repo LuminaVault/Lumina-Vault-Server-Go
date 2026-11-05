@@ -158,6 +158,7 @@ func handle(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	startGrokStub()
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /v1/items", handle)
 	mux.HandleFunc("POST /v1/execute", execute)

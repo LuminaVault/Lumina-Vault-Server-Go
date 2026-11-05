@@ -152,6 +152,7 @@ services:
       VISION_EMBED_PROVIDER: ${SWITCH_VISION_EMBED_PROVIDER:-cohere}
       VISION_EMBED_PROVIDER_COHERE_API_KEY: ${SWITCH_VISION_COHERE_API_KEY-}
       VISION_EMBED_PROVIDER_COHERE_BASE_URL: ${SWITCH_VISION_COHERE_BASE_URL:-https://api.cohere.com}
+      LV_SECRET_MASTER_KEY: ${SWITCH_LV_SECRET_MASTER_KEY-AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=}
     ports: ["18083:8080"]
     depends_on: { pg: { condition: service_healthy }, feeds: { condition: service_started } }
     profiles: [switched]
@@ -176,6 +177,7 @@ services:
       VISION_EMBED_PROVIDER: ${SWITCH_VISION_EMBED_PROVIDER:-cohere}
       VISION_EMBED_PROVIDER_COHERE_API_KEY: ${SWITCH_VISION_COHERE_API_KEY-}
       VISION_EMBED_PROVIDER_COHERE_BASE_URL: ${SWITCH_VISION_COHERE_BASE_URL:-https://api.cohere.com}
+      LV_SECRET_MASTER_KEY: ${SWITCH_LV_SECRET_MASTER_KEY-AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=}
     ports: ["18084:8080"]
     depends_on: { pg: { condition: service_healthy }, feeds: { condition: service_started } }
     profiles: [switched]
@@ -203,3 +205,8 @@ services:
   feeds:
     build: { context: ., dockerfile: parity/stubs/feeds/Dockerfile }
     profiles: [servers]
+    # Also two tenants' Hermes containers, on :8642 (parity/stubs/feeds/grok.go,
+    # parity/seed/grok.sql). Their container_name is the host the server dials.
+    networks:
+      default:
+        aliases: [grok-hermes-ann, grok-hermes-ben]
