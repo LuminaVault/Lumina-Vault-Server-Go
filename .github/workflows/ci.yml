@@ -38,6 +38,37 @@ jobs:
           go-version-file: go.mod
       - run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
+  # parity/stubs/llm as a deployable image, for hermes-stub on staging
+  # (wave-5-plan.md, "G2 for chat"). Built on every PR, pushed from main, tagged by
+  # commit. Nothing deploys it: the Deployment is an infra PR, pinned to a tag.
+  stub-image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        if: ${{ github.event_name == 'push' }}
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: parity/stubs/llm/Dockerfile
+          push: ${{ github.event_name == 'push' }}
+          tags: ghcr.io/luminavault/lumina-hermes-stub:${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          platforms: linux/amd64
+          cache-from: type=gha,scope=stub-image
+          cache-to: type=gha,mode=max,scope=stub-image
+
   # Gate G1 (roadmap): every scenario under parity/scenarios must show zero
   # differences between the Swift image pinned in parity/SWIFT_IMAGE and this
   # commit's Go server. Swift transcripts are kept for the G2 staging smoke.

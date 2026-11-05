@@ -1,0 +1,30 @@
+# Self-test on Swift (scripts/parity-switches.sh, llm_selftest): the coalesce option
+# joins Swift's real token frames, and Swift's real runs client accepts the stub's
+# capabilities and POST /v1/runs. Group 5C's scenarios build on this.
+module: chat
+steps:
+  - name: create a conversation
+    as: alice
+    request: {method: POST, path: /v1/conversations, json: {title: Stub}}
+    capture: {conversation: $.id}
+  - name: a classic turn, compared on its joined text
+    as: alice
+    stream: true
+    frames: 10
+    framesTimeout: 20s
+    coalesce: {type: token, field: payload}
+    request:
+      method: POST
+      path: /v1/conversations/{{conversation}}/messages/stream
+      json: {content: tell me about the stub}
+  - name: a client declaring the capability gets an agent run
+    as: alice
+    stream: true
+    frames: 3
+    framesTimeout: 15s
+    coalesce: {type: token, field: payload}
+    request:
+      method: POST
+      path: /v1/conversations/{{conversation}}/messages/stream
+      headers: {x-lv-client-caps: chat.hermes_run}
+      json: {content: deploy the stub}
