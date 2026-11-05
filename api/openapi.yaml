@@ -5506,7 +5506,7 @@ paths:
       description: >-
         Premium-gated (pro / ultimate, or a tier override) and requires a
         completed xAI OAuth connection. Always answers with one JSON body —
-        `stream` is forwarded upstream but this route does not stream.
+        `stream` is validated, then ignored: it is not sent upstream.
       requestBody:
         required: true
         content:
@@ -10420,7 +10420,7 @@ components:
           type: array
           items: { $ref: '#/components/schemas/GrokChatMessage' }
         model: { type: string }
-        stream: { type: boolean, description: Forwarded upstream; the route still returns a single JSON body. }
+        stream: { type: boolean, description: Validated and ignored. Not sent upstream; the route returns a single JSON body. }
         maxTokens: { type: integer }
 
     GrokUsage:
