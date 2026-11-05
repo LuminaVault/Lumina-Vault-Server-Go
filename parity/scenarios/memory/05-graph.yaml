@@ -1,6 +1,7 @@
 # GET /v1/memory/graph. mem_gra has one Space hub only: Swift maps a Dictionary over
 # the hubs, so several would come back in a different order on each process. Go sorts
-# them by id (a Go test covers that). mem_ann also has one.
+# them by id (a Go test covers that). mem_ann also has one. The team vault holds a
+# memory 02-upsert just wrote, whose activity decays with the clock.
 module: memory
 ignore: [$.generatedAt]
 steps:
@@ -69,4 +70,4 @@ steps:
   - {name: "graph empty user", as: mem_new, request: {method: GET, path: "/v1/memory/graph"}}
   - {name: "graph managed sees origin models, unlike the other routes", as: mem_ann, request: {method: GET, path: "/v1/memory/graph"}}
   - {name: "graph byok", as: mem_cat, request: {method: GET, path: "/v1/memory/graph"}}
-  - {name: "graph team", as: mem_vie, request: {method: GET, path: "/v1/memory/graph", headers: {X-Vault-ID: 3E3C0000-0000-4000-8000-0000000000C1}}}
+  - {name: "graph team", as: mem_vie, request: {method: GET, path: "/v1/memory/graph", headers: {X-Vault-ID: 3E3C0000-0000-4000-8000-0000000000C1}}, ignore: ["$.nodes[*].activity"]}

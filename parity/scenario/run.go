@@ -160,7 +160,9 @@ func runStep(ctx context.Context, sc Scenario, st Step, t Target, client *http.C
 			stableOrder(rows)
 			vals := make([]any, len(rows))
 			for i, r := range rows {
-				if vals[i], err = norm.Body(r, nil); err != nil {
+				// UUIDs first: a column may embed a random id, such as
+				// analytics_events' "memory-created:<id>" key.
+				if vals[i], err = norm.Body([]byte(norm.UUIDs(string(r))), nil); err != nil {
 					return res, err
 				}
 			}
@@ -249,8 +251,8 @@ func buildRequest(ctx context.Context, t Target, as string, r Request, vars map[
 }
 
 // stableOrder sorts snapshot rows so both servers list them identically even
-// though their ids are random: by created_at (both ran the same requests in the
-// same order), then by the row with random values masked.
+// though their ids are random: by the time the row was written (both ran the same
+// requests in the same order), then by the row with random values masked.
 func stableOrder(rows []json.RawMessage) {
 	type keyed struct {
 		created, masked string
@@ -260,9 +262,16 @@ func stableOrder(rows []json.RawMessage) {
 	for i, r := range rows {
 		var m map[string]any
 		_ = json.Unmarshal(r, &m)
+		// Tables with no created_at: analytics_events, memory_sync_tombstones.
 		created, _ := m["created_at"].(string)
-		masked, _ := json.Marshal(normalize.New().Value(m))
-		ks[i] = keyed{created, string(masked), r}
+		for _, column := range []string{"occurred_at", "deleted_at"} {
+			if created == "" {
+				created, _ = m[column].(string)
+			}
+		}
+		n := normalize.New()
+		masked, _ := json.Marshal(n.Value(m))
+		ks[i] = keyed{created, n.UUIDs(string(masked)), r}
 	}
 	sort.SliceStable(ks, func(i, j int) bool {
 		if ks[i].created != ks[j].created {
