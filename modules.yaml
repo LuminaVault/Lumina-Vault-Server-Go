@@ -21,6 +21,8 @@ modules:
     prefixes: [/v1/apple, /v1/devices/commands/pending, /v1/photos]
     exactPaths: [/v1/reminders/sync]
     sharedPrefixes: [/v1/devices/command]
+    heldPaths:
+      - {path: /v1/devices/command, reason: "DeviceCommandBroker's continuations live in the server's memory: a result reaching another server resumes nothing", releasedBy: "batch 5-4"}
     flipsWith: [devices, reminders]
     jobs: []
   devices:
@@ -57,6 +59,8 @@ modules:
     prefixes: [/v1/reminders/detect]
     exactPaths: [/v1/reminders]
     sharedPrefixes: [/v1/reminders]
+    heldPaths:
+      - {path: /v1/reminders/detect, reason: "ReminderIntentClassifier needs the LLM; Go's UnavailableTransport would answer isReminder false", releasedBy: "batch 5-3b"}
     flipsWith: [apple]
     jobs: []
   sessions:
@@ -89,6 +93,9 @@ modules:
     swiftDir: Sources/App/Community
     status: swift
     prefixes: [/v1/admin/community, /v1/community]
+    exactPaths: [/v1/admin/community/daily/run]
+    heldPaths:
+      - {path: /v1/admin/community, reason: "the daily run needs the LLM: on Go it can only record failed attempts, and three cost that day's post", releasedBy: "batch 5-3b"}
     jobs: []
   dashboard:
     wave: 3
@@ -120,6 +127,9 @@ modules:
     swiftDir: Sources/App/Me
     status: parity
     prefixes: [/v1/me/apns-categories, /v1/me/brief, /v1/me/commitments, /v1/me/learned, /v1/me/location, /v1/me/recap, /v1/me/resurface, /v1/me/today]
+    exactPaths: [/v1/me/recap/period]
+    heldPaths:
+      - {path: /v1/me/recap/period, reason: "the claim and the themes worker share a process: on Go the row is claimed and nothing generates it", releasedBy: "batch 5-3b"}
     jobs: []
   onboarding:
     wave: 3
@@ -164,7 +174,7 @@ modules:
     prefixes: []
     exactPaths: [/v1/memory-compile]
     heldPaths:
-      - {path: /v1/memory-compile, reason: "must stay on the same server as /v1/ws: the iOS review sheet fills only from its .memorySaved frames", releasedBy: "end of wave 5, with /v1/ws, /v1/devices/command, mcp and skills"}
+      - {path: /v1/memory-compile, reason: "must stay on the same server as /v1/ws: the iOS review sheet fills only from its .memorySaved frames", releasedBy: "batch 5-4"}
     jobs: []
   knowledge:
     wave: 4
@@ -231,11 +241,29 @@ modules:
     status: swift
     prefixes: [/v1/grok]
     jobs: []
-  llm:
+  llm-admin:
+    wave: 5
+    swiftDir: Sources/App/LLM/Routing
+    status: swift
+    prefixes: [/admin/llm/health]
+    jobs: []
+  llm-chat:
     wave: 5
     swiftDir: Sources/App/LLM
     status: swift
-    prefixes: [/admin, /v1/audio, /v1/llm, /v1/router, /v1/transcribe]
+    prefixes: [/v1/llm]
+    jobs: []
+  llm-router:
+    wave: 5
+    swiftDir: Sources/App/LLM/Routing
+    status: swift
+    prefixes: [/v1/router]
+    jobs: []
+  llm-voice:
+    wave: 5
+    swiftDir: Sources/App/LLM
+    status: swift
+    prefixes: [/v1/audio, /v1/transcribe]
     jobs: []
   mcp:
     wave: 5
@@ -259,13 +287,19 @@ modules:
     wave: 5
     swiftDir: Sources/App/Skills
     status: swift
-    prefixes: [/v1/jobs, /v1/me/hermes/cron, /v1/skills]
+    prefixes: [/v1/jobs, /v1/skills]
     jobs: []
   tts:
     wave: 5
     swiftDir: Sources/App/TTS
     status: swift
     prefixes: [/v1/tts]
+    jobs: []
+  ws:
+    wave: 5
+    swiftDir: Sources/App/App+build.swift
+    status: swift
+    prefixes: [/v1/ws]
     jobs: []
   workflows:
     wave: 5
@@ -303,6 +337,12 @@ modules:
     status: swift
     prefixes: [/v1/settings]
     jobs: []
+  skills-cron:
+    wave: 6
+    swiftDir: Sources/App/Skills
+    status: swift
+    prefixes: [/v1/me/hermes/cron]
+    jobs: []
   admin:
     wave: 7
     swiftDir: Sources/App/Admin
@@ -325,7 +365,7 @@ modules:
     wave: 8
     swiftDir: Sources/App/App+build.swift
     status: swift
-    prefixes: [/.well-known, /health, /v1/auth/me, /v1/kb-compile, /v1/ws]
+    prefixes: [/.well-known, /health, /v1/auth/me, /v1/kb-compile]
     exactPaths: [/]
     jobs: []
   auth:
