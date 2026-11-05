@@ -218,6 +218,8 @@ func TestFlattenPayload(t *testing.T) {
 	require.JSONEq(t, `[1]`, got["l"])
 	require.Contains(t, got["raw"], `"s":"t"`)
 	require.Equal(t, StringMap{"raw": "[1]"}, flattenPayload([]byte(`[1]`)))
+	require.Equal(t, StringMap{"raw": `{"x":1e400,"y":"z"}`}, flattenPayload([]byte(`{"x":1e400,"y":"z"}`)), "an overflow fails the whole parse")
+	require.Equal(t, `[1,1000,1.5,1e+16]`, flattenPayload([]byte(`{"l":[1.0,1e3,1.5,1e16]}`))["l"], "nested numbers are written as JSON")
 	require.Equal(t, StringMap{"raw": "nope"}, flattenPayload([]byte(`nope`)))
 	require.Equal(t, StringMap{"raw": "mine"}, flattenPayload([]byte(`{"raw":"mine"}`)))
 }

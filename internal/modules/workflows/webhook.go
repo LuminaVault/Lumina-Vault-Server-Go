@@ -216,6 +216,9 @@ func flattenPayload(body []byte) StringMap {
 	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
 		return result
 	}
+	if !representable(object) {
+		return result
+	}
 	for key, value := range object {
 		switch v := value.(type) {
 		case string:
@@ -251,10 +254,12 @@ func boolString(v bool) string {
 	return "0"
 }
 
-// numberString is NSNumber.stringValue for what corelibs' JSONSerialization parses a
-// number to: an Int64 or UInt64 if it has no "." or "e", then a Decimal if it has
-// more digits than a Double holds and its exponent fits one, then a Double.
-func numberString(n json.Number) string {
+// parsedNumber is what corelibs' JSONSerialization parses a number to: an Int64 or
+// UInt64 if it has no "." or "e", then a Decimal if it has more digits than a Double
+// holds and its exponent fits one, then a Double. A Double that overflows fails the
+// whole parse (see representable). Exactly one of the results is set: text for the
+// two exact forms, or the Double.
+func parsedNumber(n json.Number) (text string, double float64, isDouble, ok bool) {
 	raw := n.String()
 	expAt := strings.IndexByte(raw, 'e')
 	digits := len(raw)
@@ -264,25 +269,84 @@ func numberString(n json.Number) string {
 	if expAt < 0 && !strings.Contains(raw, ".") {
 		if strings.HasPrefix(raw, "-") {
 			if v, err := strconv.ParseInt(raw, 10, 64); digits <= 19 && err == nil {
-				return strconv.FormatInt(v, 10)
+				return strconv.FormatInt(v, 10), 0, false, true
 			}
 		} else if v, err := strconv.ParseUint(raw, 10, 64); digits <= 20 && err == nil {
-			return strconv.FormatUint(v, 10)
+			return strconv.FormatUint(v, 10), 0, false, true
 		}
 	}
-	exponent := 0
+	exponent := math.MaxInt
 	if expAt >= 0 {
-		// The JSON grammar has already checked this.
-		exponent, _ = strconv.Atoi(raw[expAt+1:])
+		if v, err := strconv.Atoi(raw[expAt+1:]); err == nil {
+			exponent = v
+		}
+	} else {
+		exponent = 0
 	}
 	if digits > 17 && exponent >= -128 && exponent <= 127 {
-		return decimalString(raw[:digits], exponent)
+		return decimalString(raw[:digits], exponent), 0, false, true
 	}
 	f, err := n.Float64()
-	if err != nil {
-		return raw
+	if err != nil || math.IsInf(f, 0) {
+		return "", 0, false, false
 	}
-	return swiftDouble(f)
+	return "", f, true, true
+}
+
+// numberString is NSNumber.stringValue. A Double there is Double.description.
+func numberString(n json.Number) string {
+	text, double, isDouble, ok := parsedNumber(n)
+	switch {
+	case !ok:
+		return n.String()
+	case isDouble:
+		return swiftDouble(double)
+	}
+	return text
+}
+
+// jsonNumberString is the same number as JSONSerialization writes it: a Double that
+// is a whole number loses its ".0".
+func jsonNumberString(n json.Number) string {
+	text, double, isDouble, ok := parsedNumber(n)
+	switch {
+	case !ok:
+		return n.String()
+	case isDouble:
+		return string(wireDouble(double))
+	}
+	return text
+}
+
+// representable is false when a number anywhere in value overflows a Double, which
+// makes JSONSerialization throw and leaves the payload as "raw" alone.
+func representable(value any) bool {
+	switch v := value.(type) {
+	case json.Number:
+		_, _, _, ok := parsedNumber(v)
+		return ok
+	case []any:
+		for _, element := range v {
+			if !representable(element) {
+				return false
+			}
+		}
+	case map[string]any:
+		for _, element := range v {
+			if !representable(element) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func wireDouble(f float64) []byte {
+	b, err := wire.Double(f).MarshalJSON()
+	if err != nil {
+		return nil
+	}
+	return b
 }
 
 // decimalString is Decimal(string:).description: no exponent, no trailing zeros
@@ -365,7 +429,7 @@ func writeJSON(buf *strings.Builder, value any) error {
 	case bool:
 		buf.WriteString(strconv.FormatBool(v))
 	case json.Number:
-		buf.WriteString(numberString(v))
+		buf.WriteString(jsonNumberString(v))
 	case string:
 		encoded, err := wire.MarshalFoundation(v)
 		if err != nil {
