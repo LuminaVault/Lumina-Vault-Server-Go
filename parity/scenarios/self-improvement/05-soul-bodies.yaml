@@ -1,0 +1,230 @@
+# Real SOUL bodies through the approve path, which internal/soul had only golden vectors for.
+# Each user uploads the one base document and moves it to raw/SOUL.md, so the seeded base hash
+# matches. Approving then runs SOULCore.inject on the seeded proposal, and `files` hashes the
+# result on both servers.
+module: self-improvement
+steps:
+  - name: "si_b01 upload base"
+    as: si_b01
+    request: {method: POST, path: "/v1/vault/files?path=base.md", raw: "# SOUL.md\n\n## Identity\n\nStable voice.\n", headers: {Content-Type: text/markdown}}
+  - name: "si_b01 base to SOUL.md"
+    as: si_b01
+    request: {method: POST, path: /v1/vault/files/move, json: {path: inbox/base.md, newPath: SOUL.md}}
+  - name: "si_b01 approve: canonical core already placed"
+    as: si_b01
+    request: {method: POST, path: /v1/me/improvement/changes/5e1f2000-0000-4000-8000-000000000064/approve}
+    files: [si_b01]
+  - name: "si_b02 upload base"
+    as: si_b02
+    request: {method: POST, path: "/v1/vault/files?path=base.md", raw: "# SOUL.md\n\n## Identity\n\nStable voice.\n", headers: {Content-Type: text/markdown}}
+  - name: "si_b02 base to SOUL.md"
+    as: si_b02
+    request: {method: POST, path: /v1/vault/files/move, json: {path: inbox/base.md, newPath: SOUL.md}}
+  - name: "si_b02 approve: front matter and heading, no core"
+    as: si_b02
+    request: {method: POST, path: /v1/me/improvement/changes/5e1f2000-0000-4000-8000-000000000065/approve}
+    files: [si_b02]
+  - name: "si_b03 upload base"
+    as: si_b03
+    request: {method: POST, path: "/v1/vault/files?path=base.md", raw: "# SOUL.md\n\n## Identity\n\nStable voice.\n", headers: {Content-Type: text/markdown}}
+  - name: "si_b03 base to SOUL.md"
+    as: si_b03
+    request: {method: POST, path: /v1/vault/files/move, json: {path: inbox/base.md, newPath: SOUL.md}}
+  - name: "si_b03 approve: heading only"
+    as: si_b03
+    request: {method: POST, path: /v1/me/improvement/changes/5e1f2000-0000-4000-8000-000000000066/approve}
+    files: [si_b03]
+  - name: "si_b04 upload base"
+    as: si_b04
+    request: {method: POST, path: "/v1/vault/files?path=base.md", raw: "# SOUL.md\n\n## Identity\n\nStable voice.\n", headers: {Content-Type: text/markdown}}
+  - name: "si_b04 base to SOUL.md"
+    as: si_b04
+    request: {method: POST, path: /v1/vault/files/move, json: {path: inbox/base.md, newPath: SOUL.md}}
+  - name: "si_b04 approve: no heading, prose only"
+    as: si_b04
+    request: {method: POST, path: /v1/me/improvement/changes/5e1f2000-0000-4000-8000-000000000067/approve}
+    files: [si_b04]
+  - name: "si_b05 upload base"
+    as: si_b05
+    request: {method: POST, path: "/v1/vault/files?path=base.md", raw: "# SOUL.md\n\n## Identity\n\nStable voice.\n", headers: {Content-Type: text/markdown}}
+  - name: "si_b05 base to SOUL.md"
+    as: si_b05
+    request: {method: POST, path: /v1/vault/files/move, json: {path: inbox/base.md, newPath: SOUL.md}}
+  - name: "si_b05 approve: older core block mid document"
+    as: si_b05
+    request: {method: POST, path: /v1/me/improvement/changes/5e1f2000-0000-4000-8000-000000000068/approve}
+    files: [si_b05]
+  - name: "si_b06 upload base"
+    as: si_b06
+    request: {method: POST, path: "/v1/vault/files?path=base.md", raw: "# SOUL.md\n\n## Identity\n\nStable voice.\n", headers: {Content-Type: text/markdown}}
+  - name: "si_b06 base to SOUL.md"
+    as: si_b06
+    request: {method: POST, path: /v1/vault/files/move, json: {path: inbox/base.md, newPath: SOUL.md}}
+  - name: "si_b06 approve: two blocks with text between"
+    as: si_b06
+    request: {method: POST, path: /v1/me/improvement/changes/5e1f2000-0000-4000-8000-000000000069/approve}
+    files: [si_b06]
+  - name: "si_b07 upload base"
+    as: si_b07
+    request: {method: POST, path: "/v1/vault/files?path=base.md", raw: "# SOUL.md\n\n## Identity\n\nStable voice.\n", headers: {Content-Type: text/markdown}}
+  - name: "si_b07 base to SOUL.md"
+    as: si_b07
+    request: {method: POST, path: /v1/vault/files/move, json: {path: inbox/base.md, newPath: SOUL.md}}
+  - name: "si_b07 approve: lone start marker"
+    as: si_b07
+    request: {method: POST, path: /v1/me/improvement/changes/5e1f2000-0000-4000-8000-00000000006a/approve}
+    files: [si_b07]
+  - name: "si_b08 upload base"
+    as: si_b08
+    request: {method: POST, path: "/v1/vault/files?path=base.md", raw: "# SOUL.md\n\n## Identity\n\nStable voice.\n", headers: {Content-Type: text/markdown}}
+  - name: "si_b08 base to SOUL.md"
+    as: si_b08
+    request: {method: POST, path: /v1/vault/files/move, json: {path: inbox/base.md, newPath: SOUL.md}}
+  - name: "si_b08 approve: lone end marker"
+    as: si_b08
+    request: {method: POST, path: /v1/me/improvement/changes/5e1f2000-0000-4000-8000-00000000006b/approve}
+    files: [si_b08]
+  - name: "si_b09 upload base"
+    as: si_b09
+    request: {method: POST, path: "/v1/vault/files?path=base.md", raw: "# SOUL.md\n\n## Identity\n\nStable voice.\n", headers: {Content-Type: text/markdown}}
+  - name: "si_b09 base to SOUL.md"
+    as: si_b09
+    request: {method: POST, path: /v1/vault/files/move, json: {path: inbox/base.md, newPath: SOUL.md}}
+  - name: "si_b09 approve: marker spacing and a non-ASCII digit"
+    as: si_b09
+    request: {method: POST, path: /v1/me/improvement/changes/5e1f2000-0000-4000-8000-00000000006c/approve}
+    files: [si_b09]
+  - name: "si_b10 upload base"
+    as: si_b10
+    request: {method: POST, path: "/v1/vault/files?path=base.md", raw: "# SOUL.md\n\n## Identity\n\nStable voice.\n", headers: {Content-Type: text/markdown}}
+  - name: "si_b10 base to SOUL.md"
+    as: si_b10
+    request: {method: POST, path: /v1/vault/files/move, json: {path: inbox/base.md, newPath: SOUL.md}}
+  - name: "si_b10 approve: empty"
+    as: si_b10
+    request: {method: POST, path: /v1/me/improvement/changes/5e1f2000-0000-4000-8000-00000000006d/approve}
+    files: [si_b10]
+  - name: "si_b11 upload base"
+    as: si_b11
+    request: {method: POST, path: "/v1/vault/files?path=base.md", raw: "# SOUL.md\n\n## Identity\n\nStable voice.\n", headers: {Content-Type: text/markdown}}
+  - name: "si_b11 base to SOUL.md"
+    as: si_b11
+    request: {method: POST, path: /v1/vault/files/move, json: {path: inbox/base.md, newPath: SOUL.md}}
+  - name: "si_b11 approve: only whitespace"
+    as: si_b11
+    request: {method: POST, path: /v1/me/improvement/changes/5e1f2000-0000-4000-8000-00000000006e/approve}
+    files: [si_b11]
+  - name: "si_b12 upload base"
+    as: si_b12
+    request: {method: POST, path: "/v1/vault/files?path=base.md", raw: "# SOUL.md\n\n## Identity\n\nStable voice.\n", headers: {Content-Type: text/markdown}}
+  - name: "si_b12 base to SOUL.md"
+    as: si_b12
+    request: {method: POST, path: /v1/vault/files/move, json: {path: inbox/base.md, newPath: SOUL.md}}
+  - name: "si_b12 approve: CRLF line endings"
+    as: si_b12
+    request: {method: POST, path: /v1/me/improvement/changes/5e1f2000-0000-4000-8000-00000000006f/approve}
+    files: [si_b12]
+  - name: "si_b13 upload base"
+    as: si_b13
+    request: {method: POST, path: "/v1/vault/files?path=base.md", raw: "# SOUL.md\n\n## Identity\n\nStable voice.\n", headers: {Content-Type: text/markdown}}
+  - name: "si_b13 base to SOUL.md"
+    as: si_b13
+    request: {method: POST, path: /v1/vault/files/move, json: {path: inbox/base.md, newPath: SOUL.md}}
+  - name: "si_b13 approve: heading with trailing blanks"
+    as: si_b13
+    request: {method: POST, path: /v1/me/improvement/changes/5e1f2000-0000-4000-8000-000000000070/approve}
+    files: [si_b13]
+  - name: "si_b14 upload base"
+    as: si_b14
+    request: {method: POST, path: "/v1/vault/files?path=base.md", raw: "# SOUL.md\n\n## Identity\n\nStable voice.\n", headers: {Content-Type: text/markdown}}
+  - name: "si_b14 base to SOUL.md"
+    as: si_b14
+    request: {method: POST, path: /v1/vault/files/move, json: {path: inbox/base.md, newPath: SOUL.md}}
+  - name: "si_b14 approve: heading with more words is no heading"
+    as: si_b14
+    request: {method: POST, path: /v1/me/improvement/changes/5e1f2000-0000-4000-8000-000000000071/approve}
+    files: [si_b14]
+  - name: "si_b15 upload base"
+    as: si_b15
+    request: {method: POST, path: "/v1/vault/files?path=base.md", raw: "# SOUL.md\n\n## Identity\n\nStable voice.\n", headers: {Content-Type: text/markdown}}
+  - name: "si_b15 base to SOUL.md"
+    as: si_b15
+    request: {method: POST, path: /v1/vault/files/move, json: {path: inbox/base.md, newPath: SOUL.md}}
+  - name: "si_b15 approve: heading with no newline"
+    as: si_b15
+    request: {method: POST, path: /v1/me/improvement/changes/5e1f2000-0000-4000-8000-000000000072/approve}
+    files: [si_b15]
+  - name: "si_b16 upload base"
+    as: si_b16
+    request: {method: POST, path: "/v1/vault/files?path=base.md", raw: "# SOUL.md\n\n## Identity\n\nStable voice.\n", headers: {Content-Type: text/markdown}}
+  - name: "si_b16 base to SOUL.md"
+    as: si_b16
+    request: {method: POST, path: /v1/vault/files/move, json: {path: inbox/base.md, newPath: SOUL.md}}
+  - name: "si_b16 approve: unterminated front matter"
+    as: si_b16
+    request: {method: POST, path: /v1/me/improvement/changes/5e1f2000-0000-4000-8000-000000000073/approve}
+    files: [si_b16]
+  - name: "si_b17 upload base"
+    as: si_b17
+    request: {method: POST, path: "/v1/vault/files?path=base.md", raw: "# SOUL.md\n\n## Identity\n\nStable voice.\n", headers: {Content-Type: text/markdown}}
+  - name: "si_b17 base to SOUL.md"
+    as: si_b17
+    request: {method: POST, path: /v1/vault/files/move, json: {path: inbox/base.md, newPath: SOUL.md}}
+  - name: "si_b17 approve: Unicode whitespace before the heading"
+    as: si_b17
+    request: {method: POST, path: /v1/me/improvement/changes/5e1f2000-0000-4000-8000-000000000074/approve}
+    files: [si_b17]
+  - name: "si_b18 upload base"
+    as: si_b18
+    request: {method: POST, path: "/v1/vault/files?path=base.md", raw: "# SOUL.md\n\n## Identity\n\nStable voice.\n", headers: {Content-Type: text/markdown}}
+  - name: "si_b18 base to SOUL.md"
+    as: si_b18
+    request: {method: POST, path: /v1/vault/files/move, json: {path: inbox/base.md, newPath: SOUL.md}}
+  - name: "si_b18 approve: Unicode body"
+    as: si_b18
+    request: {method: POST, path: /v1/me/improvement/changes/5e1f2000-0000-4000-8000-000000000075/approve}
+    files: [si_b18]
+  - name: "si_b19 upload base"
+    as: si_b19
+    request: {method: POST, path: "/v1/vault/files?path=base.md", raw: "# SOUL.md\n\n## Identity\n\nStable voice.\n", headers: {Content-Type: text/markdown}}
+  - name: "si_b19 base to SOUL.md"
+    as: si_b19
+    request: {method: POST, path: /v1/vault/files/move, json: {path: inbox/base.md, newPath: SOUL.md}}
+  - name: "si_b19 approve: blank lines around front matter and heading"
+    as: si_b19
+    request: {method: POST, path: /v1/me/improvement/changes/5e1f2000-0000-4000-8000-000000000076/approve}
+    files: [si_b19]
+  - name: "si_b20 upload base"
+    as: si_b20
+    request: {method: POST, path: "/v1/vault/files?path=base.md", raw: "# SOUL.md\n\n## Identity\n\nStable voice.\n", headers: {Content-Type: text/markdown}}
+  - name: "si_b20 base to SOUL.md"
+    as: si_b20
+    request: {method: POST, path: /v1/vault/files/move, json: {path: inbox/base.md, newPath: SOUL.md}}
+  - name: "si_b20 approve: front matter only"
+    as: si_b20
+    request: {method: POST, path: /v1/me/improvement/changes/5e1f2000-0000-4000-8000-000000000077/approve}
+    files: [si_b20]
+  - name: "si_b21 upload base"
+    as: si_b21
+    request: {method: POST, path: "/v1/vault/files?path=base.md", raw: "# SOUL.md\n\n## Identity\n\nStable voice.\n", headers: {Content-Type: text/markdown}}
+  - name: "si_b21 base to SOUL.md"
+    as: si_b21
+    request: {method: POST, path: /v1/vault/files/move, json: {path: inbox/base.md, newPath: SOUL.md}}
+  - name: "si_b21 approve: two starts and one end"
+    as: si_b21
+    request: {method: POST, path: /v1/me/improvement/changes/5e1f2000-0000-4000-8000-000000000078/approve}
+    files: [si_b21]
+  - name: "si_b22 upload base"
+    as: si_b22
+    request: {method: POST, path: "/v1/vault/files?path=base.md", raw: "# SOUL.md\n\n## Identity\n\nStable voice.\n", headers: {Content-Type: text/markdown}}
+  - name: "si_b22 base to SOUL.md"
+    as: si_b22
+    request: {method: POST, path: /v1/vault/files/move, json: {path: inbox/base.md, newPath: SOUL.md}}
+  - name: "si_b22 approve: heading with no space"
+    as: si_b22
+    request: {method: POST, path: /v1/me/improvement/changes/5e1f2000-0000-4000-8000-000000000079/approve}
+    files: [si_b22]
+  - name: every change applied
+    as: si_b01
+    request: {method: GET, path: /v1/me/improvement/changes}
+    snapshot: [self_improvement_changes]
