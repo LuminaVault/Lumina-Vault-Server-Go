@@ -20,7 +20,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode"
 
 	"github.com/google/uuid"
 )
@@ -255,13 +254,13 @@ func (s *MemoService) persist(ctx context.Context, tenant uuid.UUID, topic, memo
 	return finalRelative, nil
 }
 
-// MemoSlug is slug(_:): lowercase, alphanumerics and hyphens, at most 64 characters.
+// MemoSlug is slug(_:): lowercase, letters, numbers and single hyphens, at most 64
+// characters. Other characters vanish without leaving a hyphen.
 func MemoSlug(topic string) string {
 	var out []string
-	for _, ch := range swiftstr.Characters(strings.ToLower(topic)) {
-		r := []rune(ch)[0]
+	for _, ch := range swiftstr.Characters(vaultfiles.Lowercased(topic)) {
 		switch {
-		case unicode.IsLetter(r) || unicode.IsNumber(r):
+		case swiftstr.IsLetterOrNumber(ch):
 			out = append(out, ch)
 		case ch == " " || ch == "-" || ch == "_":
 			if len(out) > 0 && out[len(out)-1] != "-" {

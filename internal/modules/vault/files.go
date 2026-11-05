@@ -215,6 +215,10 @@ func (m *Module) upload(c *echo.Context) error {
 	if isNote {
 		memoryID = m.upsertNoteMemory(ctx, tenant, savedID, spaceID, safe, data, sidecar)
 	}
+	// An unfiled note gets a Space suggestion in the background.
+	if isNote && spaceID == nil && m.filing != nil {
+		m.filing(tenant, savedID)
+	}
 	return wire.JSON(c, http.StatusOK, VaultUploadResponse{
 		Path: safe, Size: len(data), ContentType: contentType, Sha256: digest, MemoryId: memoryID,
 	})

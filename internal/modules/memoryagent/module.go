@@ -9,7 +9,6 @@ import (
 	"lumina/internal/auth"
 	"lumina/internal/chunkindex"
 	"lumina/internal/embedding"
-	"lumina/internal/hermesresolve"
 	"lumina/internal/httpserver"
 	"lumina/internal/ids"
 	"lumina/internal/llm"
@@ -167,16 +166,6 @@ func (m *Module) tier(c *echo.Context) (string, bool) {
 	return u.Tier, true
 }
 
-// routed is the request context with the BYO middleware's resolution bound, which is
-// what makes the transport call the user's own Hermes.
-func routed(c *echo.Context) *http.Request {
-	req := c.Request()
-	if res, ok := hermesresolve.FromContext(c); ok {
-		return req.WithContext(llm.WithValues(req.Context(), func(v *llm.Values) { v.CurrentResolution = &res }))
-	}
-	return req
-}
-
 func (m *Module) search(c *echo.Context) error {
 	body, err := wire.Bind[searchRequest](c)
 	if err != nil {
@@ -194,7 +183,7 @@ func (m *Module) search(c *echo.Context) error {
 	if body.Limit != nil {
 		limit = *body.Limit
 	}
-	ctx := llm.WithValues(routed(c).Context(), func(v *llm.Values) { v.BillingTenantID = &access.BillingSponsorUserID })
+	ctx := llm.WithValues(llm.RequestContext(c), func(v *llm.Values) { v.BillingTenantID = &access.BillingSponsorUserID })
 	answer, err := m.opts.Service.Search(ctx, tenant, ids.Upper(tenant), "", body.Query, limit)
 	if err != nil {
 		return err
@@ -241,7 +230,7 @@ func (m *Module) query(c *echo.Context) error {
 	if body.Limit != nil {
 		limit = *body.Limit
 	}
-	base := routed(c).Context()
+	base := llm.RequestContext(c)
 	ctx := llm.WithValues(base, func(v *llm.Values) {
 		v.AnalyticsVaultID = &tenant
 		v.BillingTenantID = &access.BillingSponsorUserID
@@ -294,7 +283,7 @@ func (m *Module) queryStream(c *echo.Context) error {
 	if body.SessionID != nil {
 		sessionID = *body.SessionID
 	}
-	base := routed(c).Context()
+	base := llm.RequestContext(c)
 
 	// Retrieval failures surface as a normal HTTP error, before any frame. An embedding
 	// outage is not one: the search runs lexically.
@@ -360,7 +349,7 @@ func (m *Module) generateMemo(c *echo.Context) error {
 		return err
 	}
 	save := body.Save == nil || *body.Save
-	result, err := m.opts.Memo.Generate(routed(c).Context(), tenant, ids.Upper(tenant), "", body.Topic, body.Hint, save)
+	result, err := m.opts.Memo.Generate(llm.RequestContext(c), tenant, ids.Upper(tenant), "", body.Topic, body.Hint, save)
 	if err != nil {
 		return err
 	}
