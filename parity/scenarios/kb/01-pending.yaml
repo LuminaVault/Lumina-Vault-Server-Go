@@ -1,0 +1,30 @@
+module: kb
+steps:
+  - name: "no token"
+    request: {method: GET, path: "/v1/memory-compile/pending", headers: {"X-Forwarded-For": "10.76.0.2"}}
+  - name: "bad token"
+    request: {method: GET, path: "/v1/memory-compile/pending", headers: {"X-Forwarded-For": "10.76.0.2", "Authorization": "Bearer not.a.jwt"}}
+  - name: "bad vault header and no token: identity decides"
+    request: {method: GET, path: "/v1/memory-compile/pending", headers: {"X-Forwarded-For": "10.76.0.2", "X-Vault-ID": "nope"}}
+  - name: "counts only unprocessed rows"
+    as: kb_amy
+    request: {method: GET, path: "/v1/memory-compile/pending"}
+    snapshot: ["vault_files"]
+  - name: "no rows"
+    as: kb_ben
+    request: {method: GET, path: "/v1/memory-compile/pending"}
+  - name: "the vault header is ignored"
+    as: kb_ben
+    request: {method: GET, path: "/v1/memory-compile/pending", headers: {"X-Vault-ID": "nope"}}
+  - name: "another tenant's vault id is ignored"
+    as: kb_ben
+    request: {method: GET, path: "/v1/memory-compile/pending", headers: {"X-Vault-ID": "6B0B0000-0000-4000-8000-0000000000A1"}}
+  - name: "wrong method"
+    as: kb_ben
+    request: {method: DELETE, path: "/v1/memory-compile/pending"}
+  - name: "post is not a route"
+    as: kb_ben
+    request: {method: POST, path: "/v1/memory-compile/pending", json: {}}
+  - name: "query string is ignored"
+    as: kb_amy
+    request: {method: GET, path: "/v1/memory-compile/pending?limit=1"}

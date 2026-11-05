@@ -1,0 +1,50 @@
+module: knowledge
+steps:
+  - name: "predicate 0 forwards"
+    as: kg_nia
+    request: {method: POST, path: "/v1/knowledge/connections/explain", json: {"fromNodeID": "6B100000-0000-4000-8000-000000000014", "toNodeID": "6B100000-0000-4000-8000-000000000015"}}
+  - name: "predicate 0 backwards"
+    as: kg_nia
+    request: {method: POST, path: "/v1/knowledge/connections/explain", json: {"fromNodeID": "6B100000-0000-4000-8000-000000000015", "toNodeID": "6B100000-0000-4000-8000-000000000014"}}
+  - name: "predicate 1 forwards"
+    as: kg_nia
+    request: {method: POST, path: "/v1/knowledge/connections/explain", json: {"fromNodeID": "6B100000-0000-4000-8000-000000000014", "toNodeID": "6B100000-0000-4000-8000-000000000016"}}
+  - name: "predicate 1 backwards"
+    as: kg_nia
+    request: {method: POST, path: "/v1/knowledge/connections/explain", json: {"fromNodeID": "6B100000-0000-4000-8000-000000000016", "toNodeID": "6B100000-0000-4000-8000-000000000014"}}
+  - name: "predicate 2 forwards"
+    as: kg_nia
+    request: {method: POST, path: "/v1/knowledge/connections/explain", json: {"fromNodeID": "6B100000-0000-4000-8000-000000000014", "toNodeID": "6B100000-0000-4000-8000-000000000017"}}
+  - name: "predicate 2 backwards"
+    as: kg_nia
+    request: {method: POST, path: "/v1/knowledge/connections/explain", json: {"fromNodeID": "6B100000-0000-4000-8000-000000000017", "toNodeID": "6B100000-0000-4000-8000-000000000014"}}
+  - name: "predicate 3 forwards"
+    as: kg_nia
+    request: {method: POST, path: "/v1/knowledge/connections/explain", json: {"fromNodeID": "6B100000-0000-4000-8000-000000000014", "toNodeID": "6B100000-0000-4000-8000-000000000018"}}
+  - name: "predicate 3 backwards"
+    as: kg_nia
+    request: {method: POST, path: "/v1/knowledge/connections/explain", json: {"fromNodeID": "6B100000-0000-4000-8000-000000000018", "toNodeID": "6B100000-0000-4000-8000-000000000014"}}
+  - name: "predicate 4 forwards"
+    as: kg_nia
+    request: {method: POST, path: "/v1/knowledge/connections/explain", json: {"fromNodeID": "6B100000-0000-4000-8000-000000000014", "toNodeID": "6B100000-0000-4000-8000-000000000019"}}
+  - name: "predicate 4 backwards"
+    as: kg_nia
+    request: {method: POST, path: "/v1/knowledge/connections/explain", json: {"fromNodeID": "6B100000-0000-4000-8000-000000000019", "toNodeID": "6B100000-0000-4000-8000-000000000014"}}
+  - name: "predicate 5 forwards"
+    as: kg_nia
+    request: {method: POST, path: "/v1/knowledge/connections/explain", json: {"fromNodeID": "6B100000-0000-4000-8000-000000000014", "toNodeID": "6B100000-0000-4000-8000-00000000001A"}}
+  - name: "predicate 5 backwards"
+    as: kg_nia
+    request: {method: POST, path: "/v1/knowledge/connections/explain", json: {"fromNodeID": "6B100000-0000-4000-8000-00000000001A", "toNodeID": "6B100000-0000-4000-8000-000000000014"}}
+  - name: "predicate 6 forwards"
+    as: kg_nia
+    request: {method: POST, path: "/v1/knowledge/connections/explain", json: {"fromNodeID": "6B100000-0000-4000-8000-000000000014", "toNodeID": "6B100000-0000-4000-8000-00000000001B"}}
+  - name: "predicate 6 backwards"
+    as: kg_nia
+    request: {method: POST, path: "/v1/knowledge/connections/explain", json: {"fromNodeID": "6B100000-0000-4000-8000-00000000001B", "toNodeID": "6B100000-0000-4000-8000-000000000014"}}
+  - name: "predicate 7 forwards"
+    as: kg_nia
+    request: {method: POST, path: "/v1/knowledge/connections/explain", json: {"fromNodeID": "6B100000-0000-4000-8000-000000000014", "toNodeID": "6B100000-0000-4000-8000-00000000001C"}}
+  - name: "predicate 7 backwards"
+    as: kg_nia
+    request: {method: POST, path: "/v1/knowledge/connections/explain", json: {"fromNodeID": "6B100000-0000-4000-8000-00000000001C", "toNodeID": "6B100000-0000-4000-8000-000000000014"}}
