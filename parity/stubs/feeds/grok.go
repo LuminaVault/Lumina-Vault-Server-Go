@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -33,8 +34,15 @@ import (
 //	oversize-500          500 with the same
 //	short-body            Content-Length larger than the bytes sent, then a close
 //	hangup                closes the connection without a response
+//	reset                 the same with a TCP reset
+//	garbage               a reply that isn't HTTP
+//	garbage-header        a valid status line, then a header line with no colon
 //	redirect:NNN          that status, pointing at /redirected
 //	redirect-loop         302 to itself
+//	redirect-no-location  302 with no Location
+//	redirect-scheme       302 to ftp://
+//	redirect-other-host   307 to the other container, same path on another origin
+//	redirect-chain:N      N redirects in a row before an answer
 const grokStubAddr = ":8642"
 
 var grokDirective = regexp.MustCompile(`\[\[grok:([a-z0-9:-]+)\]\]`)
@@ -149,6 +157,39 @@ func grokHandler(reply func(model, text string) any) http.HandlerFunc {
 			w.Header().Set("Location", r.URL.Path)
 			w.WriteHeader(http.StatusFound)
 			return
+		case "redirect-no-location":
+			w.WriteHeader(http.StatusFound)
+			return
+		case "redirect-scheme":
+			w.Header().Set("Location", "ftp://grok-hermes-ben/x")
+			w.WriteHeader(http.StatusFound)
+			return
+		case "redirect-other-host":
+			w.Header().Set("Location", "http://grok-hermes-ben"+grokStubAddr+"/redirected")
+			w.WriteHeader(http.StatusTemporaryRedirect)
+			return
+		case "redirect-chain":
+			w.Header().Set("Location", "/chain/"+arg)
+			w.WriteHeader(http.StatusFound)
+			return
+		case "reset":
+			if conn, _, err := http.NewResponseController(w).Hijack(); err == nil {
+				if tcp, ok := conn.(*net.TCPConn); ok {
+					_ = tcp.SetLinger(0)
+				}
+				_ = conn.Close()
+			}
+			return
+		case "garbage", "garbage-header":
+			if conn, _, err := http.NewResponseController(w).Hijack(); err == nil {
+				reply := "this is not http\r\n\r\n"
+				if verb == "garbage-header" {
+					reply = "HTTP/1.1 200 OK\r\nno colon here\r\nContent-Length: 0\r\n\r\n"
+				}
+				_, _ = io.WriteString(conn, reply)
+				_ = conn.Close()
+			}
+			return
 		}
 		var req struct {
 			Model string `json:"model"`
@@ -192,13 +233,23 @@ func startGrokStub() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/chat/completions", grokHandler(grokChatReply))
 	mux.HandleFunc("POST /v1/responses", grokHandler(grokResponsesReply))
-	// What a followed redirect lands on: the method and whether the bearer and body
-	// survived, as the answer text, in the chat shape.
-	mux.HandleFunc("/redirected", func(w http.ResponseWriter, r *http.Request) {
+	// What a followed redirect lands on: the method and what survived of the bearer,
+	// content type and body, as the answer text, in the chat shape.
+	redirected := func(w http.ResponseWriter, r *http.Request) {
 		raw, _ := io.ReadAll(r.Body)
-		text := fmt.Sprintf("redirected method=%s auth=%s body=%d", r.Method, r.Header.Get("Authorization"), len(raw))
+		text := fmt.Sprintf("redirected host=%s method=%s auth=%s ct=%s body=%d", r.Host, r.Method, r.Header.Get("Authorization"), r.Header.Get("Content-Type"), len(raw))
 		b, _ := json.Marshal(grokChatReply("redirected", text))
 		grokWrite(w, http.StatusOK, string(b))
+	}
+	mux.HandleFunc("/redirected", redirected)
+	mux.HandleFunc("/chain/{n}", func(w http.ResponseWriter, r *http.Request) {
+		n, _ := strconv.Atoi(r.PathValue("n"))
+		if n <= 1 {
+			redirected(w, r)
+			return
+		}
+		w.Header().Set("Location", "/chain/"+strconv.Itoa(n-1))
+		w.WriteHeader(http.StatusFound)
 	})
 	srv := &http.Server{Addr: grokStubAddr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 	go func() { log.Fatal(srv.ListenAndServe()) }()

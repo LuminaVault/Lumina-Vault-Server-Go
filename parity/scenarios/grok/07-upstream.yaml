@@ -45,3 +45,13 @@ steps:
   - {name: redirect 307, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:redirect:307]]"}]}}}
   - {name: redirect 308, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:redirect:308]]"}]}}}
   - {name: redirect loop, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:redirect-loop]]"}]}}}
+  - {name: connection reset, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:reset]]"}]}}}
+  - {name: not http, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:garbage]]"}]}}}
+  - {name: a bad header line, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:garbage-header]]"}]}}}
+  - {name: 304 with a Location is followed, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:redirect:304]]"}]}}}
+  - {name: 305 with a Location is followed, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:redirect:305]]"}]}}}
+  - {name: 302 with no Location, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:redirect-no-location]]"}]}}}
+  - {name: redirect to another scheme, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:redirect-scheme]]"}]}}}
+  - {name: redirect to another origin drops the bearer, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:redirect-other-host]]"}]}}}
+  - {name: 20 redirects are allowed, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:redirect-chain:20]]"}]}}}
+  - {name: 21 redirects are not, as: grok_ann, request: {method: POST, path: /v1/grok/chat, json: {messages: [{role: user, content: "[[grok:redirect-chain:21]]"}]}}}

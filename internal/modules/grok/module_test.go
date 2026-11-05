@@ -3,6 +3,7 @@ package grok_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"lumina/internal/auth"
 	"lumina/internal/config"
@@ -18,6 +19,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -376,19 +378,157 @@ func TestUpstreamBodyLimit(t *testing.T) {
 	require.Equal(t, http.StatusRequestEntityTooLarge, r.code, "the body is collected before the status is checked")
 }
 
-func TestUpstreamTransportFailureIsPlain500(t *testing.T) {
+// What AsyncHTTPClient throws decides the status, not this server: its parser errors
+// reach Hummingbird's server as a bare 400 and a closed connection, others are a 500.
+func TestUpstreamBrokenReplies(t *testing.T) {
 	v := setup(t)
-	v.mu.Lock()
-	v.reply = func(w http.ResponseWriter, _ *http.Request) {
-		conn, _, err := http.NewResponseController(w).Hijack()
-		if err == nil {
-			_ = conn.Close()
+	hijack := func(do func(net.Conn)) func(http.ResponseWriter, *http.Request) {
+		return func(w http.ResponseWriter, _ *http.Request) {
+			conn, _, err := http.NewResponseController(w).Hijack()
+			if err == nil {
+				do(conn)
+				_ = conn.Close()
+			}
 		}
 	}
-	v.mu.Unlock()
-	r := v.do(ann, "/v1/grok/chat", chatBody)
-	require.Equal(t, http.StatusInternalServerError, r.code)
-	require.Empty(t, r.body, "not grok_upstream_*: mapProxyError only knows the proxy's own errors")
+	for _, tc := range []struct {
+		name  string
+		reply func(http.ResponseWriter, *http.Request)
+		want  int
+	}{
+		{"closed with no reply", hijack(func(net.Conn) {}), http.StatusBadRequest},
+		{"closed mid-body", hijack(func(c net.Conn) {
+			_, _ = io.WriteString(c, "HTTP/1.1 200 OK\r\nContent-Length: 1000\r\n\r\n{")
+		}), http.StatusBadRequest},
+		{"not http", hijack(func(c net.Conn) { _, _ = io.WriteString(c, "this is not http\r\n\r\n") }), http.StatusBadRequest},
+		{"bad header line", hijack(func(c net.Conn) {
+			_, _ = io.WriteString(c, "HTTP/1.1 200 OK\r\nno colon here\r\n\r\n")
+		}), http.StatusBadRequest},
+		{"reset", hijack(func(c net.Conn) {
+			if tcp, ok := c.(*net.TCPConn); ok {
+				_ = tcp.SetLinger(0)
+			}
+		}), http.StatusInternalServerError},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			v.mu.Lock()
+			v.reply = tc.reply
+			v.mu.Unlock()
+			req := httptest.NewRequest(http.MethodPost, "/v1/grok/chat", strings.NewReader(chatBody))
+			tok, err := scenario.Mint(keys, ann)
+			require.NoError(t, err)
+			req.Header.Set("Authorization", "Bearer "+tok)
+			rec := httptest.NewRecorder()
+			v.e.ServeHTTP(rec, req)
+			require.Equal(t, tc.want, rec.Code, rec.Body.String())
+			require.Empty(t, rec.Body.String())
+			if tc.want == http.StatusBadRequest {
+				require.Equal(t, "close", rec.Header().Get("Connection"))
+			}
+		})
+	}
+}
+
+// AsyncHTTPClient's rules at HTTPClient.shared's settings.
+func TestRedirects(t *testing.T) {
+	v := setup(t)
+	type hop struct {
+		method, auth, ct string
+	}
+	var mu sync.Mutex
+	var hops []hop
+	script := func(status int, location string) {
+		mu.Lock()
+		hops = nil
+		mu.Unlock()
+		v.mu.Lock()
+		defer v.mu.Unlock()
+		v.reply = func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/final" {
+				mu.Lock()
+				hops = append(hops, hop{r.Method, r.Header.Get("Authorization"), r.Header.Get("Content-Type")})
+				mu.Unlock()
+				_, _ = io.WriteString(w, goodChat)
+				return
+			}
+			w.Header().Set("Location", location)
+			w.WriteHeader(status)
+		}
+	}
+	const bearer = "Bearer parity-grok-key-ann"
+	for _, tc := range []struct {
+		status   int
+		location string
+		method   string
+		auth, ct string
+		hasBody  bool
+	}{
+		{http.StatusMovedPermanently, "/final", http.MethodGet, bearer, "", false},
+		{http.StatusFound, "/final", http.MethodGet, bearer, "", false},
+		{http.StatusSeeOther, "/final", http.MethodGet, bearer, "", false},
+		{http.StatusNotModified, "/final", http.MethodPost, bearer, "application/json", true},
+		{http.StatusUseProxy, "/final", http.MethodPost, bearer, "application/json", true},
+		{http.StatusTemporaryRedirect, "/final", http.MethodPost, bearer, "application/json", true},
+		{http.StatusPermanentRedirect, "/final", http.MethodPost, bearer, "application/json", true},
+		{http.StatusTemporaryRedirect, "http://grok-hermes-ben:8642/final", http.MethodPost, "", "application/json", true},
+		{http.StatusTemporaryRedirect, "http://grok-hermes-ann:9000/final", http.MethodPost, "", "application/json", true},
+		{http.StatusFound, "http://other.test:8642/final", http.MethodGet, "", "", false},
+	} {
+		t.Run(fmt.Sprint(tc.status, " ", tc.location), func(t *testing.T) {
+			script(tc.status, tc.location)
+			r := v.do(ann, "/v1/grok/chat", chatBody)
+			require.Equal(t, http.StatusOK, r.code, r.body)
+			mu.Lock()
+			defer mu.Unlock()
+			require.Len(t, hops, 1)
+			require.Equal(t, tc.method, hops[0].method)
+			require.Equal(t, tc.auth, hops[0].auth)
+			require.Equal(t, tc.ct, hops[0].ct)
+			require.Equal(t, tc.hasBody, v.lastCall().body != nil, "the body reaches the last hop")
+		})
+	}
+	t.Run("a Location it can't follow leaves the status", func(t *testing.T) {
+		script(http.StatusFound, "ftp://x.test/final")
+		require.Equal(t, "grok_upstream_302", message(t, v.do(ann, "/v1/grok/chat", chatBody)))
+		v.answer(http.StatusFound, "")
+		require.Equal(t, "grok_upstream_302", message(t, v.do(ann, "/v1/grok/chat", chatBody)), "no Location")
+		v.answer(http.StatusMultipleChoices, "")
+		require.Equal(t, "grok_upstream_300", message(t, v.do(ann, "/v1/grok/chat", chatBody)))
+	})
+	t.Run("a cycle fails at once, including back to the first URL", func(t *testing.T) {
+		script(http.StatusFound, "/v1/chat/completions")
+		before := v.callCount()
+		r := v.do(ann, "/v1/grok/chat", chatBody)
+		require.Equal(t, http.StatusInternalServerError, r.code, r.body)
+		require.Empty(t, r.body)
+		require.Equal(t, before+1, v.callCount())
+	})
+	chain := func(hops int) {
+		v.mu.Lock()
+		defer v.mu.Unlock()
+		v.reply = func(w http.ResponseWriter, r *http.Request) {
+			n := 0
+			if rest, ok := strings.CutPrefix(r.URL.Path, "/hop/"); ok {
+				n, _ = strconv.Atoi(rest)
+			}
+			if n == hops {
+				_, _ = io.WriteString(w, goodChat)
+				return
+			}
+			w.Header().Set("Location", "/hop/"+strconv.Itoa(n+1))
+			w.WriteHeader(http.StatusFound)
+		}
+	}
+	t.Run("20 redirects are followed", func(t *testing.T) {
+		chain(20)
+		require.Equal(t, http.StatusOK, v.do(ann, "/v1/grok/chat", chatBody).code)
+	})
+	t.Run("the 21st is refused", func(t *testing.T) {
+		chain(21)
+		r := v.do(ann, "/v1/grok/chat", chatBody)
+		require.Equal(t, http.StatusInternalServerError, r.code, r.body)
+		require.Empty(t, r.body)
+	})
 }
 
 // 200s and the guard's 402. The spec's 409, 501 and 502 point at ErrorEnvelope, whose

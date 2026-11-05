@@ -52,12 +52,14 @@ type Module struct {
 }
 
 // New builds the module. guard is entitlement.PremiumGuardMiddleware. A nil client
-// means a 60-second one (HermesGrokProxy's timeoutSeconds).
+// means the default transport. Either way post follows redirects itself.
 func New(containers *hermescontainers.Manager, guard echo.MiddlewareFunc, client *http.Client) *Module {
-	if client == nil {
-		client = &http.Client{Timeout: upstreamTimeout}
+	c := http.Client{}
+	if client != nil {
+		c = *client
 	}
-	return &Module{containers: containers, guard: guard, client: client, log: slog.Default().With("module", "grok")}
+	c.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	return &Module{containers: containers, guard: guard, client: &c, log: slog.Default().With("module", "grok")}
 }
 
 func (m *Module) Register(r httpserver.Router, authMW echo.MiddlewareFunc) {
@@ -191,27 +193,24 @@ func (m *Module) resolveHandle(c *echo.Context) (*hermescontainers.Handle, error
 }
 
 // post is HermesGrokProxy.post. Only a non-2xx status and an undecodable body are
-// grok_upstream_*: a transport failure and an over-limit body stay what they are, a
-// 500 and Hummingbird's bare 413, since mapProxyError passes them through.
+// grok_upstream_*: mapProxyError passes every other failure through, so a dead
+// connection is a 500, a broken HTTP reply is errBrokenReply, and an over-limit body
+// is Hummingbird's bare 413.
 func (m *Module) post(ctx context.Context, h *hermescontainers.Handle, path string, body, reply any) error {
 	payload, err := wire.MarshalFoundation(body)
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, h.BaseURL()+path, bytes.NewReader(payload))
+	ctx, cancel := context.WithTimeout(ctx, upstreamTimeout) // one deadline for every hop
+	defer cancel()
+	resp, err := m.execute(ctx, h, path, payload)
 	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+h.APIServerKey)
-	resp, err := m.client.Do(req)
-	if err != nil {
-		return err
+		return parserOr(err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxUpstreamBody+1))
 	if err != nil {
-		return err
+		return parserOr(err)
 	}
 	if len(raw) > maxUpstreamBody {
 		return wire.ErrBodyTooLarge
