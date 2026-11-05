@@ -1,6 +1,7 @@
 # The G2 smoke, for a user with no publisher application. Steps name no seeded
 # plugin, so they answer the same whatever the catalog holds, and nothing reaches
-# the plugin runner. 01-browsing and the rest need the parity catalog.
+# the plugin runner. 01-browsing and the rest need the parity catalog. It runs before
+# the catalog scenarios because 08-admin ends with a listing that makes the list a 404.
 # Anonymous steps send their own X-Forwarded-For (settingsByUser, 30/min by IP).
 module: marketplace
 smoke: true
