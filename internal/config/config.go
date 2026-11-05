@@ -159,7 +159,8 @@ type Config struct {
 
 	// LVGoJobs lists the background jobs this Go process runs. It is set only
 	// on api-go-* (extraEnv), so a Swift job flag inherited from api-* never
-	// starts a Go job by accident. See the roadmap's background job rule.
+	// starts a Go job by accident. See the roadmap's background job rule. Names are
+	// the Swift type names, and internal/jobs fails boot on one it doesn't know.
 	LVGoJobs []string `env:"LV_GO_JOBS" envSeparator:","`
 }
 

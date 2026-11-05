@@ -19,6 +19,7 @@ import (
 	"lumina/internal/entitlement"
 	"lumina/internal/hermesresolve"
 	"lumina/internal/httpserver"
+	"lumina/internal/jobs"
 	"lumina/internal/llm"
 	"lumina/internal/memorystore"
 	"lumina/internal/migrations"
@@ -152,6 +153,9 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		<-analyticsDone
 	}()
 	deps := httpserver.Deps{}
+	// Background jobs a port has registered. A job that needs the database goes in the
+	// FluentEnabled block, so naming it in LV_GO_JOBS without a database fails boot.
+	var registered []jobs.Job
 	if cfg.FluentEnabled {
 		pool, err := db.Open(ctx, db.DSN(cfg))
 		if err != nil {
@@ -252,6 +256,12 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		)
 		deps.Modules = append(deps.Modules, agent.modules(links, enrichment)...)
 	}
+	// Deferred after the sink and the pool, so jobs stop first and can still use both.
+	stopJobs, err := startJobs(ctx, cfg, registered)
+	if err != nil {
+		return err
+	}
+	defer stopJobs()
 	e := httpserver.New(cfg, deps)
 	sc := echo.StartConfig{
 		Address:         net.JoinHostPort(cmd.HTTPHost, strconv.Itoa(cmd.HTTPPort)),
@@ -264,6 +274,26 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		return err
 	}
 	return nil
+}
+
+// startJobs starts the jobs LV_GO_JOBS enables. It fails on a name no registered job
+// has. The returned stop cancels them and waits, and the HTTP server can also end
+// without a signal, so stop can't rely on ctx being canceled.
+func startJobs(ctx context.Context, cfg config.Config, registered []jobs.Job) (stop func(), err error) {
+	runner, err := jobs.New(cfg, registered, jobs.Options{})
+	if err != nil {
+		return nil, err
+	}
+	jobsCtx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		runner.Run(jobsCtx)
+	}()
+	return func() {
+		cancel()
+		<-done
+	}, nil
 }
 
 // linkCaptureService builds the one link-capture pipeline: POST /v1/capture/safari and
