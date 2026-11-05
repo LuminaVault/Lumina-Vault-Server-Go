@@ -280,7 +280,7 @@ modules:
   self-improvement:
     wave: 5
     swiftDir: Sources/App/SelfImprovement
-    status: swift
+    status: parity
     prefixes: [/v1/me/improvement]
     jobs: []
   skills:

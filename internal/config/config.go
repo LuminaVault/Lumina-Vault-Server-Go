@@ -7,6 +7,7 @@ package config
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/caarlos0/env/v11"
@@ -126,6 +127,13 @@ type Config struct {
 	UsagePerSkillMtokDaily float64 `env:"USAGE_PER_SKILL_MTOK_DAILY" envDefault:"0.2"`
 	UsageDegradeModel      string  `env:"USAGE_DEGRADE_MODEL" envDefault:"hermes-3-small"`
 	SelfImprovementEnabled bool    `env:"SELF_IMPROVEMENT_ENABLED" envDefault:"true"`
+	// SelfImprovementEconomyModel is selfImprovement.economyModel. Unset means
+	// UsageDegradeModel, Swift's default for it; set but empty stays empty, which
+	// the status route reports as no economy model. See LoadFrom.
+	SelfImprovementEconomyModel string `env:"SELF_IMPROVEMENT_ECONOMY_MODEL"`
+	// SkillsBuiltinScanEnabled is skills.builtinScan.enabled. Only "false", in any
+	// case, turns the bundled skills off (skills.NewVaultCatalog).
+	SkillsBuiltinScanEnabled string `env:"SKILLS_BUILTIN_SCAN_ENABLED" envDefault:"true"`
 
 	// JinaAPIKey is Jina's reader, tier-2 of link enrichment. Unset still calls it,
 	// without the header, as in Swift.
@@ -192,9 +200,23 @@ func LoadFrom(environ map[string]string) (Config, error) {
 	if err != nil {
 		return Config{}, fmt.Errorf("config: %w", err)
 	}
+	if !isSet(environ, "SELF_IMPROVEMENT_ECONOMY_MODEL") {
+		cfg.SelfImprovementEconomyModel = cfg.UsageDegradeModel
+	}
 	cfg.CORSAllowedOrigins = cleanCSV(cfg.CORSAllowedOrigins)
 	cfg.LVGoJobs = cleanCSV(cfg.LVGoJobs)
 	return cfg, nil
+}
+
+// isSet tells unset from set but empty, which an envDefault can't: env applies the
+// default to both, and a default taken from another key can't be written as a tag.
+func isSet(environ map[string]string, key string) bool {
+	if environ != nil {
+		_, set := environ[key]
+		return set
+	}
+	_, set := os.LookupEnv(key)
+	return set
 }
 
 // cleanCSV trims every entry and drops empty ones, so "a, b,," is [a b].

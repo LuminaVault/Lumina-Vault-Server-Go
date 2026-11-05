@@ -17,6 +17,7 @@
 #   vision-cohere   a Cohere key, with the base URL on the feeds stub (POST /v2/embed)
 #   billing-on      BILLING_ENFORCEMENT_ENABLED=true: the /v1/knowledge and /v1/vision paywalls, the capture gate on memory upsert
 #   no-master-key   LV_SECRET_MASTER_KEY empty: /v1/grok is not mounted
+#   improvement-off SELF_IMPROVEMENT_ENABLED=false and an empty SELF_IMPROVEMENT_ECONOMY_MODEL: /v1/me/improvement read-only, status unavailable
 #
 #   llm             HERMES_GATEWAY_URL on the LLM stub, and capture.autoFile.enabled on:
 #                   the model-calling routes' success paths (group 4F)
@@ -133,6 +134,7 @@ run_state vision-stub SWITCH_VISION_EMBED_PROVIDER=stub
 run_state vision-cohere SWITCH_VISION_COHERE_API_KEY=parity-cohere-key SWITCH_VISION_COHERE_BASE_URL=http://feeds:8080
 run_state vision-cohere-down SWITCH_VISION_COHERE_API_KEY=parity-cohere-key SWITCH_VISION_COHERE_BASE_URL=http://feeds:9
 run_state billing-on SWITCH_BILLING_ENFORCEMENT_ENABLED=true
+run_state improvement-off SWITCH_SELF_IMPROVEMENT_ENABLED=false SWITCH_SELF_IMPROVEMENT_ECONOMY_MODEL=
 run_state no-master-key SWITCH_LV_SECRET_MASTER_KEY=
 "${COMPOSE[@]}" up -d --build --force-recreate llmstub
 for _ in $(seq 1 60); do
