@@ -1,7 +1,7 @@
 module: todos
 smoke: true
 steps:
-  - {name: create, as: todo_tom, request: {method: POST, path: /v1/todos, json: {title: "Smoke todo"}}, capture: {id: $.id}}
+  - {name: create, as: todo_tom, request: {method: POST, path: /v1/todos, json: {title: "Smoke todo", dueAt: "2030-01-01T00:00:00Z"}}, capture: {id: $.id}}
   - {name: list, as: todo_tom, request: {method: GET, path: /v1/todos}}
   - {name: done, as: todo_tom, request: {method: PATCH, path: "/v1/todos/{{id}}", json: {done: true}}}
   - {name: open only, as: todo_tom, request: {method: GET, path: "/v1/todos?done=false"}}

@@ -237,7 +237,15 @@ func TestListOrderAndFilters(t *testing.T) {
 		require.False(t, seenDone && !d.Done, "an open todo after a done one: %v", titles(all))
 	}
 	require.Equal(t, "Sooner", all[0].Title)
-	require.Equal(t, "Later", all[1].Title)
+	// Rows with no date come last among the open ones.
+	lastOpen := all[0]
+	for _, d := range all {
+		if !d.Done {
+			lastOpen = d
+		}
+	}
+	require.Equal(t, "Undated", lastOpen.Title)
+	require.Nil(t, lastOpen.DueAt)
 
 	for _, d := range v.list(tia, "?done=true") {
 		require.True(t, d.Done)

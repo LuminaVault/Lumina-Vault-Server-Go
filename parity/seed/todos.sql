@@ -22,7 +22,9 @@ VALUES
 
 INSERT INTO vault_files (id, tenant_id, path, content_type, size_bytes, sha256, created_at, updated_at, processed_at, metadata)
 VALUES
-  -- Listed: dates decide among the open ones, and no date sorts last.
+  -- Listed: dates decide among the open ones, and no date sorts last. Swift's query
+  -- has no ORDER BY, so a tie comes in whichever order Postgres scans the rows. Only
+  -- one open row and one done row may share a sort position, and no date is a position.
   ('70d00000-0000-4000-8000-000000000f01', '70d00000-0000-4000-8000-0000000000a1', 'inbox/later.md', 'text/markdown', 5, 'seed', '2026-01-03T00:00:00Z', '2026-01-03T00:00:00Z', '2026-01-03T00:00:00Z',
    '{"done": false, "dueAt": 815216400.5, "title": "Later", "isTodo": true, "projectID": "70D00000-0000-4000-8000-0000000001A1"}'),
   ('70d00000-0000-4000-8000-000000000f02', '70d00000-0000-4000-8000-0000000000a1', 'inbox/sooner.md', 'text/markdown', 5, 'seed', '2026-01-03T00:00:00Z', '2026-01-03T00:00:00Z', '2026-01-03T00:00:00Z',
@@ -33,9 +35,9 @@ VALUES
    '{"done": true, "dueAt": 700000000, "title": "Finished", "isTodo": true, "projectID": "70D00000-0000-4000-8000-0000000001A1"}'),
   -- Title falls back to the file name when empty or absent; done defaults to false.
   ('70d00000-0000-4000-8000-000000000f05', '70d00000-0000-4000-8000-0000000000a1', 'deep/er/empty-title.md', 'text/markdown', 5, 'seed', '2026-01-03T00:00:00Z', '2026-01-03T00:00:00Z', NULL,
-   '{"title": "", "isTodo": true}'),
+   '{"dueAt": 800000000, "title": "", "isTodo": true}'),
   ('70d00000-0000-4000-8000-000000000f06', '70d00000-0000-4000-8000-0000000000a1', 'no-title.md', 'text/markdown', 5, 'seed', '2026-01-03T00:00:00Z', '2026-01-03T00:00:00Z', NULL,
-   '{"isTodo": true}'),
+   '{"dueAt": 800000001, "isTodo": true}'),
   -- Not listed, but PATCH makes them todos and DELETE takes them.
   ('70d00000-0000-4000-8000-000000000f07', '70d00000-0000-4000-8000-0000000000a1', 'notes/plain-note.md', 'text/markdown', 5, 'seed', '2026-01-03T00:00:00Z', '2026-01-03T00:00:00Z', NULL,
    '{"title": "Plain note", "tags": ["keep"], "provenance": "hermes-mirror", "enrichmentStatus": "done", "suggestedSpaceID": "70D00000-0000-4000-8000-0000000002A1", "unknownKey": 1}'),

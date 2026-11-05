@@ -39,9 +39,20 @@ SELECT id, tenant_id, created_by_user_id, updated_by_user_id, space_id,
 FROM vault_files
 WHERE tenant_id IN (SELECT id FROM users WHERE username LIKE 'capture\_%');
 
+-- Enrichment writes memories after the response, in whichever order the fetches
+-- finish. The harness orders rows by created_at, so it's renamed here, and the row's
+-- id and its file's id are left out or masked so rows with the same page are equal.
 CREATE VIEW parity_capture_memories AS
-SELECT * FROM memories
-WHERE tenant_id IN (SELECT id FROM users WHERE username LIKE 'capture\_%');
+SELECT m.tenant_id, m.content, m.created_at AS created, m.embedding, m.tags, m.score, m.access_count, m.query_hit_count,
+       m.last_accessed_at,
+       (SELECT regexp_replace(f.path, '\d{4}-\d{2}-\d{2}-\d{6}-(.*)-[0-9a-f]{8}\.md$', '<time>-\1-<suffix>.md')
+        FROM vault_files f WHERE f.id = m.source_vault_file_id) AS source_path,
+       m.lat, m.lng, m.accuracy_m, m.place_name, m.content_tsv, m.review_state, m.space_id, m.graph_x, m.graph_y, m.graph_z,
+       m.graph_layout_at, m.created_by_user_id, m.updated_by_user_id, m.origin_kind, m.origin_source_id, m.origin_provider,
+       m.origin_model, m.origin_conversation_message_id, m.last_reviewed_at, m.review_count, m.updated_at, m.kind,
+       m.next_review_at, m.resurface_muted
+FROM memories m
+WHERE m.tenant_id IN (SELECT id FROM users WHERE username LIKE 'capture\_%');
 
 CREATE VIEW parity_capture_contributions AS
 SELECT * FROM memory_contributions
