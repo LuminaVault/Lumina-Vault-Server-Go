@@ -1,0 +1,165 @@
+# WorkflowController's routes end to end for one pro user. WorkflowEngine doesn't run in
+# parity (LV_ENVIRONMENT=test), so what a route queues stays queued.
+module: workflows
+steps:
+  - name: "empty list"
+    as: "wf_ann"
+    request: {"method": "GET", "path": "/v1/workflows"}
+  - name: "no runs yet"
+    as: "wf_ann"
+    request: {"method": "GET", "path": "/v1/workflows/runs"}
+  - name: "no approvals yet"
+    as: "wf_ann"
+    request: {"method": "GET", "path": "/v1/workflows/approvals"}
+  - name: "limits"
+    as: "wf_ann"
+    request: {"method": "GET", "path": "/v1/workflows/limits"}
+  - name: "create trims the name, notes activity"
+    as: "wf_ann"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": "  Morning brief \n", "descriptionText": "Every day", "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+    capture: {"wid": "$.workflow.id"}
+    snapshot: ["parity_workflows", "workflow_versions", "self_improvement_settings", "self_improvement_runs"]
+  - name: "detail is a draft"
+    as: "wf_ann"
+    request: {"method": "GET", "path": "/v1/workflows/{{wid}}"}
+  - name: "listed"
+    as: "wf_ann"
+    request: {"method": "GET", "path": "/v1/workflows"}
+  - name: "a duplicate name"
+    as: "wf_ann"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": "Morning brief", "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+    snapshot: ["parity_workflows"]
+  - name: "a name of spaces is taken as empty"
+    as: "wf_ann"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": "   ", "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+    snapshot: ["parity_workflows"]
+  - name: "no published versions"
+    as: "wf_ann"
+    request: {"method": "GET", "path": "/v1/workflows/{{wid}}/versions"}
+  - name: "run before publish"
+    as: "wf_ann"
+    request: {"method": "POST", "path": "/v1/workflows/{{wid}}/runs", "json": {"input": {"topic": "x"}}}
+    snapshot: ["workflow_runs", "workflow_run_events", "workflow_node_runs"]
+  - name: "draft: wrong revision"
+    as: "wf_ann"
+    request: {"method": "PUT", "path": "/v1/workflows/{{wid}}/draft", "json": {"expectedRevision": 99, "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+    snapshot: ["parity_workflows"]
+  - name: "draft: right revision, every field"
+    as: "wf_ann"
+    request: {"method": "PUT", "path": "/v1/workflows/{{wid}}/draft", "json": {"name": " Renamed ", "descriptionText": "New words", "enabled": true, "expectedRevision": 1, "definition": {"trigger": "chat", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+    snapshot: ["parity_workflows"]
+  - name: "draft: only the definition"
+    as: "wf_ann"
+    request: {"method": "PUT", "path": "/v1/workflows/{{wid}}/draft", "json": {"expectedRevision": 2, "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+    snapshot: ["parity_workflows"]
+  - name: "draft: a stale revision"
+    as: "wf_ann"
+    request: {"method": "PUT", "path": "/v1/workflows/{{wid}}/draft", "json": {"expectedRevision": 2, "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+  - name: "draft: an invalid definition"
+    as: "wf_ann"
+    request: {"method": "PUT", "path": "/v1/workflows/{{wid}}/draft", "json": {"expectedRevision": 3, "definition": {"trigger": "manual", "nodes": [], "edges": []}}}
+  - name: "publish"
+    as: "wf_ann"
+    request: {"method": "POST", "path": "/v1/workflows/{{wid}}/publish"}
+    snapshot: ["parity_workflows", "workflow_versions"]
+  - name: "publish again adds a version"
+    as: "wf_ann"
+    request: {"method": "POST", "path": "/v1/workflows/{{wid}}/publish", "raw": "{\"ignored\":true}"}
+    snapshot: ["parity_workflows", "workflow_versions"]
+  - name: "versions"
+    as: "wf_ann"
+    request: {"method": "GET", "path": "/v1/workflows/{{wid}}/versions"}
+  - name: "restore version 1"
+    as: "wf_ann"
+    request: {"method": "POST", "path": "/v1/workflows/{{wid}}/versions/1/restore"}
+    snapshot: ["parity_workflows", "workflow_versions"]
+  - name: "restore a version that isn't there"
+    as: "wf_ann"
+    request: {"method": "POST", "path": "/v1/workflows/{{wid}}/versions/99/restore"}
+  - name: "restore version 0"
+    as: "wf_ann"
+    request: {"method": "POST", "path": "/v1/workflows/{{wid}}/versions/0/restore"}
+  - name: "restore version -1"
+    as: "wf_ann"
+    request: {"method": "POST", "path": "/v1/workflows/{{wid}}/versions/-1/restore"}
+  - name: "restore version abc"
+    as: "wf_ann"
+    request: {"method": "POST", "path": "/v1/workflows/{{wid}}/versions/abc/restore"}
+  - name: "restore version 1.5"
+    as: "wf_ann"
+    request: {"method": "POST", "path": "/v1/workflows/{{wid}}/versions/1.5/restore"}
+  - name: "restore version +1"
+    as: "wf_ann"
+    request: {"method": "POST", "path": "/v1/workflows/{{wid}}/versions/+1/restore"}
+  - name: "restore version too big for an Int"
+    as: "wf_ann"
+    request: {"method": "POST", "path": "/v1/workflows/{{wid}}/versions/99999999999999999999/restore"}
+  - name: "run"
+    as: "wf_ann"
+    request: {"method": "POST", "path": "/v1/workflows/{{wid}}/runs", "json": {"input": {"topic": "swift"}}}
+    capture: {"rid": "$.id"}
+    snapshot: ["workflow_runs", "workflow_run_events", "workflow_node_runs"]
+  - name: "second run hits pro's limit"
+    as: "wf_ann"
+    request: {"method": "POST", "path": "/v1/workflows/{{wid}}/runs", "json": {"input": {}}}
+    snapshot: ["workflow_runs"]
+  - name: "run detail"
+    as: "wf_ann"
+    request: {"method": "GET", "path": "/v1/workflows/runs/{{rid}}"}
+  - name: "all runs"
+    as: "wf_ann"
+    request: {"method": "GET", "path": "/v1/workflows/runs"}
+  - name: "this workflow's runs"
+    as: "wf_ann"
+    request: {"method": "GET", "path": "/v1/workflows/{{wid}}/runs"}
+  - name: "limits with one active"
+    as: "wf_ann"
+    request: {"method": "GET", "path": "/v1/workflows/limits"}
+  - name: "detail with a last run"
+    as: "wf_ann"
+    request: {"method": "GET", "path": "/v1/workflows/{{wid}}"}
+  - name: "retry something active"
+    as: "wf_ann"
+    request: {"method": "POST", "path": "/v1/workflows/runs/{{rid}}/retry"}
+  - name: "resume something not paused"
+    as: "wf_ann"
+    request: {"method": "POST", "path": "/v1/workflows/runs/{{rid}}/resume"}
+  - name: "cancel"
+    as: "wf_ann"
+    request: {"method": "POST", "path": "/v1/workflows/runs/{{rid}}/cancel"}
+    snapshot: ["workflow_runs", "workflow_run_events", "workflow_node_runs"]
+  - name: "cancel again is a no-op"
+    as: "wf_ann"
+    request: {"method": "POST", "path": "/v1/workflows/runs/{{rid}}/cancel"}
+    snapshot: ["workflow_runs", "workflow_run_events", "workflow_node_runs"]
+  - name: "retry the cancelled run"
+    as: "wf_ann"
+    request: {"method": "POST", "path": "/v1/workflows/runs/{{rid}}/retry"}
+    capture: {"rid2": "$.id"}
+    snapshot: ["workflow_runs", "workflow_run_events", "workflow_node_runs"]
+  - name: "cancel the retry"
+    as: "wf_ann"
+    request: {"method": "POST", "path": "/v1/workflows/runs/{{rid2}}/cancel"}
+    snapshot: ["workflow_runs"]
+  - name: "run with a conversation"
+    as: "wf_ann"
+    request: {"method": "POST", "path": "/v1/workflows/{{wid}}/runs", "json": {"input": {"a": "b"}, "conversationID": "F1000000-0000-4000-8000-0000000000C0"}}
+    capture: {"rid3": "$.id"}
+    snapshot: ["workflow_runs"]
+  - name: "cancel that"
+    as: "wf_ann"
+    request: {"method": "POST", "path": "/v1/workflows/runs/{{rid3}}/cancel"}
+  - name: "disable"
+    as: "wf_ann"
+    request: {"method": "PUT", "path": "/v1/workflows/{{wid}}/draft", "json": {"enabled": false, "expectedRevision": 5, "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+    snapshot: ["parity_workflows"]
+  - name: "a disabled workflow doesn't run"
+    as: "wf_ann"
+    request: {"method": "POST", "path": "/v1/workflows/{{wid}}/runs", "json": {"input": {}}}
+  - name: "rotate refuses a manual workflow"
+    as: "wf_ann"
+    request: {"method": "POST", "path": "/v1/workflows/{{wid}}/webhook/rotate"}
+    snapshot: ["parity_workflow_webhooks"]
+  - name: "lower-case ids work"
+    as: "wf_cat"
+    request: {"method": "GET", "path": "/v1/workflows/f10a0000-0000-4000-8000-0000000000b6"}

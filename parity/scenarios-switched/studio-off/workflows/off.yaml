@@ -1,0 +1,80 @@
+# CERBERUS_STUDIO_ENABLED=false: nothing is mounted, not even the webhook.
+module: workflows
+steps:
+  - name: "off: GET /v1/workflows"
+    as: "wf_cat"
+    request: {"method": "GET", "path": "/v1/workflows"}
+  - name: "off: POST /v1/workflows"
+    as: "wf_cat"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": "x", "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+  - name: "off: POST /v1/workflows/validate"
+    as: "wf_cat"
+    request: {"method": "POST", "path": "/v1/workflows/validate", "json": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}
+  - name: "off: GET /v1/workflows/limits"
+    as: "wf_cat"
+    request: {"method": "GET", "path": "/v1/workflows/limits"}
+  - name: "off: GET /v1/workflows/runs"
+    as: "wf_cat"
+    request: {"method": "GET", "path": "/v1/workflows/runs"}
+  - name: "off: GET /v1/workflows/approvals"
+    as: "wf_cat"
+    request: {"method": "GET", "path": "/v1/workflows/approvals"}
+  - name: "off: GET /v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A1"
+    as: "wf_cat"
+    request: {"method": "GET", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A1"}
+  - name: "off: GET /v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A1/events"
+    as: "wf_cat"
+    request: {"method": "GET", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A1/events"}
+  - name: "off: GET /v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A1/events/stream"
+    as: "wf_cat"
+    request: {"method": "GET", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A1/events/stream"}
+  - name: "off: POST /v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A1/cancel"
+    as: "wf_cat"
+    request: {"method": "POST", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A1/cancel"}
+  - name: "off: POST /v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A1/retry"
+    as: "wf_cat"
+    request: {"method": "POST", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A1/retry"}
+  - name: "off: POST /v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A1/resume"
+    as: "wf_cat"
+    request: {"method": "POST", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A1/resume"}
+  - name: "off: POST /v1/workflows/approvals/F1070000-0000-4000-8000-0000000000A1/decision"
+    as: "wf_cat"
+    request: {"method": "POST", "path": "/v1/workflows/approvals/F1070000-0000-4000-8000-0000000000A1/decision", "json": {"approved": true}}
+  - name: "off: GET /v1/workflows/F10A0000-0000-4000-8000-0000000000AA"
+    as: "wf_cat"
+    request: {"method": "GET", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000AA"}
+  - name: "off: PUT /v1/workflows/F10A0000-0000-4000-8000-0000000000AA/draft"
+    as: "wf_cat"
+    request: {"method": "PUT", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000AA/draft", "json": {"expectedRevision": 1, "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+  - name: "off: POST /v1/workflows/F10A0000-0000-4000-8000-0000000000AA/publish"
+    as: "wf_cat"
+    request: {"method": "POST", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000AA/publish"}
+  - name: "off: POST /v1/workflows/F10A0000-0000-4000-8000-0000000000AA/runs"
+    as: "wf_cat"
+    request: {"method": "POST", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000AA/runs", "json": {"input": {}}}
+  - name: "off: POST /v1/workflows/F10A0000-0000-4000-8000-0000000000AA/webhook/rotate"
+    as: "wf_cat"
+    request: {"method": "POST", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000AA/webhook/rotate"}
+  - name: "off: GET /v1/workflows/F10A0000-0000-4000-8000-0000000000AA/runs"
+    as: "wf_cat"
+    request: {"method": "GET", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000AA/runs"}
+  - name: "off: GET /v1/workflows/F10A0000-0000-4000-8000-0000000000AA/versions"
+    as: "wf_cat"
+    request: {"method": "GET", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000AA/versions"}
+  - name: "off: POST /v1/workflows/F10A0000-0000-4000-8000-0000000000AA/versions/1/restore"
+    as: "wf_cat"
+    request: {"method": "POST", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000AA/versions/1/restore"}
+  - name: "off: GET /v1/workflow-templates"
+    as: "wf_cat"
+    request: {"method": "GET", "path": "/v1/workflow-templates"}
+  - name: "off: POST /v1/workflow-templates/research-brief/instantiate"
+    as: "wf_cat"
+    request: {"method": "POST", "path": "/v1/workflow-templates/research-brief/instantiate", "json": {}}
+  - name: "off: POST /v1/workflow-templates/research-brief/runs"
+    as: "wf_cat"
+    request: {"method": "POST", "path": "/v1/workflow-templates/research-brief/runs", "json": {"input": {}}}
+  - name: "off: POST /v1/workflow-hooks/F1080000-0000-4000-8000-0000000000AB"
+    as: "wf_cat"
+    request: {"method": "POST", "path": "/v1/workflow-hooks/F1080000-0000-4000-8000-0000000000AB"}
+  - name: "off, no token"
+    request: {"method": "GET", "path": "/v1/workflows/limits", "headers": {"X-Forwarded-For": "10.76.5.5"}}

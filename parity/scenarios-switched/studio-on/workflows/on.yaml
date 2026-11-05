@@ -1,0 +1,20 @@
+# CERBERUS_STUDIO_ENABLED=true with an OpenRouter key, which turns on
+# managedInferenceAvailable in limits.
+module: workflows
+steps:
+  - name: "limits say managed inference is there"
+    as: "wf_cat"
+    request: {"method": "GET", "path": "/v1/workflows/limits"}
+  - name: "limits for pro"
+    as: "wf_ann"
+    request: {"method": "GET", "path": "/v1/workflows/limits"}
+  - name: "limits for free"
+    as: "wf_fay"
+    request: {"method": "GET", "path": "/v1/workflows/limits"}
+  - name: "create"
+    as: "wf_cat"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": "On", "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+    snapshot: ["parity_workflows"]
+  - name: "templates"
+    as: "wf_cat"
+    request: {"method": "GET", "path": "/v1/workflow-templates"}

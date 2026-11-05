@@ -5,7 +5,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
 	"unicode"
 
 	// Workflow schedules name IANA zones. Foundation carries its own database, and
@@ -26,7 +25,7 @@ type cronExpression struct {
 	minute, hour, dayOfMonth, month, dayOfWeek cronField
 }
 
-// parseCron is CronExpression(raw). false is any ParseError. A field of "/" alone
+// parseCron is CronExpression(raw). false is any ParseError. A chunk of "/" alone
 // makes Swift index an empty array and trap, taking the process down; here it is
 // a parse error.
 func parseCron(raw string) (cronExpression, bool) {

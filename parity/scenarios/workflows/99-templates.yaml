@@ -1,0 +1,56 @@
+# Last, because a template run's workflow name ends in a random id. Every snapshot goes
+# through parity_workflows, which hides it. A template's edge ids are random per process.
+module: workflows
+steps:
+  - name: "catalog"
+    as: "wf_tpl"
+    request: {"method": "GET", "path": "/v1/workflow-templates"}
+  - name: "archived can't read the catalog"
+    as: "wf_arc"
+    request: {"method": "GET", "path": "/v1/workflow-templates"}
+  - name: "instantiate"
+    as: "wf_tpl"
+    request: {"method": "POST", "path": "/v1/workflow-templates/research-brief/instantiate", "json": {"name": "My brief"}}
+    capture: {"tw": "$.workflow.id"}
+    snapshot: ["parity_workflows"]
+  - name: "instantiate with no name"
+    as: "wf_tpl"
+    request: {"method": "POST", "path": "/v1/workflow-templates/memory-digest/instantiate", "json": {}}
+    snapshot: ["parity_workflows"]
+  - name: "instantiate with a null name"
+    as: "wf_tpl"
+    request: {"method": "POST", "path": "/v1/workflow-templates/research-brief/instantiate", "json": {"name": null}}
+  - name: "instantiate with spaces for a name"
+    as: "wf_tpl"
+    request: {"method": "POST", "path": "/v1/workflow-templates/research-brief/instantiate", "json": {"name": "   "}}
+  - name: "a template that isn't there"
+    as: "wf_tpl"
+    request: {"method": "POST", "path": "/v1/workflow-templates/nope/instantiate", "json": {}}
+  - name: "free can't instantiate"
+    as: "wf_fay"
+    request: {"method": "POST", "path": "/v1/workflow-templates/research-brief/instantiate", "json": {}}
+  - name: "trial can't instantiate"
+    as: "wf_tia"
+    request: {"method": "POST", "path": "/v1/workflow-templates/research-brief/instantiate", "json": {}}
+  - name: "a run of a template"
+    as: "wf_tpl"
+    request: {"method": "POST", "path": "/v1/workflow-templates/research-brief/runs", "json": {"input": {"topic": "swift"}}}
+    capture: {"tr": "$.id"}
+    snapshot: ["parity_workflows", "workflow_versions", "workflow_runs", "workflow_run_events", "workflow_node_runs"]
+    ignore: ["$.workflowName"]
+  - name: "cancel it"
+    as: "wf_tpl"
+    request: {"method": "POST", "path": "/v1/workflows/runs/{{tr}}/cancel"}
+  - name: "a run of one that isn't there"
+    as: "wf_tpl"
+    request: {"method": "POST", "path": "/v1/workflow-templates/nope/runs", "json": {"input": {}}}
+  - name: "free can't run a template"
+    as: "wf_fay"
+    request: {"method": "POST", "path": "/v1/workflow-templates/research-brief/runs", "json": {"input": {}}}
+  - name: "run with a bad conversation"
+    as: "wf_tpl"
+    request: {"method": "POST", "path": "/v1/workflow-templates/research-brief/runs", "json": {"input": {}, "conversationID": "nope"}}
+  - name: "the workflows that made"
+    as: "wf_tpl"
+    request: {"method": "GET", "path": "/v1/workflows"}
+    ignore: ["$.workflows[*].name"]

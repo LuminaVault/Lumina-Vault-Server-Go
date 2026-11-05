@@ -1,0 +1,637 @@
+# Every route without a token and with a bad one; every body route with bodies that
+# aren't what it wants; bad and unknown ids; methods and paths that aren't routes.
+# The studio's handlers read the body, then the token, then the path id.
+module: workflows
+steps:
+  - name: "no token: GET /v1/workflows"
+    request: {"method": "GET", "path": "/v1/workflows", "headers": {"X-Forwarded-For": "10.76.5.1"}}
+    headers: ["WWW-Authenticate"]
+  - name: "no token: POST /v1/workflows"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": "x", "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}, "headers": {"X-Forwarded-For": "10.76.5.1"}}
+    headers: ["WWW-Authenticate"]
+  - name: "no token: POST /v1/workflows/validate"
+    request: {"method": "POST", "path": "/v1/workflows/validate", "json": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}, "headers": {"X-Forwarded-For": "10.76.5.1"}}
+    headers: ["WWW-Authenticate"]
+  - name: "no token: GET /v1/workflows/limits"
+    request: {"method": "GET", "path": "/v1/workflows/limits", "headers": {"X-Forwarded-For": "10.76.5.1"}}
+    headers: ["WWW-Authenticate"]
+  - name: "no token: GET /v1/workflows/runs"
+    request: {"method": "GET", "path": "/v1/workflows/runs", "headers": {"X-Forwarded-For": "10.76.5.1"}}
+    headers: ["WWW-Authenticate"]
+  - name: "no token: GET /v1/workflows/approvals"
+    request: {"method": "GET", "path": "/v1/workflows/approvals", "headers": {"X-Forwarded-For": "10.76.5.1"}}
+    headers: ["WWW-Authenticate"]
+  - name: "no token: GET /v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A1"
+    request: {"method": "GET", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A1", "headers": {"X-Forwarded-For": "10.76.5.1"}}
+    headers: ["WWW-Authenticate"]
+  - name: "no token: GET /v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A1/events"
+    request: {"method": "GET", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A1/events", "headers": {"X-Forwarded-For": "10.76.5.1"}}
+    headers: ["WWW-Authenticate"]
+  - name: "no token: GET /v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A1/events/stream"
+    request: {"method": "GET", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A1/events/stream", "headers": {"X-Forwarded-For": "10.76.5.1"}}
+    headers: ["WWW-Authenticate"]
+  - name: "no token: POST /v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A1/cancel"
+    request: {"method": "POST", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A1/cancel", "headers": {"X-Forwarded-For": "10.76.5.1"}}
+    headers: ["WWW-Authenticate"]
+  - name: "no token: POST /v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A1/retry"
+    request: {"method": "POST", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A1/retry", "headers": {"X-Forwarded-For": "10.76.5.1"}}
+    headers: ["WWW-Authenticate"]
+  - name: "no token: POST /v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A1/resume"
+    request: {"method": "POST", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A1/resume", "headers": {"X-Forwarded-For": "10.76.5.1"}}
+    headers: ["WWW-Authenticate"]
+  - name: "no token: POST /v1/workflows/approvals/F1070000-0000-4000-8000-0000000000A1/decision"
+    request: {"method": "POST", "path": "/v1/workflows/approvals/F1070000-0000-4000-8000-0000000000A1/decision", "json": {"approved": true}, "headers": {"X-Forwarded-For": "10.76.5.2"}}
+    headers: ["WWW-Authenticate"]
+  - name: "no token: GET /v1/workflows/F10A0000-0000-4000-8000-0000000000AA"
+    request: {"method": "GET", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000AA", "headers": {"X-Forwarded-For": "10.76.5.2"}}
+    headers: ["WWW-Authenticate"]
+  - name: "no token: PUT /v1/workflows/F10A0000-0000-4000-8000-0000000000AA/draft"
+    request: {"method": "PUT", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000AA/draft", "json": {"expectedRevision": 1, "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}, "headers": {"X-Forwarded-For": "10.76.5.2"}}
+    headers: ["WWW-Authenticate"]
+  - name: "no token: POST /v1/workflows/F10A0000-0000-4000-8000-0000000000AA/publish"
+    request: {"method": "POST", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000AA/publish", "headers": {"X-Forwarded-For": "10.76.5.2"}}
+    headers: ["WWW-Authenticate"]
+  - name: "no token: POST /v1/workflows/F10A0000-0000-4000-8000-0000000000AA/runs"
+    request: {"method": "POST", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000AA/runs", "json": {"input": {}}, "headers": {"X-Forwarded-For": "10.76.5.2"}}
+    headers: ["WWW-Authenticate"]
+  - name: "no token: POST /v1/workflows/F10A0000-0000-4000-8000-0000000000AA/webhook/rotate"
+    request: {"method": "POST", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000AA/webhook/rotate", "headers": {"X-Forwarded-For": "10.76.5.2"}}
+    headers: ["WWW-Authenticate"]
+  - name: "no token: GET /v1/workflows/F10A0000-0000-4000-8000-0000000000AA/runs"
+    request: {"method": "GET", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000AA/runs", "headers": {"X-Forwarded-For": "10.76.5.2"}}
+    headers: ["WWW-Authenticate"]
+  - name: "no token: GET /v1/workflows/F10A0000-0000-4000-8000-0000000000AA/versions"
+    request: {"method": "GET", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000AA/versions", "headers": {"X-Forwarded-For": "10.76.5.2"}}
+    headers: ["WWW-Authenticate"]
+  - name: "no token: POST /v1/workflows/F10A0000-0000-4000-8000-0000000000AA/versions/1/restore"
+    request: {"method": "POST", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000AA/versions/1/restore", "headers": {"X-Forwarded-For": "10.76.5.2"}}
+    headers: ["WWW-Authenticate"]
+  - name: "no token: GET /v1/workflow-templates"
+    request: {"method": "GET", "path": "/v1/workflow-templates", "headers": {"X-Forwarded-For": "10.76.5.2"}}
+    headers: ["WWW-Authenticate"]
+  - name: "no token: POST /v1/workflow-templates/research-brief/instantiate"
+    request: {"method": "POST", "path": "/v1/workflow-templates/research-brief/instantiate", "json": {}, "headers": {"X-Forwarded-For": "10.76.5.2"}}
+    headers: ["WWW-Authenticate"]
+  - name: "no token: POST /v1/workflow-templates/research-brief/runs"
+    request: {"method": "POST", "path": "/v1/workflow-templates/research-brief/runs", "json": {"input": {}}, "headers": {"X-Forwarded-For": "10.76.5.2"}}
+    headers: ["WWW-Authenticate"]
+  - name: "bad token: GET /v1/workflows"
+    request: {"method": "GET", "path": "/v1/workflows", "headers": {"X-Forwarded-For": "10.76.5.3", "Authorization": "Bearer not-a-jwt"}}
+  - name: "bad token: GET /v1/workflows/limits"
+    request: {"method": "GET", "path": "/v1/workflows/limits", "headers": {"X-Forwarded-For": "10.76.5.3", "Authorization": "Bearer not-a-jwt"}}
+  - name: "bad token: GET /v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A1"
+    request: {"method": "GET", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A1", "headers": {"X-Forwarded-For": "10.76.5.3", "Authorization": "Bearer not-a-jwt"}}
+  - name: "bad token: POST /v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A1/cancel"
+    request: {"method": "POST", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A1/cancel", "headers": {"X-Forwarded-For": "10.76.5.3", "Authorization": "Bearer not-a-jwt"}}
+  - name: "bad token: POST /v1/workflows/approvals/F1070000-0000-4000-8000-0000000000A1/decision"
+    request: {"method": "POST", "path": "/v1/workflows/approvals/F1070000-0000-4000-8000-0000000000A1/decision", "json": {"approved": true}, "headers": {"X-Forwarded-For": "10.76.5.3", "Authorization": "Bearer not-a-jwt"}}
+  - name: "bad token: POST /v1/workflows/F10A0000-0000-4000-8000-0000000000AA/publish"
+    request: {"method": "POST", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000AA/publish", "headers": {"X-Forwarded-For": "10.76.5.3", "Authorization": "Bearer not-a-jwt"}}
+  - name: "bad token: GET /v1/workflows/F10A0000-0000-4000-8000-0000000000AA/runs"
+    request: {"method": "GET", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000AA/runs", "headers": {"X-Forwarded-For": "10.76.5.3", "Authorization": "Bearer not-a-jwt"}}
+  - name: "bad token: GET /v1/workflow-templates"
+    request: {"method": "GET", "path": "/v1/workflow-templates", "headers": {"X-Forwarded-For": "10.76.5.3", "Authorization": "Bearer not-a-jwt"}}
+  - name: "no token and a bad body: the body comes first"
+    request: {"method": "POST", "path": "/v1/workflows", "raw": "{", "headers": {"X-Forwarded-For": "10.76.5.3"}}
+  - name: "no token and a bad id: the token comes first"
+    request: {"method": "GET", "path": "/v1/workflows/nope", "headers": {"X-Forwarded-For": "10.76.5.3"}}
+  - name: "no token, good body, bad id on draft"
+    request: {"method": "PUT", "path": "/v1/workflows/nope/draft", "json": {"expectedRevision": 1, "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}, "headers": {"X-Forwarded-For": "10.76.5.3"}}
+  - name: "no token and a bad version"
+    request: {"method": "POST", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000AA/versions/abc/restore", "headers": {"X-Forwarded-For": "10.76.5.3"}}
+  - name: "no token on templates with a bad body"
+    request: {"method": "POST", "path": "/v1/workflow-templates/research-brief/instantiate", "raw": "{", "headers": {"X-Forwarded-For": "10.76.5.3"}}
+  - name: "create: broken body"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows", "raw": "{"}
+  - name: "create: empty body"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows", "raw": ""}
+  - name: "create: array body"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows", "raw": "[]"}
+  - name: "create: null body"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows", "raw": "null"}
+  - name: "create: a number body"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows", "raw": "1"}
+  - name: "create: a string body"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows", "raw": "\"x\""}
+  - name: "create: empty object body"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows", "raw": "{}"}
+  - name: "create: text/plain"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows", "raw": "{}", "headers": {"Content-Type": "text/plain"}}
+  - name: "create: no content type"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows", "raw": "{}", "headers": {"Content-Type": ""}}
+  - name: "validate: broken body"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/validate", "raw": "{"}
+  - name: "validate: empty body"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/validate", "raw": ""}
+  - name: "validate: array body"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/validate", "raw": "[]"}
+  - name: "validate: null body"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/validate", "raw": "null"}
+  - name: "validate: a number body"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/validate", "raw": "1"}
+  - name: "validate: a string body"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/validate", "raw": "\"x\""}
+  - name: "validate: empty object body"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/validate", "raw": "{}"}
+  - name: "validate: text/plain"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/validate", "raw": "{}", "headers": {"Content-Type": "text/plain"}}
+  - name: "validate: no content type"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/validate", "raw": "{}", "headers": {"Content-Type": ""}}
+  - name: "draft: broken body"
+    as: "wf_err"
+    request: {"method": "PUT", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000B6/draft", "raw": "{"}
+  - name: "draft: empty body"
+    as: "wf_err"
+    request: {"method": "PUT", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000B6/draft", "raw": ""}
+  - name: "draft: array body"
+    as: "wf_err"
+    request: {"method": "PUT", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000B6/draft", "raw": "[]"}
+  - name: "draft: null body"
+    as: "wf_err"
+    request: {"method": "PUT", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000B6/draft", "raw": "null"}
+  - name: "draft: a number body"
+    as: "wf_err"
+    request: {"method": "PUT", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000B6/draft", "raw": "1"}
+  - name: "draft: a string body"
+    as: "wf_err"
+    request: {"method": "PUT", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000B6/draft", "raw": "\"x\""}
+  - name: "draft: empty object body"
+    as: "wf_err"
+    request: {"method": "PUT", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000B6/draft", "raw": "{}"}
+  - name: "draft: text/plain"
+    as: "wf_err"
+    request: {"method": "PUT", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000B6/draft", "raw": "{}", "headers": {"Content-Type": "text/plain"}}
+  - name: "draft: no content type"
+    as: "wf_err"
+    request: {"method": "PUT", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000B6/draft", "raw": "{}", "headers": {"Content-Type": ""}}
+  - name: "run: broken body"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000B6/runs", "raw": "{"}
+  - name: "run: empty body"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000B6/runs", "raw": ""}
+  - name: "run: array body"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000B6/runs", "raw": "[]"}
+  - name: "run: null body"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000B6/runs", "raw": "null"}
+  - name: "run: a number body"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000B6/runs", "raw": "1"}
+  - name: "run: a string body"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000B6/runs", "raw": "\"x\""}
+  - name: "run: empty object body"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000B6/runs", "raw": "{}"}
+  - name: "run: text/plain"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000B6/runs", "raw": "{}", "headers": {"Content-Type": "text/plain"}}
+  - name: "run: no content type"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000B6/runs", "raw": "{}", "headers": {"Content-Type": ""}}
+  - name: "decision: broken body"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/approvals/F1000000-0000-4000-8000-00000000DEAD/decision", "raw": "{"}
+  - name: "decision: empty body"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/approvals/F1000000-0000-4000-8000-00000000DEAD/decision", "raw": ""}
+  - name: "decision: array body"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/approvals/F1000000-0000-4000-8000-00000000DEAD/decision", "raw": "[]"}
+  - name: "decision: null body"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/approvals/F1000000-0000-4000-8000-00000000DEAD/decision", "raw": "null"}
+  - name: "decision: a number body"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/approvals/F1000000-0000-4000-8000-00000000DEAD/decision", "raw": "1"}
+  - name: "decision: a string body"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/approvals/F1000000-0000-4000-8000-00000000DEAD/decision", "raw": "\"x\""}
+  - name: "decision: empty object body"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/approvals/F1000000-0000-4000-8000-00000000DEAD/decision", "raw": "{}"}
+  - name: "decision: text/plain"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/approvals/F1000000-0000-4000-8000-00000000DEAD/decision", "raw": "{}", "headers": {"Content-Type": "text/plain"}}
+  - name: "decision: no content type"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/approvals/F1000000-0000-4000-8000-00000000DEAD/decision", "raw": "{}", "headers": {"Content-Type": ""}}
+  - name: "instantiate: broken body"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflow-templates/nope/instantiate", "raw": "{"}
+  - name: "instantiate: empty body"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflow-templates/nope/instantiate", "raw": ""}
+  - name: "instantiate: array body"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflow-templates/nope/instantiate", "raw": "[]"}
+  - name: "instantiate: null body"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflow-templates/nope/instantiate", "raw": "null"}
+  - name: "instantiate: a number body"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflow-templates/nope/instantiate", "raw": "1"}
+  - name: "instantiate: a string body"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflow-templates/nope/instantiate", "raw": "\"x\""}
+  - name: "instantiate: empty object body"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflow-templates/nope/instantiate", "raw": "{}"}
+  - name: "instantiate: text/plain"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflow-templates/nope/instantiate", "raw": "{}", "headers": {"Content-Type": "text/plain"}}
+  - name: "instantiate: no content type"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflow-templates/nope/instantiate", "raw": "{}", "headers": {"Content-Type": ""}}
+  - name: "template run: broken body"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflow-templates/nope/runs", "raw": "{"}
+  - name: "template run: empty body"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflow-templates/nope/runs", "raw": ""}
+  - name: "template run: array body"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflow-templates/nope/runs", "raw": "[]"}
+  - name: "template run: null body"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflow-templates/nope/runs", "raw": "null"}
+  - name: "template run: a number body"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflow-templates/nope/runs", "raw": "1"}
+  - name: "template run: a string body"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflow-templates/nope/runs", "raw": "\"x\""}
+  - name: "template run: empty object body"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflow-templates/nope/runs", "raw": "{}"}
+  - name: "template run: text/plain"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflow-templates/nope/runs", "raw": "{}", "headers": {"Content-Type": "text/plain"}}
+  - name: "template run: no content type"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflow-templates/nope/runs", "raw": "{}", "headers": {"Content-Type": ""}}
+  - name: "field: name missing"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+  - name: "field: name null"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": null, "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+  - name: "field: name a number"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": 1, "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+  - name: "field: definition missing"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": "Field case"}}
+  - name: "field: definition null"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": "Field case", "definition": null}}
+  - name: "field: definition an array"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": "Field case", "definition": []}}
+  - name: "field: description a number"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": "Field case", "descriptionText": 1, "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+  - name: "field: schemaVersion a string"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": "Field case", "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}], "schemaVersion": "1"}}}
+  - name: "field: schemaVersion a float"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": "Field case", "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}], "schemaVersion": 1.5}}}
+  - name: "field: trigger missing"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": "Field case", "definition": {"nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+  - name: "field: trigger null"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": "Field case", "definition": {"trigger": null, "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+  - name: "field: trigger unknown"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": "Field case", "definition": {"trigger": "sometimes", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+  - name: "field: trigger a number"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": "Field case", "definition": {"trigger": 1, "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+  - name: "field: triggerConfiguration a string"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": "Field case", "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}], "triggerConfiguration": "x"}}}
+  - name: "field: triggerConfiguration holds a number"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": "Field case", "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}], "triggerConfiguration": {"a": 1}}}}
+  - name: "field: nodes missing"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": "Field case", "definition": {"trigger": "manual", "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+  - name: "field: nodes null"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": "Field case", "definition": {"trigger": "manual", "nodes": null, "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+  - name: "field: nodes an object"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": "Field case", "definition": {"trigger": "manual", "nodes": {}, "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+  - name: "field: edges missing"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": "Field case", "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}]}}}
+  - name: "field: edges null"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": "Field case", "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": null}}}
+  - name: "field: node id missing"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": "Field case", "definition": {"trigger": "manual", "nodes": [{"kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+  - name: "field: node id not a uuid"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": "Field case", "definition": {"trigger": "manual", "nodes": [{"id": "nope", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+  - name: "field: node id a number"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": "Field case", "definition": {"trigger": "manual", "nodes": [{"id": 1, "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+  - name: "field: node kind missing"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": "Field case", "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+  - name: "field: node kind unknown"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": "Field case", "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "magic", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+  - name: "field: node kind a number"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": "Field case", "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": 1, "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+  - name: "field: node name missing"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": "Field case", "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+  - name: "field: node name null"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": "Field case", "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": null, "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+  - name: "field: node x missing"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": "Field case", "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+  - name: "field: node x a string"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": "Field case", "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": "1", "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+  - name: "field: node y null"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": "Field case", "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": null, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+  - name: "field: node x huge"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": "Field case", "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 1e+308, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+  - name: "field: node configuration missing"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": "Field case", "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+  - name: "field: node configuration holds a number"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": "Field case", "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {"a": 1}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+  - name: "field: node configuration an array"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": "Field case", "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": []}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+  - name: "field: edge id missing"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": "Field case", "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+  - name: "field: edge id bad"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": "Field case", "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "nope", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+  - name: "field: edge source missing"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": "Field case", "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+  - name: "field: edge source bad"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": "Field case", "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "nope", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+  - name: "field: edge port missing"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": "Field case", "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+  - name: "field: edge target missing"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": "Field case", "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetPort": "input"}]}}}
+  - name: "field: edge target port a number"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": "Field case", "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": 1}]}}}
+  - name: "draft: expectedRevision missing"
+    as: "wf_err"
+    request: {"method": "PUT", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000B6/draft", "json": {"definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+  - name: "draft: expectedRevision a string"
+    as: "wf_err"
+    request: {"method": "PUT", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000B6/draft", "json": {"expectedRevision": "1", "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+  - name: "draft: expectedRevision a float"
+    as: "wf_err"
+    request: {"method": "PUT", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000B6/draft", "json": {"expectedRevision": 1.5, "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+  - name: "draft: enabled a string"
+    as: "wf_err"
+    request: {"method": "PUT", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000B6/draft", "json": {"enabled": "yes", "expectedRevision": 1, "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+  - name: "draft: definition missing"
+    as: "wf_err"
+    request: {"method": "PUT", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000B6/draft", "json": {"expectedRevision": 1}}
+  - name: "draft: name a number"
+    as: "wf_err"
+    request: {"method": "PUT", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000B6/draft", "json": {"name": 1, "expectedRevision": 1, "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+  - name: "run: input missing"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000B6/runs", "json": {}}
+  - name: "run: input null"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000B6/runs", "json": {"input": null}}
+  - name: "run: input holds a number"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000B6/runs", "json": {"input": {"a": 1}}}
+  - name: "run: conversation bad"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000B6/runs", "json": {"input": {}, "conversationID": "nope"}}
+  - name: "instantiate: name a number"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflow-templates/research-brief/instantiate", "json": {"name": 1}}
+  - name: "bad id: detail"
+    as: "wf_err"
+    request: {"method": "GET", "path": "/v1/workflows/nope"}
+  - name: "bad id: draft"
+    as: "wf_err"
+    request: {"method": "PUT", "path": "/v1/workflows/nope/draft", "json": {"expectedRevision": 1, "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+  - name: "bad id: publish"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/nope/publish"}
+  - name: "bad id: run"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/nope/runs", "json": {"input": {}}}
+  - name: "bad id: rotate"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/nope/webhook/rotate"}
+  - name: "bad id: runs"
+    as: "wf_err"
+    request: {"method": "GET", "path": "/v1/workflows/nope/runs"}
+  - name: "bad id: versions"
+    as: "wf_err"
+    request: {"method": "GET", "path": "/v1/workflows/nope/versions"}
+  - name: "bad id: restore"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/nope/versions/1/restore"}
+  - name: "bad id: run detail"
+    as: "wf_err"
+    request: {"method": "GET", "path": "/v1/workflows/runs/nope"}
+  - name: "bad id: events"
+    as: "wf_err"
+    request: {"method": "GET", "path": "/v1/workflows/runs/nope/events"}
+  - name: "bad id: stream"
+    as: "wf_err"
+    request: {"method": "GET", "path": "/v1/workflows/runs/nope/events/stream"}
+  - name: "bad id: cancel"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/runs/nope/cancel"}
+  - name: "bad id: retry"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/runs/nope/retry"}
+  - name: "bad id: resume"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/runs/nope/resume"}
+  - name: "bad id: decision"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/approvals/nope/decision", "json": {"approved": true}}
+  - name: "unknown id: detail"
+    as: "wf_err"
+    request: {"method": "GET", "path": "/v1/workflows/F1000000-0000-4000-8000-00000000DEAD"}
+  - name: "unknown id: draft"
+    as: "wf_err"
+    request: {"method": "PUT", "path": "/v1/workflows/F1000000-0000-4000-8000-00000000DEAD/draft", "json": {"expectedRevision": 1, "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+  - name: "unknown id: publish"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/F1000000-0000-4000-8000-00000000DEAD/publish"}
+  - name: "unknown id: run"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/F1000000-0000-4000-8000-00000000DEAD/runs", "json": {"input": {}}}
+  - name: "unknown id: rotate"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/F1000000-0000-4000-8000-00000000DEAD/webhook/rotate"}
+  - name: "unknown id: runs"
+    as: "wf_err"
+    request: {"method": "GET", "path": "/v1/workflows/F1000000-0000-4000-8000-00000000DEAD/runs"}
+  - name: "unknown id: versions"
+    as: "wf_err"
+    request: {"method": "GET", "path": "/v1/workflows/F1000000-0000-4000-8000-00000000DEAD/versions"}
+  - name: "unknown id: restore"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/F1000000-0000-4000-8000-00000000DEAD/versions/1/restore"}
+  - name: "unknown id: run detail"
+    as: "wf_err"
+    request: {"method": "GET", "path": "/v1/workflows/runs/F1000000-0000-4000-8000-00000000DEAD"}
+  - name: "unknown id: events"
+    as: "wf_err"
+    request: {"method": "GET", "path": "/v1/workflows/runs/F1000000-0000-4000-8000-00000000DEAD/events"}
+  - name: "unknown id: stream"
+    as: "wf_err"
+    request: {"method": "GET", "path": "/v1/workflows/runs/F1000000-0000-4000-8000-00000000DEAD/events/stream"}
+  - name: "unknown id: cancel"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/runs/F1000000-0000-4000-8000-00000000DEAD/cancel"}
+  - name: "unknown id: retry"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/runs/F1000000-0000-4000-8000-00000000DEAD/retry"}
+  - name: "unknown id: resume"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/runs/F1000000-0000-4000-8000-00000000DEAD/resume"}
+  - name: "unknown id: decision"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/approvals/F1000000-0000-4000-8000-00000000DEAD/decision", "json": {"approved": true}}
+  - name: "route shape: DELETE /v1/workflows"
+    as: "wf_err"
+    request: {"method": "DELETE", "path": "/v1/workflows"}
+  - name: "route shape: PATCH /v1/workflows"
+    as: "wf_err"
+    request: {"method": "PATCH", "path": "/v1/workflows"}
+  - name: "route shape: GET /v1/workflows/validate"
+    as: "wf_err"
+    request: {"method": "GET", "path": "/v1/workflows/validate"}
+  - name: "route shape: POST /v1/workflows/limits"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/limits"}
+  - name: "route shape: POST /v1/workflows/approvals"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/approvals"}
+  - name: "route shape: POST /v1/workflows/runs/runs"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/runs/runs"}
+  - name: "route shape: GET /v1/workflows/limits/runs"
+    as: "wf_err"
+    request: {"method": "GET", "path": "/v1/workflows/limits/runs"}
+  - name: "route shape: GET /v1/workflows/runs/runs"
+    as: "wf_err"
+    request: {"method": "GET", "path": "/v1/workflows/runs/runs"}
+  - name: "route shape: GET /v1/workflows/limits/versions"
+    as: "wf_err"
+    request: {"method": "GET", "path": "/v1/workflows/limits/versions"}
+  - name: "route shape: DELETE /v1/workflows/F10A0000-0000-4000-8000-0000000000B6"
+    as: "wf_err"
+    request: {"method": "DELETE", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000B6"}
+  - name: "route shape: POST /v1/workflows/F10A0000-0000-4000-8000-0000000000B6"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000B6"}
+  - name: "route shape: GET /v1/workflows/F10A0000-0000-4000-8000-0000000000B6/publish"
+    as: "wf_err"
+    request: {"method": "GET", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000B6/publish"}
+  - name: "route shape: GET /v1/workflows/F10A0000-0000-4000-8000-0000000000B6/draft"
+    as: "wf_err"
+    request: {"method": "GET", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000B6/draft"}
+  - name: "route shape: PATCH /v1/workflows/F10A0000-0000-4000-8000-0000000000B6/draft"
+    as: "wf_err"
+    request: {"method": "PATCH", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000B6/draft"}
+  - name: "route shape: GET /v1/workflows/F10A0000-0000-4000-8000-0000000000B6/webhook/rotate"
+    as: "wf_err"
+    request: {"method": "GET", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000B6/webhook/rotate"}
+  - name: "route shape: GET /v1/workflows/F10A0000-0000-4000-8000-0000000000B6/versions/1/restore"
+    as: "wf_err"
+    request: {"method": "GET", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000B6/versions/1/restore"}
+  - name: "route shape: POST /v1/workflows/F10A0000-0000-4000-8000-0000000000B6/versions"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000B6/versions"}
+  - name: "route shape: GET /v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A1/cancel"
+    as: "wf_err"
+    request: {"method": "GET", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A1/cancel"}
+  - name: "route shape: POST /v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A1"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A1"}
+  - name: "route shape: POST /v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A1/events"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A1/events"}
+  - name: "route shape: POST /v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A1/events/stream"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A1/events/stream"}
+  - name: "route shape: GET /v1/workflows/approvals/F1070000-0000-4000-8000-0000000000A1/decision"
+    as: "wf_err"
+    request: {"method": "GET", "path": "/v1/workflows/approvals/F1070000-0000-4000-8000-0000000000A1/decision"}
+  - name: "route shape: GET /v1/workflows/approvals/F1070000-0000-4000-8000-0000000000A1"
+    as: "wf_err"
+    request: {"method": "GET", "path": "/v1/workflows/approvals/F1070000-0000-4000-8000-0000000000A1"}
+  - name: "route shape: GET /v1/workflows/"
+    as: "wf_err"
+    request: {"method": "GET", "path": "/v1/workflows/"}
+  - name: "route shape: GET /v1/workflows/limits/"
+    as: "wf_err"
+    request: {"method": "GET", "path": "/v1/workflows/limits/"}
+  - name: "route shape: POST /v1/workflow-templates"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflow-templates"}
+  - name: "route shape: GET /v1/workflow-templates/research-brief"
+    as: "wf_err"
+    request: {"method": "GET", "path": "/v1/workflow-templates/research-brief"}
+  - name: "route shape: GET /v1/workflow-templates/research-brief/runs"
+    as: "wf_err"
+    request: {"method": "GET", "path": "/v1/workflow-templates/research-brief/runs"}
+  - name: "route shape: GET /v1/workflow-templates/"
+    as: "wf_err"
+    request: {"method": "GET", "path": "/v1/workflow-templates/"}
+  - name: "route shape: GET /v1/workflow-hooks/F1080000-0000-4000-8000-0000000000AB"
+    as: "wf_err"
+    request: {"method": "GET", "path": "/v1/workflow-hooks/F1080000-0000-4000-8000-0000000000AB"}
+  - name: "route shape: DELETE /v1/workflow-hooks/F1080000-0000-4000-8000-0000000000AB"
+    as: "wf_err"
+    request: {"method": "DELETE", "path": "/v1/workflow-hooks/F1080000-0000-4000-8000-0000000000AB"}
+  - name: "route shape: POST /v1/workflow-hooks"
+    as: "wf_err"
+    request: {"method": "POST", "path": "/v1/workflow-hooks"}

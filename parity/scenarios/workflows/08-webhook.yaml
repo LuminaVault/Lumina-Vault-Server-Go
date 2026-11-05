@@ -1,0 +1,167 @@
+# POST /v1/workflow-hooks/{hookID}. No token, no rate limit: an HMAC over "<time>.<body>"
+# with the workflow's secret (the harness's sign). The controller has no mapErrors, so
+# any refusal from enqueue is a bare 500. Nested JSON here has one key at most, except
+# where it's an array: Swift serializes a dictionary in a random order.
+module: workflows
+steps:
+  - name: "create"
+    as: "wf_hok"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": "Hooked", "definition": {"trigger": "webhook", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+    capture: {"wid": "$.workflow.id"}
+  - name: "publish"
+    as: "wf_hok"
+    request: {"method": "POST", "path": "/v1/workflows/{{wid}}/publish"}
+  - name: "rotate"
+    as: "wf_hok"
+    request: {"method": "POST", "path": "/v1/workflows/{{wid}}/webhook/rotate"}
+    capture: {"hook": "$.path", "secret": "$.secret"}
+    snapshot: ["parity_workflow_webhooks"]
+    ignore: ["$.path", "$.secret"]
+  - name: "the hook has no rate limit or token"
+    request: {"method": "POST", "path": "{{hook}}", "raw": "{\"topic\":\"x\"}", "sign": {"secret": "{{secret}}"}, "headers": {"Idempotency-Key": "k1"}}
+    capture: {"r1": "$.id"}
+    snapshot: ["workflow_runs", "workflow_run_events", "workflow_node_runs"]
+  - name: "a replayed key is the same run"
+    request: {"method": "POST", "path": "{{hook}}", "raw": "{\"topic\":\"y\"}", "sign": {"secret": "{{secret}}"}, "headers": {"Idempotency-Key": "k1"}}
+    snapshot: ["workflow_runs"]
+  - name: "cancel"
+    as: "wf_hok"
+    request: {"method": "POST", "path": "/v1/workflows/runs/{{r1}}/cancel"}
+  - name: "a replay of a finished delivery"
+    request: {"method": "POST", "path": "{{hook}}", "raw": "{\"topic\":\"z\"}", "sign": {"secret": "{{secret}}"}, "headers": {"Idempotency-Key": "k1"}}
+    snapshot: ["workflow_runs"]
+  - name: "types flatten to strings"
+    request: {"method": "POST", "path": "{{hook}}", "raw": "{\"s\":\"text\",\"i\":7,\"n\":-1,\"f\":1.5,\"e\":1e3,\"z\":0,\"t\":true,\"u\":false,\"nul\":null,\"o\":{\"a\":1},\"l\":[1,\"x\",true,null],\"emptyo\":{},\"emptyl\":[]}", "sign": {"secret": "{{secret}}"}, "headers": {"Idempotency-Key": "types"}}
+    capture: {"r2": "$.id"}
+    snapshot: ["workflow_runs"]
+  - name: "cancel the types run"
+    as: "wf_hok"
+    request: {"method": "POST", "path": "/v1/workflows/runs/{{r2}}/cancel"}
+  - name: "a raw key replaces the body"
+    request: {"method": "POST", "path": "{{hook}}", "raw": "{\"raw\":\"mine\"}", "sign": {"secret": "{{secret}}"}, "headers": {"Idempotency-Key": "raw"}}
+    capture: {"r3": "$.id"}
+    snapshot: ["workflow_runs"]
+  - name: "cancel the raw run"
+    as: "wf_hok"
+    request: {"method": "POST", "path": "/v1/workflows/runs/{{r3}}/cancel"}
+  - name: "an array stays raw"
+    request: {"method": "POST", "path": "{{hook}}", "raw": "[1,2]", "sign": {"secret": "{{secret}}"}, "headers": {"Idempotency-Key": "array"}}
+    capture: {"r4": "$.id"}
+    snapshot: ["workflow_runs"]
+  - name: "cancel the array run"
+    as: "wf_hok"
+    request: {"method": "POST", "path": "/v1/workflows/runs/{{r4}}/cancel"}
+  - name: "not JSON stays raw"
+    request: {"method": "POST", "path": "{{hook}}", "raw": "hello there", "sign": {"secret": "{{secret}}"}, "headers": {"Idempotency-Key": "text", "Content-Type": "text/plain"}}
+    capture: {"r5": "$.id"}
+    snapshot: ["workflow_runs"]
+  - name: "cancel the text run"
+    as: "wf_hok"
+    request: {"method": "POST", "path": "/v1/workflows/runs/{{r5}}/cancel"}
+  - name: "an empty body"
+    request: {"method": "POST", "path": "{{hook}}", "sign": {"secret": "{{secret}}"}, "headers": {"Idempotency-Key": "empty"}}
+    capture: {"r6": "$.id"}
+    snapshot: ["workflow_runs"]
+  - name: "cancel the empty run"
+    as: "wf_hok"
+    request: {"method": "POST", "path": "/v1/workflows/runs/{{r6}}/cancel"}
+  - name: "a key of 200"
+    request: {"method": "POST", "path": "{{hook}}", "raw": "{}", "sign": {"secret": "{{secret}}"}, "headers": {"Idempotency-Key": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk"}}
+    capture: {"r7": "$.id"}
+    snapshot: ["workflow_runs"]
+  - name: "cancel the long key run"
+    as: "wf_hok"
+    request: {"method": "POST", "path": "/v1/workflows/runs/{{r7}}/cancel"}
+  - name: "a key of 201"
+    request: {"method": "POST", "path": "{{hook}}", "raw": "{}", "sign": {"secret": "{{secret}}"}, "headers": {"Idempotency-Key": "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk"}}
+  - name: "an empty key"
+    request: {"method": "POST", "path": "{{hook}}", "raw": "{}", "sign": {"secret": "{{secret}}"}, "headers": {"Idempotency-Key": ""}}
+  - name: "no key"
+    request: {"method": "POST", "path": "{{hook}}", "raw": "{}", "sign": {"secret": "{{secret}}"}}
+  - name: "no signature, no timestamp"
+    request: {"method": "POST", "path": "{{hook}}", "raw": "{}", "headers": {"Idempotency-Key": "x"}}
+  - name: "a wrong secret"
+    request: {"method": "POST", "path": "{{hook}}", "raw": "{}", "sign": {"secret": "not-it"}, "headers": {"Idempotency-Key": "x"}}
+  - name: "an edited signature"
+    request: {"method": "POST", "path": "{{hook}}", "raw": "{}", "sign": {"secret": "{{secret}}"}, "headers": {"Idempotency-Key": "x", "X-Lumina-Signature": "00"}}
+  - name: "an empty signature"
+    request: {"method": "POST", "path": "{{hook}}", "raw": "{}", "sign": {"secret": "{{secret}}"}, "headers": {"Idempotency-Key": "x", "X-Lumina-Signature": ""}}
+  - name: "not hex"
+    request: {"method": "POST", "path": "{{hook}}", "raw": "{}", "sign": {"secret": "{{secret}}"}, "headers": {"Idempotency-Key": "x", "X-Lumina-Signature": "zz"}}
+  - name: "400 s old"
+    request: {"method": "POST", "path": "{{hook}}", "raw": "{}", "sign": {"secret": "{{secret}}", "offset": -400}, "headers": {"Idempotency-Key": "x"}}
+  - name: "400 s ahead"
+    request: {"method": "POST", "path": "{{hook}}", "raw": "{}", "sign": {"secret": "{{secret}}", "offset": 400}, "headers": {"Idempotency-Key": "x"}}
+  - name: "200 s old"
+    request: {"method": "POST", "path": "{{hook}}", "raw": "{}", "sign": {"secret": "{{secret}}", "offset": -200}, "headers": {"Idempotency-Key": "old"}}
+    capture: {"r8": "$.id"}
+  - name: "cancel the old run"
+    as: "wf_hok"
+    request: {"method": "POST", "path": "/v1/workflows/runs/{{r8}}/cancel"}
+  - name: "200 s ahead"
+    request: {"method": "POST", "path": "{{hook}}", "raw": "{}", "sign": {"secret": "{{secret}}", "offset": 200}, "headers": {"Idempotency-Key": "ahead"}}
+    capture: {"r9": "$.id"}
+  - name: "cancel the ahead run"
+    as: "wf_hok"
+    request: {"method": "POST", "path": "/v1/workflows/runs/{{r9}}/cancel"}
+  - name: "timestamp: words"
+    request: {"method": "POST", "path": "{{hook}}", "raw": "{}", "sign": {"secret": "{{secret}}"}, "headers": {"Idempotency-Key": "x", "X-Lumina-Timestamp": "abc"}}
+  - name: "timestamp: empty"
+    request: {"method": "POST", "path": "{{hook}}", "raw": "{}", "sign": {"secret": "{{secret}}"}, "headers": {"Idempotency-Key": "x", "X-Lumina-Timestamp": ""}}
+  - name: "timestamp: zero"
+    request: {"method": "POST", "path": "{{hook}}", "raw": "{}", "sign": {"secret": "{{secret}}"}, "headers": {"Idempotency-Key": "x", "X-Lumina-Timestamp": "0"}}
+  - name: "timestamp: NaN"
+    request: {"method": "POST", "path": "{{hook}}", "raw": "{}", "sign": {"secret": "{{secret}}"}, "headers": {"Idempotency-Key": "x", "X-Lumina-Timestamp": "nan"}}
+  - name: "timestamp: infinity"
+    request: {"method": "POST", "path": "{{hook}}", "raw": "{}", "sign": {"secret": "{{secret}}"}, "headers": {"Idempotency-Key": "x", "X-Lumina-Timestamp": "inf"}}
+  - name: "timestamp: exponent"
+    request: {"method": "POST", "path": "{{hook}}", "raw": "{}", "sign": {"secret": "{{secret}}"}, "headers": {"Idempotency-Key": "x", "X-Lumina-Timestamp": "1e3"}}
+  - name: "no bad secret leaks into the runs"
+    as: "wf_hok"
+    request: {"method": "GET", "path": "/v1/workflows/runs"}
+    snapshot: ["workflow_runs"]
+  - name: "1 MiB exactly"
+    request: {"method": "POST", "path": "{{hook}}", "fill": {"text": "x", "size": 1048576}, "sign": {"secret": "{{secret}}"}, "headers": {"Idempotency-Key": "big"}}
+    capture: {"r10": "$.id"}
+  - name: "cancel the big run"
+    as: "wf_hok"
+    request: {"method": "POST", "path": "/v1/workflows/runs/{{r10}}/cancel"}
+  - name: "1 MiB and a byte"
+    request: {"method": "POST", "path": "{{hook}}", "fill": {"text": "x", "size": 1048577}, "sign": {"secret": "{{secret}}"}, "headers": {"Idempotency-Key": "too-big"}}
+  - name: "too big, and no headers: headers come first"
+    request: {"method": "POST", "path": "{{hook}}", "fill": {"text": "x", "size": 1048577}}
+  - name: "rotate again keeps the hook"
+    as: "wf_hok"
+    request: {"method": "POST", "path": "/v1/workflows/{{wid}}/webhook/rotate"}
+    capture: {"secret2": "$.secret", "hook2": "$.path"}
+    snapshot: ["parity_workflow_webhooks"]
+    ignore: ["$.path", "$.secret"]
+  - name: "the old secret stops working"
+    request: {"method": "POST", "path": "{{hook2}}", "raw": "{}", "sign": {"secret": "{{secret}}"}, "headers": {"Idempotency-Key": "rotated"}}
+  - name: "the new secret works"
+    request: {"method": "POST", "path": "{{hook2}}", "raw": "{}", "sign": {"secret": "{{secret2}}"}, "headers": {"Idempotency-Key": "rotated"}}
+    capture: {"r11": "$.id"}
+  - name: "cancel the rotated run"
+    as: "wf_hok"
+    request: {"method": "POST", "path": "/v1/workflows/runs/{{r11}}/cancel"}
+  - name: "a bad hook id"
+    request: {"method": "POST", "path": "/v1/workflow-hooks/nope", "raw": "{}", "sign": {"secret": "{{secret}}"}, "headers": {"Idempotency-Key": "x"}}
+  - name: "an unknown hook"
+    request: {"method": "POST", "path": "/v1/workflow-hooks/F1000000-0000-4000-8000-00000000DEAD", "raw": "{}", "sign": {"secret": "{{secret}}"}, "headers": {"Idempotency-Key": "x"}}
+  - name: "an unknown hook, no headers"
+    request: {"method": "POST", "path": "/v1/workflow-hooks/F1000000-0000-4000-8000-00000000DEAD", "raw": "{}"}
+  - name: "free tier: signed, then refused"
+    request: {"method": "POST", "path": "/v1/workflow-hooks/F1080000-0000-4000-8000-0000000000A4", "raw": "{}", "sign": {"secret": "parity-hook-secret"}, "headers": {"Idempotency-Key": "x"}}
+    snapshot: ["workflow_runs"]
+  - name: "unpublished: signed, then refused"
+    request: {"method": "POST", "path": "/v1/workflow-hooks/F1080000-0000-4000-8000-0000000000B1", "raw": "{}", "sign": {"secret": "parity-hook-secret"}, "headers": {"Idempotency-Key": "x"}}
+  - name: "disabled: signed, then refused"
+    request: {"method": "POST", "path": "/v1/workflow-hooks/F1080000-0000-4000-8000-0000000000B2", "raw": "{}", "sign": {"secret": "parity-hook-secret"}, "headers": {"Idempotency-Key": "x"}}
+  - name: "a secret that won't open"
+    request: {"method": "POST", "path": "/v1/workflow-hooks/F1080000-0000-4000-8000-0000000000B3", "raw": "{}", "sign": {"secret": "parity-hook-secret"}, "headers": {"Idempotency-Key": "x"}}
+  - name: "a replay at the limit answers"
+    request: {"method": "POST", "path": "/v1/workflow-hooks/F1080000-0000-4000-8000-0000000000AB", "raw": "{}", "sign": {"secret": "parity-hook-secret"}, "headers": {"Idempotency-Key": "seen"}}
+    snapshot: ["workflow_runs"]
+  - name: "a new delivery at the limit doesn't"
+    request: {"method": "POST", "path": "/v1/workflow-hooks/F1080000-0000-4000-8000-0000000000AB", "raw": "{}", "sign": {"secret": "parity-hook-secret"}, "headers": {"Idempotency-Key": "new"}}
+    snapshot: ["workflow_runs"]
