@@ -26,17 +26,28 @@ type Route struct {
 	ModelID  string
 }
 
-// CerberusMetadata is the part of CerberusDecisionMetadata the transport and
-// the trial router read. CerberusModelRouter itself is not ported yet; when it
-// is, it fills this in. Nil on Decision means no Cerberus involvement.
+// CerberusMetadata is CerberusDecisionMetadata, filled in by CerberusRouter. Nil
+// on Decision means no Cerberus involvement.
 type CerberusMetadata struct {
 	ExecutionID                uuid.UUID
 	TenantID                   uuid.UUID
+	VaultID                    uuid.UUID
+	ActorUserID                uuid.UUID
 	ProfileID                  uuid.UUID
 	ProfileName                string
+	RuleID                     *uuid.UUID
 	TaskType                   string
+	Surface                    RouterSurface
+	SpaceID                    *uuid.UUID
+	ConversationID             *uuid.UUID
 	Strategy                   string // "sequential" or StrategyEnsemble
+	ParallelStrategy           ParallelStrategy
+	Participants               []ParallelParticipant
 	Routes                     []WireRoute
+	SynthesisRoute             *WireRoute
+	MinimumSuccessfulResults   int
+	RetryPolicy                RouterRetryPolicy
+	PredictedCostUsdMicros     int64
 	BudgetReservationUsdMicros int64
 	BudgetDenied               bool
 	Mode                       CredentialMode
@@ -90,12 +101,6 @@ func (d Decision) Candidates() []Route { return append([]Route{d.Primary}, d.Fal
 type Router interface {
 	Pick(ctx context.Context, model string, capability Capability, user *User) Decision
 }
-
-const (
-	FreeLaneOpenRouterModel          = "nvidia/nemotron-3-ultra-550b-a55b:free"
-	FreeLaneOpenRouterSecondaryModel = "nvidia/nemotron-3-super-120b-a12b:free"
-	FreeLaneNvidiaModel              = "nvidia/nemotron-3-super-120b-a12b"
-)
 
 // cnOriginSubstrings is ModelOriginRegistry: lowercased substrings of model ids
 // whose weights originated in China, whatever host serves them.

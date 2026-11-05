@@ -50,7 +50,10 @@ type streamRequest struct {
 
 type streamFraming string
 
-const framingSSE streamFraming = "\n\n"
+const (
+	framingSSE    streamFraming = "\n\n"
+	framingNDJSON streamFraming = "\n"
+)
 
 // runStream is ProviderStreamKit.run: it executes the request and hands each
 // framed record to process until process reports the upstream finished.
@@ -80,7 +83,7 @@ func runStream(
 		}
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, request.url, bytes.NewReader(request.body))
 		if err != nil {
-			fail(Network(kind, opaqueNetworkError{err.Error()}))
+			fail(Network(kind, opaqueNetworkError{redactURLError(err).Error()}))
 			return
 		}
 		req.Header.Set("Content-Type", "application/json")
@@ -92,7 +95,7 @@ func runStream(
 		resp, err := client.Do(req)
 		timer.Stop()
 		if err != nil {
-			fail(Network(kind, opaqueNetworkError{err.Error()}))
+			fail(Network(kind, opaqueNetworkError{redactURLError(err).Error()}))
 			return
 		}
 		defer func() { _ = resp.Body.Close() }()

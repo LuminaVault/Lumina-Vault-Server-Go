@@ -99,7 +99,7 @@ func (t *Transport) ChatCompletions(ctx context.Context, payload []byte, session
 			publishRouteOutcome(values, ensemble.Route, c)
 			return ensemble.Metadata, nil
 		}
-		if values.ParallelRequested {
+		if values.ParallelStrategy != "" {
 			t.release(ctx, c)
 			return Metadata{}, &UpstreamErrorResponse{Reason: "parallel_quorum_failed", Message: "Not enough models completed to synthesize this answer."}
 		}
@@ -202,7 +202,7 @@ func (t *Transport) routedStream(ctx context.Context, payload []byte, sessionKey
 				publishRouteOutcome(values, ensemble.Route, c)
 				return
 			}
-			if values.ParallelRequested {
+			if values.ParallelStrategy != "" {
 				t.release(ctx, c)
 				fail(&UpstreamErrorResponse{Reason: "parallel_quorum_failed", Message: "Not enough models completed to synthesize this answer."})
 				return
