@@ -142,10 +142,15 @@ type Config struct {
 	// BYO Hermes resolution (hermesresolve, ssrfguard). Strings, read with
 	// Swift's lowercased() == "true". BYOHermesRequireHTTPS has no default here
 	// because Swift's depends on LV_ENVIRONMENT; use its method.
-	HermesGatewayURL         string `env:"HERMES_GATEWAY_URL" envDefault:"http://hermes:8642"`
+	HermesGatewayURL string `env:"HERMES_GATEWAY_URL" envDefault:"http://hermes:8642"`
+	// HermesGatewayKind picks hermesprofile.NewGateway: "filesystem" or "logging".
+	HermesGatewayKind        string `env:"HERMES_GATEWAY_KIND" envDefault:"filesystem"`
 	BYOHermesAllowPrivate    string `env:"BYO_HERMES_ALLOW_PRIVATE" envDefault:"false"`
 	BYOHermesRequireHTTPSRaw string `env:"BYO_HERMES_REQUIRE_HTTPS"`
 	BYOHermesAllowTailnet    string `env:"BYO_HERMES_ALLOW_TAILNET_HTTP" envDefault:"true"`
+
+	// MaxConcurrentStreamsPerUser is the ceiling on ratelimit.InFlightLimit for /v1/llm and /v1/query.
+	MaxConcurrentStreamsPerUser int `env:"HTTP_MAX_CONCURRENT_STREAMS_PER_USER" envDefault:"3"`
 
 	// Memory routes. HybridExecutionEnabled stays a string, read with Swift's
 	// lowercased() == "true"; it mounts /v1/memory/local-sync.
