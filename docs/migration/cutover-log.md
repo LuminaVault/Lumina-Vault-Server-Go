@@ -1261,7 +1261,13 @@ Beyond the pilot gate (D-wave2-early):
   servers, through the keyless Jina path, which is also production's: `JINA_API_KEY` isn't in
   `api-env-production`.
 
-### Production flip: waiting on infra #563
+### Production flip: 2026-11-05 11:32:09Z, infra #563
+
+- Image `cda9718`. Verified publicly after the sync: no `Server` header on the moved paths.
+- First real client traffic at 12:22Z: vault list and read, onboarding, memory-compile/pending and
+  me/suggestions returned 200 after the client's token refresh (401 first, then 200 on retry).
+  `/v1/news/ticker` returned 404 for the same client: the plugin isn't installed, pinned by `news/errors`.
+- G3 72 h watch ends 2026-11-08 11:35Z.
 
 - Holds on Swift: `/v1/memory/search` and `/v1/memory-compile`. `/v1/memory-compile/pending` goes to Go.
   `/v1/knowledge/reason` stays on Swift because only three knowledge sub-paths move.
