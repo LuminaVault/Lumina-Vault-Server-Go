@@ -1,8 +1,9 @@
 // Package apns is the part of Swift's APNSNotificationService
-// (Sources/App/Services/APNSNotificationService.swift) wave 4 needs:
-// notifyAchievement, device token lookup, the per-tenant category opt-outs and
-// the reaping of dead tokens. The other notify* surfaces (chat, digest, ingestion,
-// workflow, approvals) move with their callers and can call Notify.
+// (Sources/App/Services/APNSNotificationService.swift) waves 4 and 5 need: the
+// achievement, ingestion, LLM reply, nudge and digest pushes, device token lookup,
+// the per-tenant category opt-outs and the reaping of dead tokens. It also holds
+// ProactiveChatDelivery and ProactivePushBudget (proactive.go). The other notify*
+// surfaces (workflow, approvals) move with their callers and can call Notify.
 //
 // When APNS_ENABLED isn't "true", the key file is missing or unreadable, or
 // APNS_BUNDLE_ID is empty, every call is a no-op that succeeds, as in Swift.
@@ -169,6 +170,40 @@ func (s *Service) NotifyIngestion(ctx context.Context, tenant, batchID, itemID u
 	})
 }
 
+// LLMReplyPreviewCharacters is how much of a reply notifyLLMReply puts in the push.
+const LLMReplyPreviewCharacters = 140
+
+// NotifyLLMReply is the push for a finished chat reply; content is
+// response.message.content.
+func (s *Service) NotifyLLMReply(ctx context.Context, tenant uuid.UUID, username, content string) error {
+	return s.Notify(ctx, tenant, Message{
+		Title:    "LuminaVault reply ready",
+		Subtitle: &username,
+		Body:     swiftstr.CharacterPrefix(content, LLMReplyPreviewCharacters),
+		Category: CategoryChat,
+	})
+}
+
+// NotifyNudge is the push for a skill's apns_nudge output.
+func (s *Service) NotifyNudge(ctx context.Context, tenant uuid.UUID, username, body string) error {
+	return s.Notify(ctx, tenant, Message{
+		Title:    "Hermes noticed something",
+		Subtitle: &username,
+		Body:     body,
+		Category: CategoryNudge,
+	})
+}
+
+// NotifyDigest is the push for a skill's apns_digest output.
+func (s *Service) NotifyDigest(ctx context.Context, tenant uuid.UUID, username, body string) error {
+	return s.Notify(ctx, tenant, Message{
+		Title:    "Your daily brief",
+		Subtitle: &username,
+		Body:     body,
+		Category: CategoryDigest,
+	})
+}
+
 // Notify pushes to every device token of tenant, each under its own app's topic.
 // It returns an error only for the opt-out and token lookups: a failed device is
 // logged and the rest still get theirs. A dead token's row is deleted.
@@ -176,7 +211,7 @@ func (s *Service) Notify(ctx context.Context, tenant uuid.UUID, m Message) error
 	if s == nil || s.sender == nil || s.bundleID == "" {
 		return nil
 	}
-	suppressed, err := s.isSuppressed(ctx, m.Category, tenant)
+	suppressed, err := isSuppressed(ctx, s.pool, m.Category, tenant)
 	if err != nil {
 		return err
 	}
@@ -234,7 +269,7 @@ func (s *Service) deviceTokens(ctx context.Context, tenant uuid.UUID) ([]deviceT
 
 // isSuppressed is isCategorySuppressed: high-signal categories are never gated.
 // With no prefs row everything is on, except the one opt-in category.
-func (s *Service) isSuppressed(ctx context.Context, category Category, tenant uuid.UUID) (bool, error) {
+func isSuppressed(ctx context.Context, pool *pgxpool.Pool, category Category, tenant uuid.UUID) (bool, error) {
 	var column string
 	switch category {
 	case CategoryChat:
@@ -253,7 +288,7 @@ func (s *Service) isSuppressed(ctx context.Context, category Category, tenant uu
 		return false, nil
 	}
 	var enabled bool
-	err := s.pool.QueryRow(ctx, `SELECT `+column+` FROM apns_category_prefs WHERE tenant_id = $1`, tenant).Scan(&enabled) //nolint:gosec // column comes from the switch above
+	err := pool.QueryRow(ctx, `SELECT `+column+` FROM apns_category_prefs WHERE tenant_id = $1`, tenant).Scan(&enabled) //nolint:gosec // column comes from the switch above
 	if errors.Is(err, pgx.ErrNoRows) {
 		return category == CategoryMeeting, nil
 	}

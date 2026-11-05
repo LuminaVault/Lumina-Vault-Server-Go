@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"lumina/internal/ids"
 	"lumina/internal/modules/vault/db"
+	"lumina/internal/soul"
 	"lumina/internal/vaultfiles"
 	"lumina/internal/wire"
 	"net/http"
@@ -81,8 +82,8 @@ func (m *Module) streamExport(ctx context.Context, z *zipStream, user db.UserRow
 
 	// Prefer the file on disk. Accounts older than SOULService have none, and get
 	// a manifest built here.
-	soul, soulTime := m.soulForExport(rawRoot, user, exportedAt)
-	if err := z.storedEntry(soulFileName, soul, soulTime); err != nil {
+	soulData, soulTime := m.soulForExport(rawRoot, user, exportedAt)
+	if err := z.storedEntry(soul.FileName, soulData, soulTime); err != nil {
 		return err
 	}
 	if err := m.memoriesEntry(ctx, z, user.ID, since, exportedAt); err != nil {
@@ -103,7 +104,7 @@ func (m *Module) streamExport(ctx context.Context, z *zipStream, user db.UserRow
 }
 
 func (m *Module) soulForExport(rawRoot string, user db.UserRow, exportedAt time.Time) ([]byte, time.Time) {
-	path := filepath.Join(rawRoot, soulFileName)
+	path := filepath.Join(rawRoot, soul.FileName)
 	if data, err := os.ReadFile(path); err == nil { //nolint:gosec // a fixed name under the tenant's raw directory
 		if info, err := os.Stat(path); err == nil {
 			return data, info.ModTime()
@@ -288,7 +289,7 @@ func enumerateRawFiles(rawRoot string, since *time.Time) ([]rawFile, error) {
 		if err != nil {
 			return err
 		}
-		if strings.HasPrefix(rel, "_deleted_") || rel == soulFileName {
+		if strings.HasPrefix(rel, "_deleted_") || rel == soul.FileName {
 			return nil
 		}
 		out = append(out, rawFile{path: path, relativePath: rel, size: info.Size(), modTime: info.ModTime()})

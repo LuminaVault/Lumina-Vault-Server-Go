@@ -350,3 +350,12 @@ func IsLetterOrNumber(c string) bool {
 	}
 	return len(runes) == 1 && unicode.IsNumber(r)
 }
+
+// CharacterPrefix is Swift's String(s.prefix(n)), exactly.
+func CharacterPrefix(s string, n int) string {
+	i := 0
+	for k := 0; k < n && i < len(s); k++ {
+		i += CharacterLen(s[i:])
+	}
+	return s[:i]
+}

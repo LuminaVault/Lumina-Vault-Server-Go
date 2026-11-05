@@ -21,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/labstack/echo/v5"
 )
 
@@ -62,6 +63,22 @@ func StandardTierScale(tier string) float64 {
 		return 0.1
 	default: // free, lapsed, unknown
 		return 0.34
+	}
+}
+
+// VoiceTierScale is RateLimitPolicy.voiceTierScale over users.tier. Flatter at
+// the top than StandardTierScale, because the cost here is provider seconds of
+// audio, not our capacity. On a daily cap of 200, free gets 10.
+func VoiceTierScale(tier string) float64 {
+	switch tier {
+	case "ultimate":
+		return 2
+	case "pro":
+		return 1.5
+	case "trial":
+		return 1
+	default: // free, lapsed, archived, unknown
+		return 0.05
 	}
 }
 
@@ -206,6 +223,26 @@ func UserOrIPKey(c *echo.Context) string {
 		return "u:" + ids.Upper(id)
 	}
 	return "ip:" + IPKey(c.Request())
+}
+
+// IPOnlyKey is the keyer of the IP-keyed policies: IPKey, with no "ip:" prefix.
+func IPOnlyKey(c *echo.Context) string { return IPKey(c.Request()) }
+
+// PGTier reads the tier a TieredMiddleware scales by: users.tier, with no override
+// applied, as Swift's context.identity?.tierEnum. An unidentified caller reads as
+// no tier. So does a failed read, which falls back to the baseline Max.
+func PGTier(pool *pgxpool.Pool) func(*echo.Context) (string, bool) {
+	return func(c *echo.Context) (string, bool) {
+		id, ok := auth.Identity(c)
+		if !ok {
+			return "", false
+		}
+		var tier string
+		if err := pool.QueryRow(c.Request().Context(), `SELECT tier FROM users WHERE id = $1`, id).Scan(&tier); err != nil {
+			return "", false
+		}
+		return tier, true
+	}
 }
 
 // IPKey is RateLimitPolicy.ipKey: the first X-Forwarded-For entry, else

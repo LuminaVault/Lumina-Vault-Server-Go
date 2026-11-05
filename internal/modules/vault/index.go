@@ -9,30 +9,26 @@ import (
 	"lumina/internal/modules/vault/db"
 	"lumina/internal/vaultaccess"
 	"lumina/internal/vaultfiles"
+	"lumina/internal/vaultindex"
 	"lumina/internal/wire"
 	"net/http"
 	"os"
 	"slices"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v5"
 )
 
-// VaultIndexController and the Indexing services behind it. Every route here is a
-// pure read: none of them index, embed or re-resolve anything.
+// VaultIndexController and VaultLintService; the other Indexing services are in
+// internal/vaultindex. Every route here is a pure read: none of them index, embed or
+// re-resolve anything.
 const (
-	samplePathLimit     = 20
-	defaultSiblingLimit = 25
-	maxSiblingLimit     = 100
 	maxFilesScanned     = 2000
 	maxFindingsPerCheck = 50
 	oversizedBytes      = 5 * 1024 * 1024
 )
-
-var errNoFileWithID = wire.NewError(http.StatusNotFound, "no vault file with that id")
 
 // linksResponse is VaultLinksResponse. chunkindex's link rows already carry
 // Swift's wire names.
@@ -48,68 +44,14 @@ func (m *Module) indexStatus(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	status, err := m.indexStatusOf(c.Request().Context(), a.VaultID)
+	status, err := m.index.Status(c.Request().Context(), a.VaultID)
 	if err != nil {
 		return err
 	}
 	return wire.JSON(c, http.StatusOK, status)
 }
 
-// indexStatusOf is VaultIndexStatusService.status.
-func (m *Module) indexStatusOf(ctx context.Context, tenant uuid.UUID) (VaultIndexStatus, error) {
-	var out VaultIndexStatus
-	counts, err := m.q.IndexCounts(ctx, tenant)
-	if err != nil {
-		return out, err
-	}
-	lastIndexedAt, err := m.q.LastIndexedAt(ctx, tenant)
-	if err != nil {
-		return out, err
-	}
-	unindexed, err := m.q.UnindexedPaths(ctx, tenant)
-	if err != nil {
-		return out, err
-	}
-	stale, err := m.q.StalePaths(ctx, tenant)
-	if err != nil {
-		return out, err
-	}
-	links, err := m.links.Counts(ctx, tenant)
-	if err != nil {
-		return out, err
-	}
-	var lastIndexed *time.Time
-	if lastIndexedAt.Valid {
-		lastIndexed = &lastIndexedAt.Time
-	}
-	reasons := []string{}
-	if len(unindexed) > 0 {
-		reasons = append(reasons, fmt.Sprintf("%d document(s) have no chunks — run the chunk backfill", len(unindexed)))
-	}
-	if len(stale) > 0 {
-		reasons = append(reasons, fmt.Sprintf("%d document(s) changed since they were indexed", len(stale)))
-	}
-	if links.Ambiguous > 0 {
-		reasons = append(reasons, fmt.Sprintf("%d wiki link(s) match more than one document", links.Ambiguous))
-	}
-	return VaultIndexStatus{
-		DocumentCount:          int(counts.Documents),
-		MemoryCount:            int(counts.Memories),
-		ChunkCount:             int(counts.Chunks),
-		ResolvedLinkCount:      links.Resolved,
-		UnresolvedLinkCount:    links.Unresolved,
-		AmbiguousLinkCount:     links.Ambiguous,
-		UnindexedDocumentCount: len(unindexed),
-		StaleDocumentCount:     len(stale),
-		UnindexedSample:        firstN(unindexed, samplePathLimit),
-		StaleSample:            firstN(stale, samplePathLimit),
-		LastIndexedAt:          wireTime(lastIndexed),
-		Stale:                  len(reasons) > 0,
-		StaleReasons:           reasons,
-	}, nil
-}
-
-// context is VaultNavigationService.context.
+// context is VaultIndexController.context.
 func (m *Module) context(c *echo.Context) error {
 	a, err := m.access.Resolve(c, vaultaccess.Read)
 	if err != nil {
@@ -120,106 +62,15 @@ func (m *Module) context(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	siblingLimit := defaultSiblingLimit
+	siblingLimit := vaultindex.DefaultSiblingLimit
 	if v, ok := wire.QueryInt(c, "siblingLimit"); ok {
 		siblingLimit = v
 	}
-	siblingLimit = max(1, min(siblingLimit, maxSiblingLimit))
-
-	ctx := c.Request().Context()
-	file, err := m.store.FindByID(ctx, tenant, id)
+	packet, err := m.index.Context(c.Request().Context(), tenant, id, siblingLimit)
 	if err != nil {
 		return err
 	}
-	if file == nil {
-		return errNoFileWithID
-	}
-	headingRows, err := m.q.HeadingRows(ctx, db.HeadingRowsParams{TenantID: tenant, VaultFileID: &id})
-	if err != nil {
-		return err
-	}
-	headings := []VaultContextHeading{}
-	for _, row := range headingRows {
-		path := chunkindex.DecodeHeadingPath(&row.HeadingPathJson)
-		if len(path) > 0 {
-			headings = append(headings, VaultContextHeading{Path: path, StartLine: int(row.StartLine)})
-		}
-	}
-	chunkCount, err := m.q.ChunkCount(ctx, db.ChunkCountParams{TenantID: tenant, VaultFileID: &id})
-	if err != nil {
-		return err
-	}
-	// An unfiled document has no Space and so no siblings, not "every unfiled note".
-	siblings := []VaultContextNeighbour{}
-	if file.SpaceID != nil {
-		rows, err := m.q.Siblings(ctx, db.SiblingsParams{TenantID: tenant, SpaceID: file.SpaceID, ID: id, Limit: int32(siblingLimit)}) //nolint:gosec // clamped to 1...100
-		if err != nil {
-			return err
-		}
-		for _, row := range rows {
-			siblings = append(siblings, VaultContextNeighbour{VaultFileID: wire.UUID{UUID: row.ID}, Path: row.Path})
-		}
-	}
-	outgoing, err := m.links.Outgoing(ctx, tenant, id)
-	if err != nil {
-		return err
-	}
-	incoming, err := m.links.Incoming(ctx, tenant, id)
-	if err != nil {
-		return err
-	}
-	var targets, sources []string
-	dangling := []string{}
-	for _, l := range outgoing {
-		if l.TargetPath != nil {
-			targets = append(targets, *l.TargetPath)
-		}
-		if l.ResolutionState != string(chunkindex.Resolved) {
-			dangling = append(dangling, l.RawTarget)
-		}
-	}
-	for _, l := range incoming {
-		if l.SourcePath != nil {
-			sources = append(sources, *l.SourcePath)
-		}
-	}
-	linksTo, err := m.neighbours(ctx, tenant, targets)
-	if err != nil {
-		return err
-	}
-	linkedFrom, err := m.neighbours(ctx, tenant, sources)
-	if err != nil {
-		return err
-	}
-	slices.Sort(dangling)
-	return wire.JSON(c, http.StatusOK, VaultContextPacket{
-		VaultFileID:   wire.UUID{UUID: id},
-		Path:          file.Path,
-		SpaceID:       wireUUID(file.SpaceID),
-		ChunkCount:    int(chunkCount),
-		Headings:      headings,
-		Siblings:      siblings,
-		LinksTo:       linksTo,
-		LinkedFrom:    linkedFrom,
-		DanglingLinks: slices.Compact(dangling),
-	})
-}
-
-// neighbours is resolveNeighbours: deduplicated, and paths that no longer exist
-// are dropped.
-func (m *Module) neighbours(ctx context.Context, tenant uuid.UUID, paths []string) ([]VaultContextNeighbour, error) {
-	out := []VaultContextNeighbour{}
-	if len(paths) == 0 {
-		return out, nil
-	}
-	rows, err := m.q.NeighboursByPath(ctx, db.NeighboursByPathParams{TenantID: tenant, Column2: paths})
-	if err != nil {
-		return nil, err
-	}
-	for _, row := range rows {
-		out = append(out, VaultContextNeighbour{VaultFileID: wire.UUID{UUID: row.ID}, Path: row.Path})
-	}
-	return out, nil
+	return wire.JSON(c, http.StatusOK, packet)
 }
 
 // documentLinks is VaultIndexController.documentLinks.
@@ -239,7 +90,7 @@ func (m *Module) documentLinks(c *echo.Context) error {
 		return err
 	}
 	if file == nil {
-		return errNoFileWithID
+		return vaultindex.ErrNoFileWithID
 	}
 	outgoing, err := m.links.Outgoing(ctx, tenant, id)
 	if err != nil {
@@ -376,7 +227,7 @@ func (m *Module) orphans(ctx context.Context, tenant uuid.UUID) (VaultLintCheck,
 // staleIndex reuses /v1/vault/index's computation, so the two can't disagree.
 // Unlike the link checks it's an error: those documents are unreachable.
 func (m *Module) staleIndex(ctx context.Context, tenant uuid.UUID) (VaultLintCheck, error) {
-	status, err := m.indexStatusOf(ctx, tenant)
+	status, err := m.index.Status(ctx, tenant)
 	if err != nil {
 		return VaultLintCheck{}, err
 	}
@@ -420,7 +271,7 @@ func (m *Module) fileChecks(ctx context.Context, tenant uuid.UUID) ([]VaultLintC
 		if err != nil {
 			slog.DebugContext(ctx, "vault lint: unreadable", "tenant", ids.Upper(tenant), "error", err)
 		}
-		text, ok := decodeUTF8(data)
+		text, ok := vaultfiles.DecodeUTF8(data)
 		if err != nil || !ok {
 			unreadable = append(unreadable, VaultLintFinding{Path: ptr(file.Path), Message: "missing, unreadable, or not valid UTF-8"})
 			continue

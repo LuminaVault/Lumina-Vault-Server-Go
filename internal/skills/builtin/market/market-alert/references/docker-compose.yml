@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  market-alert-service:
+    build: .
+    container_name: market-alert-service
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./alerts:/app/alerts
+      - ./config.json:/app/config.json
+    environment:
+      - PYTHONUNBUFFERED=1
+    networks:
+      - market-network
+
+networks:
+  market-network:
+    driver: bridge
