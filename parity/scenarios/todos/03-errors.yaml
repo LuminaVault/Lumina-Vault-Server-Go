@@ -1,0 +1,45 @@
+module: todos
+steps:
+  - {name: list no token, request: {method: GET, path: /v1/todos}}
+  - {name: create no token, request: {method: POST, path: /v1/todos, json: {title: x}}}
+  - {name: patch no token, request: {method: PATCH, path: /v1/todos/70D00000-0000-4000-8000-000000000F02, json: {title: x}}}
+  - {name: delete no token, request: {method: DELETE, path: /v1/todos/70D00000-0000-4000-8000-000000000F02}}
+  - {name: bad token, request: {method: GET, path: /v1/todos, headers: {Authorization: "Bearer not.a.jwt"}}}
+  - {name: bad token on create, request: {method: POST, path: /v1/todos, json: {title: x}, headers: {Authorization: "Bearer not.a.jwt"}}}
+
+  - {name: malformed json, as: todo_tom, request: {method: POST, path: /v1/todos, raw: "{\"title\":"}}
+  - {name: empty body, as: todo_tom, request: {method: POST, path: /v1/todos, raw: ""}}
+  - {name: array body, as: todo_tom, request: {method: POST, path: /v1/todos, raw: "[]"}}
+  - {name: missing title, as: todo_tom, request: {method: POST, path: /v1/todos, json: {}}}
+  - {name: null title, as: todo_tom, request: {method: POST, path: /v1/todos, raw: "{\"title\":null}"}}
+  - {name: title wrong type, as: todo_tom, request: {method: POST, path: /v1/todos, json: {title: 42}}}
+  - {name: blank title, as: todo_tom, request: {method: POST, path: /v1/todos, json: {title: "  \n\t "}}}
+  - {name: empty title, as: todo_tom, request: {method: POST, path: /v1/todos, json: {title: ""}}}
+  - {name: due date wrong type, as: todo_tom, request: {method: POST, path: /v1/todos, json: {title: x, dueAt: 7}}}
+  - {name: due date not a date, as: todo_tom, request: {method: POST, path: /v1/todos, json: {title: x, dueAt: tomorrow}}}
+  - {name: project wrong type, as: todo_tom, request: {method: POST, path: /v1/todos, json: {title: x, projectID: 7}}}
+  - {name: project not a uuid, as: todo_tom, request: {method: POST, path: /v1/todos, json: {title: x, projectID: nope}}}
+  - {name: unknown project, as: todo_tom, request: {method: POST, path: /v1/todos, json: {title: x, projectID: 70D00000-0000-4000-8000-00000000FFFF}}}
+  - {name: blank title comes before the project, as: todo_tom, request: {method: POST, path: /v1/todos, json: {title: " ", projectID: 70D00000-0000-4000-8000-00000000FFFF}}}
+
+  - {name: patch bad id, as: todo_tom, request: {method: PATCH, path: /v1/todos/nope, json: {done: true}}}
+  - {name: patch bare hex id, as: todo_tom, request: {method: PATCH, path: /v1/todos/70D00000000040008000000000000F11, json: {done: true}}}
+  - {name: patch bad id before the body, as: todo_tom, request: {method: PATCH, path: /v1/todos/nope, raw: "{"}}
+  - {name: patch unknown id, as: todo_tom, request: {method: PATCH, path: /v1/todos/70D00000-0000-4000-8000-00000000FFFF, json: {done: true}}}
+  - {name: patch body before the row, as: todo_tom, request: {method: PATCH, path: /v1/todos/70D00000-0000-4000-8000-00000000FFFF, raw: "{"}}
+  - {name: patch row before the project, as: todo_tom, request: {method: PATCH, path: /v1/todos/70D00000-0000-4000-8000-00000000FFFF, json: {projectID: 70D00000-0000-4000-8000-00000000FFFF}}}
+  - {name: patch malformed, as: todo_tom, request: {method: PATCH, path: /v1/todos/70D00000-0000-4000-8000-000000000F11, raw: "{\"done\":"}}
+  - {name: patch empty body, as: todo_tom, request: {method: PATCH, path: /v1/todos/70D00000-0000-4000-8000-000000000F11, raw: ""}}
+  - {name: patch array, as: todo_tom, request: {method: PATCH, path: /v1/todos/70D00000-0000-4000-8000-000000000F11, raw: "[]"}}
+  - {name: patch title wrong type, as: todo_tom, request: {method: PATCH, path: /v1/todos/70D00000-0000-4000-8000-000000000F11, json: {title: 1}}}
+  - {name: patch done wrong type, as: todo_tom, request: {method: PATCH, path: /v1/todos/70D00000-0000-4000-8000-000000000F11, json: {done: "yes"}}}
+  - {name: patch due wrong type, as: todo_tom, request: {method: PATCH, path: /v1/todos/70D00000-0000-4000-8000-000000000F11, json: {dueAt: false}}}
+  - {name: patch due not a date, as: todo_tom, request: {method: PATCH, path: /v1/todos/70D00000-0000-4000-8000-000000000F11, json: {dueAt: soon}}}
+  - {name: patch project wrong type, as: todo_tom, request: {method: PATCH, path: /v1/todos/70D00000-0000-4000-8000-000000000F11, json: {projectID: []}}}
+  - {name: patch unknown project, as: todo_tom, request: {method: PATCH, path: /v1/todos/70D00000-0000-4000-8000-000000000F11, json: {projectID: 70D00000-0000-4000-8000-00000000FFFF}}}
+
+  - {name: delete bad id, as: todo_tom, request: {method: DELETE, path: /v1/todos/nope}}
+  - {name: delete unknown id, as: todo_tom, request: {method: DELETE, path: /v1/todos/70D00000-0000-4000-8000-00000000FFFF}}
+  - {name: wrong method on an item, as: todo_tom, request: {method: GET, path: /v1/todos/70D00000-0000-4000-8000-000000000F11}}
+  - {name: wrong method on the list, as: todo_tom, request: {method: DELETE, path: /v1/todos}}
+  - {name: unchanged after refusals, as: todo_tom, request: {method: GET, path: /v1/todos}, snapshot: [parity_todo_files, parity_todo_memories], files: [todo_tom]}

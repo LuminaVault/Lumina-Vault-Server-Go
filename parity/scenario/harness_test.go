@@ -521,6 +521,56 @@ func TestStableOrderUsesTheWriteTimeWhenThereIsNoCreatedAt(t *testing.T) {
 	require.Equal(t, []json.RawMessage{gone, later}, rows)
 }
 
+// A wait-only step reads its snapshot after the view empties, and running out of
+// time compares what's there instead of failing the run.
+func TestWaitEmptyPollsUntilNoRows(t *testing.T) {
+	srv := serve(t, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+	polls := 0
+	tgt := target(srv.URL)
+	tgt.Snapshot = func(_ context.Context, table string) ([]json.RawMessage, error) {
+		if table != "pending" {
+			return []json.RawMessage{json.RawMessage(fmt.Sprintf(`{"polls":%d}`, polls))}, nil
+		}
+		polls++
+		if polls < 3 {
+			return []json.RawMessage{json.RawMessage(`{"id":1}`)}, nil
+		}
+		return nil, nil
+	}
+	step := Step{Name: "wait", Request: Request{Method: http.MethodGet, Path: "/"}, WaitEmpty: "pending", Snapshot: []string{"done"}}
+	res, err := Run(context.Background(), scenarioOf(step), tgt)
+	require.NoError(t, err)
+	require.Equal(t, 3, polls)
+	require.Len(t, res.Steps, 1)
+	require.Contains(t, fmt.Sprint(res.Steps[0].Snapshots["done"]), "3")
+
+	polls = -1000
+	step.WaitTimeout = 150 * time.Millisecond
+	_, err = Run(context.Background(), scenarioOf(step), tgt)
+	require.NoError(t, err, "running out of time isn't an error")
+
+	// A deployed server has no database: smoke skips the wait.
+	tgt.Snapshot = nil
+	_, err = Run(context.Background(), scenarioOf(step), tgt)
+	require.NoError(t, err)
+}
+
+func TestValidateWaitEmpty(t *testing.T) {
+	req := Request{Method: http.MethodGet, Path: "/"}
+	for _, c := range []struct {
+		step Step
+		want string
+	}{
+		{Step{Name: "a", Request: req, WaitEmpty: "x; drop"}, "bad waitEmpty table"},
+		{Step{Name: "a", Request: req, WaitTimeout: time.Second}, "waitTimeout needs waitEmpty"},
+		{Step{Name: "a", Request: req, WaitEmpty: "x", WaitTimeout: -time.Second}, "waitTimeout must be"},
+		{Step{Name: "a", Request: req, WaitEmpty: "x", WaitTimeout: 24 * time.Hour}, "waitTimeout must be"},
+	} {
+		require.ErrorContains(t, scenarioOf(c.step).validate(), c.want)
+	}
+	require.NoError(t, scenarioOf(Step{Name: "a", Request: req, WaitEmpty: "x", WaitTimeout: time.Second}).validate())
+}
+
 func TestZipBodiesCompareByEntry(t *testing.T) {
 	archive := func(content string) []byte {
 		var b bytes.Buffer

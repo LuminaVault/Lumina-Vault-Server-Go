@@ -1,0 +1,9 @@
+# EntitlementMiddleware(.capture) sits after the JWT and before the rate limit and the
+# body. Only archived is refused. The passes use refused URLs, so nothing is fetched.
+module: capture
+steps:
+  - {name: no token, request: {method: POST, path: /v1/capture/safari, json: {url: "http://localhost/"}}}
+  - {name: archived is refused, as: capture_arc, request: {method: POST, path: /v1/capture/safari, json: {url: "http://feeds:8080/capture/article"}}, snapshot: [parity_capture_files]}
+  - {name: the gate comes before the body, as: capture_arc, request: {method: POST, path: /v1/capture/safari, raw: "{"}}
+  - {name: trial passes the gate, as: capture_cid, request: {method: POST, path: /v1/capture/safari, json: {url: "http://localhost/"}}}
+  - {name: lapsed passes the gate, as: capture_lap, request: {method: POST, path: /v1/capture/safari, json: {url: "http://localhost/"}}}

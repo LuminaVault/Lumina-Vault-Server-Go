@@ -167,6 +167,17 @@ mem_lim: 3E300000-0000-4000-8000-0000000000AC
 mem_sug: 3E300000-0000-4000-8000-0000000000AD
 mem_arc: 3E300000-0000-4000-8000-0000000000AE
 mem_ups: 3E300000-0000-4000-8000-0000000000AF
+# capture (parity/seed/capture.sql): own users, so a filled captureByUser bucket or
+# a vault tree can't touch other scenarios.
+capture_amy: CA97E000-0000-4000-8000-0000000000A1
+capture_ben: CA97E000-0000-4000-8000-0000000000B2
+capture_cid: CA97E000-0000-4000-8000-0000000000C3
+capture_hal: CA97E000-0000-4000-8000-0000000000D4
+capture_arc: CA97E000-0000-4000-8000-0000000000E5
+capture_lap: CA97E000-0000-4000-8000-0000000000F6
+# todos (parity/seed/todos.sql)
+todo_tia: 70D00000-0000-4000-8000-0000000000A1
+todo_tom: 70D00000-0000-4000-8000-0000000000B2
 # knowledge (parity/seed/knowledge.sql): own users so no captureByUser bucket fills.
 kg_kim: 6B000000-0000-4000-8000-0000000000A1
 kg_nia: 6B000000-0000-4000-8000-0000000000A2

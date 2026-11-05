@@ -1,0 +1,7 @@
+module: todos
+steps:
+  - {name: create refused, as: todo_tia, request: {method: POST, path: /v1/todos, json: {title: "buy disks"}}, snapshot: [parity_todo_files, parity_todo_memories], files: [todo_tia]}
+  - {name: validation before the guard still wins, as: todo_tia, request: {method: POST, path: /v1/todos, json: {title: " "}}}
+  - {name: patch writes no file, as: todo_tia, request: {method: PATCH, path: /v1/todos/70D00000-0000-4000-8000-000000000F02, json: {done: true}}}
+  - {name: delete writes no file, as: todo_tia, request: {method: DELETE, path: /v1/todos/70D00000-0000-4000-8000-000000000F03}}
+  - {name: list still works, as: todo_tia, request: {method: GET, path: /v1/todos}}

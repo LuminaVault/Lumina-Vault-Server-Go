@@ -119,6 +119,10 @@ type Config struct {
 	HermesDataRoot            string `env:"HERMES_DATA_ROOT" envDefault:"/app/data/hermes"`
 	BillingEnforcementEnabled string `env:"BILLING_ENFORCEMENT_ENABLED" envDefault:"false"`
 
+	// JinaAPIKey is Jina's reader, tier-2 of link enrichment. Unset still calls it,
+	// without the header, as in Swift.
+	JinaAPIKey string `env:"JINA_API_KEY"`
+
 	// APNS unlock pushes (apns package). APNSEnabled stays a string: Swift
 	// enables it only when it lowercases to "true".
 	APNSEnabled        string `env:"APNS_ENABLED" envDefault:"false"`

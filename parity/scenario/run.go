@@ -152,6 +152,9 @@ func runStep(ctx context.Context, sc Scenario, st Step, t Target, client *http.C
 		}
 		res.Headers[h] = strings.Join(resp.Header.Values(h), ", ")
 	}
+	if err := waitEmpty(ctx, st, t); err != nil {
+		return res, err
+	}
 	if t.Snapshot != nil && len(st.Snapshot) > 0 {
 		res.Snapshots = map[string]any{}
 		for _, table := range st.Snapshot {
@@ -175,6 +178,37 @@ func runStep(ctx context.Context, sc Scenario, st Step, t Target, client *http.C
 		return res, err
 	}
 	return res, nil
+}
+
+const (
+	defaultWaitTimeout = 25 * time.Second
+	waitPollInterval   = 100 * time.Millisecond
+)
+
+// waitEmpty polls st.WaitEmpty until it has no rows or the timeout passes.
+func waitEmpty(ctx context.Context, st Step, t Target) error {
+	if st.WaitEmpty == "" || t.Snapshot == nil {
+		return nil
+	}
+	timeout := st.WaitTimeout
+	if timeout == 0 {
+		timeout = defaultWaitTimeout
+	}
+	deadline := time.Now().Add(timeout)
+	for {
+		rows, err := t.Snapshot(ctx, st.WaitEmpty)
+		if err != nil {
+			return fmt.Errorf("waitEmpty %s: %w", st.WaitEmpty, err)
+		}
+		if len(rows) == 0 || time.Now().After(deadline) {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(waitPollInterval):
+		}
+	}
 }
 
 // sendTrigger sends a stream step's trigger and returns its status.

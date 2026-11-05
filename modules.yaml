@@ -136,7 +136,7 @@ modules:
   capture:
     wave: 4
     swiftDir: Sources/App/Capture
-    status: swift
+    status: parity
     prefixes: [/v1/capture]
     jobs: []
   import:
@@ -197,7 +197,7 @@ modules:
   todos:
     wave: 4
     swiftDir: Sources/App/Todos
-    status: swift
+    status: parity
     prefixes: [/v1/todos]
     jobs: []
   vault:
