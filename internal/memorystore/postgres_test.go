@@ -42,6 +42,7 @@ func TestAgainstPostgres(t *testing.T) {
 		"UpdateTags":                       testUpdateTags,
 		"UpdateReviewStateLeavesUpdatedAt": testReviewState,
 		"SetSpace":                         testSetSpace,
+		"SetEmbedding":                     testSetEmbedding,
 		"Forget":                           testForget,
 		"SourceVaultFileLookups":           testSourceVaultFile,
 		"Lineage":                          testLineage,
@@ -551,6 +552,33 @@ func testReviewState(t *testing.T, pool *pgxpool.Pool) {
 	assert.Equal(t, ReviewApproved, got.ReviewState)
 	assert.Nil(t, got.UpdatedAt, "raw SQL with no hand bump")
 	assert.NoError(t, r.UpdateReviewState(ctx, tenant, uuid.New(), ReviewApproved), "a missing row is not an error")
+}
+
+func testSetEmbedding(t *testing.T, pool *pgxpool.Pool) {
+	ctx := context.Background()
+	tenant, other := newTenant(t, pool), newTenant(t, pool)
+	r := New(pool, nil)
+	m := create(t, r, CreateParams{Tenant: tenant, Content: "x"})
+	v := vec(t, "image")
+
+	found, err := r.SetEmbedding(ctx, other, m.ID, v)
+	require.NoError(t, err)
+	assert.False(t, found, "another tenant's row is not found")
+	stored, exists, err := r.StoredEmbedding(ctx, tenant, m.ID)
+	require.NoError(t, err)
+	assert.True(t, exists)
+	assert.Nil(t, stored)
+
+	found, err = r.SetEmbedding(ctx, tenant, m.ID, v)
+	require.NoError(t, err)
+	assert.True(t, found)
+	stored, _, err = r.StoredEmbedding(ctx, tenant, m.ID)
+	require.NoError(t, err)
+	assert.InDeltaSlice(t, v, stored, 1e-5)
+	got, err := r.Find(ctx, tenant, m.ID)
+	require.NoError(t, err)
+	assert.Nil(t, got.UpdatedAt, "raw SQL with no hand bump")
+	assert.Equal(t, "x", got.Content)
 }
 
 func testSetSpace(t *testing.T, pool *pgxpool.Pool) {
