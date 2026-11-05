@@ -1148,12 +1148,12 @@ Beyond the pilot gate (D-wave2-early):
 
 ### G1 parity: met 2026-11-05
 
-- CI run 41973749983 on head 38ea86c: self-test (Swift vs Swift) and Swift vs Go give
-  **125 scenarios, 0 differences** (whole suite), and every switch state has 0 differences,
+- CI run 41975659123 on head 735b083: self-test (Swift vs Swift) and Swift vs Go give
+  **147 scenarios, 0 differences** (whole suite), and every switch state has 0 differences,
   including the new `hybrid-off` and `billing-on/memory`. `parity/scenarios/memory` has 10
   files and 625 steps, 134 with snapshots, with `memory_chunks` chunk IDs compared after
   content patches. `parity`, `lint`, `test` and `vuln` pass
-  (https://github.com/LuminaVault/Lumina-Vault-Server-Go/actions/runs/41973749983).
+  (https://github.com/LuminaVault/Lumina-Vault-Server-Go/actions/runs/41975659123).
 - The file move with bytes on disk is compared too: `03-patch.yaml` uploads a note through
   `/v1/vault/files` and moves its memory, with `files` steps on the tenant tree.
 - Go tests: `internal/modules/memory` has 70 tests, on Postgres where they need it,
