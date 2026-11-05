@@ -12,5 +12,5 @@ steps:
   - {"name": "empty query", "as": "ma_upd", "request": {"method": "POST", "path": "/v1/query/stream", "raw": "{\"query\":\"\"}"}}
   - {"name": "bad vault header", "as": "ma_upd", "request": {"method": "POST", "path": "/v1/query/stream", "json": {"query": "x"}, "headers": {"X-Vault-ID": "nope"}}}
   - {"name": "foreign vault", "as": "ma_upd", "request": {"method": "POST", "path": "/v1/query/stream", "json": {"query": "x"}, "headers": {"X-Vault-ID": "3A000000-0000-4000-8000-0000000000A1"}}}
-  - {"name": "gateway down: an error frame after a 200", "as": "ma_upd", "request": {"method": "POST", "path": "/v1/query/stream", "json": {"query": "hello"}}, "stream": true, "frames": 5, "framesTimeout": "20s"}
+  - {"name": "gateway down: an error frame after a 200", "as": "ma_upd", "request": {"method": "POST", "path": "/v1/query/stream", "json": {"query": "hello"}}, "ignore": ["$.payload.latencyMs"], "stream": true, "frames": 5, "framesTimeout": "20s"}
   - {"name": "wrong method", "as": "ma_upd", "request": {"method": "GET", "path": "/v1/query/stream"}}

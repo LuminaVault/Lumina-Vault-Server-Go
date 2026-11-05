@@ -7,13 +7,21 @@
 //	                           OpenAI-compatible providers speak it; SSE on stream:true
 //	POST /v1/messages          Anthropic Messages, also with stream:true
 //	GET  /v1/models            one model, for gateway probes
-//	GET  /health               200
-//	GET  /stub/stats           requests answered per path, so a script can prove a
+//	GET  /health               200, with a version
+//	GET  /stub/stats           requests answered per route, so a script can prove a
 //	                           server reached the stub and didn't fail over or fail closed
 //
+// runs.go has the Hermes runs API, gateway.go the Agents page and per-tenant
+// Hermes calls, providers.go Whisper and Ollama. Every shape is what the Swift
+// client reads, not the whole upstream API.
+//
+// The stub also runs on staging as HERMES_GATEWAY_URL (wave-5-plan.md, "G2 for
+// chat"), so it holds no secret, reaches nothing upstream, executes no tool, and
+// keeps a bounded amount of state.
+//
 // By default the reply is "stub reply <digest>", with the digest taken from the
-// last user message: a prompt that differs between the servers shows up as a
-// body difference. A directive anywhere in a message changes the answer. The
+// last user message: a user prompt that differs between the servers shows up as
+// a body difference. A directive anywhere in a message changes the answer. The
 // newest message holding one wins:
 //
 //	[[stub:reply:TEXT]]         reply with exactly TEXT (for example, JSON a
@@ -23,6 +31,9 @@
 //	[[stub:echo]]               reply with the whole request body as canonical JSON
 //	                            (sorted keys), so a prompt, tool schema or sampling
 //	                            parameter that differs shows up in the response
+//	[[stub:digest:all]]         take the digest over every message, role and text,
+//	                            so a system prompt or history difference shows too.
+//	                            Opt-in: only for prompts free of times and random ids
 //
 // /v1/messages refuses what Haiku 5.5 refuses (platform/infra
 // docs/llm-haiku-trial.md): temperature, top_p, top_k and assistant prefill are
@@ -47,9 +58,10 @@ import (
 const (
 	fixedCreated = 1700000000
 	fixedID      = "stub-0001"
+	stubVersion  = "stub"
 )
 
-var directiveRe = regexp.MustCompile(`(?s)\[\[stub:(?:(echo)|(reply|tool|error):(.*))\]\]`)
+var directiveRe = regexp.MustCompile(`(?s)\[\[stub:(?:(echo)|(reply|tool|error|digest):(.*))\]\]`)
 
 type message struct {
 	Role    string          `json:"role"`
@@ -85,8 +97,11 @@ type answer struct {
 	errorCode int
 }
 
-// decide turns a conversation into the stub's answer.
-func decide(messages []message, body []byte) answer {
+// decide turns a conversation into the stub's answer, for APIs with no chat body to echo.
+func decide(messages []message) answer { return decideRequest(messages, nil) }
+
+// decideRequest is decide with the request body, which [[stub:echo]] replies with.
+func decideRequest(messages []message, body []byte) answer {
 	for i := len(messages) - 1; i >= 0; i-- {
 		m := directiveRe.FindStringSubmatch(messages[i].text())
 		if m == nil {
@@ -107,6 +122,8 @@ func decide(messages []message, body []byte) answer {
 				code = http.StatusInternalServerError
 			}
 			return answer{errorCode: code}
+		case "digest":
+			return answer{text: replyFor(wholePrompt(messages))}
 		}
 	}
 	last := ""
@@ -116,8 +133,27 @@ func decide(messages []message, body []byte) answer {
 			break
 		}
 	}
-	sum := sha256.Sum256([]byte(last))
-	return answer{text: "stub reply " + hex.EncodeToString(sum[:8])}
+	return answer{text: replyFor(last)}
+}
+
+func replyFor(prompt string) string {
+	sum := sha256.Sum256([]byte(prompt))
+	return "stub reply " + hex.EncodeToString(sum[:8])
+}
+
+// wholePrompt is every message with its role, unambiguously delimited.
+func wholePrompt(messages []message) string {
+	var b strings.Builder
+	for _, m := range messages {
+		fmt.Fprintf(&b, "%q:%q\n", m.Role, m.text())
+	}
+	return b.String()
+}
+
+// userMessage wraps text in a message, for APIs that take a bare prompt.
+func userMessage(text string) message {
+	raw, _ := json.Marshal(text)
+	return message{Role: "user", Content: raw}
 }
 
 // canonical re-encodes a JSON body with sorted keys, so field order isn't a difference.
@@ -153,9 +189,13 @@ func pieces(s string) []string {
 type stub struct {
 	mu    sync.Mutex
 	stats map[string]int
+	// Under mu, oldest first in runOrder (runs.go).
+	runs     map[string]*run
+	runOrder []string
+	runCount int
 }
 
-func newStub() *stub { return &stub{stats: map[string]int{}} }
+func newStub() *stub { return &stub{stats: map[string]int{}, runs: map[string]*run{}} }
 
 func (s *stub) count(path string) {
 	s.mu.Lock()
@@ -166,6 +206,8 @@ func (s *stub) count(path string) {
 func (s *stub) handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/chat/completions", s.chat)
+	// DeepInfra's adapter joins chat/completions straight onto its base URL.
+	mux.HandleFunc("POST /chat/completions", s.chat)
 	mux.HandleFunc("POST /v1/messages", s.messages)
 	mux.HandleFunc("GET /v1/models", func(w http.ResponseWriter, r *http.Request) {
 		s.count(r.URL.Path)
@@ -173,7 +215,12 @@ func (s *stub) handler() http.Handler {
 			map[string]any{"id": "hermes-3", "object": "model", "created": fixedCreated, "owned_by": "stub"},
 		}})
 	})
-	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "version": stubVersion})
+	})
+	s.mountRuns(mux)
+	s.mountGateway(mux)
+	s.mountProviders(mux)
 	mux.HandleFunc("GET /stub/stats", func(w http.ResponseWriter, _ *http.Request) {
 		s.mu.Lock()
 		defer s.mu.Unlock()
@@ -205,7 +252,7 @@ func (s *stub) chat(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": map[string]any{"message": "bad json", "type": "invalid_request_error"}})
 		return
 	}
-	a := decide(req.Messages, body)
+	a := decideRequest(req.Messages, body)
 	if a.errorCode != 0 {
 		writeJSON(w, a.errorCode, map[string]any{"error": map[string]any{"message": "stub error", "type": "stub_error"}})
 		return
@@ -301,7 +348,7 @@ func (s *stub) messages(w http.ResponseWriter, r *http.Request) {
 		anthropicError(w, http.StatusBadRequest, "invalid_request_error", "assistant prefill is not supported")
 		return
 	}
-	a := decide(req.Messages, body)
+	a := decideRequest(req.Messages, body)
 	if a.errorCode != 0 {
 		anthropicError(w, a.errorCode, "api_error", "stub error")
 		return

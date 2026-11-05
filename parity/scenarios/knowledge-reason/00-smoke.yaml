@@ -3,6 +3,6 @@ module: knowledge-reason
 smoke: true
 steps:
   - {"name": "nothing in the graph", "as": "alice", "request": {"method": "POST", "path": "/v1/knowledge/reason", "json": {"query": "unmatched smoke words zzqx"}}}
-  - {"name": "nothing in the graph, stream", "as": "alice", "request": {"method": "POST", "path": "/v1/knowledge/reason/stream", "json": {"query": "unmatched smoke words zzqx"}}, "stream": true, "frames": 10, "framesTimeout": "20s"}
+  - {"name": "nothing in the graph, stream", "as": "alice", "request": {"method": "POST", "path": "/v1/knowledge/reason/stream", "json": {"query": "unmatched smoke words zzqx"}}, "ignore": ["$.payload.latencyMs"], "stream": true, "frames": 10, "framesTimeout": "20s"}
   - {"name": "empty query", "as": "alice", "request": {"method": "POST", "path": "/v1/knowledge/reason", "json": {"query": ""}}}
   - {"name": "only stop words", "as": "alice", "request": {"method": "POST", "path": "/v1/knowledge/reason", "json": {"query": "what is the"}}}
