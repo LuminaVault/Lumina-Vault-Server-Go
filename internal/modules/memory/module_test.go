@@ -1083,7 +1083,7 @@ func TestLocalSyncOffFallsToTheIDRoute(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, v.do(cur, http.MethodGet, "/v1/memory/local-sync/lineage", "").code)
 }
 
-func TestALiteralSegmentNeverFallsBackToTheIDRoute(t *testing.T) {
+func TestAPathEndingOnALiteralNeverFallsBackToTheIDRoute(t *testing.T) {
 	v := setup(t)
 	for _, c := range []struct{ method, path string }{
 		{http.MethodGet, "/v1/memory/upsert"},
@@ -1091,12 +1091,16 @@ func TestALiteralSegmentNeverFallsBackToTheIDRoute(t *testing.T) {
 		{http.MethodDelete, "/v1/memory/graph"},
 		{http.MethodPatch, "/v1/memory/facets"},
 		{http.MethodDelete, "/v1/memory/local-sync"},
-		{http.MethodGet, "/v1/memory/upsert/lineage"},
-		{http.MethodPost, "/v1/memory/search/review"},
 	} {
 		assert.Equal(t, http.StatusNotFound, v.do(ann, c.method, c.path, "").code, c.method+" "+c.path)
 	}
-	assert.Equal(t, http.StatusBadRequest, v.do(ann, http.MethodGet, "/v1/memory/other", "").code)
+	for _, c := range []struct{ method, path string }{
+		{http.MethodGet, "/v1/memory/other"},
+		{http.MethodGet, "/v1/memory/upsert/lineage"},
+		{http.MethodPost, "/v1/memory/search/review"},
+	} {
+		assert.Equal(t, http.StatusBadRequest, v.do(ann, c.method, c.path, "").code, c.method+" "+c.path)
+	}
 }
 
 func TestSuggestionsNeedNoTokenAndShareTheMeBucket(t *testing.T) {

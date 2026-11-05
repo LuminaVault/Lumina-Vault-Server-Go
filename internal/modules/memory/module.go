@@ -175,11 +175,11 @@ func (m *Module) Register(r httpserver.Router, _ echo.MiddlewareFunc) {
 	m.registerLiteralShadows(r)
 }
 
-// registerLiteralShadows pins a Hummingbird trie quirk: a path segment that matches a
-// constant child never falls back to the :id sibling, so DELETE /v1/memory/graph and
-// GET /v1/memory/upsert/lineage are 404s with no body, not "invalid memory id". The
-// one literal missing here is local-sync with hybrid execution off: Swift has no such
-// node then, and the path does reach :id.
+// registerLiteralShadows pins a Hummingbird trie quirk: when the whole path ends on a
+// constant child, that node answers and a method it lacks is a 404 with no body, so
+// DELETE /v1/memory/graph never reaches the :id sibling. GET /v1/memory/graph/lineage
+// has no such child and does reach :id, as here. With hybrid execution off Swift has
+// no local-sync node at all, so that path reaches :id too.
 func (m *Module) registerLiteralShadows(r httpserver.Router) {
 	notFound := func(*echo.Context) error { return echo.ErrNotFound }
 	shadow := func(literal string, get bool) {
@@ -189,10 +189,6 @@ func (m *Module) registerLiteralShadows(r httpserver.Router) {
 		}
 		r.DELETE(base, notFound)
 		r.PATCH(base, notFound)
-		for _, sub := range []string{"lineage", "related", "provenance"} {
-			r.GET(base+"/"+sub, notFound)
-		}
-		r.POST(base+"/review", notFound)
 	}
 	shadow("upsert", true)
 	shadow("search", true)
