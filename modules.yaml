@@ -304,7 +304,7 @@ modules:
   workflows:
     wave: 5
     swiftDir: Sources/App/Workflows
-    status: swift
+    status: parity
     prefixes: [/v1/workflow-hooks, /v1/workflow-templates, /v1/workflows]
     jobs: []
   hermes:

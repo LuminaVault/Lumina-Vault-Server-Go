@@ -1,0 +1,127 @@
+# Seeded runs in every status, a status and a trigger Swift's enums don't know, and the
+# active-run limit. Node runs carry provider columns: only BYOK users see them.
+module: workflows
+steps:
+  - name: "all runs: every status, bogus ones as failed"
+    as: "wf_run"
+    request: {"method": "GET", "path": "/v1/workflows/runs"}
+  - name: "the lab's runs"
+    as: "wf_run"
+    request: {"method": "GET", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000AA/runs"}
+  - name: "no runs"
+    as: "wf_run"
+    request: {"method": "GET", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000B4/runs"}
+  - name: "a list"
+    as: "wf_run"
+    request: {"method": "GET", "path": "/v1/workflows"}
+  - name: "detail with approvals and last run"
+    as: "wf_run"
+    request: {"method": "GET", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000AA"}
+  - name: "detail: succeeded"
+    as: "wf_run"
+    request: {"method": "GET", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A1"}
+  - name: "detail: failed"
+    as: "wf_run"
+    request: {"method": "GET", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A2"}
+  - name: "detail: waiting"
+    as: "wf_run"
+    request: {"method": "GET", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A3"}
+  - name: "detail: paused"
+    as: "wf_run"
+    request: {"method": "GET", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A4"}
+  - name: "detail: timed out"
+    as: "wf_run"
+    request: {"method": "GET", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A5"}
+  - name: "detail: bogus"
+    as: "wf_run"
+    request: {"method": "GET", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A6"}
+  - name: "byok sees provider and model"
+    as: "wf_byo"
+    request: {"method": "GET", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000B1"}
+  - name: "byok's runs"
+    as: "wf_byo"
+    request: {"method": "GET", "path": "/v1/workflows/runs"}
+  - name: "byok's limits"
+    as: "wf_byo"
+    request: {"method": "GET", "path": "/v1/workflows/limits"}
+  - name: "retry a succeeded run"
+    as: "wf_run"
+    request: {"method": "POST", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A1/retry"}
+    snapshot: ["workflow_runs"]
+  - name: "resume a succeeded run"
+    as: "wf_run"
+    request: {"method": "POST", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A1/resume"}
+  - name: "cancel a succeeded run"
+    as: "wf_run"
+    request: {"method": "POST", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A1/cancel"}
+    snapshot: ["workflow_runs"]
+  - name: "cancel a timed out run"
+    as: "wf_run"
+    request: {"method": "POST", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A5/cancel"}
+    snapshot: ["workflow_runs"]
+  - name: "limits before"
+    as: "wf_run"
+    request: {"method": "GET", "path": "/v1/workflows/limits"}
+  - name: "retry a failed run"
+    as: "wf_run"
+    request: {"method": "POST", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A2/retry"}
+    capture: {"r1": "$.id"}
+    snapshot: ["workflow_runs", "workflow_run_events", "workflow_node_runs"]
+  - name: "resume the paused run"
+    as: "wf_run"
+    request: {"method": "POST", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A4/resume"}
+    snapshot: ["workflow_runs", "workflow_run_events", "workflow_node_runs"]
+  - name: "limits after"
+    as: "wf_run"
+    request: {"method": "GET", "path": "/v1/workflows/limits"}
+  - name: "retry a timed out run at the limit"
+    as: "wf_run"
+    request: {"method": "POST", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A5/retry"}
+    snapshot: ["workflow_runs"]
+  - name: "cancel the waiting run and its node runs"
+    as: "wf_run"
+    request: {"method": "POST", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A3/cancel"}
+    snapshot: ["workflow_runs", "workflow_run_events", "workflow_node_runs"]
+  - name: "cancel the bogus run"
+    as: "wf_run"
+    request: {"method": "POST", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A6/cancel"}
+    snapshot: ["workflow_runs", "workflow_run_events", "workflow_node_runs"]
+  - name: "retry the cancelled waiting run"
+    as: "wf_run"
+    request: {"method": "POST", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A3/retry"}
+    snapshot: ["workflow_runs"]
+  - name: "run an unpublished workflow"
+    as: "wf_run"
+    request: {"method": "POST", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000B4/runs", "json": {"input": {}}}
+  - name: "publish it"
+    as: "wf_run"
+    request: {"method": "POST", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000B4/publish"}
+    snapshot: ["parity_workflows", "workflow_versions"]
+  - name: "all runs again"
+    as: "wf_run"
+    request: {"method": "GET", "path": "/v1/workflows/runs"}
+  - name: "at pro's limit: limits"
+    as: "wf_lim"
+    request: {"method": "GET", "path": "/v1/workflows/limits"}
+  - name: "at pro's limit: run"
+    as: "wf_lim"
+    request: {"method": "POST", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000AB/runs", "json": {"input": {}}}
+    snapshot: ["workflow_runs"]
+  - name: "at pro's limit: resume"
+    as: "wf_lim"
+    request: {"method": "POST", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000C2/resume"}
+    snapshot: ["workflow_runs"]
+  - name: "at pro's limit: retry"
+    as: "wf_lim"
+    request: {"method": "POST", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000C2/retry"}
+    snapshot: ["workflow_runs"]
+  - name: "free a slot"
+    as: "wf_lim"
+    request: {"method": "POST", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000C1/cancel"}
+  - name: "resume in the slot clears the pause"
+    as: "wf_lim"
+    request: {"method": "POST", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000C2/resume"}
+    snapshot: ["workflow_runs", "workflow_run_events", "workflow_node_runs"]
+  - name: "the slot is taken again"
+    as: "wf_lim"
+    request: {"method": "POST", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000AB/runs", "json": {"input": {}}}

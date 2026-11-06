@@ -1,0 +1,81 @@
+# Another tenant's workflow, run and approval, through every route that takes an id.
+module: workflows
+steps:
+  - name: "the owner sees it"
+    as: "wf_iso"
+    request: {"method": "GET", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000B5"}
+  - name: "the owner's run"
+    as: "wf_iso"
+    request: {"method": "GET", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000F2"}
+  - name: "the owner's approval"
+    as: "wf_iso"
+    request: {"method": "GET", "path": "/v1/workflows/approvals"}
+  - name: "not in the stranger's list"
+    as: "wf_hun"
+    request: {"method": "GET", "path": "/v1/workflows"}
+  - name: "not in the stranger's runs"
+    as: "wf_hun"
+    request: {"method": "GET", "path": "/v1/workflows/runs"}
+  - name: "not in the stranger's approvals"
+    as: "wf_hun"
+    request: {"method": "GET", "path": "/v1/workflows/approvals"}
+  - name: "detail"
+    as: "wf_hun"
+    request: {"method": "GET", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000B5"}
+  - name: "draft"
+    as: "wf_hun"
+    request: {"method": "PUT", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000B5/draft", "json": {"name": "Stolen", "expectedRevision": 3, "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+  - name: "publish"
+    as: "wf_hun"
+    request: {"method": "POST", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000B5/publish"}
+  - name: "run"
+    as: "wf_hun"
+    request: {"method": "POST", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000B5/runs", "json": {"input": {}}}
+  - name: "rotate"
+    as: "wf_hun"
+    request: {"method": "POST", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000B5/webhook/rotate"}
+  - name: "its runs list as empty"
+    as: "wf_hun"
+    request: {"method": "GET", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000B5/runs"}
+  - name: "versions"
+    as: "wf_hun"
+    request: {"method": "GET", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000B5/versions"}
+  - name: "restore"
+    as: "wf_hun"
+    request: {"method": "POST", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000B5/versions/1/restore"}
+  - name: "run detail"
+    as: "wf_hun"
+    request: {"method": "GET", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000F2"}
+  - name: "events"
+    as: "wf_hun"
+    request: {"method": "GET", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000F2/events"}
+  - name: "stream"
+    as: "wf_hun"
+    request: {"method": "GET", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000F2/events/stream"}
+    stream: true
+    frames: 1
+  - name: "cancel"
+    as: "wf_hun"
+    request: {"method": "POST", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000F2/cancel"}
+  - name: "retry"
+    as: "wf_hun"
+    request: {"method": "POST", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000F2/retry"}
+  - name: "resume"
+    as: "wf_hun"
+    request: {"method": "POST", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000F2/resume"}
+  - name: "decision"
+    as: "wf_hun"
+    request: {"method": "POST", "path": "/v1/workflows/approvals/F1070000-0000-4000-8000-0000000000B1/decision", "json": {"approved": true}}
+  - name: "nothing moved"
+    as: "wf_iso"
+    request: {"method": "GET", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000B5"}
+    snapshot: ["parity_workflows", "workflow_runs", "workflow_approvals", "parity_workflow_webhooks"]
+  - name: "alice's list stays hers"
+    as: "alice"
+    request: {"method": "GET", "path": "/v1/workflows"}
+  - name: "bob reads alice's nothing"
+    as: "bob"
+    request: {"method": "GET", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000A1"}
+  - name: "alice can't reach the run lab"
+    as: "alice"
+    request: {"method": "GET", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000AA"}

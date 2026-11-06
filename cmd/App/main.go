@@ -53,15 +53,19 @@ import (
 	"lumina/internal/modules/todos"
 	"lumina/internal/modules/vault"
 	"lumina/internal/modules/vision"
+	"lumina/internal/modules/workflows"
 	"lumina/internal/onboardlatch"
 	"lumina/internal/posthog"
 	"lumina/internal/ratelimit"
 	"lumina/internal/secretbox"
+	"lumina/internal/selfimprove"
+	"lumina/internal/ssrfguard"
 	"lumina/internal/telemetry"
 	"lumina/internal/usagemeter"
 	"lumina/internal/vaultfiles"
 	"lumina/internal/vaultpaths"
 	"net"
+	"net/url"
 	"os"
 	"os/signal"
 	"strconv"
@@ -260,6 +264,9 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 			todos.New(pool, paths, todos.Options{Disk: disk, Memories: memories, Embeddings: embeddings}),
 			captureModule(pool, cfg, box, limits, links, analytics),
 		)
+		if workflows.Enabled(cfg.CerberusStudioEnabled) {
+			deps.Modules = append(deps.Modules, workflowsModule(pool, cfg, box, identify, limits))
+		}
 		deps.Modules = append(deps.Modules, agent.modules(links, enrichment)...)
 	}
 	// Deferred after the sink and the pool, so jobs stop first and can still use both.
@@ -280,6 +287,32 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		return err
 	}
 	return nil
+}
+
+// workflowsModule builds the workflow routes, the "if workflowStudioEnabled" block of
+// App+build.swift without its background services, which stay in Swift.
+func workflowsModule(pool *pgxpool.Pool, cfg config.Config, box *secretbox.Box, identify echo.MiddlewareFunc, limits *ratelimit.Store) httpserver.Module {
+	var isUserOverride func(context.Context, uuid.UUID) bool
+	if box != nil {
+		if gateway, err := url.Parse(cfg.HermesGatewayURL); err == nil {
+			isUserOverride = selfimprove.ResolverOverride(hermesresolve.New(pool, box, ssrfguard.Guard{
+				AllowPrivateRanges: strings.EqualFold(cfg.BYOHermesAllowPrivate, "true"),
+				RequireHTTPS:       cfg.BYOHermesRequireHTTPS(),
+				AllowTailnetHTTP:   strings.EqualFold(cfg.BYOHermesAllowTailnet, "true"),
+			}, gateway))
+		}
+	}
+	return workflows.New(pool, workflows.Options{
+		Identify: identify,
+		Limits:   limits,
+		Gate: entitlement.Middleware(pool, entitlement.WorkflowAutomation,
+			entitlement.EnforcementEnabled(cfg.BillingEnforcementEnabled), entitlement.PGCredentials(pool, box)),
+		Box:         box,
+		Preferences: llm.NewPreferenceRepository(pool),
+		Activity:    selfimprove.NewActivity(pool, cfg.SelfImprovementEnabled, isUserOverride),
+		// providerAPIKey("openRouter", alias: "openrouter.api_key").
+		ManagedInferenceAvailable: cfg.LLMOpenRouterAPIKey != "" || cfg.LLMOpenRouterAPIKeyLegacy != "" || cfg.OpenRouterAPIKey != "",
+	})
 }
 
 // startJobs starts the jobs LV_GO_JOBS enables. It fails on a name no registered job
