@@ -1847,3 +1847,22 @@ Beyond the pilot gate (D-wave2-early):
   were already in `logic_test.go` and `module_test.go`.
 - Left for J2 part 2: `DailyPostWorker` and the moderation sweep, `PeriodRecapThemesWorker`,
   `KnowledgeExtractionWorker`, `SynthesisWorker`, `EmbeddingReembedService`.
+
+## jobs J2 (part 2): PeriodRecapThemesWorker
+
+### Ported 2026-11-11
+
+- `me.ThemesWorker` is PeriodRecapThemesWorker and its generator. It writes the
+  `recap_themes` card with one bounded call (20 s) through the agent's routed transport,
+  following Haiku 5.5 rules: no sampling knobs, user turn last, `max_tokens` 400.
+  `GET /v1/me/recap/period` now schedules a job when it wins the claim. That route is still
+  held on Swift.
+- Job `PeriodRecapThemesWorker` drains the inbox every 2 s. It is built only with
+  `RECAP_THEMES_ENABLED` and runs only while `LV_GO_JOBS` names it. A job that Go claims but
+  doesn't run stays `pending`, and the next view after the 120 s in-flight window claims it
+  again on either server.
+- Move: **Any**, since the claim row is the lock. Name it in `LV_GO_JOBS` in the same commit
+  that flips `/v1/me/recap/period`, because Go's claims only reach Go's own inbox.
+- Swift tests ported: the payload, parse and generator tests in `PeriodRecapLogicTests`, and
+  `the worker writes the themes the next view shows, and a failed write falls back` in
+  `PeriodRecapControllerTests` (`themes_test.go`).

@@ -216,9 +216,8 @@ func (m *Module) periodRecap(c *echo.Context, u user, p periodParams, now time.T
 }
 
 // themesCard never fails: a failing cache read shows the counted fallback.
-// The claim is PeriodRecapThemesStore.claim; Swift then hands a job to its
-// in-process worker. Go has no worker (it makes the LLM call), so nothing is
-// scheduled here.
+// The claim is PeriodRecapThemesStore.claim; a won claim hands a job to the
+// themes worker.
 func (m *Module) themesCard(c *echo.Context, userID uuid.UUID, w periodWindow, in periodInputs, current dayCounts, now time.Time) RecapThemesCardDTO {
 	fallback := fallbackSentence(w, in.topTags, current.memories())
 	if !m.opts.RecapThemesEnabled {
@@ -244,6 +243,9 @@ func (m *Module) themesCard(c *echo.Context, userID uuid.UUID, w periodWindow, i
 			return themesPolicyCard(nil, false, true, fallback, now)
 		}
 		claimed = len(won) > 0
+		if claimed && m.opts.Themes != nil {
+			m.opts.Themes.Schedule(themesJob(userID, w, in, current))
+		}
 	}
 	return themesPolicyCard(rowp, claimed, true, fallback, now)
 }
@@ -694,4 +696,25 @@ func themesPolicyCard(row *db.RecapThemesLoadRow, claimed, enabled bool, fallbac
 	}
 	card.Status = "fallback"
 	return card
+}
+
+// themesJob is the PeriodRecapThemesJob PeriodRecapService schedules.
+func themesJob(userID uuid.UUID, w periodWindow, in periodInputs, current dayCounts) ThemesJob {
+	input := ThemesInput{
+		PeriodName: periodName(w), Kind: w.kind, Memories: current.memories(), Asked: current.asked,
+		TopTags: in.topTags,
+	}
+	if in.topSpace != nil {
+		label := in.topSpace.Label
+		input.TopSpace = &label
+	}
+	if r := periodRhythm(in.hourCounts); r != nil {
+		persona := string(r.Persona)
+		input.Persona = &persona
+	}
+	if p := periodPeak(w, in.days, periodSeries(w, in.days)); p != nil {
+		busiest := p.Busiest.Key
+		input.Busiest = &busiest
+	}
+	return ThemesJob{UserID: userID, PeriodKey: w.periodKey(), Start: w.start, End: w.end, Input: input}
 }

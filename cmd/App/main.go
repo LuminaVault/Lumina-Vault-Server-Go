@@ -191,7 +191,12 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		// SecretBox: nil without LV_SECRET_MASTER_KEY, as in Swift.
 		box, _ := secretbox.New(cfg.LVSecretMasterKey)
 		embeddings := embedding.New(pool, embeddingConfig(cfg), box)
-		meModule := me.New(pool, identify, limits, me.Options{RecapThemesEnabled: cfg.RecapThemesEnabled})
+		// recap.themesEnabled builds the worker; its transport is the agent's LLM stack, set below.
+		var themes *me.ThemesWorker
+		if cfg.RecapThemesEnabled {
+			themes = &me.ThemesWorker{Pool: pool, Model: cfg.HermesDefaultModel, Logger: slog.Default().With("label", "lv.me.recap")}
+		}
+		meModule := me.New(pool, identify, limits, me.Options{RecapThemesEnabled: cfg.RecapThemesEnabled, Themes: themes})
 		// One achievements inbox per process, and MeTodayCache is its one real subscriber.
 		// The sink stops after the HTTP server, so a request finishing in graceful shutdown
 		// can still enqueue.
@@ -279,6 +284,10 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		registered = append(registered, j2Jobs(pool, cfg, embeddings)...)
 		agent, stopAgent := newAgent(ctx, pool, cfg, box, paths, identify, limits, embeddings, sink, meModule, disk)
 		agent.sockets = sockets
+		if themes != nil {
+			themes.Transport = agent.stack.Transport
+			registered = append(registered, themes.Job())
+		}
 		defer stopAgent()
 		links, enrichment := linkCaptureService(pool, cfg, paths, embeddings, memories, disk, sink)
 		deps.Modules = append(deps.Modules,

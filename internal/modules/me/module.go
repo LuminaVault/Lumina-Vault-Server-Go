@@ -53,6 +53,9 @@ import (
 type Options struct {
 	// RecapThemesEnabled is recap.themesEnabled (RECAP_THEMES_ENABLED, default true).
 	RecapThemesEnabled bool
+	// Themes takes the job a won claim produces (PeriodRecapThemesWorker). Nil
+	// claims and schedules nothing.
+	Themes *ThemesWorker
 }
 
 type Module struct {
