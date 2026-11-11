@@ -77,11 +77,12 @@ type photonSession struct {
 
 // photon is PhotonProvisioningService: Photon's device-code login, then a project
 // with Spectrum, then a shared line for the bound phone, sealed into the photon
-// gateway row. Sessions are in-memory. The sidecar activation step is not ported:
-// production configures no sidecar (wave-6-8-plan.md 6D).
+// gateway row, then activates the project in the central sidecar when one is
+// configured. Sessions are in-memory.
 type photon struct {
 	pool          *pgxpool.Pool
 	box           *secretbox.Box
+	sidecar       SidecarClient
 	http          *http.Client
 	log           *slog.Logger
 	dashboardHost string
@@ -99,9 +100,9 @@ const (
 	photonProjectName = "Lumina Agent"
 )
 
-func newPhoton(pool *pgxpool.Pool, box *secretbox.Box, log *slog.Logger) *photon {
+func newPhoton(pool *pgxpool.Pool, box *secretbox.Box, sidecar SidecarClient, log *slog.Logger) *photon {
 	return &photon{
-		pool: pool, box: box, http: &http.Client{}, log: log,
+		pool: pool, box: box, sidecar: sidecar, http: &http.Client{}, log: log,
 		dashboardHost: "https://app.photon.codes", spectrumHost: "https://spectrum.photon.codes",
 		sessions: map[uuid.UUID]*photonSession{}, byTenant: map[uuid.UUID]uuid.UUID{},
 	}
@@ -620,7 +621,18 @@ func (p *photon) persist(ctx context.Context, id uuid.UUID, spectrumID, secret, 
 	if err != nil {
 		return err
 	}
-	return upsertGatewayRow(ctx, p.pool, tenant, "photon", sealed)
+	if err := upsertGatewayRow(ctx, p.pool, tenant, "photon", sealed); err != nil {
+		return err
+	}
+	// Activate the central sidecar with the new credentials so inbound flows.
+	if p.sidecar != nil {
+		if err := p.sidecar.Activate(ctx, spectrumID, secret, tenant, nil); err != nil {
+			p.log.WarnContext(ctx, "photon sidecar activate after provisioning failed (will retry on apply)", "error", err.Error())
+		} else {
+			p.log.InfoContext(ctx, "photon sidecar auto-activated after provisioning", "tenantID", tenant)
+		}
+	}
+	return nil
 }
 
 // extractTokenCandidate looks for the access token where Photon has put it.

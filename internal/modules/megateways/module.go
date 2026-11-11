@@ -45,18 +45,25 @@ type Options struct {
 	Resolver *hermesresolve.Resolver
 	// SidecarToken is photon.sidecarToken. Empty disables the inbound webhook.
 	SidecarToken string
+	// Sidecar is the central Photon sidecar; nil when photon.sidecarUrl or the
+	// token is unset. Without it provisioning skips activation and inbound is 503.
+	Sidecar SidecarClient
+	// DeliveryHost is where inbound delivery reaches a tenant's published port;
+	// empty is Swift's http://host.docker.internal.
+	DeliveryHost string
 	Log          *slog.Logger
 }
 
 // Module serves the gateway routes.
 type Module struct {
-	pool    *pgxpool.Pool
-	opt     Options
-	pairing *pairing
-	apply   *applier
-	photon  *photon
-	health  *http.Client
-	now     func() time.Time
+	pool     *pgxpool.Pool
+	opt      Options
+	pairing  *pairing
+	apply    *applier
+	photon   *photon
+	delivery *delivery
+	health   *http.Client
+	now      func() time.Time
 }
 
 func New(pool *pgxpool.Pool, opt Options) *Module {
@@ -69,7 +76,14 @@ func New(pool *pgxpool.Pool, opt Options) *Module {
 		pool: pool, containers: opt.Containers, probe: defaultHealthProbe, healthTimeout: 60 * time.Second,
 		log: opt.Log, now: m.nowFn, subs: map[uuid.UUID]map[int]chan applyEvent{},
 	}
-	m.photon = newPhoton(pool, opt.Box, opt.Log)
+	m.photon = newPhoton(pool, opt.Box, opt.Sidecar, opt.Log)
+	if opt.Sidecar != nil {
+		host := opt.DeliveryHost
+		if host == "" {
+			host = "http://host.docker.internal"
+		}
+		m.delivery = &delivery{client: opt.Sidecar, containers: opt.Containers, http: &http.Client{}, log: opt.Log, hostBase: host}
+	}
 	return m
 }
 
@@ -219,11 +233,13 @@ func (m *Module) list(c *echo.Context) error {
 }
 
 // parseID is parseID: an id outside the catalog is 404 unsupported_gateway.
-// "apply" is a constant segment in Hummingbird's trie, which wins over :id and
-// answers any other method with an empty 404.
-func parseID(c *echo.Context) (string, error) {
+// "apply", "whatsapp" and "photon" are constant segments in Hummingbird's trie,
+// which win over a terminal :id and answer its methods with an empty 404 (GET,
+// PUT, DELETE /whatsapp never reach the handler). Deeper paths (/:id/test)
+// backtrack to :id, so there only "apply" is shadowed.
+func parseID(c *echo.Context, terminal bool) (string, error) {
 	raw := c.Param("id")
-	if raw == "apply" {
+	if raw == "apply" || (terminal && (raw == "whatsapp" || raw == "photon")) {
 		return "", echo.ErrNotFound
 	}
 	if _, ok := catalog[raw]; !ok {
@@ -244,7 +260,7 @@ func (m *Module) getOne(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	id, err := parseID(c)
+	id, err := parseID(c, true)
 	if err != nil {
 		return err
 	}
@@ -274,7 +290,7 @@ func (m *Module) put(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	id, err := parseID(c)
+	id, err := parseID(c, true)
 	if err != nil {
 		return err
 	}
@@ -313,7 +329,7 @@ func (m *Module) delete(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	id, err := parseID(c)
+	id, err := parseID(c, true)
 	if err != nil {
 		return err
 	}
@@ -331,7 +347,7 @@ func (m *Module) test(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	id, err := parseID(c)
+	id, err := parseID(c, false)
 	if err != nil {
 		return err
 	}
@@ -625,11 +641,21 @@ func presentedToken(r *http.Request) (string, bool) {
 	return strings.TrimPrefix(v[0], "Bearer "), true
 }
 
-// photonInbound is handlePhotonInbound with no delivery service: the sidecar
-// client is not ported (production sets no sidecar), so it is always 503.
+// photonInbound is handlePhotonInbound: 503 without a sidecar, 400 for an event
+// that won't decode, else the reply is delivered before the 200.
 func (m *Module) photonInbound(c *echo.Context) error {
-	m.opt.Log.WarnContext(c.Request().Context(), "photon inbound received but delivery service not available")
-	return c.NoContent(http.StatusServiceUnavailable)
+	ctx := c.Request().Context()
+	if m.delivery == nil {
+		m.opt.Log.WarnContext(ctx, "photon inbound received but delivery service not available")
+		return c.NoContent(http.StatusServiceUnavailable)
+	}
+	ev, err := wire.Bind[InboundEvent](c)
+	if err != nil {
+		m.opt.Log.ErrorContext(ctx, "photon inbound decode/delivery error", "error", err.Error())
+		return c.NoContent(http.StatusBadRequest)
+	}
+	m.delivery.deliver(ctx, *ev)
+	return c.NoContent(http.StatusOK)
 }
 
 // streamSSE writes one `data:` frame per event, Foundation-encoded, until the

@@ -112,7 +112,7 @@ func setup(t *testing.T, spawn bool) env {
 	master := make([]byte, 32)
 	box, err := secretbox.New(base64.StdEncoding.EncodeToString(master))
 	require.NoError(t, err)
-	life := &hermescontainers.Lifecycle{Manager: hermescontainers.New(pool, box), Docker: hermescontainers.ProcessDocker{BinaryPath: "/nonexistent/docker"}, Network: "n"}
+	life := &hermescontainers.Lifecycle{Manager: hermescontainers.New(pool, box), Docker: hermescontainers.ProcessDocker{BinaryPath: "/nonexistent/docker"}, Config: hermescontainers.Config{Network: "n"}}
 	var containers hermescontainers.Containers = life
 	if spawn {
 		containers = &spawning{Lifecycle: life, pool: pool, box: box}

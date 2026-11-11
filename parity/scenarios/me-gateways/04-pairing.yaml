@@ -1,9 +1,13 @@
 # WhatsApp pairing and Photon setup without a container. Neither server can run
-# docker here, so starting a pairing is the empty 500 of a failed spawn. Photon
-# setup is left out: it calls the real Photon API. Streams for unknown sessions
-# send one error frame.
+# docker here, so starting a pairing is the empty 500 of a failed spawn. Photon's
+# hosts (app.photon.codes, spectrum.photon.codes) are fixed https URLs in Swift, so
+# the compose file points them at 127.0.0.1 (x-no-external): setup start fails on
+# the device-code request in both servers, never reaching the real API. The
+# success path is covered in Go against httptest stubs. Streams for unknown
+# sessions send one error frame.
 module: me-gateways
 steps:
+  - {name: photon setup start with the Photon API unreachable, as: gw_fay, request: {method: POST, path: /v1/me/hermes-gateways/photon/setup}}
   - {name: whatsapp pair without docker, as: gw_eve, request: {method: POST, path: /v1/me/hermes-gateways/whatsapp/pair}}
   - name: whatsapp unknown session stream
     as: gw_eve

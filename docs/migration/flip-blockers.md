@@ -189,19 +189,17 @@ Fixes that later remove the held routes and gaps (Go only unless stated; no modu
   doesn't move the archive date, because Swift has to outlive wave 5 regardless. Owner's call.
 - **Swift change.** None. **Unlocks.** 1 module.
 
-### me-gateways, integrations: in-process sessions, no container spawn (6D, 6E)
+### me-gateways, integrations: in-process sessions (6D, 6E)
 
 - **In-memory state: real, by design.** The gateway-apply SSE subscribers, WhatsApp pairing sessions,
   Photon setup sessions, xAI and Nous OAuth sessions and the parked `hermes auth` processes live in the
   serving process. Start and complete (or stream) must reach the same server, so each module flips as
   one, with no `heldPaths`. Apply jobs themselves persist in `hermes_gateway_apply_jobs`.
-- **Container spawn: not ported (O1).** Go's `hermescontainers.Lifecycle.EnsureRunning` checks the
-  docker network and then fails. In production there is no docker in the pod, so Swift fails at the
-  same point and both answer the empty 500. On a host with docker they would diverge: Swift would start
-  the container, Go would not.
-- **Photon sidecar: not ported.** Production sets no `PHOTON_SIDECAR_URL`; inbound answers 503 and
-  provisioning skips sidecar activation. Go logs a warning at boot if the sidecar is configured.
-- **Template seeding** for a tenant that already has a container row is not ported; it needs docker.
+- **Containers.** Go ports the container lifecycle in full (D-6de-waivers). Production has no docker in
+  the pod, so both servers fail at the first docker call. `ContainerReaperService` stays in Swift until
+  the wave 6 jobs move.
+- **Photon sidecar.** Ported client; production sets no `PHOTON_SIDECAR_URL`, so inbound answers 503 in
+  both. `docker/photon-sidecar` is retired with the Swift archive.
 - **Swift change.** None. **Unlocks.** 2 modules.
 
 ## Gap found that wasn't recorded: server-side PostHog events

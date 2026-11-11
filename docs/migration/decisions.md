@@ -693,3 +693,22 @@ port."
 - `FixDashboard` stays off for the same reason: it is a deliberate difference, not a port.
 - Order now: 5C chat first, then the rest of the port.
 - The other answers above stand.
+
+## D-6de-waivers: no waivers for 6D/6E; `docker/photon-sidecar` retired
+
+On 2026-11-11 the owner rejected the three waivers proposed in #71. All three are ported instead:
+
+- **Container start and template seeding.** `internal/hermescontainers.Lifecycle` ports HermesContainerManager
+  (ensureRunning, docker run args, config.yaml/.env seeding with SHA-256 drift, audio-proxy credential, evictIdle,
+  reprovisionAll, seed/apply gateway config) behind the `Docker` interface, tested against a stub docker as Swift's
+  tests stub `DockerExec`. Production still has no docker in the pod, so the default `ProcessDocker` fails at the first
+  call, as Swift's does. `ContainerReaperService` (the periodic evictIdle job) is not part of this; it moves with the
+  other wave 6 jobs.
+- **Photon sidecar client and activation.** `megateways.HTTPSidecarClient` and the delivery service are ported and
+  tested against httptest stubs; provisioning activates the sidecar when one is configured.
+- **Photon setup start in parity.** Swift's Photon hosts are fixed https URLs, so the parity compose file points
+  `app.photon.codes` and `spectrum.photon.codes` at 127.0.0.1 and both servers fail the device-code request the same
+  way. The success path is a Go test against an httptest Photon stub.
+
+`docker/photon-sidecar` (the Node spectrum-ts process) is retired with the Swift archive. It is not carried into the
+Go repo; Go keeps only the client for whatever sidecar an operator runs.

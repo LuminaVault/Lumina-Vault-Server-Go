@@ -41,7 +41,7 @@ func setup(t *testing.T) env {
 	box, err := secretbox.New(base64.StdEncoding.EncodeToString(make([]byte, 32)))
 	require.NoError(t, err)
 	docker := hermescontainers.ProcessDocker{BinaryPath: "/nonexistent/docker"}
-	life := &hermescontainers.Lifecycle{Manager: hermescontainers.New(pool, box), Docker: docker, Network: "n"}
+	life := &hermescontainers.Lifecycle{Manager: hermescontainers.New(pool, box), Docker: docker, Config: hermescontainers.Config{Network: "n"}}
 	m := New(pool, Options{Box: box, Limits: ratelimit.NewStore(), Containers: life, Docker: docker})
 	srv := httpserver.New(config.Config{}, httpserver.Deps{Auth: auth.Middleware(keys, auth.PGUsers(pool)), Modules: []httpserver.Module{m}})
 	return env{t: t, pool: pool, srv: srv}
@@ -170,6 +170,10 @@ func TestRouteShadowing(t *testing.T) {
 		{http.MethodGet, "/v1/me/hermes-gateways/apply"},
 		{http.MethodPut, "/v1/me/hermes-gateways/apply"},
 		{http.MethodDelete, "/v1/me/hermes-gateways/apply"},
+		{http.MethodGet, "/v1/me/hermes-gateways/whatsapp"},
+		{http.MethodPut, "/v1/me/hermes-gateways/whatsapp"},
+		{http.MethodGet, "/v1/me/hermes-gateways/photon"},
+		{http.MethodDelete, "/v1/me/hermes-gateways/photon"},
 	} {
 		code, body := v.do(u, c.method, c.path, "")
 		require.Equal(t, http.StatusNotFound, code, c.method+" "+c.path)

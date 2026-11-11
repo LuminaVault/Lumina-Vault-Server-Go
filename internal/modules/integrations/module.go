@@ -59,11 +59,11 @@ func New(pool *pgxpool.Pool, opt Options) *Module {
 func (m *Module) Register(r httpserver.Router, authMW echo.MiddlewareFunc) {
 	r.GET("/v1/integrations/xai", m.xaiStatus, authMW)
 	r.POST("/v1/integrations/xai/start", m.xaiStart, authMW)
-	r.POST("/v1/integrations/xai/complete", m.xaiComplete, authMW)
+	r.POST("/v1/integrations/xai/complete", m.xaiComplete) // no identity: Swift completes by session alone
 	r.DELETE("/v1/integrations/xai", m.xaiRevoke, authMW)
 	r.GET("/v1/integrations/nous", m.nousStatus, authMW)
 	r.POST("/v1/integrations/nous/start", m.nousStart, authMW)
-	r.POST("/v1/integrations/nous/complete", m.nousComplete, authMW)
+	r.POST("/v1/integrations/nous/complete", m.nousComplete) // no identity: Swift completes by session alone
 	r.DELETE("/v1/integrations/nous", m.nousRevoke, authMW)
 }
 

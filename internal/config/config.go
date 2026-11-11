@@ -169,10 +169,21 @@ type Config struct {
 
 	// Hermes tenant containers (wave 6D/6E). DockerBinaryPath is forked for every
 	// container operation; in a pod with no docker each call fails as in Swift.
-	DockerBinaryPath       string `env:"DOCKER_BINARY_PATH" envDefault:"/usr/bin/docker"`
-	HermesPerTenantNetwork string `env:"HERMES_PER_TENANT_NETWORK" envDefault:"luminavault-hermes-net"`
-	// PhotonSidecarToken gates POST /v1/gateways/photon/inbound; empty disables it.
-	// PhotonSidecarURL is read only to warn: the sidecar client is not ported.
+	DockerBinaryPath              string `env:"DOCKER_BINARY_PATH" envDefault:"/usr/bin/docker"`
+	HermesPerTenantNetwork        string `env:"HERMES_PER_TENANT_NETWORK" envDefault:"luminavault-hermes-net"`
+	HermesPerTenantImage          string `env:"HERMES_PER_TENANT_IMAGE" envDefault:"luminavault-hermes:local"`
+	HermesPerTenantDataRootBase   string `env:"HERMES_PER_TENANT_DATA_ROOT_BASE" envDefault:"/app/data/hermes-tenants"`
+	HermesPerTenantPortRangeStart int    `env:"HERMES_PER_TENANT_PORT_RANGE_START" envDefault:"9000"`
+	HermesPerTenantPortRangeEnd   int    `env:"HERMES_PER_TENANT_PORT_RANGE_END" envDefault:"9500"`
+	HermesPerTenantIdleTTLSeconds int    `env:"HERMES_PER_TENANT_IDLE_TTL_SECONDS" envDefault:"1800"`
+	HermesPerTenantMemoryLimit    string `env:"HERMES_PER_TENANT_MEMORY_LIMIT" envDefault:"512m"`
+	HermesPerTenantCPULimit       string `env:"HERMES_PER_TENANT_CPU_LIMIT" envDefault:"1.0"`
+	// HermesAudioProxyBaseURL includes /v1; empty seeds no voice into containers.
+	HermesAudioProxyBaseURL string `env:"HERMES_AUDIO_PROXY_BASE_URL"`
+	// MnemosyneEnabled is raw: on when it lowercases to "true", as Swift reads it.
+	MnemosyneEnabled string `env:"MNEMOSYNE_ENABLED" envDefault:"true"`
+	// PhotonSidecarURL and PhotonSidecarToken reach the central iMessage sidecar.
+	// The token also gates POST /v1/gateways/photon/inbound; empty disables it.
 	PhotonSidecarURL   string `env:"PHOTON_SIDECAR_URL" envDefault:"http://photon-sidecar:8789"`
 	PhotonSidecarToken string `env:"PHOTON_SIDECAR_TOKEN"`
 
