@@ -422,7 +422,8 @@ type SpacesRow struct {
 	Name     string
 }
 
-// Hub attributes. Each query is bound to the admitted vault ids and to the selected item ids.
+// Hub attributes. Each query is bound to the selected item ids, and all but Authors to the
+// admitted vault ids (see the header).
 func (q *Queries) Spaces(ctx context.Context, arg SpacesParams) ([]SpacesRow, error) {
 	rows, err := q.db.Query(ctx, spaces, arg.VaultIds, arg.SpaceIds)
 	if err != nil {

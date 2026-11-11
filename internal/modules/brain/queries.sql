@@ -66,7 +66,8 @@ JOIN vault_files vf ON vf.id = m.source_vault_file_id AND vf.tenant_id = ANY(@va
 WHERE m.tenant_id = ANY(@vault_ids::uuid[])
   AND m.id = ANY(@memory_ids::uuid[]);
 
--- Hub attributes. Each query is bound to the admitted vault ids and to the selected item ids.
+-- Hub attributes. Each query is bound to the selected item ids, and all but Authors to the
+-- admitted vault ids (see the header).
 
 -- name: Spaces :many
 SELECT s.id, s.tenant_id, s.name
