@@ -61,12 +61,18 @@ func Setup(ctx context.Context, cfg config.Config) (Shutdown, error) {
 	}, nil
 }
 
+// buildResource adds service.instance.id, the pod's hostname, which Swift's resource
+// doesn't carry. Both servers inherit OTEL_SERVICE_NAME, so Alloy gives their series
+// the same job, and the Swift-named metrics (P5) would otherwise land on the same
+// series as Swift's with instance="" too: two writers on one counter read as
+// resets. The instance label keeps Go's series apart, and a sum() over job, which
+// every alert rule takes, still adds both servers up.
 func buildResource(cfg config.Config) (*resource.Resource, error) {
-	return resource.Merge(resource.Default(), resource.NewWithAttributes(
-		semconv.SchemaURL,
-		semconv.ServiceName(cfg.OTelServiceName),
-		ImplAttribute,
-	))
+	attrs := []attribute.KeyValue{semconv.ServiceName(cfg.OTelServiceName), ImplAttribute}
+	if host, err := os.Hostname(); err == nil && host != "" {
+		attrs = append(attrs, semconv.ServiceInstanceID(host))
+	}
+	return resource.Merge(resource.Default(), resource.NewWithAttributes(semconv.SchemaURL, attrs...))
 }
 
 // NewLogger returns a JSON logger on stdout. Unknown levels fall back to info,

@@ -4,10 +4,10 @@ import (
 	"context"
 	"log/slog"
 	"lumina/internal/swiftstr"
+	"lumina/internal/telemetry"
 	"regexp"
 	"strings"
 
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 )
@@ -108,7 +108,7 @@ func SanitizeAssistantMessage(m CompletionMessage) CompletionMessage {
 	return m
 }
 
-var toolFailureCounter, _ = otel.Meter("lumina/llm").Int64Counter("luminavault.llm.tool_failure")
+var toolFailureCounter = telemetry.Global.LLM.ToolFailure
 
 // ObserveToolErrors is HermesToolErrorClassifier.observe: one warning and one
 // counter increment per error.
