@@ -721,3 +721,32 @@ func TestSimilarMemoriesQueryIsScoped(t *testing.T) {
 		require.Empty(t, run([]uuid.UUID{alice, teamVault}, ids(m1)))
 	})
 }
+
+// A rejected memory is hidden from lists and search, so it is hidden here too: no node, no edge,
+// and no share of a hub's weight.
+func TestRejectedMemoryIsExcluded(t *testing.T) {
+	v := setup(t)
+	rejected := "00000000-0000-4000-8000-0000000002ae"
+	exec(t, v, `INSERT INTO memories (id, tenant_id, content, tags, review_state, created_at, updated_at)
+		VALUES ($1, $2, 'rejected one', ARRAY['shared'], 'rejected', now(), now())`, rejected, alice)
+	exec(t, v, `UPDATE memories SET tags = ARRAY['shared'] WHERE id = ANY($1::uuid[])`, []string{m1, m2})
+	rec := v.do(alice, http.MethodGet, "/v1/brain/graph", "")
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.NotContains(t, strings.ToLower(rec.Body.String()), rejected)
+	_, _, _, weight, ok := getHubs(t, v, "").node("tag:shared")
+	require.True(t, ok)
+	require.Equal(t, 2, weight)
+}
+
+// Only text files are notes: an uploaded PDF in the same vault is not an item.
+func TestNonTextFileIsNotANote(t *testing.T) {
+	v := setup(t)
+	pdf := "00000000-0000-4000-8000-0000000001af"
+	exec(t, v, `INSERT INTO vault_files (id, tenant_id, path, content_type, size_bytes, sha256, created_at, updated_at)
+		VALUES ($1, $2, 'scans/Invoice.pdf', 'application/pdf', 1, 'x', now(), now())`, pdf, alice)
+	rec := v.do(alice, http.MethodGet, "/v1/brain/graph", "")
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	body := strings.ToLower(rec.Body.String())
+	require.NotContains(t, body, pdf)
+	require.NotContains(t, body, "invoice")
+}

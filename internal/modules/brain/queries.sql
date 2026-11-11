@@ -24,11 +24,13 @@ FROM (
          NULL::text[] AS tags, vf.created_by_user_id
   FROM vault_files vf
   WHERE vf.tenant_id = ANY(@vault_ids::uuid[])
+    AND vf.content_type LIKE 'text/%'
   UNION ALL
   SELECT m.id, m.tenant_id, m.space_id, 'memory'::text, left(m.content, 400),
          m.created_at, m.updated_at, m.graph_x, m.graph_y, m.graph_z, m.tags, m.created_by_user_id
   FROM memories m
   WHERE m.tenant_id = ANY(@vault_ids::uuid[])
+    AND m.review_state <> 'rejected'
 ) items
 ORDER BY coalesce(updated_at, created_at) DESC NULLS LAST, id
 LIMIT @row_limit::int;
