@@ -1802,6 +1802,142 @@ Beyond the pilot gate (D-wave2-early):
   later modules' `memory_chunks` snapshots.
 - Flip: only with the ws bundle.
 
+## skills (wave 5)
+
+### G0 entry: met 2026-11-11
+
+- Routes: 8. `GET /v1/skills`, `PATCH /v1/skills/:name`, `GET /v1/skills/:name/runs`,
+  `POST /v1/skills/:name/run`, `POST /v1/skills/slash`, `GET /v1/skills/outputs`, `POST /v1/jobs`,
+  `POST /v1/jobs/detect`.
+- `internal/modules/skills/runner.go` ports SkillRunner: cap guard, meter budget check, CerberusScope
+  routing, 6-iteration agent loop with the 13 tools in Swift's order (`tools.go`), outputs (memory,
+  vault file, push, chat message, job result), `skill_run_log` + `skills_state` persistence, cap
+  refund on failure. daily-brief composes the brief through `me.ComposeBrief` first.
+- `/v1/skills/slash`'s `/kb-compile` reuses `kbcompile.Compile`; device tools go through
+  `internal/devicetools` and this process's broker.
+- Kept from Swift, pinned until the post-archive security pass: `skills_state` PATCH updates every
+  row for the name.
+- Known gaps: `skill_run_log.error` is Swift's `String(describing:)` text; snapshots compare
+  `error IS NOT NULL`. A constant-segment 404 runs auth first in Go (differs only unauthenticated).
+
+### G1 parity: met 2026-11-11
+
+- `parity/scenarios/skills` 01-09 with `parity/seed/skills.sql` (views `parity_sk_runs`,
+  `parity_sk_state`, `parity_sk_briefs`), and `parity/scenarios-switched/llm/skills/01-run.yaml`
+  (jobs, cap, blocks, tool loop, slash `/patterns`, daily-brief) on the LLM stub.
+- Flip: only with the ws bundle (device tools resolve through `/v1/ws`).
+
+## billing (wave 7)
+
+### G0 entry: met 2026-11-11
+
+- Routes: `POST /v1/billing/revenuecat-webhook`, plus three routes App+build.swift mounts beside
+  billing and that live under other modules' prefixes: `GET /v1/auth/me/billing` and
+  `GET /v1/auth/me/usage` (app, `/v1/auth/me`), and `PUT /v1/admin/users/:userID/tier-override`
+  (admin, `/v1/admin/users`; 7B leaves it to 7A). They flip with their prefixes' modules; the
+  ingress for `admin` and `app` must not move them before billing is at `production`, or must name them.
+- Webhook ported exactly (wave-6-8-plan.md "Billing"): empty secret 500, 1 MiB cap (413), bearer
+  (plain "Bearer " replace) then hex HMAC-SHA256 of the raw body, 401, decode 400, the
+  `billing_event_logs` check, the effect and the log row **not** in one transaction (a lost race
+  on the unique index is a 500), unknown user 200 with an anonymous row, unknown product 500 with
+  no row. `RevenueCatClient` has no callers and is not ported.
+- `LapseArchiverService` is `workers.LapseArchiver`, registered off (LV_GO_JOBS) and in dry run by
+  default (`LV_LAPSE_DRY_RUN=true`): it logs each would-be lapse, archive and hard delete and writes
+  nothing. Runs at 02:00 UTC, before Swift's 03:00.
+- `TierOverrideAllowlist` is `billing.ParseTierOverrides`; nothing reads it until token minting
+  moves (8A), which must apply it on every issued session as Swift's `issueTokens` does.
+- `checkBudget` still has no callers; no live budget check was added.
+- Config: `REVENUECAT_WEBHOOK_SECRET`, `BILLING_TIER_OVERRIDE_EMAILS`, `BILLING_COLD_STORAGE_PATH`
+  (default `<VAULT_ROOT_PATH>/cold-storage`), `LV_LAPSE_DRY_RUN`.
+- Swift tests: `RevenueCatWebhook` 11, `SubscriptionCatalog` 6, `TierOverrideAllowlist` 5,
+  `LapseArchiver` 7, `UsageMetrics` 2 ported. Audit: `EntitlementChecker` 27, `Enforcement` 11,
+  `BYOEntitlementPolicy` 7 ported against `internal/entitlement` (`BYOExemption` extracted, same
+  rule); `BYOEntitlementMiddleware`, `StorageQuotaService`, `CostLedgerService`,
+  `UsageMeterBudget` were already cited. `UsageEventsRetention` is 7B's.
+
+### G1 parity: met 2026-11-11
+
+- `parity/scenarios/billing` 01-03 with `parity/seed/billing.sql`, plus
+  `scenarios-switched/unconfigured/billing` (empty secret and admin token) and
+  `scenarios-switched/billing-on/billing`. A billing-issue hold (now + 16 days) is compared as
+  "hold"; usage's period, `generatedAt` and day stamps are the clock and ignored.
+
+## settings (wave 6)
+
+### G0 entry: met 2026-11-11
+
+- Routes: 5. `GET`/`PUT`/`DELETE /v1/settings/hermes`, `POST /v1/settings/hermes/test`, and
+  `GET /v1/me/hermes/capabilities` (listed under `hermes` in `modules.yaml`; it ships here because
+  PUT refreshes it). All behind JWT and `settingsByUser`, mounted only with `LV_SECRET_MASTER_KEY`.
+- `internal/hermescaps` ports HermesRemoteCapabilitiesService: managed default, 1 h cache in
+  `user_hermes_config.capabilities`, `/health` + `/v1/capabilities` + `/api/jobs` probe, and the
+  dashboard probe (`/api/status`, `/api/fs/default-cwd`, `/api/skills`, 429 retry x3). The full
+  dashboard client (P2) comes with 6B.
+- Not ported: the post-save nudge (Swift fires it detached; it writes nothing the client reads).
+- Swift tests: `HermesCapabilitiesParseTests` 5 as unit tests; `HermesConfigControllerTests` 8 as
+  DB tests, plus tenant isolation, invalid URL, unreachable verify and the capabilities probe.
+  `UserHermesConfigTests` 2 only assert the Fluent schema name.
+
+### G1 parity: met 2026-11-11
+
+- `parity/scenarios/settings/01-hermes.yaml` (refusals, no config, managed capabilities) and
+  `parity/scenarios-switched/agents/settings/01-hermes.yaml` (save, verify, probe, cache, replace,
+  unreachable, delete on the LLM stub), with `parity/seed/settings.sql` and its `parity_st_hermes`
+  view. `agents_state` now also requires stub calls on `/v1/models` and `/v1/capabilities`.
+
+## system (wave 7)
+
+### G0 entry: met 2026-11-11
+
+- Routes: 7 under `/v1/system/hermes`, behind the JWT then `X-Admin-Token` (empty token 404 "admin
+  disabled", mismatch 401 "admin token invalid"), mounted only with the secret box, as in Swift:
+  `version`, `update`, `update/current`, `update/:jobID`, `update/:jobID/stream` (SSE),
+  `update/:jobID/rollback`, `reprovision`.
+- The whole engine is ported: CentralHermesManager (blue-green temp container, cutover, restore,
+  loopback health probe), the step engine, auto and manual rollback, tenant reprovision. Docker is
+  an interface. Production has no docker binary (O1), so `NoDocker` fails every call as Swift's
+  spawn does: an update fails at `preflight`, a manual rollback fails at restore, `reprovision`
+  is a 500, and `version` falls back to the channel tag. Tenant reprovision runs through a
+  no-docker container manager until 6D's `hermescontainers` lifecycle is wired in.
+- Config: `HERMES_CENTRAL_{CONTAINER_NAME,TEMP_CONTAINER_NAME,REGISTRY_IMAGE,CHANNEL_TAG,
+  VOLUME_PATH,PORT,TEMP_PORT}`, `HERMES_PER_TENANT_NETWORK`, `HERMES_API_KEY` (Swift's defaults).
+- Swift tests: `HermesUpdateServiceTests` 3, all ported against a stub Docker and probe (owner
+  rejected waivers 2026-11-11).
+
+### G1 parity: met 2026-11-11
+
+- `parity/scenarios/system/01-hermes-update.yaml` with `parity/seed/system.sql`. Seeded jobs are
+  compared whole, including the stream. Ignored for jobs the scenario starts: clock times,
+  `errorMessage` and step `detail` (Swift's Process or docker stderr text).
+
+## plugins (wave 6)
+
+### G0 entry: met 2026-11-11
+
+- Routes: 9. `GET /v1/plugins/catalog`, `GET /v1/plugins/hermes-skills`, `GET`/`POST
+  /v1/plugins/installs`, `PATCH`/`DELETE /v1/plugins/installs/:id`, `POST .../:id/sync`, and the hub
+  routes `POST /v1/plugins/hermes-skills/install`, `DELETE /v1/plugins/hermes-skills/:name`. JWT,
+  `settingsByUser`, BYO resolution; mounted only with `LV_SECRET_MASTER_KEY`, as in Swift.
+- `internal/modules/plugins` ports PluginController, PluginService, PluginCatalog,
+  SkillPluginCatalog, the Readwise, Raindrop, RSS and news-ticker connectors, HermesSkillsClient and
+  HermesHubSkillsController/Service. Syncs stage through `imports.Service.ImportLinks`.
+- Hub install runs `hermes skills install|uninstall` with `docker exec` in Swift. Owner decision O1:
+  the route is ported, and Go's default `DockerExec` fails as Swift does with no docker binary (500).
+  Every path before the exec (ref validation, no container 409, undecryptable key) is compared.
+- Kept from Swift (D-security-after-archive): installing or toggling a skill plugin updates
+  `enabled` on every `skills_state` row of the tenant (SkillsState's Fluent @ID is tenant_id).
+- Swift tests: `PluginLogic` 8, `PluginConnectorsSlice2` 8, `SkillPluginCatalog` 3,
+  `HermesHubSkillsService` 2 and the catalog half of `MemoryProviderPlugin` (2) as unit tests; the
+  other 2 (`TenantAwareEmbeddingService`) belong to embeddings. Route behaviour as DB tests.
+
+### G1 parity: met 2026-11-11
+
+- `parity/scenarios/plugins` 01-03 with `parity/seed/plugins.sql` (`parity_pl_installs`,
+  `parity_pl_skills`), `parity/scenarios-switched/agents/plugins` (a BYO Hermes's `/v1/skills` on the
+  LLM stub) and `parity/scenarios-switched/import-links/plugins` (rss and news-ticker syncs through the
+  import pipeline against the feeds stub's `/plugins/feed.xml`).
+- Not compared: Readwise and Raindrop syncs, which call the public APIs; their parsing is unit-tested.
+
 ## app (wave 8, 8E)
 
 ### Progress 2026-11-11

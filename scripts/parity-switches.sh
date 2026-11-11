@@ -6,7 +6,7 @@
 #
 #   community-off   COMMUNITY_ENABLED=false
 #   posting-off     COMMUNITY_POSTING_ENABLED=false, and today's daily post published
-#   unconfigured    ADMIN_TOKEN empty, plugin signing key too short, no runner token
+#   unconfigured    ADMIN_TOKEN and REVENUECAT_WEBHOOK_SECRET empty, plugin signing key too short, no runner token
 #                   (a short key with a runner token refuses to boot, in both servers)
 #   runner-off      no runner token
 #   catalog-unseeded  no "luminavault" publisher: the first read tries to seed the catalog
@@ -175,7 +175,8 @@ agents_state() {
   run_state agents SWITCH_HERMES_GATEWAY_URL=http://llmstub:8080 SWITCH_BYO_HERMES_ALLOW_PRIVATE=true SWITCH_BYO_HERMES_REQUIRE_HTTPS=false
   after=$(curl -fsS http://localhost:18085/stub/stats)
   # /v1/chat/completions is the central agent (llm.RoutedService through the gateway).
-  for route in /api/instance /api/sessions/{id}/chat /v1/chat/completions; do
+  # /v1/models and /v1/capabilities are settings (6A): the verify and capabilities probes.
+  for route in /api/instance /api/sessions/{id}/chat /v1/chat/completions /v1/models /v1/capabilities; do
     calls=$(( $(stub_count "$after" "$route") - $(stub_count "$before" "$route") ))
     echo "stub answered $calls on $route in state agents"
     if [ "$calls" -lt 2 ]; then
@@ -217,7 +218,7 @@ stub_count() {
 failed=0
 run_state community-off SWITCH_COMMUNITY_ENABLED=false
 run_state posting-off SWITCH_COMMUNITY_POSTING_ENABLED=false
-run_state unconfigured SWITCH_ADMIN_TOKEN= SWITCH_SIGNING_KEY=too-short SWITCH_RUNNER_TOKEN=
+run_state unconfigured SWITCH_ADMIN_TOKEN= SWITCH_REVENUECAT_WEBHOOK_SECRET= SWITCH_SIGNING_KEY=too-short SWITCH_RUNNER_TOKEN=
 run_state runner-off SWITCH_RUNNER_TOKEN=
 run_state catalog-unseeded SWITCH_NONE=
 run_state import-links SWITCH_NONE=

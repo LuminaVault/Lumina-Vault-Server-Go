@@ -83,9 +83,9 @@ func (m *Module) Register(r httpserver.Router, _ echo.MiddlewareFunc) {
 	}
 	r.GET("/v1/skills", m.list, skillsChain...)
 	r.PATCH("/v1/skills/:name", constantFirst(m.patch), skillsChain...)
-	r.GET("/v1/skills/:name/runs", constantFirst(m.runs), skillsChain...)
+	r.GET("/v1/skills/:name/runs", m.runs, skillsChain...)
 	r.POST("/v1/skills/slash", m.slash, skillsChain...)
-	r.POST("/v1/skills/:name/run", constantFirst(m.runSkill), skillsChain...)
+	r.POST("/v1/skills/:name/run", m.runSkill, skillsChain...)
 
 	r.GET("/v1/skills/outputs", m.outputs, m.opt.Identify,
 		ratelimit.Middleware(m.opt.Limits, ratelimit.SkillOutputsByUser, ratelimit.UserOrIPKey))
@@ -100,8 +100,9 @@ func (m *Module) Register(r httpserver.Router, _ echo.MiddlewareFunc) {
 }
 
 // constantFirst: Hummingbird's trie takes the constant segments "slash" and
-// "outputs" before :name and does not backtrack, so any other method or a deeper
-// path under them is an empty 404 there.
+// "outputs" before :name, so another method on /v1/skills/slash or
+// /v1/skills/outputs is an empty 404 there. Deeper paths (/:name/runs, /:name/run)
+// do reach :name (parity/scenarios/skills/09-constant-segments.yaml).
 func constantFirst(h echo.HandlerFunc) echo.HandlerFunc {
 	return func(c *echo.Context) error {
 		if segments := wire.PathSegments(c.Request()); len(segments) > 2 && (segments[2] == "slash" || segments[2] == "outputs") {
