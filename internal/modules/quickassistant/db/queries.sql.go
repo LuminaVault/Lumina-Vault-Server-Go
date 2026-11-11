@@ -13,6 +13,56 @@ import (
 	"github.com/google/uuid"
 )
 
+const browseFiles = `-- name: BrowseFiles :many
+SELECT id, path, size_bytes FROM vault_files
+WHERE tenant_id = $1
+  AND ($2::text IS NULL
+       OR (path COLLATE "C" >= $2::text AND path COLLATE "C" < $3::text))
+ORDER BY path
+LIMIT $4
+`
+
+type BrowseFilesParams struct {
+	TenantID uuid.UUID
+	Low      *string
+	High     *string
+	RowLimit int32
+}
+
+type BrowseFilesRow struct {
+	ID        uuid.UUID
+	Path      string
+	SizeBytes int64
+}
+
+// With a prefix, the half-open range [prefix, prefix + U+FFFF), as Swift's.
+// Compared bytewise: under a libc collation such as en_US.utf8, U+FFFF has no
+// weight, so the range is empty and the prefix would match nothing.
+func (q *Queries) BrowseFiles(ctx context.Context, arg BrowseFilesParams) ([]BrowseFilesRow, error) {
+	rows, err := q.db.Query(ctx, browseFiles,
+		arg.TenantID,
+		arg.Low,
+		arg.High,
+		arg.RowLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []BrowseFilesRow
+	for rows.Next() {
+		var i BrowseFilesRow
+		if err := rows.Scan(&i.ID, &i.Path, &i.SizeBytes); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const cancelPendingAction = `-- name: CancelPendingAction :one
 UPDATE assistant_pending_actions SET status = 'cancelled', args = '{}'::jsonb, summary = ''
 WHERE id = $1 AND tenant_id = $2 AND status = 'pending'
@@ -72,6 +122,54 @@ func (q *Queries) ClaimPendingAction(ctx context.Context, arg ClaimPendingAction
 	return i, err
 }
 
+const contextMemories = `-- name: ContextMemories :many
+SELECT id, kind, content, created_at FROM memories
+WHERE tenant_id = $1
+  AND kind IN ('decision', 'preference')
+  AND review_state <> 'rejected'
+  AND ($2::uuid IS NULL OR space_id = $2)
+ORDER BY created_at DESC
+LIMIT $3
+`
+
+type ContextMemoriesParams struct {
+	TenantID uuid.UUID
+	SpaceID  *uuid.UUID
+	RowLimit int32
+}
+
+type ContextMemoriesRow struct {
+	ID        uuid.UUID
+	Kind      *string
+	Content   string
+	CreatedAt *time.Time
+}
+
+func (q *Queries) ContextMemories(ctx context.Context, arg ContextMemoriesParams) ([]ContextMemoriesRow, error) {
+	rows, err := q.db.Query(ctx, contextMemories, arg.TenantID, arg.SpaceID, arg.RowLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ContextMemoriesRow
+	for rows.Next() {
+		var i ContextMemoriesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Kind,
+			&i.Content,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const deleteLongExpiredPendingActions = `-- name: DeleteLongExpiredPendingActions :exec
 DELETE FROM assistant_pending_actions
 WHERE tenant_id = $1 AND expires_at < NOW() - INTERVAL '1 day'
@@ -80,6 +178,43 @@ WHERE tenant_id = $1 AND expires_at < NOW() - INTERVAL '1 day'
 func (q *Queries) DeleteLongExpiredPendingActions(ctx context.Context, tenantID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, deleteLongExpiredPendingActions, tenantID)
 	return err
+}
+
+const existingMemory = `-- name: ExistingMemory :one
+SELECT id FROM memories
+WHERE tenant_id = $1 AND content = $2 AND review_state <> 'rejected'
+LIMIT 1
+`
+
+type ExistingMemoryParams struct {
+	TenantID uuid.UUID
+	Content  string
+}
+
+// memory_save's duplicate check: the same text, unless the user rejected it.
+func (q *Queries) ExistingMemory(ctx context.Context, arg ExistingMemoryParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, existingMemory, arg.TenantID, arg.Content)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const fileAtPath = `-- name: FileAtPath :one
+SELECT path FROM vault_files
+WHERE tenant_id = $1 AND path = $2
+LIMIT 1
+`
+
+type FileAtPathParams struct {
+	TenantID uuid.UUID
+	Path     string
+}
+
+func (q *Queries) FileAtPath(ctx context.Context, arg FileAtPathParams) (string, error) {
+	row := q.db.QueryRow(ctx, fileAtPath, arg.TenantID, arg.Path)
+	var path string
+	err := row.Scan(&path)
+	return path, err
 }
 
 const insertPendingAction = `-- name: InsertPendingAction :exec
@@ -142,4 +277,72 @@ func (q *Queries) PendingActionStatus(ctx context.Context, arg PendingActionStat
 	var status string
 	err := row.Scan(&status)
 	return status, err
+}
+
+const recentFiles = `-- name: RecentFiles :many
+SELECT path, updated_at FROM vault_files
+WHERE tenant_id = $1
+ORDER BY updated_at DESC
+LIMIT $2
+`
+
+type RecentFilesParams struct {
+	TenantID uuid.UUID
+	Limit    int32
+}
+
+type RecentFilesRow struct {
+	Path      string
+	UpdatedAt *time.Time
+}
+
+func (q *Queries) RecentFiles(ctx context.Context, arg RecentFilesParams) ([]RecentFilesRow, error) {
+	rows, err := q.db.Query(ctx, recentFiles, arg.TenantID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RecentFilesRow
+	for rows.Next() {
+		var i RecentFilesRow
+		if err := rows.Scan(&i.Path, &i.UpdatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const spacesForVault = `-- name: SpacesForVault :many
+
+SELECT id, slug FROM spaces WHERE tenant_id = $1
+`
+
+type SpacesForVaultRow struct {
+	ID   uuid.UUID
+	Slug string
+}
+
+// Vault tool reads (Swift: MCPService, Fluent queries scoped by tenant_id).
+func (q *Queries) SpacesForVault(ctx context.Context, tenantID uuid.UUID) ([]SpacesForVaultRow, error) {
+	rows, err := q.db.Query(ctx, spacesForVault, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SpacesForVaultRow
+	for rows.Next() {
+		var i SpacesForVaultRow
+		if err := rows.Scan(&i.ID, &i.Slug); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
