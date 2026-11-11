@@ -190,6 +190,8 @@ func TestVaultsParamNarrows(t *testing.T) {
 	require.Equal(t, []vaultOut{{ID: teamVault.String(), Name: "Team Vault"}}, got)
 	// An empty value is the same as an absent one.
 	require.Len(t, vaultsOf(t, v.do(alice, http.MethodGet, "/v1/brain/graph?vaults=", "")), 2)
+	// Spaces around each element are trimmed, as for links.
+	require.Len(t, vaultsOf(t, v.do(alice, http.MethodGet, "/v1/brain/graph?vaults="+alice.String()+",%20"+teamVault.String()+"%20", "")), 2)
 }
 
 func TestVaultsParamRejectsUnreadable(t *testing.T) {

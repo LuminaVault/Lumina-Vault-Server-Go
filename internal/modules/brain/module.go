@@ -109,7 +109,7 @@ func parseParams(c *echo.Context) (params, error) {
 	if raw := c.QueryParam("vaults"); raw != "" {
 		seen := map[uuid.UUID]bool{}
 		for _, part := range strings.Split(raw, ",") {
-			id, err := ids.Parse(part)
+			id, err := ids.Parse(strings.TrimSpace(part))
 			if err != nil {
 				return params{}, errInvalidVaults
 			}

@@ -1,5 +1,20 @@
--- Vault scope for GET /v1/brain/graph. These are only candidates: every id
--- still goes through vaultaccess.ResolveVault before it is read.
+-- Queries for GET /v1/brain/graph.
+--
+-- Scope. CandidateVaults only proposes vaults: every id still goes through
+-- vaultaccess.ResolveVault, and only the ids it admits become @vault_ids.
+--
+-- Self-bounding (each returned row's vault is checked against @vault_ids in SQL):
+-- Items, MemorySources (the memory and its source note), Spaces, ModelAuthors
+-- (through the memory), Entities (the knowledge node and its evidence) and
+-- SimilarMemories (both memories).
+--
+-- Bounded by their callers:
+--   - VaultName takes no vault ids; it is called only with a vault id that
+--     ResolveVault has just admitted.
+--   - Authors takes no vault ids; it is called only with created_by_user_id values
+--     of rows Items returned, and returns only id and username.
+--   - NoteLinks checks the link row's vault; the note ids at both ends are bounded
+--     by @note_ids, which the caller fills only from rows Items returned.
 
 -- name: CandidateVaults :many
 SELECT v.id, v.name
@@ -12,8 +27,7 @@ ORDER BY v.name, v.id;
 -- name: VaultName :one
 SELECT name FROM vaults WHERE id = $1;
 
--- Item nodes. Every query below is restricted to vault ids that scopes() already
--- admitted through vaultaccess; none reads outside them.
+-- Item nodes: text files as notes, and memories that were not rejected.
 
 -- name: Items :many
 SELECT id, vault_id, space_id, kind, body, created_at, graph_x, graph_y, graph_z, tags, created_by_user_id

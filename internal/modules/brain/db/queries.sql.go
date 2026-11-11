@@ -59,8 +59,23 @@ type CandidateVaultsRow struct {
 	Name string
 }
 
-// Vault scope for GET /v1/brain/graph. These are only candidates: every id
-// still goes through vaultaccess.ResolveVault before it is read.
+// Queries for GET /v1/brain/graph.
+//
+// Scope. CandidateVaults only proposes vaults: every id still goes through
+// vaultaccess.ResolveVault, and only the ids it admits become @vault_ids.
+//
+// Self-bounding (each returned row's vault is checked against @vault_ids in SQL):
+// Items, MemorySources (the memory and its source note), Spaces, ModelAuthors
+// (through the memory), Entities (the knowledge node and its evidence) and
+// SimilarMemories (both memories).
+//
+// Bounded by their callers:
+//   - VaultName takes no vault ids; it is called only with a vault id that
+//     ResolveVault has just admitted.
+//   - Authors takes no vault ids; it is called only with created_by_user_id values
+//     of rows Items returned, and returns only id and username.
+//   - NoteLinks checks the link row's vault; the note ids at both ends are bounded
+//     by @note_ids, which the caller fills only from rows Items returned.
 func (q *Queries) CandidateVaults(ctx context.Context, userID uuid.UUID) ([]CandidateVaultsRow, error) {
 	rows, err := q.db.Query(ctx, candidateVaults, userID)
 	if err != nil {
@@ -174,8 +189,7 @@ type ItemsRow struct {
 	CreatedByUserID *uuid.UUID
 }
 
-// Item nodes. Every query below is restricted to vault ids that scopes() already
-// admitted through vaultaccess; none reads outside them.
+// Item nodes: text files as notes, and memories that were not rejected.
 func (q *Queries) Items(ctx context.Context, arg ItemsParams) ([]ItemsRow, error) {
 	rows, err := q.db.Query(ctx, items, arg.VaultIds, arg.RowLimit)
 	if err != nil {
