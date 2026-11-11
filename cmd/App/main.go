@@ -281,6 +281,7 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 			deps.Modules = append(deps.Modules, workflowsModule(pool, cfg, box, identify, limits))
 		}
 		deps.Modules = append(deps.Modules, agent.modules(links, enrichment)...)
+		deps.Modules = append(deps.Modules, agent.routerModules()...)
 	}
 	// Deferred after the sink and the pool, so jobs stop first and can still use both.
 	stopJobs, err := startJobs(ctx, cfg, registered)
