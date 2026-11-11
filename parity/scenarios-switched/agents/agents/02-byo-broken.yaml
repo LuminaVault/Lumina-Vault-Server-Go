@@ -1,0 +1,13 @@
+# A BYO Hermes too old for /api/profiles (gus) and one that doesn't answer (hal).
+module: agents
+steps:
+  - {name: outdated instance, as: agents_gus, request: {method: GET, path: /v1/agents/instances}}
+  - {name: outdated sessions, as: agents_gus, request: {method: GET, path: /v1/agents/sessions}}
+  - {name: outdated under a profile filter, as: agents_gus, request: {method: GET, path: "/v1/agents/sessions?profile=default"}}
+  - {name: outdated log, as: agents_gus, request: {method: GET, path: /v1/agents/instances/byo/sessions/s1/messages}}
+  - {name: outdated candidates, as: agents_gus, request: {method: GET, path: /v1/agents/room-candidates}}
+  - {name: outdated can't be seated, as: agents_gus, request: {method: POST, path: /v1/agents/rooms, json: {title: x, members: [{instanceID: byo}]}}}
+  - {name: unreachable instance, as: agents_hal, request: {method: GET, path: /v1/agents/instances}}
+  - {name: unreachable sessions, as: agents_hal, request: {method: GET, path: "/v1/agents/sessions?instance=byo"}}
+  - {name: unreachable log, as: agents_hal, request: {method: GET, path: /v1/agents/instances/byo/sessions/s1/messages}}
+  - {name: unreachable candidates, as: agents_hal, request: {method: GET, path: /v1/agents/room-candidates}}

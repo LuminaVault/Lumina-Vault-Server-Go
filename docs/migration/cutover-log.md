@@ -1594,3 +1594,34 @@ Beyond the pilot gate (D-wave2-early):
   sets one curator state on all of them. Parity confirms it. Fixing it is an owner decision.
 - An empty `archivedPath` is skipped in Go. Swift would target the working directory. The curator never
   writes that value, so parity doesn't cover it.
+
+## agents (wave 5)
+
+### G0 entry: met 2026-11-11
+
+- Routes: 10, under `/v1/agents`: instances, sessions, a session's messages, room candidates, and rooms
+  (list, create, get, delete, post as SSE `event: agent.room`, stop).
+- Prefixes: disjoint (`internal/manifest`).
+- Coupling: reads `conversations`, `conversation_messages`, `user_hermes_profiles`, `hermes_profiles` and
+  `user_hermes_config` (through `hermesresolve`). Writes only `agent_rooms`, `agent_room_members` and
+  `agent_room_messages`. No vault paths, so no `SanitizePath` call sites.
+- Jobs: none.
+- LLM: the central agent speaks through the shared stack's `ChatService` (`internal/llm`, not forked). BYO
+  members go to the user's own gateway, which never follows redirects.
+- Swift tests: all 23 ported: 8 `AgentGatewayClientTests`, 6 `AgentRoomTurnPolicyTests`,
+  6 `AgentRoomOrchestratorTests`, 2 `AgentRoomsControllerTests`, 1 `AgentsControllerTests`.
+
+### G1 parity: met 2026-11-11
+
+- CI run 43003550424 on head 198f80f: Swift vs Go gives **213 scenarios, 0 differences** (whole suite).
+  `parity/scenarios/agents` has 5 files. The new switch state `agents` gives 3 scenarios, 0 differences.
+  `parity`, `lint`, `test` and `vuln` pass
+  (https://github.com/LuminaVault/Lumina-Vault-Server-Go/actions/runs/43003550424/job/130465298732).
+- The `agents` state points the gateway at `llmstub` and allows private ranges over HTTP. Its stub
+  counters prove that both servers really ran the BYO and central paths: 10 calls on `/api/instance`,
+  10 on `/api/sessions/{id}/chat` and 20 on `/v1/chat/completions`.
+- Go tests only: the 409 `room_busy` and a chain stopped by the client leaving the stream, because both
+  depend on timing.
+- Not compared: the key order of a re-encoded multi-key `tool_calls` object, because Swift's
+  `JSONSerialization` order is unspecified.
+- G2 needs a staging stub for the success path. Staging has no Hermes.
