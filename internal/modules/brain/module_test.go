@@ -126,8 +126,12 @@ func TestGraphRateLimited(t *testing.T) {
 	v := setup(t)
 	now := time.Date(2026, 11, 11, 10, 0, 0, 0, time.UTC)
 	v.limits.SetClock(func() time.Time { return now })
-	for i := 1; i <= 30; i++ {
-		require.Equal(t, http.StatusOK, v.do(alice, http.MethodGet, "/v1/brain/graph", "").Code, "request %d", i)
+	var tier string
+	require.NoError(t, v.pool.QueryRow(context.Background(), `SELECT tier FROM users WHERE id = $1`, alice).Scan(&tier))
+	max := ratelimit.BrainGraphByUser.EffectiveMax(tier)
+	require.Positive(t, max)
+	for i := 1; i <= max; i++ {
+		require.Equal(t, http.StatusOK, v.do(alice, http.MethodGet, "/v1/brain/graph", "").Code, "request %d of %d", i, max)
 	}
 	require.Equal(t, http.StatusTooManyRequests, v.do(alice, http.MethodGet, "/v1/brain/graph", "").Code)
 }
