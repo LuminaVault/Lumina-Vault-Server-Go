@@ -1827,6 +1827,41 @@ Beyond the pilot gate (D-wave2-early):
   (jobs, cap, blocks, tool loop, slash `/patterns`, daily-brief) on the LLM stub.
 - Flip: only with the ws bundle (device tools resolve through `/v1/ws`).
 
+## billing (wave 7)
+
+### G0 entry: met 2026-11-11
+
+- Routes: `POST /v1/billing/revenuecat-webhook`, plus three routes App+build.swift mounts beside
+  billing and that live under other modules' prefixes: `GET /v1/auth/me/billing` and
+  `GET /v1/auth/me/usage` (app, `/v1/auth/me`), and `PUT /v1/admin/users/:userID/tier-override`
+  (admin, `/v1/admin/users`; 7B leaves it to 7A). They flip with their prefixes' modules; the
+  ingress for `admin` and `app` must not move them before billing is at `production`, or must name them.
+- Webhook ported exactly (wave-6-8-plan.md "Billing"): empty secret 500, 1 MiB cap (413), bearer
+  (plain "Bearer " replace) then hex HMAC-SHA256 of the raw body, 401, decode 400, the
+  `billing_event_logs` check, the effect and the log row **not** in one transaction (a lost race
+  on the unique index is a 500), unknown user 200 with an anonymous row, unknown product 500 with
+  no row. `RevenueCatClient` has no callers and is not ported.
+- `LapseArchiverService` is `workers.LapseArchiver`, registered off (LV_GO_JOBS) and in dry run by
+  default (`LV_LAPSE_DRY_RUN=true`): it logs each would-be lapse, archive and hard delete and writes
+  nothing. Runs at 02:00 UTC, before Swift's 03:00.
+- `TierOverrideAllowlist` is `billing.ParseTierOverrides`; nothing reads it until token minting
+  moves (8A), which must apply it on every issued session as Swift's `issueTokens` does.
+- `checkBudget` still has no callers; no live budget check was added.
+- Config: `REVENUECAT_WEBHOOK_SECRET`, `BILLING_TIER_OVERRIDE_EMAILS`, `BILLING_COLD_STORAGE_PATH`
+  (default `<VAULT_ROOT_PATH>/cold-storage`), `LV_LAPSE_DRY_RUN`.
+- Swift tests: `RevenueCatWebhook` 11, `SubscriptionCatalog` 6, `TierOverrideAllowlist` 5,
+  `LapseArchiver` 7, `UsageMetrics` 2 ported. Audit: `EntitlementChecker` 27, `Enforcement` 11,
+  `BYOEntitlementPolicy` 7 ported against `internal/entitlement` (`BYOExemption` extracted, same
+  rule); `BYOEntitlementMiddleware`, `StorageQuotaService`, `CostLedgerService`,
+  `UsageMeterBudget` were already cited. `UsageEventsRetention` is 7B's.
+
+### G1 parity: met 2026-11-11
+
+- `parity/scenarios/billing` 01-03 with `parity/seed/billing.sql`, plus
+  `scenarios-switched/unconfigured/billing` (empty secret and admin token) and
+  `scenarios-switched/billing-on/billing`. A billing-issue hold (now + 16 days) is compared as
+  "hold"; usage's period, `generatedAt` and day stamps are the clock and ignored.
+
 ## hermes-runs (wave 6, 6C)
 
 The `hermes` module stays `swift`: 6A and 6B (`/v1/hermes` mirror and webhooks) are not ported. 6C's routes are
