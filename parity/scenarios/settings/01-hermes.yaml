@@ -1,0 +1,22 @@
+# /v1/settings/hermes and /v1/me/hermes/capabilities in the default state: private
+# ranges refused, HTTPS required, so nothing here reaches a remote box.
+module: settings
+steps:
+  - {name: no token, request: {method: GET, path: /v1/settings/hermes}}
+  - {name: no config, as: st_amy, request: {method: GET, path: /v1/settings/hermes}}
+  - {name: test with no config, as: st_amy, request: {method: POST, path: /v1/settings/hermes/test}}
+  - {name: delete with no config, as: st_amy, request: {method: DELETE, path: /v1/settings/hermes}}
+  - {name: managed capabilities, as: st_amy, request: {method: GET, path: /v1/me/hermes/capabilities}}
+  - {name: managed capabilities refreshed, as: st_amy, request: {method: GET, path: "/v1/me/hermes/capabilities?refresh=true"}}
+  - {name: plain http refused, as: st_amy, request: {method: PUT, path: /v1/settings/hermes, json: {baseUrl: "http://203.0.113.9"}}, snapshot: [parity_st_hermes]}
+  - {name: private address refused, as: st_amy, request: {method: PUT, path: /v1/settings/hermes, json: {baseUrl: "https://10.0.0.1"}}}
+  - {name: loopback refused, as: st_amy, request: {method: PUT, path: /v1/settings/hermes, json: {baseUrl: "https://127.0.0.1:8443"}}}
+  - {name: metadata address refused, as: st_amy, request: {method: PUT, path: /v1/settings/hermes, json: {baseUrl: "https://169.254.169.254"}}}
+  - {name: not a url, as: st_amy, request: {method: PUT, path: /v1/settings/hermes, json: {baseUrl: "not a url"}}}
+  - {name: ftp scheme, as: st_amy, request: {method: PUT, path: /v1/settings/hermes, json: {baseUrl: "ftp://203.0.113.9"}}}
+  - {name: missing baseUrl, as: st_amy, request: {method: PUT, path: /v1/settings/hermes, json: {name: x}}}
+  - {name: snake case body, as: st_amy, request: {method: PUT, path: /v1/settings/hermes, json: {base_url: "https://10.0.0.1"}}}
+  - {name: empty body, as: st_amy, request: {method: PUT, path: /v1/settings/hermes}}
+  - {name: other method, as: st_amy, request: {method: POST, path: /v1/settings/hermes}}
+  - {name: deeper path, as: st_amy, request: {method: GET, path: /v1/settings/hermes/test}}
+  - {name: still no config, as: st_amy, request: {method: GET, path: /v1/settings/hermes}, snapshot: [parity_st_hermes]}
