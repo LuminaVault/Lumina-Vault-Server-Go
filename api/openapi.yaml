@@ -5923,7 +5923,7 @@ paths:
         `X-Vault-ID` is ignored on this route.
       parameters:
         - { in: query, name: vaults, schema: { type: string }, description: "CSV of vault ids. Default: every vault the caller can read." }
-        - { in: query, name: links, schema: { type: string }, description: "CSV of edge kinds from link, source, tag, author, entity, space, similar. Unknown values are ignored. Default: all except similar." }
+        - { in: query, name: links, schema: { type: string }, description: "CSV of edge kinds from link, source, tag, author, entity, space, similar. Unknown values are ignored. Default: all except similar. Similarity considers the 400 most recently updated memories in the result and is dropped if it cannot be computed in time." }
         - { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 2000, default: 400 }, description: "Item nodes (notes plus memories) across all vaults, most recently updated first." }
         - { in: query, name: focus, schema: { type: string, minLength: 1, maxLength: 300 }, description: "A node id. Returns only nodes within `depth` hops of it. A uuid, whole or after `space:` or `author:user:`, matches in either case; any other value is matched exactly." }
         - { in: query, name: depth, schema: { type: integer, minimum: 1, maximum: 3, default: 1 }, description: "Used with `focus`." }

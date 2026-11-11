@@ -269,7 +269,7 @@ type BrainGraphParams struct {
 	// Vaults CSV of vault ids. Default: every vault the caller can read.
 	Vaults *string `form:"vaults,omitempty" json:"vaults,omitempty"`
 
-	// Links CSV of edge kinds from link, source, tag, author, entity, space, similar. Unknown values are ignored. Default: all except similar.
+	// Links CSV of edge kinds from link, source, tag, author, entity, space, similar. Unknown values are ignored. Default: all except similar. Similarity considers the 400 most recently updated memories in the result and is dropped if it cannot be computed in time.
 	Links *string `form:"links,omitempty" json:"links,omitempty"`
 
 	// Limit Item nodes (notes plus memories) across all vaults, most recently updated first.

@@ -7,6 +7,8 @@ package brain
 
 import (
 	"context"
+	"errors"
+	"log/slog"
 	"lumina/internal/auth"
 	"lumina/internal/httpserver"
 	"lumina/internal/ids"
@@ -33,12 +35,17 @@ type Module struct {
 	identify echo.MiddlewareFunc
 	limits   *ratelimit.Store
 	now      func() time.Time
+	// similarTimeout bounds the similarity query; tests shorten it.
+	similarTimeout time.Duration
 }
 
 // New builds the module. identify is auth.Identify and limits the process's
 // shared rate-limit store.
 func New(pool *pgxpool.Pool, identify echo.MiddlewareFunc, limits *ratelimit.Store) *Module {
-	return &Module{pool: pool, q: db.New(pool), access: vaultaccess.New(pool), identify: identify, limits: limits, now: time.Now}
+	return &Module{
+		pool: pool, q: db.New(pool), access: vaultaccess.New(pool), identify: identify, limits: limits, now: time.Now,
+		similarTimeout: similarTimeout,
+	}
 }
 
 func (m *Module) Register(r httpserver.Router, _ echo.MiddlewareFunc) {
@@ -70,6 +77,10 @@ const (
 	// similar edges: top 3 neighbours per memory at cosine similarity 0.78 or higher.
 	minSimilarity  = 0.78
 	similarPerNode = 3
+	// The similarity query is quadratic in the memories it is given, so it gets at most the 400
+	// most recently updated selected memories and two seconds; past that the edges are dropped.
+	maxSimilarMemories = 400
+	similarTimeout     = 2 * time.Second
 )
 
 var (
@@ -196,9 +207,7 @@ func (m *Module) graph(c *echo.Context) error {
 		}
 	}
 	if p.links["similar"] && len(memoryIDs) > 0 {
-		sims, err := m.q.SimilarMemories(ctx, db.SimilarMemoriesParams{
-			VaultIds: vaultIDs, MemoryIds: memoryIDs, MinSimilarity: minSimilarity, PerNode: similarPerNode,
-		})
+		sims, err := m.similar(ctx, vaultIDs, memoryIDs)
 		if err != nil {
 			return err
 		}
@@ -238,6 +247,31 @@ func (m *Module) graph(c *echo.Context) error {
 		return c.NoContent(http.StatusNotModified)
 	}
 	return wire.JSON(c, http.StatusOK, resp)
+}
+
+// capSimilar keeps the first maxSimilarMemories ids. Items arrive newest first, so these are the
+// most recently updated memories, in the same order.
+func capSimilar(ids []uuid.UUID) []uuid.UUID {
+	if len(ids) > maxSimilarMemories {
+		return ids[:maxSimilarMemories]
+	}
+	return ids
+}
+
+// similar runs the similarity query over at most maxSimilarMemories memories and within
+// m.similarTimeout. Running out of time is not an error: the graph is returned without similar
+// edges. Any other failure, including the request itself being cancelled, is returned.
+func (m *Module) similar(ctx context.Context, vaultIDs, memoryIDs []uuid.UUID) ([]db.SimilarMemoriesRow, error) {
+	sctx, cancel := context.WithTimeout(ctx, m.similarTimeout)
+	defer cancel()
+	rows, err := m.q.SimilarMemories(sctx, db.SimilarMemoriesParams{
+		VaultIds: vaultIDs, MemoryIds: capSimilar(memoryIDs), MinSimilarity: minSimilarity, PerNode: similarPerNode,
+	})
+	if err != nil && ctx.Err() == nil && errors.Is(sctx.Err(), context.DeadlineExceeded) {
+		slog.WarnContext(ctx, "brain graph similarity timed out", "memories", min(len(memoryIDs), maxSimilarMemories), "timeout", m.similarTimeout)
+		return nil, nil
+	}
+	return rows, err
 }
 
 // matchesETag reports whether an If-None-Match value names tag. It accepts a comma-separated

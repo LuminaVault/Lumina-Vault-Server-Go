@@ -40,6 +40,7 @@ type env struct {
 	e      *echo.Echo
 	pool   *pgxpool.Pool
 	limits *ratelimit.Store
+	mod    *brain.Module
 }
 
 // Each test gets its own stack, so the rate-limit store never crosses tests.
@@ -55,11 +56,12 @@ func setup(t *testing.T) env {
 		require.NoError(t, err, f)
 	}
 	limits := ratelimit.NewStore()
+	mod := brain.New(pool, auth.Identify(keys, auth.PGUsers(pool)), limits)
 	e := httpserver.New(config.Config{}, httpserver.Deps{
 		Auth:    auth.Middleware(keys, auth.PGUsers(pool)),
-		Modules: []httpserver.Module{brain.New(pool, auth.Identify(keys, auth.PGUsers(pool)), limits)},
+		Modules: []httpserver.Module{mod},
 	})
-	return env{t: t, e: e, pool: pool, limits: limits}
+	return env{t: t, e: e, pool: pool, limits: limits, mod: mod}
 }
 
 func (v env) do(user uuid.UUID, method, path, body string, headers ...string) *httptest.ResponseRecorder {
@@ -779,4 +781,21 @@ func TestMemorySourceInOtherVaultIsNotRead(t *testing.T) {
 	rec := v.do(alice, http.MethodGet, "/v1/brain/graph", "")
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	require.NotContains(t, strings.ToLower(rec.Body.String()), strings.ToLower(bn))
+}
+
+// A similarity query that runs out of time costs the similar edges, not the request.
+func TestSimilarTimeoutDropsOnlySimilarEdges(t *testing.T) {
+	v := setup(t)
+	embed(t, v)
+	kinds := func(g similarGraph) map[string]int {
+		out := map[string]int{}
+		for _, e := range g.Edges {
+			out[e.Kind]++
+		}
+		return out
+	}
+	require.Equal(t, map[string]int{"similar": 1, "source": 1}, kinds(getSimilar(t, v, "?links=similar,source")))
+
+	brain.SetSimilarTimeout(v.mod, time.Nanosecond)
+	require.Equal(t, map[string]int{"source": 1}, kinds(getSimilar(t, v, "?links=similar,source")))
 }

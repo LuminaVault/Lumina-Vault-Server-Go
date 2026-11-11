@@ -341,3 +341,15 @@ func TestFocusLengthCountsRunes(t *testing.T) {
 	require.NoError(t, parse(strings.Repeat("日", 300)), "300 runes is 900 bytes and still allowed")
 	require.Equal(t, errInvalidFocus, parse(strings.Repeat("日", 301)))
 }
+
+func TestCapSimilarKeepsTheNewest400(t *testing.T) {
+	require.Equal(t, 400, maxSimilarMemories)
+	in := make([]uuid.UUID, 0, 450)
+	for range 450 {
+		in = append(in, uuid.New())
+	}
+	require.Equal(t, in[:400], capSimilar(in), "rows arrive newest first; the first 400 are kept in order")
+	require.Equal(t, in[:400], capSimilar(in[:400]))
+	require.Equal(t, in[:7], capSimilar(in[:7]))
+	require.Empty(t, capSimilar(nil))
+}
