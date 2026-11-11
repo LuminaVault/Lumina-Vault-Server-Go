@@ -28,8 +28,10 @@ import (
 )
 
 var (
-	alice = uuid.MustParse("a11ce000-0000-4000-8000-000000000001")
-	keys  = auth.NewKeyset(auth.Key{Kid: "t", Secret: []byte("test-secret-test-secret-test-0000")})
+	alice     = uuid.MustParse("a11ce000-0000-4000-8000-000000000001")
+	bob       = uuid.MustParse("b0b00000-0000-4000-8000-000000000002")
+	teamVault = uuid.MustParse("7ea40000-0000-4000-8000-0000000000a1")
+	keys      = auth.NewKeyset(auth.Key{Kid: "t", Secret: []byte("test-secret-test-secret-test-0000")})
 )
 
 type env struct {
@@ -134,4 +136,69 @@ func TestGraphRateLimited(t *testing.T) {
 		require.Equal(t, http.StatusOK, v.do(alice, http.MethodGet, "/v1/brain/graph", "").Code, "request %d of %d", i, max)
 	}
 	require.Equal(t, http.StatusTooManyRequests, v.do(alice, http.MethodGet, "/v1/brain/graph", "").Code)
+}
+
+type vaultOut struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Personal bool   `json:"personal"`
+}
+
+func vaultsOf(t *testing.T, rec *httptest.ResponseRecorder) []vaultOut {
+	t.Helper()
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	var out struct {
+		Vaults []vaultOut `json:"vaults"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &out))
+	for i := range out.Vaults {
+		out.Vaults[i].ID = strings.ToLower(out.Vaults[i].ID)
+	}
+	return out.Vaults
+}
+
+func TestVaultsDefaultToAllReadable(t *testing.T) {
+	v := setup(t)
+	got := vaultsOf(t, v.do(alice, http.MethodGet, "/v1/brain/graph", ""))
+	require.Equal(t, []vaultOut{
+		{ID: alice.String(), Name: "alice's Vault", Personal: true},
+		{ID: teamVault.String(), Name: "Team Vault", Personal: false},
+	}, got)
+}
+
+func TestVaultsParamNarrows(t *testing.T) {
+	v := setup(t)
+	got := vaultsOf(t, v.do(alice, http.MethodGet, "/v1/brain/graph?vaults="+teamVault.String()+","+teamVault.String(), ""))
+	require.Equal(t, []vaultOut{{ID: teamVault.String(), Name: "Team Vault"}}, got)
+	// An empty value is the same as an absent one.
+	require.Len(t, vaultsOf(t, v.do(alice, http.MethodGet, "/v1/brain/graph?vaults=", "")), 2)
+}
+
+func TestVaultsParamRejectsUnreadable(t *testing.T) {
+	v := setup(t)
+	for _, id := range []uuid.UUID{bob, uuid.MustParse("7ea40000-0000-4000-8000-0000000000a2"), uuid.New()} {
+		rec := v.do(alice, http.MethodGet, "/v1/brain/graph?vaults="+alice.String()+","+id.String(), "")
+		require.Contains(t, []int{http.StatusForbidden, http.StatusNotFound}, rec.Code, rec.Body.String())
+		require.NotContains(t, rec.Body.String(), "nodes")
+	}
+	require.Equal(t, http.StatusForbidden, v.do(alice, http.MethodGet, "/v1/brain/graph?vaults="+bob.String(), "").Code)
+}
+
+func TestVaultsParamMalformed(t *testing.T) {
+	v := setup(t)
+	for _, q := range []string{"nope", alice.String() + ",nope", alice.String() + ",,"} {
+		rec := v.do(alice, http.MethodGet, "/v1/brain/graph?vaults="+q, "")
+		require.Equal(t, http.StatusBadRequest, rec.Code, q)
+		require.Contains(t, rec.Body.String(), "invalid vaults")
+	}
+}
+
+func TestNewUserHasEmptyGraph(t *testing.T) {
+	v := setup(t)
+	rec := v.do(bob, http.MethodGet, "/v1/brain/graph", "")
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	validate(t, http.MethodGet, "/v1/brain/graph", rec)
+	require.Equal(t, []vaultOut{{ID: bob.String(), Name: "bob's Vault", Personal: true}}, vaultsOf(t, rec))
+	require.Contains(t, rec.Body.String(), `"nodes":[]`)
+	require.Contains(t, rec.Body.String(), `"edges":[]`)
 }
