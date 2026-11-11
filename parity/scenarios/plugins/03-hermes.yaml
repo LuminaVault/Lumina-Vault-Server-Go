@@ -1,0 +1,14 @@
+# Hermes-hub skills: a tenant with no container, one whose container key does not
+# decrypt (nothing reaches docker), and a BYO Hermes the default state refuses.
+module: plugins
+steps:
+  - {name: install with no id, as: pl_cy, request: {method: POST, path: /v1/plugins/hermes-skills/install}}
+  - {name: install a flag, as: pl_cy, request: {method: POST, path: "/v1/plugins/hermes-skills/install?id=--help"}}
+  - {name: install with a space, as: pl_cy, request: {method: POST, path: "/v1/plugins/hermes-skills/install?id=two%20words"}}
+  - {name: no container, as: pl_amy, request: {method: POST, path: "/v1/plugins/hermes-skills/install?id=gif-search"}}
+  - {name: uninstall with no container, as: pl_amy, request: {method: DELETE, path: /v1/plugins/hermes-skills/gif-search}}
+  - {name: uninstall a flag, as: pl_amy, request: {method: DELETE, path: /v1/plugins/hermes-skills/-rf}}
+  - {name: undecryptable container, as: pl_cy, request: {method: POST, path: "/v1/plugins/hermes-skills/install?id=gif-search"}}
+  - {name: other method, as: pl_cy, request: {method: GET, path: /v1/plugins/hermes-skills/install}}
+  - {name: byo refused here, as: pl_eve, request: {method: GET, path: /v1/plugins/hermes-skills}}
+  - {name: byo refused on the catalog too, as: pl_eve, request: {method: GET, path: /v1/plugins/catalog}}

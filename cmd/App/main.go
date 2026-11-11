@@ -323,6 +323,9 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		deps.Modules = append(deps.Modules, agent.routerModules()...)
 		deps.Modules = append(deps.Modules, agent.chatModules(links, enrichment, analytics)...)
 		deps.Modules = append(deps.Modules, agent.skillsModule(deviceRPC))
+		if m := agent.pluginsModule(); m != nil { // nil without LV_SECRET_MASTER_KEY, as in Swift
+			deps.Modules = append(deps.Modules, m)
+		}
 	}
 	// Deferred after the sink and the pool, so jobs stop first and can still use both.
 	stopJobs, err := startJobs(ctx, cfg, registered)

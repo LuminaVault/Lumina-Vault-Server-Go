@@ -1909,3 +1909,31 @@ Beyond the pilot gate (D-wave2-early):
 - `parity/scenarios/system/01-hermes-update.yaml` with `parity/seed/system.sql`. Seeded jobs are
   compared whole, including the stream. Ignored for jobs the scenario starts: clock times,
   `errorMessage` and step `detail` (Swift's Process or docker stderr text).
+
+## plugins (wave 6)
+
+### G0 entry: met 2026-11-11
+
+- Routes: 9. `GET /v1/plugins/catalog`, `GET /v1/plugins/hermes-skills`, `GET`/`POST
+  /v1/plugins/installs`, `PATCH`/`DELETE /v1/plugins/installs/:id`, `POST .../:id/sync`, and the hub
+  routes `POST /v1/plugins/hermes-skills/install`, `DELETE /v1/plugins/hermes-skills/:name`. JWT,
+  `settingsByUser`, BYO resolution; mounted only with `LV_SECRET_MASTER_KEY`, as in Swift.
+- `internal/modules/plugins` ports PluginController, PluginService, PluginCatalog,
+  SkillPluginCatalog, the Readwise, Raindrop, RSS and news-ticker connectors, HermesSkillsClient and
+  HermesHubSkillsController/Service. Syncs stage through `imports.Service.ImportLinks`.
+- Hub install runs `hermes skills install|uninstall` with `docker exec` in Swift. Owner decision O1:
+  the route is ported, and Go's default `DockerExec` fails as Swift does with no docker binary (500).
+  Every path before the exec (ref validation, no container 409, undecryptable key) is compared.
+- Kept from Swift (D-security-after-archive): installing or toggling a skill plugin updates
+  `enabled` on every `skills_state` row of the tenant (SkillsState's Fluent @ID is tenant_id).
+- Swift tests: `PluginLogic` 8, `PluginConnectorsSlice2` 8, `SkillPluginCatalog` 3,
+  `HermesHubSkillsService` 2 and the catalog half of `MemoryProviderPlugin` (2) as unit tests; the
+  other 2 (`TenantAwareEmbeddingService`) belong to embeddings. Route behaviour as DB tests.
+
+### G1 parity: met 2026-11-11
+
+- `parity/scenarios/plugins` 01-03 with `parity/seed/plugins.sql` (`parity_pl_installs`,
+  `parity_pl_skills`), `parity/scenarios-switched/agents/plugins` (a BYO Hermes's `/v1/skills` on the
+  LLM stub) and `parity/scenarios-switched/import-links/plugins` (rss and news-ticker syncs through the
+  import pipeline against the feeds stub's `/plugins/feed.xml`).
+- Not compared: Readwise and Raindrop syncs, which call the public APIs; their parsing is unit-tested.
