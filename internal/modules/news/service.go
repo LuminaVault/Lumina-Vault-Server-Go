@@ -77,7 +77,7 @@ func NewService(baseURL string, curated []string, client *http.Client, installs 
 		curated:  curated,
 		http:     client,
 		installs: installs,
-		cache:    &cache{entries: map[string]cacheEntry{}},
+		cache:    &cache{ttl: cacheTTL, entries: map[string]cacheEntry{}},
 		now:      time.Now,
 	}
 }
@@ -92,6 +92,13 @@ func CuratedFeeds(raw string) []string {
 		}
 	}
 	return out
+}
+
+// WithCacheTTL is the init's cacheTTL argument (the Daily Post's source uses 15
+// minutes). It returns s.
+func (s *Service) WithCacheTTL(ttl time.Duration) *Service {
+	s.cache.ttl = ttl
+	return s
 }
 
 func (s *Service) configured() bool { return s.baseURL != "" }
@@ -118,6 +125,30 @@ func (s *Service) Ticker(ctx context.Context, tenantID uuid.UUID, limit int) (Ne
 		return emptyResponse(now), nil
 	}
 	key := ids.Upper(tenantID) + "|" + strconv.Itoa(clamped) + "|" + strings.Join(feeds, "\n")
+	if cached, ok := s.cache.get(key, now); ok {
+		return cached, nil
+	}
+	resp, err := s.fetch(ctx, feeds, clamped, now)
+	if err != nil {
+		return NewsTickerResponse{}, err
+	}
+	s.cache.set(key, resp, now)
+	return resp, nil
+}
+
+// CuratedHeadlines is NewsTickerService.curatedHeadlines(limit:): the curated
+// feeds only, no install needed. The Daily Post's headline source.
+func (s *Service) CuratedHeadlines(ctx context.Context, limit int) (NewsTickerResponse, error) {
+	if !s.configured() {
+		return NewsTickerResponse{}, errNotConfigured
+	}
+	clamped := min(max(limit, 1), 100)
+	feeds := s.curated[:min(len(s.curated), maxFeedsPerCall)]
+	now := s.now()
+	if len(feeds) == 0 {
+		return emptyResponse(now), nil
+	}
+	key := "curated|" + strconv.Itoa(clamped) + "|" + strings.Join(feeds, "\n")
 	if cached, ok := s.cache.get(key, now); ok {
 		return cached, nil
 	}
@@ -440,6 +471,7 @@ type cacheEntry struct {
 
 // cache is NewsTickerCache: per-process, TTL 60 s, bounded at 512 entries.
 type cache struct {
+	ttl     time.Duration
 	mu      sync.Mutex
 	entries map[string]cacheEntry
 }
@@ -467,5 +499,5 @@ func (c *cache) set(key string, resp NewsTickerResponse, now time.Time) {
 			c.entries = map[string]cacheEntry{}
 		}
 	}
-	c.entries[key] = cacheEntry{resp: resp, expires: now.Add(cacheTTL)}
+	c.entries[key] = cacheEntry{resp: resp, expires: now.Add(c.ttl)}
 }

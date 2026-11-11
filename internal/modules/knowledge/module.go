@@ -2,7 +2,7 @@
 // LuminaVaultServer Sources/App/Knowledge (KnowledgeGraphController,
 // KnowledgeGraphService). /v1/knowledge/reason and /reason/stream call the
 // model and are the knowledge-reason module (group 4F).
-// KnowledgeExtractionWorker fills these tables and stays in Swift.
+// KnowledgeExtractionWorker (extraction.go) fills these tables as a job.
 package knowledge
 
 //go:generate sh -c "cd ../../.. && go tool oapi-codegen -config internal/modules/knowledge/oapi-codegen.yaml api/openapi.yaml"

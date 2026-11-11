@@ -383,3 +383,16 @@ func payload(m Message) map[string]any {
 	out["aps"] = aps
 	return out
 }
+
+// IsCategorySuppressed is APNSNotificationService.isCategorySuppressed, for the
+// schedulers that record an opt-out before they pay for any work.
+func IsCategorySuppressed(ctx context.Context, pool *pgxpool.Pool, category Category, tenant uuid.UUID) (bool, error) {
+	return isSuppressed(ctx, pool, category, tenant)
+}
+
+// HasDeviceToken is DeviceToken.query(on:tenantID:).count() > 0.
+func HasDeviceToken(ctx context.Context, pool *pgxpool.Pool, tenant uuid.UUID) (bool, error) {
+	var exists bool
+	err := pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM device_tokens WHERE tenant_id = $1)`, tenant).Scan(&exists)
+	return exists, err
+}

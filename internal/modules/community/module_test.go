@@ -28,6 +28,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// CommunityControllerTests: the seven route tests from TestBoardNeverRevealsEmailUsernameOrUserID
+// to TestSwitches. CommunityUnitTests: the filter, handle, cursor and config tests
+// here; moderator parsing, the Daily Post rules, page size and DTO mapping are in
+// daily_test.go.
+
 // Fixture members from parity/seed/community.sql.
 var (
 	ann  = member("A1")
@@ -341,8 +346,8 @@ func TestSwitches(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, off.do(uuid.Nil, http.MethodPost, "/v1/admin/community/daily/run", "", "X-Admin-Token", "x").code)
 }
 
-// Without the LLM moderator, the production default: a post that passes the
-// filter is held pending for Swift's sweep, and a reply does not bump the thread.
+// Without a model (FilterOnly): a post that passes the filter is held pending for
+// the sweep, and a reply does not bump the thread.
 func TestFilterOnlyHoldsPostsPending(t *testing.T) {
 	v := setupWith(t, community.Config{Enabled: true, PostingEnabled: true}, nil)
 	thread := v.thread(ann, "Held for review", "Waiting for the sweep.")
