@@ -182,11 +182,13 @@ type BrainGraphEdgeKind string
 
 // BrainGraphNode defines model for BrainGraphNode.
 type BrainGraphNode struct {
-	CreatedAt *wire.Time          `json:"createdAt,omitempty"`
-	Id        string              `json:"id"`
-	Kind      BrainGraphNodeKind  `json:"kind"`
-	Label     string              `json:"label"`
-	Pos       *BrainGraphPosition `json:"pos,omitempty"`
+	CreatedAt *wire.Time `json:"createdAt,omitempty"`
+
+	// Id Notes and memories use their uuid. Hubs use `tag:<normalised tag>`, `author:user:<uuid>`, `author:model:<provider>/<model>`, `entity:<canonical key>` and `space:<uuid>`. Every uuid is UPPERCASE, as in `vaultID` and `spaceID`; the prefixes are lowercase and tag text, model names and canonical keys are as stored.
+	Id    string              `json:"id"`
+	Kind  BrainGraphNodeKind  `json:"kind"`
+	Label string              `json:"label"`
+	Pos   *BrainGraphPosition `json:"pos,omitempty"`
 
 	// Refs Entity hubs only: the knowledge_nodes id per vault.
 	Refs    *[]BrainGraphRef `json:"refs,omitempty"`
@@ -273,7 +275,7 @@ type BrainGraphParams struct {
 	// Limit Item nodes (notes plus memories) across all vaults, most recently updated first.
 	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
 
-	// Focus A node id. Returns only nodes within `depth` hops of it.
+	// Focus A node id. Returns only nodes within `depth` hops of it. A uuid, whole or after `space:` or `author:user:`, matches in either case; any other value is matched exactly.
 	Focus *string `form:"focus,omitempty" json:"focus,omitempty"`
 
 	// Depth Used with `focus`.

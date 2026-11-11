@@ -220,14 +220,15 @@ func TestNewUserHasEmptyGraph(t *testing.T) {
 	require.Contains(t, rec.Body.String(), `"edges":[]`)
 }
 
+// Seed item ids, written as they appear in node ids: UPPERCASE, like every uuid on the wire.
 const (
-	n1 = "00000000-0000-4000-8000-0000000001a1"
-	n2 = "00000000-0000-4000-8000-0000000001a2"
-	n3 = "00000000-0000-4000-8000-0000000001a3"
-	m1 = "00000000-0000-4000-8000-0000000002a1"
-	m2 = "00000000-0000-4000-8000-0000000002a2"
-	bn = "00000000-0000-4000-8000-0000000001b1"
-	bm = "00000000-0000-4000-8000-0000000002b1"
+	n1 = "00000000-0000-4000-8000-0000000001A1"
+	n2 = "00000000-0000-4000-8000-0000000001A2"
+	n3 = "00000000-0000-4000-8000-0000000001A3"
+	m1 = "00000000-0000-4000-8000-0000000002A1"
+	m2 = "00000000-0000-4000-8000-0000000002A2"
+	bn = "00000000-0000-4000-8000-0000000001B1"
+	bm = "00000000-0000-4000-8000-0000000002B1"
 )
 
 type graphOut struct {
@@ -356,6 +357,7 @@ type hubGraph struct {
 		Kind    string  `json:"kind"`
 		Label   string  `json:"label"`
 		VaultID *string `json:"vaultID"`
+		SpaceID *string `json:"spaceID"`
 		Weight  int     `json:"weight"`
 		Refs    []struct {
 			VaultID string `json:"vaultID"`
@@ -417,7 +419,7 @@ func TestSharedTagHubAcrossVaults(t *testing.T) {
 
 func TestSpaceHub(t *testing.T) {
 	v := setup(t)
-	space := "5ace0000-0000-4000-8000-000000000001"
+	space := "5ACE0000-0000-4000-8000-000000000001"
 	exec(t, v, `INSERT INTO spaces (id, tenant_id, name, slug) VALUES ($1, $2, 'Research', 'research')`, space, alice)
 	exec(t, v, `UPDATE vault_files SET space_id = $1 WHERE id = $2`, space, n1)
 	exec(t, v, `UPDATE memories SET space_id = $1 WHERE id = $2`, space, m1)
@@ -430,6 +432,14 @@ func TestSpaceHub(t *testing.T) {
 	require.Equal(t, alice.String(), strings.ToLower(*vault))
 	require.Equal(t, 2, weight)
 	require.Equal(t, []string{"space:" + n1, "space:" + m1}, g.edgesTo("space:"+space))
+	// An item's spaceID is exactly the uuid part of its Space hub id, so a client can join them.
+	for _, n := range g.Nodes {
+		if n.ID == n1 || n.ID == m1 {
+			require.NotNil(t, n.SpaceID)
+			_, _, _, _, ok := g.node("space:" + *n.SpaceID)
+			require.True(t, ok, "no hub with id space:%s", *n.SpaceID)
+		}
+	}
 }
 
 func TestSpaceInOtherVaultIsNotRead(t *testing.T) {
@@ -450,7 +460,7 @@ func TestUserAuthorHub(t *testing.T) {
 	exec(t, v, `UPDATE vault_files SET created_by_user_id = $1 WHERE id = $2`, alice, n1)
 	exec(t, v, `UPDATE memories SET created_by_user_id = $1 WHERE id = $2`, alice, m1)
 	g := getHubs(t, v, "")
-	id := "author:user:" + alice.String()
+	id := "author:user:" + strings.ToUpper(alice.String())
 	kind, label, vault, weight, ok := g.node(id)
 	require.True(t, ok)
 	require.Equal(t, "author", kind)
@@ -463,7 +473,7 @@ func TestUserAuthorHub(t *testing.T) {
 func TestModelAuthorHub(t *testing.T) {
 	v := setup(t)
 	// memory_contributions.tenant_id references users, so both memories live in alice's vault.
-	m3 := "00000000-0000-4000-8000-0000000002a3"
+	m3 := "00000000-0000-4000-8000-0000000002A3"
 	exec(t, v, `INSERT INTO memories (id, tenant_id, content, created_at, updated_at) VALUES ($1, $2, 'third', now(), now())`, m3, alice)
 	for _, mem := range []string{m1, m3} {
 		// Two rows for one memory must still count once.
@@ -642,7 +652,7 @@ func (g similarGraph) similar() (out []string) {
 // embed gives M1 and M2 the same embedding and a third memory in alice's vault an orthogonal one.
 func embed(t *testing.T, v env) (m3 string) {
 	t.Helper()
-	m3 = "00000000-0000-4000-8000-0000000002a3"
+	m3 = "00000000-0000-4000-8000-0000000002A3"
 	exec(t, v, `INSERT INTO memories (id, tenant_id, content, created_at, updated_at) VALUES ($1, $2, 'third', now(), now())`, m3, alice)
 	exec(t, v, `UPDATE memories SET embedding = `+vecFirstHalf+` WHERE id = ANY($1::uuid[])`, []string{m1, m2})
 	exec(t, v, `UPDATE memories SET embedding = `+vecSecondHalf+` WHERE id = $1`, m3)

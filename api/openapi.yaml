@@ -5925,7 +5925,7 @@ paths:
         - { in: query, name: vaults, schema: { type: string }, description: "CSV of vault ids. Default: every vault the caller can read." }
         - { in: query, name: links, schema: { type: string }, description: "CSV of edge kinds from link, source, tag, author, entity, space, similar. Unknown values are ignored. Default: all except similar." }
         - { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 2000, default: 400 }, description: "Item nodes (notes plus memories) across all vaults, most recently updated first." }
-        - { in: query, name: focus, schema: { type: string, minLength: 1, maxLength: 300 }, description: "A node id. Returns only nodes within `depth` hops of it." }
+        - { in: query, name: focus, schema: { type: string, minLength: 1, maxLength: 300 }, description: "A node id. Returns only nodes within `depth` hops of it. A uuid, whole or after `space:` or `author:user:`, matches in either case; any other value is matched exactly." }
         - { in: query, name: depth, schema: { type: integer, minimum: 1, maximum: 3, default: 1 }, description: "Used with `focus`." }
       responses:
         '200':
@@ -15435,7 +15435,13 @@ components:
       type: object
       required: [id, kind, label, weight]
       properties:
-        id: { type: string }
+        id:
+          type: string
+          description: >
+            Notes and memories use their uuid. Hubs use `tag:<normalised tag>`, `author:user:<uuid>`,
+            `author:model:<provider>/<model>`, `entity:<canonical key>` and `space:<uuid>`. Every uuid
+            is UPPERCASE, as in `vaultID` and `spaceID`; the prefixes are lowercase and tag text,
+            model names and canonical keys are as stored.
         kind: { type: string, enum: [note, memory, tag, author, entity, space] }
         label: { type: string }
         vaultID: { type: string, format: uuid, description: "Set on notes, memories and Space hubs." }

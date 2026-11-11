@@ -1,10 +1,12 @@
 package brain
 
 import (
+	"lumina/internal/ids"
 	"lumina/internal/modules/brain/db"
 	"lumina/internal/wire"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -51,18 +53,18 @@ func TestNoteLabel(t *testing.T) {
 
 func TestAssembleDropsDanglingAndSelfEdges(t *testing.T) {
 	_, edges := assemble([]item{note(idA), note(idB)}, nil, []relation{
-		{From: idA.String(), To: idB.String(), Kind: "link"},
-		{From: idA.String(), To: idC.String(), Kind: "link"},
-		{From: idA.String(), To: idA.String(), Kind: "link"},
+		{From: nodeID(idA), To: nodeID(idB), Kind: "link"},
+		{From: nodeID(idA), To: nodeID(idC), Kind: "link"},
+		{From: nodeID(idA), To: nodeID(idA), Kind: "link"},
 	})
-	require.Equal(t, []string{"link:" + idA.String() + ">" + idB.String()}, kinds(edges))
+	require.Equal(t, []string{"link:" + nodeID(idA) + ">" + nodeID(idB)}, kinds(edges))
 }
 
 func TestAssembleDedupesUndirectedPairs(t *testing.T) {
 	_, edges := assemble([]item{note(idA), note(idB)}, nil, []relation{
-		{From: idA.String(), To: idB.String(), Kind: "link"},
-		{From: idB.String(), To: idA.String(), Kind: "link"},
-		{From: idA.String(), To: idB.String(), Kind: "link"},
+		{From: nodeID(idA), To: nodeID(idB), Kind: "link"},
+		{From: nodeID(idB), To: nodeID(idA), Kind: "link"},
+		{From: nodeID(idA), To: nodeID(idB), Kind: "link"},
 	})
 	require.Len(t, edges, 1)
 }
@@ -74,15 +76,15 @@ func TestAssembleDropsSmallHubs(t *testing.T) {
 			{ID: "tag:pair", Kind: "tag", Label: "pair"},
 		},
 		[]relation{
-			{From: idA.String(), To: "tag:solo", Kind: "tag"},
-			{From: idA.String(), To: "tag:pair", Kind: "tag"},
-			{From: idB.String(), To: "tag:pair", Kind: "tag"},
+			{From: nodeID(idA), To: "tag:solo", Kind: "tag"},
+			{From: nodeID(idA), To: "tag:pair", Kind: "tag"},
+			{From: nodeID(idB), To: "tag:pair", Kind: "tag"},
 		})
 	for _, n := range nodes {
 		require.NotEqual(t, "tag:solo", n.Id)
 	}
 	require.Len(t, nodes, 3)
-	require.Equal(t, []string{"tag:" + idA.String() + ">tag:pair", "tag:" + idB.String() + ">tag:pair"}, kinds(edges))
+	require.Equal(t, []string{"tag:" + nodeID(idA) + ">tag:pair", "tag:" + nodeID(idB) + ">tag:pair"}, kinds(edges))
 }
 
 func TestAssembleSortsAndWeights(t *testing.T) {
@@ -94,19 +96,19 @@ func TestAssembleSortsAndWeights(t *testing.T) {
 	n := note(idB)
 	n.SpaceID = &sp
 	nodes, edges := assemble([]item{m, n, note(idA)}, nil, []relation{
-		{From: idC.String(), To: idB.String(), Kind: "source"},
-		{From: idB.String(), To: idA.String(), Kind: "link"},
+		{From: nodeID(idC), To: nodeID(idB), Kind: "source"},
+		{From: nodeID(idB), To: nodeID(idA), Kind: "link"},
 	})
 	require.Len(t, nodes, 3)
 	// (kind, id): memory < note
-	require.Equal(t, idC.String(), nodes[0].Id)
-	require.Equal(t, idA.String(), nodes[1].Id)
-	require.Equal(t, idB.String(), nodes[2].Id)
+	require.Equal(t, nodeID(idC), nodes[0].Id)
+	require.Equal(t, nodeID(idA), nodes[1].Id)
+	require.Equal(t, nodeID(idB), nodes[2].Id)
 	require.Equal(t, []int{1, 1, 2}, []int{nodes[0].Weight, nodes[1].Weight, nodes[2].Weight})
 	require.NotNil(t, nodes[0].Pos)
 	require.NotNil(t, nodes[0].CreatedAt)
 	require.NotNil(t, nodes[2].SpaceID)
-	require.Equal(t, []string{"link:" + idB.String() + ">" + idA.String(), "source:" + idC.String() + ">" + idB.String()}, kinds(edges))
+	require.Equal(t, []string{"link:" + nodeID(idB) + ">" + nodeID(idA), "source:" + nodeID(idC) + ">" + nodeID(idB)}, kinds(edges))
 	// An item with no edges has weight 0.
 	nodes, _ = assemble([]item{note(idA)}, nil, nil)
 	require.Equal(t, 0, nodes[0].Weight)
@@ -179,9 +181,9 @@ var idD = uuid.MustParse("00000000-0000-4000-8000-00000000000d")
 // chain is A-B-C-D, with the middle edge written backwards to show edges are undirected.
 func chain() ([]BrainGraphNode, []BrainGraphEdge) {
 	nodes, edges := assemble([]item{note(idA), note(idB), note(idC), note(idD)}, nil, []relation{
-		{From: idA.String(), To: idB.String(), Kind: "link"},
-		{From: idC.String(), To: idB.String(), Kind: "link"},
-		{From: idC.String(), To: idD.String(), Kind: "link"},
+		{From: nodeID(idA), To: nodeID(idB), Kind: "link"},
+		{From: nodeID(idC), To: nodeID(idB), Kind: "link"},
+		{From: nodeID(idC), To: nodeID(idD), Kind: "link"},
 	})
 	return nodes, edges
 }
@@ -195,7 +197,7 @@ func idsOf(nodes []BrainGraphNode) (out []string) {
 
 func TestNeighbourhood(t *testing.T) {
 	nodes, edges := chain()
-	a, b, c, d := idA.String(), idB.String(), idC.String(), idD.String()
+	a, b, c, d := nodeID(idA), nodeID(idB), nodeID(idC), nodeID(idD)
 
 	got, es, ok := neighbourhood(nodes, edges, a, 1)
 	require.True(t, ok)
@@ -219,10 +221,10 @@ func TestNeighbourhood(t *testing.T) {
 
 func TestNeighbourhoodKeepsSingleMemberHubAndNonNilEdges(t *testing.T) {
 	nodes, edges := assemble([]item{note(idA), note(idB)}, []hub{{ID: "tag:x", Kind: "tag", Label: "x"}}, []relation{
-		{From: idA.String(), To: "tag:x", Kind: "tag"},
-		{From: idB.String(), To: "tag:x", Kind: "tag"},
+		{From: nodeID(idA), To: "tag:x", Kind: "tag"},
+		{From: nodeID(idB), To: "tag:x", Kind: "tag"},
 	})
-	got, es, ok := neighbourhood(nodes, edges, idA.String(), 1)
+	got, es, ok := neighbourhood(nodes, edges, nodeID(idA), 1)
 	require.True(t, ok)
 	require.Contains(t, idsOf(got), "tag:x")
 	require.Len(t, es, 1)
@@ -268,4 +270,74 @@ func TestFocusIgnoresDefaultLimit(t *testing.T) {
 		_, err := parseParams(echo.New().NewContext(req, httptest.NewRecorder()))
 		require.Equal(t, errInvalidFocus, err)
 	}
+}
+
+func TestNormaliseFocus(t *testing.T) {
+	up := "00000000-0000-4000-8000-0000000002A1"
+	low := strings.ToLower(up)
+	for in, want := range map[string]string{
+		low:                     up,
+		up:                      up,
+		"space:" + low:          "space:" + up,
+		"author:user:" + low:    "author:user:" + up,
+		"author:user:" + up:     "author:user:" + up,
+		"tag:Go":                "tag:Go",
+		"entity:" + low:         "entity:" + low,
+		"author:model:p/" + low: "author:model:p/" + low,
+		"SPACE:" + low:          "SPACE:" + low,
+		"space:not-a-uuid":      "space:not-a-uuid",
+		"{" + low + "}":         "{" + low + "}",
+	} {
+		require.Equal(t, want, normaliseFocus(in), in)
+	}
+}
+
+func TestNodeIDsAreUppercase(t *testing.T) {
+	sp := idB
+	n := note(idA)
+	n.SpaceID = &sp
+	n.CreatedBy = &idC
+	n.Tags = []string{"Go"}
+	m := mem(idD)
+	m.SpaceID = &sp
+	m.CreatedBy = &idC
+	m.Tags = []string{"go"}
+	items := []item{n, m}
+	var hubs []hub
+	var rels []relation
+	for _, f := range []func() ([]hub, []relation){
+		func() ([]hub, []relation) { return tagHubs(items) },
+		func() ([]hub, []relation) {
+			return spaceHubs(items, []db.SpacesRow{{ID: idB, TenantID: vlt, Name: "S"}})
+		},
+		func() ([]hub, []relation) { return userAuthorHubs(items, []db.AuthorsRow{{ID: idC, Username: "c"}}) },
+	} {
+		h, r := f()
+		hubs = append(hubs, h...)
+		rels = append(rels, r...)
+	}
+	nodes, edges := assemble(items, hubs, rels)
+	require.ElementsMatch(t, []string{
+		"00000000-0000-4000-8000-00000000000A",
+		"00000000-0000-4000-8000-00000000000D",
+		"tag:go",
+		"space:00000000-0000-4000-8000-00000000000B",
+		"author:user:00000000-0000-4000-8000-00000000000C",
+	}, idsOf(nodes))
+	require.Len(t, edges, 6)
+	for _, nd := range nodes {
+		if nd.SpaceID != nil {
+			require.Equal(t, "space:"+ids.Upper(nd.SpaceID.UUID), "space:00000000-0000-4000-8000-00000000000B")
+		}
+	}
+}
+
+func TestFocusLengthCountsRunes(t *testing.T) {
+	parse := func(focus string) error {
+		req := httptest.NewRequest(http.MethodGet, "/v1/brain/graph?focus="+url.QueryEscape(focus), nil)
+		_, err := parseParams(echo.New().NewContext(req, httptest.NewRecorder()))
+		return err
+	}
+	require.NoError(t, parse(strings.Repeat("日", 300)), "300 runes is 900 bytes and still allowed")
+	require.Equal(t, errInvalidFocus, parse(strings.Repeat("日", 301)))
 }

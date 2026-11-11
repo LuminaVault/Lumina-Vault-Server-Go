@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"lumina/internal/ids"
 	"lumina/internal/modules/brain/db"
 	"lumina/internal/wire"
 	"path"
@@ -15,6 +16,15 @@ import (
 )
 
 const maxLabelRunes = 80
+
+// nodeID is how a uuid appears inside a node id: UPPERCASE, exactly as wire.UUID writes vaultID,
+// spaceID and refs, so an id taken from any other endpoint matches. Every node and hub id that
+// carries a uuid is built with it; the prefixes stay lowercase.
+func nodeID(id uuid.UUID) string { return ids.Upper(id) }
+
+func spaceHubID(id uuid.UUID) string { return "space:" + nodeID(id) }
+
+func userAuthorHubID(id uuid.UUID) string { return "author:user:" + nodeID(id) }
 
 // item is a note or a memory, the nodes that count against `limit`.
 type item struct {
@@ -127,7 +137,7 @@ func tagHubs(items []item) ([]hub, []relation) {
 				seen[id] = true
 				hubs = append(hubs, hub{ID: id, Kind: "tag", Label: tag})
 			}
-			rels = append(rels, relation{From: it.ID.String(), To: id, Kind: "tag"})
+			rels = append(rels, relation{From: nodeID(it.ID), To: id, Kind: "tag"})
 		}
 	}
 	return hubs, rels
@@ -140,12 +150,12 @@ func spaceHubs(items []item, spaces []db.SpacesRow) ([]hub, []relation) {
 	for _, s := range spaces {
 		known[s.ID] = true
 		vault := s.TenantID
-		hubs = append(hubs, hub{ID: "space:" + s.ID.String(), Kind: "space", Label: s.Name, VaultID: &vault})
+		hubs = append(hubs, hub{ID: spaceHubID(s.ID), Kind: "space", Label: s.Name, VaultID: &vault})
 	}
 	var rels []relation
 	for _, it := range items {
 		if it.SpaceID != nil && known[*it.SpaceID] {
-			rels = append(rels, relation{From: it.ID.String(), To: "space:" + it.SpaceID.String(), Kind: "space"})
+			rels = append(rels, relation{From: nodeID(it.ID), To: spaceHubID(*it.SpaceID), Kind: "space"})
 		}
 	}
 	return hubs, rels
@@ -158,12 +168,12 @@ func userAuthorHubs(items []item, users []db.AuthorsRow) ([]hub, []relation) {
 	known := make(map[uuid.UUID]bool, len(users))
 	for _, u := range users {
 		known[u.ID] = true
-		hubs = append(hubs, hub{ID: "author:user:" + u.ID.String(), Kind: "author", Label: u.Username})
+		hubs = append(hubs, hub{ID: userAuthorHubID(u.ID), Kind: "author", Label: u.Username})
 	}
 	var rels []relation
 	for _, it := range items {
 		if it.CreatedBy != nil && known[*it.CreatedBy] {
-			rels = append(rels, relation{From: it.ID.String(), To: "author:user:" + it.CreatedBy.String(), Kind: "author"})
+			rels = append(rels, relation{From: nodeID(it.ID), To: userAuthorHubID(*it.CreatedBy), Kind: "author"})
 		}
 	}
 	return hubs, rels
@@ -184,7 +194,7 @@ func modelAuthorHubs(rows []db.ModelAuthorsRow) ([]hub, []relation) {
 			seen[id] = true
 			hubs = append(hubs, hub{ID: id, Kind: "author", Label: r.Model})
 		}
-		rels = append(rels, relation{From: r.MemoryID.String(), To: id, Kind: "author"})
+		rels = append(rels, relation{From: nodeID(r.MemoryID), To: id, Kind: "author"})
 	}
 	return hubs, rels
 }
@@ -210,7 +220,7 @@ func entityHubs(rows []db.EntitiesRow) ([]hub, []relation) {
 		if cur, ok := perVault[k]; !ok || better(r, cur) {
 			perVault[k] = r
 		}
-		rels = append(rels, relation{From: r.MemoryID.String(), To: "entity:" + r.CanonicalKey, Kind: "entity"})
+		rels = append(rels, relation{From: nodeID(r.MemoryID), To: "entity:" + r.CanonicalKey, Kind: "entity"})
 	}
 	byKey := map[string][]db.EntitiesRow{}
 	for k, r := range perVault {
@@ -244,7 +254,7 @@ func undirected(kind string) bool { return kind == "link" || kind == "similar" }
 func assemble(items []item, hubs []hub, rels []relation) ([]BrainGraphNode, []BrainGraphEdge) {
 	itemIDs := make(map[string]bool, len(items))
 	for _, it := range items {
-		itemIDs[it.ID.String()] = true
+		itemIDs[nodeID(it.ID)] = true
 	}
 	hubByID := make(map[string]hub, len(hubs))
 	for _, h := range hubs {
@@ -330,7 +340,7 @@ func assemble(items []item, hubs []hub, rels []relation) ([]BrainGraphNode, []Br
 
 	nodes := make([]BrainGraphNode, 0, len(items)+len(keep))
 	for _, it := range items {
-		id := it.ID.String()
+		id := nodeID(it.ID)
 		n := BrainGraphNode{Id: id, Kind: BrainGraphNodeKind(it.Kind), Label: it.Label, Weight: weight[id]}
 		v := wire.UUID{UUID: it.VaultID}
 		n.VaultID = &v

@@ -104,3 +104,20 @@ func TestGraphIsCompressed(t *testing.T) {
 	require.True(t, json.Valid(raw))
 	require.NotEmpty(t, rec.Header().Get("ETag"))
 }
+
+// Node ids carry uuids in UPPERCASE like every other endpoint, and focus accepts either case.
+func TestFocusAcceptsEitherCase(t *testing.T) {
+	v := setup(t)
+	upper, lower := strings.ToUpper(m1), strings.ToLower(m1)
+	want := getGraph(t, v, "?focus="+upper)
+	require.Contains(t, nodeIDs(want), upper)
+	require.Equal(t, want, getGraph(t, v, "?focus="+lower))
+
+	space := "5ace0000-0000-4000-8000-0000000000ab"
+	exec(t, v, `INSERT INTO spaces (id, tenant_id, name, slug) VALUES ($1, $2, 'Research', 'research')`, space, alice)
+	exec(t, v, `UPDATE vault_files SET space_id = $1 WHERE id = $2`, space, n1)
+	exec(t, v, `UPDATE memories SET space_id = $1 WHERE id = $2`, space, m1)
+	g := getGraph(t, v, "?links=space&focus=space:"+strings.ToLower(space))
+	require.ElementsMatch(t, []string{"space:" + strings.ToUpper(space), strings.ToUpper(n1), upper}, nodeIDs(g))
+	require.Equal(t, g, getGraph(t, v, "?links=space&focus=space:"+strings.ToUpper(space)))
+}

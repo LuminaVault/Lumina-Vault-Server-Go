@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -83,9 +84,10 @@ func parseParams(c *echo.Context) (params, error) {
 	p := params{links: parseLinks(c.QueryParam("links")), limit: parseLimit(c.QueryParam("limit")), depth: 1}
 	if _, ok := c.QueryParams()["focus"]; ok {
 		p.focus = c.QueryParam("focus")
-		if p.focus == "" || len(p.focus) > maxFocus {
+		if p.focus == "" || utf8.RuneCountInString(p.focus) > maxFocus {
 			return params{}, errInvalidFocus
 		}
+		p.focus = normaliseFocus(p.focus)
 		if _, ok := c.QueryParams()["limit"]; !ok {
 			p.limit = focusLimit
 		}
@@ -107,6 +109,23 @@ func parseParams(c *echo.Context) (params, error) {
 		}
 	}
 	return p, nil
+}
+
+// normaliseFocus maps a focus value onto the case node ids use, so a uuid copied from any
+// endpoint matches in either case: a bare uuid, or a uuid after `space:` or `author:user:`,
+// becomes UPPERCASE. Anything else is matched exactly as given.
+func normaliseFocus(s string) string {
+	if id, err := ids.Parse(s); err == nil {
+		return nodeID(id)
+	}
+	for _, prefix := range [...]string{"space:", "author:user:"} {
+		if rest, ok := strings.CutPrefix(s, prefix); ok {
+			if id, err := ids.Parse(rest); err == nil {
+				return prefix + nodeID(id)
+			}
+		}
+	}
+	return s
 }
 
 // parseLimit never fails: absent or unparsable is the default 400, and any number is clamped to 1..2000.
@@ -163,7 +182,7 @@ func (m *Module) graph(c *echo.Context) error {
 		}
 		for _, l := range links {
 			if l.ToID != nil {
-				rels = append(rels, relation{From: l.FromID.String(), To: l.ToID.String(), Kind: "link"})
+				rels = append(rels, relation{From: nodeID(l.FromID), To: nodeID(*l.ToID), Kind: "link"})
 			}
 		}
 	}
@@ -173,7 +192,7 @@ func (m *Module) graph(c *echo.Context) error {
 			return err
 		}
 		for _, s := range srcs {
-			rels = append(rels, relation{From: s.MemoryID.String(), To: s.NoteID.String(), Kind: "source"})
+			rels = append(rels, relation{From: nodeID(s.MemoryID), To: nodeID(s.NoteID), Kind: "source"})
 		}
 	}
 	if p.links["similar"] && len(memoryIDs) > 0 {
@@ -185,7 +204,7 @@ func (m *Module) graph(c *echo.Context) error {
 		}
 		for _, s := range sims {
 			w := s.Similarity
-			rels = append(rels, relation{From: s.FromID.String(), To: s.ToID.String(), Kind: "similar", Weight: &w})
+			rels = append(rels, relation{From: nodeID(s.FromID), To: nodeID(s.ToID), Kind: "similar", Weight: &w})
 		}
 	}
 	hubs, hubRels, err := m.hubs(ctx, p.links, vaultIDs, items, memoryIDs)
