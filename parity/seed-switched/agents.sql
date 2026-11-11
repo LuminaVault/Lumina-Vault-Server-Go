@@ -9,3 +9,8 @@ VALUES
   ('a9e79000-0000-4000-8000-000000000002', 'a9e70000-0000-4000-8000-0000000000a7', 'http://llmstub:8080/old-hermes', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
   ('a9e79000-0000-4000-8000-000000000003', 'a9e70000-0000-4000-8000-0000000000a8', 'http://llmstub:9', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
   ('a9e79000-0000-4000-8000-000000000004', 'a9e70000-0000-4000-8000-0000000000aa', 'http://llmstub:8080/', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+
+-- hm_dee (parity/seed/hermes-mirror.sql): a gateway-only BYO tenant for the mirror,
+-- the shape every iOS user has (no dashboard pair).
+INSERT INTO user_hermes_config (id, tenant_id, base_url, verified_at, created_at, updated_at)
+VALUES ('4e779000-0000-4000-8000-000000000001', '4e770000-0000-4000-8000-0000000000d4', 'http://llmstub:8080', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
