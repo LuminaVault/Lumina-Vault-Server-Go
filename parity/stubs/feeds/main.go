@@ -163,6 +163,7 @@ func main() {
 	mux.HandleFunc("GET /v1/items", handle)
 	mux.HandleFunc("POST /v1/execute", execute)
 	registerCapture(mux)
+	registerPlugins(mux)
 	mux.HandleFunc("POST /v2/embed", cohereEmbed)
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("ok")) })
 	srv := &http.Server{Addr: ":8080", Handler: mux, ReadHeaderTimeout: 5 * time.Second}
