@@ -254,10 +254,16 @@ func soulExcerpt(s *soul.Service, tenant uuid.UUID, username string) *string {
 	if personal == "" {
 		return nil
 	}
-	if swiftstr.CharacterCount(personal) > maxSoulCharacters {
-		personal = swiftstr.CharacterPrefix(personal, maxSoulCharacters) + "\n…(truncated)"
-	}
+	personal = capped(personal, maxSoulCharacters)
 	return &personal
+}
+
+// capped is ConversationController.capped: at most maxCharacters, then a marker.
+func capped(s string, maxCharacters int) string {
+	if swiftstr.CharacterCount(s) <= maxCharacters {
+		return s
+	}
+	return swiftstr.CharacterPrefix(s, maxCharacters) + "\n…(truncated)"
 }
 
 // scheduleContext is ConversationController.scheduleContext: the user's calendar now,
