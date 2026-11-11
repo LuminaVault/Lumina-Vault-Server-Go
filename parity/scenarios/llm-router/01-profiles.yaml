@@ -34,13 +34,15 @@ steps:
     as: lr_pro
     request: {method: POST, path: /v1/router, json: {name: Lean, mode: managed, objective: {quality: 0, cost: 100, latency: 0}, budget: {}, defaultAction: {kind: sequential, routes: [{provider: openRouter, model: openai/gpt-4o-mini}], retryPolicy: fast}}}
     capture: {lean: $.id}
+  - {name: a duplicate name, as: lr_pro, request: {method: POST, path: /v1/router, json: {name: Lean, mode: managed, objective: {quality: 0, cost: 100, latency: 0}, budget: {}, defaultAction: {kind: sequential, routes: [{provider: openRouter, model: m}], retryPolicy: fast}}}}
+  - {name: "byok defaults to the Auto policy, which needs an OpenRouter key", as: lr_pro, request: {method: POST, path: /v1/router, json: {name: NoPolicy, mode: byok, objective: {quality: 100, cost: 0, latency: 0}, budget: {}, defaultAction: {kind: sequential, routes: [{provider: openai, model: gpt-4o}], retryPolicy: fast}}}}
   - {name: list shows all three, as: lr_pro, request: {method: GET, path: /v1/router}}
   - name: update with the current revision
     as: lr_pro
-    request: {method: PUT, path: "/v1/router/{{work}}", json: {name: Work 2, mode: byok, objective: {quality: 34, cost: 33, latency: 33}, budget: {}, defaultAction: {kind: sequential, routes: [{provider: openai, model: gpt-4.1}], retryPolicy: fast}, expectedRevision: 1}}
+    request: {method: PUT, path: "/v1/router/{{work}}", json: {name: Work 2, mode: byok, objective: {quality: 34, cost: 33, latency: 33}, budget: {}, defaultAction: {kind: sequential, routes: [{provider: openai, model: gpt-4.1}], retryPolicy: fast}, routingPolicy: balanced, expectedRevision: 1}}
     snapshot: [parity_lr_profiles]
-  - {name: a stale revision conflicts, as: lr_pro, request: {method: PUT, path: "/v1/router/{{work}}", json: {name: Work 3, mode: byok, objective: {quality: 34, cost: 33, latency: 33}, budget: {}, defaultAction: {kind: sequential, routes: [{provider: openai, model: gpt-4.1}], retryPolicy: fast}, expectedRevision: 1}}}
-  - {name: no revision overwrites, as: lr_pro, request: {method: PUT, path: "/v1/router/{{work}}", json: {name: Work 4, mode: byok, objective: {quality: 34, cost: 33, latency: 33}, budget: {}, defaultAction: {kind: sequential, routes: [{provider: openai, model: gpt-4.1}], retryPolicy: fast}}}}
+  - {name: a stale revision conflicts, as: lr_pro, request: {method: PUT, path: "/v1/router/{{work}}", json: {name: Work 3, mode: byok, objective: {quality: 34, cost: 33, latency: 33}, budget: {}, defaultAction: {kind: sequential, routes: [{provider: openai, model: gpt-4.1}], retryPolicy: fast}, routingPolicy: balanced, expectedRevision: 1}}}
+  - {name: no revision overwrites, as: lr_pro, request: {method: PUT, path: "/v1/router/{{work}}", json: {name: Work 4, mode: byok, objective: {quality: 34, cost: 33, latency: 33}, budget: {}, defaultAction: {kind: sequential, routes: [{provider: openai, model: gpt-4.1}], retryPolicy: fast}, routingPolicy: balanced}}}
   - {name: update an unknown profile, as: lr_pro, request: {method: PUT, path: /v1/router/1a7e9000-0000-4000-8000-0000000000ff, json: {name: X, mode: managed, objective: {quality: 100, cost: 0, latency: 0}, budget: {}, defaultAction: {kind: sequential, routes: [{provider: openai, model: m}], retryPolicy: fast}}}}
   - {name: update a bad id, as: lr_pro, request: {method: PUT, path: /v1/router/nope, json: {}}}
   - {name: update the default profile, as: lr_pro, request: {method: PUT, path: "/v1/router/{{default}}", json: {name: Mine, mode: managed, objective: {quality: 100, cost: 0, latency: 0}, budget: {hardLimitUsdMicros: 9000}, defaultAction: {kind: sequential, routes: [{provider: openRouter, model: m}], retryPolicy: fast}}}}

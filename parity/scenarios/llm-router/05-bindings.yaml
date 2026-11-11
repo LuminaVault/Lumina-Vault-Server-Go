@@ -6,7 +6,7 @@ steps:
   - {name: list makes the default and its user binding, as: lr_bind, request: {method: GET, path: /v1/router}, capture: {default: $.defaultProfileID}}
   - name: a profile to bind
     as: lr_bind
-    request: {method: POST, path: /v1/router, json: {name: Scoped, mode: byok, objective: {quality: 100, cost: 0, latency: 0}, budget: {}, defaultAction: {kind: sequential, routes: [{provider: openai, model: gpt-4o}], retryPolicy: fast}}}
+    request: {method: POST, path: /v1/router, json: {name: Scoped, mode: byok, objective: {quality: 100, cost: 0, latency: 0}, budget: {}, defaultAction: {kind: sequential, routes: [{provider: openai, model: gpt-4o}], retryPolicy: fast}, routingPolicy: balanced}}
     capture: {scoped: $.id}
   - {name: another tenant's default profile, as: lr_pro, request: {method: GET, path: /v1/router}, capture: {foreign: $.defaultProfileID}}
   - {name: bindings before, as: lr_bind, request: {method: GET, path: /v1/router/bindings}}

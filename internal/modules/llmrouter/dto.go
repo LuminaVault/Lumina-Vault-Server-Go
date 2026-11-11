@@ -174,13 +174,13 @@ type presetWriteReq struct {
 // parallelReq is ParallelExecutionRequestDTO. Its synthesized init(from:) needs
 // strategy: the memberwise default does not apply to decoding.
 type parallelReq struct {
-	Prompt            string           `json:"prompt"`
-	Strategy          parallelStrategy `json:"strategy"`
+	Prompt            string            `json:"prompt"`
+	Strategy          parallelStrategy  `json:"strategy"`
 	Participants      *[]participantReq `json:"participants,omitempty"`
-	SynthesisRoute    *routeReq        `json:"synthesisRoute,omitempty"`
-	SynthesisPrompt   *string          `json:"synthesisPrompt,omitempty"`
-	SynthesisPresetID *wire.UUID       `json:"synthesisPresetID,omitempty"`
-	SpaceID           *wire.UUID       `json:"spaceID,omitempty"`
+	SynthesisRoute    *routeReq         `json:"synthesisRoute,omitempty"`
+	SynthesisPrompt   *string           `json:"synthesisPrompt,omitempty"`
+	SynthesisPresetID *wire.UUID        `json:"synthesisPresetID,omitempty"`
+	SpaceID           *wire.UUID        `json:"spaceID,omitempty"`
 }
 
 // MARK: - Request to llm
@@ -249,8 +249,8 @@ func providers(ps []providerID) []llm.ProviderID {
 func (w *writeReq) write() llm.RouterProfileWrite {
 	out := llm.RouterProfileWrite{
 		Name: w.Name, Mode: llm.CredentialMode(w.Mode),
-		Objective: llm.RouterObjective{Quality: w.Objective.Quality, Cost: w.Objective.Cost, Latency: w.Objective.Latency},
-		Budget:    llm.RouterBudget{SoftLimitUsdMicros: i64(w.Budget.SoftLimitUsdMicros), HardLimitUsdMicros: i64(w.Budget.HardLimitUsdMicros)},
+		Objective:        llm.RouterObjective{Quality: w.Objective.Quality, Cost: w.Objective.Cost, Latency: w.Objective.Latency},
+		Budget:           llm.RouterBudget{SoftLimitUsdMicros: i64(w.Budget.SoftLimitUsdMicros), HardLimitUsdMicros: i64(w.Budget.HardLimitUsdMicros)},
 		AllowedProviders: providers(w.AllowedProviders), BlockedProviders: providers(w.BlockedProviders),
 		DefaultAction: w.DefaultAction.wire(), Rules: make([]llm.RouterRule, len(w.Rules)),
 		RoutingPolicy: llm.PolicyAutoSmart, ExpectedRevision: w.ExpectedRevision,
@@ -280,20 +280,20 @@ func (w *writeReq) write() llm.RouterProfileWrite {
 // profileDTO is RouterProfileDTO. The synthesized encoder writes every
 // non-optional field; createdAt and updatedAt are always set from the row.
 type profileDTO struct {
-	ID               wire.UUID          `json:"id"`
-	Name             string             `json:"name"`
-	Mode             string             `json:"mode"`
-	IsPreset         bool               `json:"isPreset"`
+	ID               wire.UUID           `json:"id"`
+	Name             string              `json:"name"`
+	Mode             string              `json:"mode"`
+	IsPreset         bool                `json:"isPreset"`
 	Objective        llm.RouterObjective `json:"objective"`
-	Budget           llm.RouterBudget   `json:"budget"`
-	AllowedProviders []llm.ProviderID   `json:"allowedProviders"`
-	BlockedProviders []llm.ProviderID   `json:"blockedProviders"`
-	DefaultAction    llm.RouterAction   `json:"defaultAction"`
-	Rules            []llm.RouterRule   `json:"rules"`
-	RoutingPolicy    llm.RoutingPolicy  `json:"routingPolicy"`
-	Revision         int                `json:"revision"`
-	CreatedAt        *wire.Time         `json:"createdAt,omitempty"`
-	UpdatedAt        *wire.Time         `json:"updatedAt,omitempty"`
+	Budget           llm.RouterBudget    `json:"budget"`
+	AllowedProviders []llm.ProviderID    `json:"allowedProviders"`
+	BlockedProviders []llm.ProviderID    `json:"blockedProviders"`
+	DefaultAction    llm.RouterAction    `json:"defaultAction"`
+	Rules            []llm.RouterRule    `json:"rules"`
+	RoutingPolicy    llm.RoutingPolicy   `json:"routingPolicy"`
+	Revision         int                 `json:"revision"`
+	CreatedAt        *wire.Time          `json:"createdAt,omitempty"`
+	UpdatedAt        *wire.Time          `json:"updatedAt,omitempty"`
 }
 
 type profilesResponse struct {

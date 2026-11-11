@@ -77,8 +77,8 @@ type healthLine struct {
 }
 
 type healthResponse struct {
-	CheckedAt  wire.Time    `json:"checked_at"`
-	Providers  []healthLine `json:"providers"`
+	CheckedAt wire.Time    `json:"checked_at"`
+	Providers []healthLine `json:"providers"`
 }
 
 // region is ProviderKind.region: the Chinese-hosted upstreams are "cn".

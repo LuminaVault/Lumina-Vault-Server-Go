@@ -7,15 +7,15 @@ steps:
   - {name: the default profile mirrors the saved chain, as: lr_byok, request: {method: GET, path: /v1/router}}
   - name: a placeholder default route takes the saved chain
     as: lr_byok
-    request: {method: POST, path: /v1/router, json: {name: Chain, mode: byok, objective: {quality: 100, cost: 0, latency: 0}, budget: {}, defaultAction: {kind: sequential, routes: [{provider: openRouter, model: auto}], retryPolicy: fast}}}
+    request: {method: POST, path: /v1/router, json: {name: Chain, mode: byok, objective: {quality: 100, cost: 0, latency: 0}, budget: {}, defaultAction: {kind: sequential, routes: [{provider: openRouter, model: auto}], retryPolicy: fast}, routingPolicy: balanced}}
     snapshot: [parity_lr_profiles]
   - name: the brain label is a literal model, only openRouter auto is the placeholder
     as: lr_byok
-    request: {method: POST, path: /v1/router, json: {name: Label, mode: byok, objective: {quality: 100, cost: 0, latency: 0}, budget: {}, defaultAction: {kind: sequential, routes: [{provider: xai, model: grok-4}, {provider: openRouter, model: "LuminaVault Brain · Auto"}], retryPolicy: fast}, rules: [{id: 1a7e9000-0000-4000-8000-0000000000c4, name: R, enabled: true, priority: 1, taskTypes: [coding], surfaces: [], action: {kind: sequential, routes: [{provider: anthropic, model: "LuminaVault Brain · Auto"}], retryPolicy: fast}}]}}
+    request: {method: POST, path: /v1/router, json: {name: Label, mode: byok, objective: {quality: 100, cost: 0, latency: 0}, budget: {}, defaultAction: {kind: sequential, routes: [{provider: xai, model: grok-4}, {provider: openRouter, model: "LuminaVault Brain · Auto"}], retryPolicy: fast}, rules: [{id: 1a7e9000-0000-4000-8000-0000000000c4, name: R, enabled: true, priority: 1, taskTypes: [coding], surfaces: [], action: {kind: sequential, routes: [{provider: anthropic, model: "LuminaVault Brain · Auto"}], retryPolicy: fast}}], routingPolicy: balanced}}
   - {name: a managed profile scrubs its routes, as: lr_byok, request: {method: POST, path: /v1/router, json: {name: Managed, mode: managed, objective: {quality: 100, cost: 0, latency: 0}, budget: {}, defaultAction: {kind: sequential, routes: [{provider: openai, model: gpt-4o}], retryPolicy: fast}}}}
   - {name: list after the writes, as: lr_byok, request: {method: GET, path: /v1/router}}
 
   - {name: no saved chain to substitute, as: lr_none, request: {method: POST, path: /v1/router, json: {name: Chain, mode: byok, objective: {quality: 100, cost: 0, latency: 0}, budget: {}, defaultAction: {kind: sequential, routes: [{provider: openRouter, model: auto}], retryPolicy: fast}}}}
-  - {name: the brain label needs no chain, as: lr_none, request: {method: POST, path: /v1/router, json: {name: Chain, mode: byok, objective: {quality: 100, cost: 0, latency: 0}, budget: {}, defaultAction: {kind: sequential, routes: [{provider: openai, model: "LuminaVault Brain · Auto"}], retryPolicy: fast}}}}
-  - {name: a real route needs no chain, as: lr_none, request: {method: POST, path: /v1/router, json: {name: Real, mode: byok, objective: {quality: 100, cost: 0, latency: 0}, budget: {}, defaultAction: {kind: sequential, routes: [{provider: openai, model: gpt-4o}], retryPolicy: fast}}}}
+  - {name: the brain label needs no chain, as: lr_none, request: {method: POST, path: /v1/router, json: {name: Chain, mode: byok, objective: {quality: 100, cost: 0, latency: 0}, budget: {}, defaultAction: {kind: sequential, routes: [{provider: openai, model: "LuminaVault Brain · Auto"}], retryPolicy: fast}, routingPolicy: balanced}}}
+  - {name: a real route needs no chain, as: lr_none, request: {method: POST, path: /v1/router, json: {name: Real, mode: byok, objective: {quality: 100, cost: 0, latency: 0}, budget: {}, defaultAction: {kind: sequential, routes: [{provider: openai, model: gpt-4o}], retryPolicy: fast}, routingPolicy: balanced}}}
   - {name: the default profile with no preference, as: lr_none, request: {method: GET, path: /v1/router}}

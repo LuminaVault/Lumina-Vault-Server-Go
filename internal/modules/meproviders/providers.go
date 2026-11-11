@@ -22,7 +22,7 @@ import (
 
 // The /test failure codes: ProvidersController.TestError.
 const (
-	errNoCredential        = "no_credential"
+	errNoCredential        = "no_credential" //nolint:gosec // an error code, not a credential.
 	errUnsupportedProvider = "unsupported_provider"
 	errCreditExhausted     = "credit_exhausted"
 	errRateLimit           = "rate_limit"
@@ -393,7 +393,7 @@ func (m *Module) get(ctx context.Context, rawURL string, headers map[string]stri
 	if err != nil {
 		return 0, false
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return 0, false
