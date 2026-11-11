@@ -40,12 +40,12 @@ const (
 	proposalPending = "A confirmation card is showing for the user. Nothing has been done yet: it only happens if the user confirms. Do not say it is done; tell the user it is waiting for their confirmation."
 	tooManyCards    = "The tool did not run: too many confirmations are waiting in this turn. Tell the user what is waiting and ask them to send the rest separately."
 	noConversation  = "The tool did not run: there is nowhere to show a confirmation here. Tell the user you can't do it right now."
+	permissionCard  = "The user has not allowed Calendar changes, so a card is showing that points them to Data Access. Nothing has been done. Tell the user."
 
 	maxTitleLength         = 200
 	maxBodyLength          = 2000
 	maxWritesPerTurn       = 5 // ruling 23
 	maxConfirmCardsPerTurn = 3 // ruling 27
-	confirmWindow          = 10 * time.Minute
 
 	// toolTimeout bounds one tool call. The loop hands Run a context the turn
 	// does not cancel, so a started write finishes (ruling 73); this is what
@@ -235,9 +235,11 @@ func (r *Runner) dispatch(ctx context.Context, tool Tool, args map[string]any, p
 		return r.saveMemory(ctx, args, personalRanBefore)
 	case "app_reminder_create", "app_reminders_list":
 		return r.personal(ctx, tool.Name, args)
+	case "calendar_create":
+		return r.proposeEvent(ctx, args)
+	case "memory_forget":
+		return r.proposeForget(ctx, args)
 	}
-	// calendar_create and memory_forget are confirm tools; until they are
-	// proposed here (Task 10), a write that reaches this point does not run.
 	if tool.Writes {
 		return modelOnly(notAvailable), nil
 	}
@@ -407,42 +409,6 @@ func screenLabel(s Screen) string {
 	default:
 		return "that screen"
 	}
-}
-
-// MARK: - Confirm cards
-
-// propose stores a pending action and returns its card, at most three per
-// turn (ruling 27). Only the user's Confirm runs it.
-func (r *Runner) propose(ctx context.Context, tool string, vault uuid.UUID, args map[string]any, summary string) (ToolResult, error) {
-	if r.ConversationID == nil {
-		return modelOnly(noConversation), nil
-	}
-	if r.Store == nil {
-		return ToolResult{}, errMissingDependency
-	}
-	if r.state().Proposals() >= maxConfirmCardsPerTurn {
-		return modelOnly(tooManyCards), nil
-	}
-	// Housekeeping only: a sweep that fails must not cost the user the card.
-	if err := r.Store.DeleteLongExpired(ctx, r.Actor); err != nil {
-		r.logger().WarnContext(ctx, "quick assistant expired actions not swept", "error_type", fmt.Sprintf("%T", err))
-	}
-	id := uuid.New()
-	expiresAt := r.now().Add(confirmWindow)
-	if err := r.Store.Insert(ctx, PendingAction{
-		ID: id, TenantID: r.Actor, VaultID: vault, ConversationID: *r.ConversationID,
-		Tool: tool, Args: args, Summary: summary, ExpiresAt: expiresAt,
-	}); err != nil {
-		return ToolResult{}, err
-	}
-	r.state().noteProposal()
-	return ToolResult{
-		ModelContent: proposalPending,
-		Action: &Action{
-			ID: wire.UUID{UUID: id}, Kind: KindNeedsConfirm, Summary: summary,
-			ExpiresAt: &wire.Time{Time: expiresAt},
-		},
-	}, nil
 }
 
 // MARK: - Helpers
