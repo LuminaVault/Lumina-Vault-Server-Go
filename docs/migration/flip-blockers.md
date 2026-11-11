@@ -189,6 +189,21 @@ Fixes that later remove the held routes and gaps (Go only unless stated; no modu
   doesn't move the archive date, because Swift has to outlive wave 5 regardless. Owner's call.
 - **Swift change.** None. **Unlocks.** 1 module.
 
+### me-gateways, integrations: in-process sessions, no container spawn (6D, 6E)
+
+- **In-memory state: real, by design.** The gateway-apply SSE subscribers, WhatsApp pairing sessions,
+  Photon setup sessions, xAI and Nous OAuth sessions and the parked `hermes auth` processes live in the
+  serving process. Start and complete (or stream) must reach the same server, so each module flips as
+  one, with no `heldPaths`. Apply jobs themselves persist in `hermes_gateway_apply_jobs`.
+- **Container spawn: not ported (O1).** Go's `hermescontainers.Lifecycle.EnsureRunning` checks the
+  docker network and then fails. In production there is no docker in the pod, so Swift fails at the
+  same point and both answer the empty 500. On a host with docker they would diverge: Swift would start
+  the container, Go would not.
+- **Photon sidecar: not ported.** Production sets no `PHOTON_SIDECAR_URL`; inbound answers 503 and
+  provisioning skips sidecar activation. Go logs a warning at boot if the sidecar is configured.
+- **Template seeding** for a tenant that already has a container row is not ported; it needs docker.
+- **Swift change.** None. **Unlocks.** 2 modules.
+
 ## Gap found that wasn't recorded: server-side PostHog events
 
 Go has no PostHog client, and `POSTHOG_PROJECT_TOKEN` is in production's sealed env. Each flip silently ends that module's

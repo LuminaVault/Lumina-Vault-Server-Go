@@ -1801,3 +1801,48 @@ Beyond the pilot gate (D-wave2-early):
 - Memories saved over MCP are forgotten within the scenario, so their randomly keyed chunks never reach
   later modules' `memory_chunks` snapshots.
 - Flip: only with the ws bundle.
+
+## me-gateways (wave 6, 6D)
+
+### G0 entry: met 2026-11-11
+
+- Routes: 16. `/v1/me/hermes-gateways` list, get, put, delete, test, apply (start, current, status,
+  stream), WhatsApp pair, pair stream and unlink, Photon setup, phone and setup stream (JWT,
+  `settingsByUser`, byoHermes resolver), and `POST /v1/gateways/photon/inbound` (sidecar token only).
+- O1, P4: container operations go through `internal/hermescontainers` (`Docker`, `Containers`). The
+  default implementation forks docker as Swift does, so in a pod with no docker every container call
+  fails at spawn and answers Swift's empty 500. Go never spawns a container: `EnsureRunning` checks the
+  network, then fails with `ErrSpawnNotPorted`.
+- Photon inbound answers 503 when no delivery service exists, which is always: the sidecar client is
+  not ported and production configures none. With no sidecar token the route is the disabled 404.
+- Route order: "apply" is a constant segment that wins over `:id` (empty 404 for other methods), in
+  `parity/scenarios/me-gateways/02-shadowing.yaml`.
+- Config: `DOCKER_BINARY_PATH`, `HERMES_PER_TENANT_NETWORK`, `PHOTON_SIDECAR_URL`, `PHOTON_SIDECAR_TOKEN`.
+- Swift tests: `HermesGatewaysControllerTests` 6 (DB), `WhatsAppPairParserTests` 8,
+  `SidecarTokenMiddlewareTests` 5.
+
+### G1 parity: pending CI
+
+- `parity/scenarios/me-gateways` 00-04 with `parity/seed/gateways.sql`. Photon setup start is left out:
+  it calls the real Photon API. A new apply's job is compared on its acknowledgement only.
+- Flip: one group. The apply SSE, WhatsApp pairing and Photon setup sessions are in-memory.
+
+## integrations (wave 6, 6E)
+
+### G0 entry: met 2026-11-11
+
+- Routes: 8. `/v1/integrations/xai` and `/v1/integrations/nous`: status, start, complete, revoke (JWT
+  only, no rate limit).
+- The live CLI backends (`hermes auth add xai-oauth`, `hermes auth add nous`, `portal status`, the
+  loopback `curl` forward) are ported over `hermescontainers.Docker`. Without docker, start is the
+  empty 500 of a failed spawn, and revoke's CLI call fails and is ignored, as in Swift.
+- Kept Swift weakness: xAI revoke demotes the tenant to `trial` and deletes any `xai` credential row,
+  not only the OAuth marker.
+- Swift tests: `XaiOAuthServiceTests` 5, `NousOAuthServiceTests` 5, `XaiOAuthControllerTests` 4 (DB),
+  `LiveXaiOAuthBackendTests` 8.
+
+### G1 parity: pending CI
+
+- `parity/scenarios/integrations/00-oauth.yaml` with `parity/seed/gateways.sql`.
+- Flip: one group. OAuth sessions and parked CLI processes are in-memory, so start and complete must
+  reach the same server.

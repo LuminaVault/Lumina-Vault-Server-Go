@@ -1,0 +1,42 @@
+# xAI and Nous OAuth. Neither server can run docker here, so starting a flow for
+# a tenant without a container is the empty 500 of a failed spawn, and revoke's
+# CLI call fails and is ignored. Sessions are in memory: completing one that was
+# never started is a 404.
+module: integrations
+steps:
+  - {name: xai status no token, request: {method: GET, path: /v1/integrations/xai, headers: {X-Forwarded-For: 10.97.0.1}}}
+  - {name: xai start no token, request: {method: POST, path: /v1/integrations/xai/start, headers: {X-Forwarded-For: 10.97.0.1}}}
+  - {name: xai complete no token, request: {method: POST, path: /v1/integrations/xai/complete, json: {}, headers: {X-Forwarded-For: 10.97.0.1}}}
+  - {name: xai revoke no token, request: {method: DELETE, path: /v1/integrations/xai, headers: {X-Forwarded-For: 10.97.0.1}}}
+  - {name: nous status no token, request: {method: GET, path: /v1/integrations/nous, headers: {X-Forwarded-For: 10.97.0.1}}}
+  - {name: nous start no token, request: {method: POST, path: /v1/integrations/nous/start, headers: {X-Forwarded-For: 10.97.0.1}}}
+
+  - {name: xai status trial, as: in_ann, request: {method: GET, path: /v1/integrations/xai}}
+  - {name: xai status free, as: in_ben, request: {method: GET, path: /v1/integrations/xai}}
+  - {name: xai status connected, as: in_cid, request: {method: GET, path: /v1/integrations/xai}}
+  - {name: xai start without docker, as: in_ann, request: {method: POST, path: /v1/integrations/xai/start}}
+  - {name: xai complete empty body, as: in_ann, request: {method: POST, path: /v1/integrations/xai/complete, json: {}}}
+  - {name: xai complete blank session, as: in_ann, request: {method: POST, path: /v1/integrations/xai/complete, json: {sessionID: "", callbackURL: "http://127.0.0.1:56121/callback?code=x"}}}
+  - {name: xai complete blank callback, as: in_ann, request: {method: POST, path: /v1/integrations/xai/complete, json: {sessionID: abc, callbackURL: ""}}}
+  - {name: xai complete unknown session, as: in_ann, request: {method: POST, path: /v1/integrations/xai/complete, json: {sessionID: abc, callbackURL: "http://127.0.0.1:56121/callback?code=x"}}}
+  - {name: xai complete malformed, as: in_ann, request: {method: POST, path: /v1/integrations/xai/complete, raw: "{"}}
+  - name: xai revoke a connected tenant
+    as: in_cid
+    request: {method: DELETE, path: /v1/integrations/xai}
+    snapshot: [parity_in_users, parity_in_containers, parity_in_credentials]
+  - {name: xai status after revoke, as: in_cid, request: {method: GET, path: /v1/integrations/xai}}
+  - name: xai revoke without a container
+    as: in_ben
+    request: {method: DELETE, path: /v1/integrations/xai}
+    snapshot: [parity_in_users]
+
+  - {name: nous status none, as: in_ann, request: {method: GET, path: /v1/integrations/nous}}
+  - {name: nous status connected, as: in_dee, request: {method: GET, path: /v1/integrations/nous}}
+  - {name: nous start without docker, as: in_ann, request: {method: POST, path: /v1/integrations/nous/start}}
+  - {name: nous complete empty body, as: in_ann, request: {method: POST, path: /v1/integrations/nous/complete, json: {}}}
+  - {name: nous complete unknown session, as: in_ann, request: {method: POST, path: /v1/integrations/nous/complete, json: {sessionID: abc}}}
+  - name: nous revoke a connected tenant
+    as: in_dee
+    request: {method: DELETE, path: /v1/integrations/nous}
+    snapshot: [parity_in_users, parity_in_containers]
+  - {name: nous revoke without a container, as: in_ben, request: {method: DELETE, path: /v1/integrations/nous}}
