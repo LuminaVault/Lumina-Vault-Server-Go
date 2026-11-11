@@ -96,6 +96,10 @@ func Require(next echo.HandlerFunc) echo.HandlerFunc {
 	}
 }
 
+// SetIdentity attaches a user an authenticator other than the JWT one resolved
+// (MCP's `lv_` agent keys), so Identity and Require see it.
+func SetIdentity(c *echo.Context, id uuid.UUID) { c.Set(ctxUserID, id) }
+
 // Identity returns the user Identify attached, if any.
 func Identity(c *echo.Context) (uuid.UUID, bool) {
 	id, ok := c.Get(ctxUserID).(uuid.UUID)
