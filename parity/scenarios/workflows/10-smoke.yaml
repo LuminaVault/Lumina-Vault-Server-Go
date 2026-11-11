@@ -1,0 +1,19 @@
+# Runs on staging as a fresh user: no seeded ids, no provider, no run (Swift's engine
+# would execute one there).
+module: workflows
+smoke: true
+steps:
+  - name: "templates"
+    as: "wf_smk"
+    request: {"method": "GET", "path": "/v1/workflow-templates"}
+  - name: "limits"
+    as: "wf_smk"
+    request: {"method": "GET", "path": "/v1/workflows/limits"}
+  - name: "detail of nothing"
+    as: "wf_smk"
+    request: {"method": "GET", "path": "/v1/workflows/F1000000-0000-4000-8000-00000000DEAD"}
+  - name: "validate"
+    as: "wf_smk"
+    request: {"method": "POST", "path": "/v1/workflows/validate", "json": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}
+  - name: "no token"
+    request: {"method": "GET", "path": "/v1/workflows/limits", "headers": {"X-Forwarded-For": "10.76.5.4"}}

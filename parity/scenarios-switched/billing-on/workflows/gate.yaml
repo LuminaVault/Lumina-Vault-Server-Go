@@ -1,0 +1,51 @@
+# BILLING_ENFORCEMENT_ENABLED=true: the paywall on /v1/workflows. Templates and hooks are
+# outside it.
+module: workflows
+steps:
+  - name: "no token: the gate asks first"
+    request: {"method": "GET", "path": "/v1/workflows/limits", "headers": {"X-Forwarded-For": "10.76.5.6"}}
+  - name: "no token, bad body: the gate wins"
+    request: {"method": "POST", "path": "/v1/workflows", "raw": "{", "headers": {"X-Forwarded-For": "10.76.5.6"}}
+  - name: "free is refused"
+    as: "wf_fay"
+    request: {"method": "GET", "path": "/v1/workflows/limits"}
+  - name: "free: the gate comes before the body"
+    as: "wf_fay"
+    request: {"method": "POST", "path": "/v1/workflows", "raw": "{"}
+  - name: "free: and before the id"
+    as: "wf_fay"
+    request: {"method": "GET", "path": "/v1/workflows/nope"}
+  - name: "lapsed is refused"
+    as: "wf_lea"
+    request: {"method": "GET", "path": "/v1/workflows"}
+  - name: "archived is refused"
+    as: "wf_arc"
+    request: {"method": "GET", "path": "/v1/workflows"}
+  - name: "trial passes"
+    as: "wf_tia"
+    request: {"method": "GET", "path": "/v1/workflows/limits"}
+  - name: "pro passes"
+    as: "wf_ann"
+    request: {"method": "GET", "path": "/v1/workflows/limits"}
+  - name: "ultimate passes"
+    as: "wf_cat"
+    request: {"method": "GET", "path": "/v1/workflows"}
+  - name: "a pro override passes"
+    as: "wf_ovr"
+    request: {"method": "GET", "path": "/v1/workflows/limits"}
+  - name: "a free user with their own key passes"
+    as: "gate_key"
+    request: {"method": "GET", "path": "/v1/workflows/limits"}
+  - name: "templates aren't gated: free"
+    as: "wf_fay"
+    request: {"method": "GET", "path": "/v1/workflow-templates"}
+  - name: "templates aren't gated: archived"
+    as: "wf_arc"
+    request: {"method": "GET", "path": "/v1/workflow-templates"}
+  - name: "templates aren't gated: instantiate"
+    as: "wf_fay"
+    request: {"method": "POST", "path": "/v1/workflow-templates/research-brief/instantiate", "json": {}}
+  - name: "hooks aren't gated"
+    request: {"method": "POST", "path": "/v1/workflow-hooks/F1080000-0000-4000-8000-0000000000AB", "raw": "{}", "sign": {"secret": "parity-hook-secret"}, "headers": {"Idempotency-Key": "seen"}}
+  - name: "hooks aren't gated: free tier"
+    request: {"method": "POST", "path": "/v1/workflow-hooks/F1080000-0000-4000-8000-0000000000A4", "raw": "{}", "sign": {"secret": "parity-hook-secret"}, "headers": {"Idempotency-Key": "x"}}

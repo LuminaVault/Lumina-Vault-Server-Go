@@ -1508,3 +1508,58 @@ Beyond the pilot gate (D-wave2-early):
     net/http's transparent gzip.
 - Spec: the 409, 501 and 502 responses point at `ErrorEnvelope`, whose `error` is a string. Both
   servers send `{"error":{"message":...}}`. That schema has 107 uses, so it wasn't changed here.
+
+## workflows (wave 5)
+
+### G0 entry: met 2026-11-05
+
+- Routes: 25 in `docs/migration/routes.json`: 21 under `/v1/workflows`, 3 under
+  `/v1/workflow-templates`, and `POST /v1/workflow-hooks/{hookID}`.
+- Prefixes: `/v1/workflow-hooks`, `/v1/workflow-templates`, `/v1/workflows`.
+- Coupling: writes `workflows`, `workflow_versions`, `workflow_runs`, `workflow_node_runs`,
+  `workflow_run_events`, `workflow_approvals` and `workflow_webhooks`. Creating a workflow also
+  notes self-improvement activity. It reads `users`, `user_llm_preferences`, `memories` and
+  `workflow_spend_buckets`. No vault paths, no PostHog captures.
+- Jobs: none. `WorkflowEngine`, `WorkflowScheduler`, `WorkflowMaintenanceService` and
+  `LegacyJobWorkflowMigrator` stay in Swift and poll the rows these routes write. They don't run
+  in parity (`LV_ENVIRONMENT=test`).
+- Paid path: none on the request path. Runs are executed by Swift's engine.
+- Mounting: `CERBERUS_STUDIO_ENABLED` (default true) mounts every route or none, as in Swift
+  (states `studio-off` and `studio-on`). The entitlement gate covers `/v1/workflows` only
+  (`billing-on`).
+- Swift tests: `WorkflowLifecycleIntegrationTests` 2, `WorkflowValidatorTests` 12 (with
+  `WorkflowTierPolicyTests` and `WorkflowSchedulePolicyTests`) and `WorkflowWebhookSignatureTests`
+  2, all ported. The engine's reserve and reconcile stay in Swift, so the lifecycle test writes the
+  spend they would book.
+- Quirks kept:
+  - `WorkflowEventStore.list` decodes rows with SQLKit's default keys and fails on any row. The
+    event list is a 500 whenever the run has events, and the stream is a 200 that ends at once.
+    `Options.DecodeEventRows` turns on the fix.
+  - Handlers read the body, then the token, then the path id.
+  - Routes without `mapErrors` (limits, run lists, approvals, the webhook) answer bare 500s
+    where others say 403, 409 or 429. Trial can't list but gets 403 on details. A duplicate
+    workflow name is a 500.
+  - A decision isn't one transaction: a bad memory attachment answers 400 after the approval is
+    decided.
+  - Hummingbird resolves the path before the method, so `GET /v1/workflows/validate`, and `:id`
+    routes reached through `runs/` or `approvals/`, are bare 404s.
+  - Webhook payloads flatten as corelibs' JSONSerialization and `NSNumber.stringValue` do: Int64,
+    UInt64, Decimal, then Double. A Double overflow keeps only `raw`. Booleans are `1` and `0`.
+  - A cron field of `/` alone traps the Swift process. Go answers `invalidCron`.
+
+### G1 parity: met 2026-11-05
+
+- CI run 42073449919 on head a4f2d6d: self-test (Swift vs Swift) and Swift vs Go give
+  **166 scenarios, 0 differences** (whole suite), and every switch state has 0 differences.
+  `parity/scenarios/workflows` has 11 files and 693 steps, 70 with snapshots. There are 48 more
+  steps in `studio-off`, `studio-on` and `billing-on`. `parity`, `lint`, `test` and `vuln` pass
+  (https://github.com/LuminaVault/Lumina-Vault-Server-Go/actions/runs/42073449919/job/127407261812).
+- Go tests: `internal/modules/workflows` has 33 tests, 12 on Postgres, including spec
+  conformance, event frames with decoding on, client disconnect on the stream, and the rate limit.
+- Not compared:
+  - Live execution, because the engine doesn't run in parity.
+  - Event frames with rows, because Swift can't produce them. A Go test covers them.
+  - The number of keep-alives and the timing of polls on the event stream.
+  - The rate limit itself, because a scenario would depend on the clock.
+  - A webhook payload whose nested object has two or more keys: Swift's key order is random.
+

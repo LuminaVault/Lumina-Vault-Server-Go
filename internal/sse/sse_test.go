@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -172,4 +173,114 @@ func TestCursorPrecedence(t *testing.T) {
 		c := echo.New().NewContext(req, httptest.NewRecorder())
 		require.Equal(t, tc.want, Cursor(c), "%q %q", tc.query, tc.header)
 	}
+}
+
+// workflowLike is the shape of WorkflowEventsSSEResponse: named per event, a
+// different comment, no poll cap, and it swallows its own failures.
+func workflowLike() Options {
+	return Options{Interval: time.Millisecond, Heartbeat: ": keep-alive\n\n", UntilDrained: true, FinishOnError: true}
+}
+
+func TestEventNameComesFromTheEvent(t *testing.T) {
+	src := &script{
+		polls:    [][]Event{{{ID: 1, Name: "runQueued", Data: payload{}}, {ID: 2, Data: payload{}}}},
+		terminal: func(int) bool { return true },
+	}
+	opts := workflowLike()
+	opts.EventName = "fallback"
+	_, _, body := serve(t, src, 0, opts)
+	require.Contains(t, body, "id: 1\nevent: runQueued\n")
+	require.Contains(t, body, "id: 2\nevent: fallback\n")
+}
+
+func TestHeartbeatOption(t *testing.T) {
+	src := &script{terminal: func(poll int) bool { return poll >= 2 }}
+	_, _, body := serve(t, src, 0, workflowLike())
+	require.Equal(t, ": keep-alive\n\n", body)
+}
+
+func TestNoPollCapRunsUntilTerminal(t *testing.T) {
+	src := &script{terminal: func(poll int) bool { return poll >= 500 }}
+	_, _, _ = serve(t, src, 0, workflowLike())
+	require.EqualValues(t, 500, src.count.Load())
+}
+
+func TestUntilDrainedSendsTheEventsATerminalSourceStillHas(t *testing.T) {
+	src := &script{
+		polls:    [][]Event{{{ID: 1, Name: "a", Data: payload{}}}, {{ID: 2, Name: "b", Data: payload{}}}},
+		terminal: func(int) bool { return true },
+	}
+	_, _, body := serve(t, src, 0, workflowLike())
+	require.Contains(t, body, "id: 1\n")
+	require.Contains(t, body, "id: 2\n")
+	require.NotContains(t, body, "keep-alive")
+	require.EqualValues(t, 3, src.count.Load(), "ends on the first empty round")
+}
+
+func TestUntilDrainedDoesNotWaitAfterARoundWithEvents(t *testing.T) {
+	src := &script{
+		polls:    [][]Event{{{ID: 1, Name: "a", Data: payload{}}}, {{ID: 2, Name: "b", Data: payload{}}}},
+		terminal: func(int) bool { return true },
+	}
+	opts := workflowLike()
+	opts.Interval = time.Hour
+	_, _, body := serve(t, src, 0, opts)
+	require.Contains(t, body, "id: 2\n")
+}
+
+func TestFinishOnErrorEndsTheStreamNormally(t *testing.T) {
+	src := &script{polls: [][]Event{{{ID: 1, Name: "a", Data: payload{}}}}, failAt: 2}
+	code, _, body := serve(t, src, 0, workflowLike())
+	require.Equal(t, http.StatusOK, code)
+	require.Contains(t, body, "id: 1\n")
+}
+
+func TestFinishOnErrorCoversAnEncodingFailure(t *testing.T) {
+	src := &script{polls: [][]Event{{{ID: 1, Name: "a", Data: make(chan int)}}}}
+	code, _, body := serve(t, src, 0, workflowLike())
+	require.Equal(t, http.StatusOK, code)
+	require.Empty(t, body)
+}
+
+// A body left unread stops net/http watching the connection, so the handler
+// would poll for a client that has gone.
+func TestClientWithARequestBodyGoneEndsTheStream(t *testing.T) {
+	src := &script{}
+	done := make(chan struct{})
+	e := echo.New()
+	e.POST("/s", func(c *echo.Context) error {
+		defer close(done)
+		return Serve(c, src, 0, workflowLike())
+	})
+	srv := httptest.NewServer(e)
+	t.Cleanup(srv.Close)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, srv.URL+"/s", strings.NewReader("unread body"))
+	require.NoError(t, err)
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the handler kept polling after the client left")
+	}
+}
+
+func TestHeaderFirstCursorPrecedence(t *testing.T) {
+	at := func(target, header string) int64 {
+		e := echo.New()
+		r := httptest.NewRequest(http.MethodGet, target, nil)
+		if header != "" {
+			r.Header.Set("Last-Event-ID", header)
+		}
+		return HeaderFirstCursor(e.NewContext(r, httptest.NewRecorder()))
+	}
+	require.EqualValues(t, 7, at("/s?after=3", "7"))
+	require.EqualValues(t, 3, at("/s?after=3", "junk"))
+	require.EqualValues(t, 3, at("/s?after=3", ""))
+	require.EqualValues(t, 0, at("/s?after=junk", "junk"))
+	require.EqualValues(t, 0, at("/s", ""))
 }

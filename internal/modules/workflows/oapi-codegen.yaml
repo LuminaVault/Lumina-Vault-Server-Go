@@ -1,0 +1,41 @@
+# Models only (decisions.md D2); handlers are hand-written on Echo v5.
+# include-operation-ids = this module's routes in docs/migration/routes.json.
+package: workflows
+output: internal/modules/workflows/models.gen.go
+generate:
+  models: true
+output-options:
+  include-operation-ids:
+    - workflowsList
+    - workflowsCreate
+    - workflowsGet
+    - workflowsUpdateDraft
+    - workflowsPublish
+    - workflowValidate
+    - workflowLimits
+    - workflowWebhookRotate
+    - workflowWebhookIngest
+    - workflowRunsList
+    - workflowRunCreate
+    - workflowRunsAll
+    - workflowRunGet
+    - workflowRunEvents
+    - workflowRunEventsStream
+    - workflowRunCancel
+    - workflowRunRetry
+    - workflowRunResume
+    - workflowVersionsList
+    - workflowVersionRestore
+    - workflowTemplatesList
+    - workflowTemplateInstantiate
+    - workflowTemplateRun
+    - workflowApprovalsList
+    - workflowApprovalDecide
+  type-mapping:
+    number:
+      formats:
+        double: { type: wire.Double, import: lumina/internal/wire }
+    string:
+      formats:
+        uuid: { type: wire.UUID, import: lumina/internal/wire }
+        date-time: { type: wire.Time, import: lumina/internal/wire }
