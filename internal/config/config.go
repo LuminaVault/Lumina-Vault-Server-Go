@@ -116,6 +116,17 @@ type Config struct {
 	CommunityPostingEnabled string `env:"COMMUNITY_POSTING_ENABLED" envDefault:"true"`
 	AdminToken              string `env:"ADMIN_TOKEN"`
 
+	// hermes.central.* (system module, /v1/system/hermes).
+	HermesCentralContainerName string `env:"HERMES_CENTRAL_CONTAINER_NAME" envDefault:"luminavault-hermes"`
+	HermesCentralRegistryImage string `env:"HERMES_CENTRAL_REGISTRY_IMAGE" envDefault:"ghcr.io/luminavault/luminavault-hermes"`
+	HermesCentralChannelTag    string `env:"HERMES_CENTRAL_CHANNEL_TAG" envDefault:"latest"`
+	HermesCentralTempName      string `env:"HERMES_CENTRAL_TEMP_CONTAINER_NAME" envDefault:"luminavault-hermes-next"`
+	HermesCentralVolumePath    string `env:"HERMES_CENTRAL_VOLUME_PATH" envDefault:"/app/data/hermes"`
+	HermesCentralPort          int    `env:"HERMES_CENTRAL_PORT" envDefault:"8642"`
+	HermesCentralTempPort      int    `env:"HERMES_CENTRAL_TEMP_PORT" envDefault:"8643"`
+	// hermes.perTenant.network, shared with the container manager.
+	HermesCentralNetwork string `env:"HERMES_PER_TENANT_NETWORK" envDefault:"luminavault-hermes-net"`
+
 	// WASM plugin runner and artifact store (marketplace module).
 	PluginRunnerURL          string `env:"PLUGIN_RUNNER_URL" envDefault:"http://plugin-runner:8090"`
 	PluginRunnerToken        string `env:"PLUGIN_RUNNER_TOKEN"`
@@ -177,6 +188,26 @@ type Config struct {
 	// CerberusStudioEnabled is raw: workflows.Enabled reads it as Swift's reader.bool
 	// does. Off unmounts /v1/workflows, /v1/workflow-templates and /v1/workflow-hooks.
 	CerberusStudioEnabled string `env:"CERBERUS_STUDIO_ENABLED" envDefault:"true"`
+
+	// Hermes tenant containers (wave 6D/6E). DockerBinaryPath is forked for every
+	// container operation; in a pod with no docker each call fails as in Swift.
+	DockerBinaryPath              string `env:"DOCKER_BINARY_PATH" envDefault:"/usr/bin/docker"`
+	HermesPerTenantNetwork        string `env:"HERMES_PER_TENANT_NETWORK" envDefault:"luminavault-hermes-net"`
+	HermesPerTenantImage          string `env:"HERMES_PER_TENANT_IMAGE" envDefault:"luminavault-hermes:local"`
+	HermesPerTenantDataRootBase   string `env:"HERMES_PER_TENANT_DATA_ROOT_BASE" envDefault:"/app/data/hermes-tenants"`
+	HermesPerTenantPortRangeStart int    `env:"HERMES_PER_TENANT_PORT_RANGE_START" envDefault:"9000"`
+	HermesPerTenantPortRangeEnd   int    `env:"HERMES_PER_TENANT_PORT_RANGE_END" envDefault:"9500"`
+	HermesPerTenantIdleTTLSeconds int    `env:"HERMES_PER_TENANT_IDLE_TTL_SECONDS" envDefault:"1800"`
+	HermesPerTenantMemoryLimit    string `env:"HERMES_PER_TENANT_MEMORY_LIMIT" envDefault:"512m"`
+	HermesPerTenantCPULimit       string `env:"HERMES_PER_TENANT_CPU_LIMIT" envDefault:"1.0"`
+	// HermesAudioProxyBaseURL includes /v1; empty seeds no voice into containers.
+	HermesAudioProxyBaseURL string `env:"HERMES_AUDIO_PROXY_BASE_URL"`
+	// MnemosyneEnabled is raw: on when it lowercases to "true", as Swift reads it.
+	MnemosyneEnabled string `env:"MNEMOSYNE_ENABLED" envDefault:"true"`
+	// PhotonSidecarURL and PhotonSidecarToken reach the central iMessage sidecar.
+	// The token also gates POST /v1/gateways/photon/inbound; empty disables it.
+	PhotonSidecarURL   string `env:"PHOTON_SIDECAR_URL" envDefault:"http://photon-sidecar:8789"`
+	PhotonSidecarToken string `env:"PHOTON_SIDECAR_TOKEN"`
 
 	// JinaAPIKey is Jina's reader, tier-2 of link enrichment. Unset still calls it,
 	// without the header, as in Swift.

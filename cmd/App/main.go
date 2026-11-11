@@ -53,6 +53,7 @@ import (
 	"lumina/internal/modules/selfimprovement"
 	"lumina/internal/modules/sessions"
 	"lumina/internal/modules/spaces"
+	"lumina/internal/modules/system"
 	"lumina/internal/modules/teams"
 	"lumina/internal/modules/todos"
 	"lumina/internal/modules/tts"
@@ -273,6 +274,13 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		// Wave 5: Swift builds grokController in the SecretBox branch, so no key, no routes.
 		if box != nil {
 			deps.Modules = append(deps.Modules, grok.New(hermescontainers.New(pool, box), entitlement.PremiumGuardMiddleware(pool), nil))
+			deps.Modules = append(deps.Modules, system.New(pool, system.Options{
+				Identify: identify, AdminToken: cfg.AdminToken, PerTenant: true,
+				ContainerName: cfg.HermesCentralContainerName, RegistryImage: cfg.HermesCentralRegistryImage,
+				ChannelTag: cfg.HermesCentralChannelTag, TempName: cfg.HermesCentralTempName,
+				Network: cfg.HermesCentralNetwork, VolumePath: cfg.HermesCentralVolumePath,
+				Port: cfg.HermesCentralPort, TempPort: cfg.HermesCentralTempPort, APIKey: cfg.HermesAPIKey,
+			}))
 		}
 		deps.Modules = append(deps.Modules, billing.New(pool, billing.Options{
 			WebhookSecret: cfg.RevenueCatWebhookSecret, AdminToken: cfg.AdminToken, EnforcementEnabled: entitlement.EnforcementEnabled(cfg.BillingEnforcementEnabled),
@@ -308,6 +316,7 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 			deps.Modules = append(deps.Modules, workflowsModule(pool, cfg, box, identify, limits))
 		}
 		deps.Modules = append(deps.Modules, agent.modules(links, enrichment)...)
+		deps.Modules = append(deps.Modules, agent.containerModules(keys)...)
 		// /v1/ws (5J) flips with kb-compile, the device result route, mcp and skills.
 		deps.Modules = append(deps.Modules, wsroute.New(pool, sockets, identify))
 		deps.Modules = append(deps.Modules, agent.agentsModule())
@@ -315,6 +324,9 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		deps.Modules = append(deps.Modules, agent.routerModules()...)
 		deps.Modules = append(deps.Modules, agent.chatModules(links, enrichment, analytics)...)
 		deps.Modules = append(deps.Modules, agent.skillsModule(deviceRPC))
+		if m := agent.pluginsModule(); m != nil { // nil without LV_SECRET_MASTER_KEY, as in Swift
+			deps.Modules = append(deps.Modules, m)
+		}
 		if m := agent.hermesRunsModule(); m != nil {
 			deps.Modules = append(deps.Modules, m)
 		}

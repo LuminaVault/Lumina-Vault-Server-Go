@@ -316,19 +316,19 @@ modules:
   integrations:
     wave: 6
     swiftDir: Sources/App/Integrations
-    status: swift
+    status: parity
     prefixes: [/v1/integrations]
     jobs: []
   me-gateways:
     wave: 6
     swiftDir: Sources/App/Me
-    status: swift
+    status: parity
     prefixes: [/v1/gateways, /v1/me/hermes-gateways]
     jobs: []
   plugins:
     wave: 6
     swiftDir: Sources/App/Plugins
-    status: swift
+    status: parity
     prefixes: [/v1/plugins]
     jobs: []
   settings:
@@ -358,7 +358,7 @@ modules:
   system:
     wave: 7
     swiftDir: Sources/App/System
-    status: swift
+    status: parity
     prefixes: [/v1/system]
     jobs: []
   app:

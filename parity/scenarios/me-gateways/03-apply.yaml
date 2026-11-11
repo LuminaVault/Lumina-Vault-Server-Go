@@ -1,0 +1,19 @@
+# Apply jobs. gw_cid's seeded job is finished, so status, current and the stream
+# read it back. A new apply's job runs detached and fails on the missing
+# container; only its acknowledgement is compared.
+module: me-gateways
+steps:
+  - {name: current is the seeded job, as: gw_cid, request: {method: GET, path: /v1/me/hermes-gateways/apply/current}}
+  - {name: status of the seeded job, as: gw_cid, request: {method: GET, path: /v1/me/hermes-gateways/apply/6A7E1000-0000-4000-8000-000000000001}}
+  - {name: status lowercase id, as: gw_cid, request: {method: GET, path: /v1/me/hermes-gateways/apply/6a7e1000-0000-4000-8000-000000000001}}
+  - name: stream of a finished job
+    as: gw_cid
+    request: {method: GET, path: /v1/me/hermes-gateways/apply/6A7E1000-0000-4000-8000-000000000001/stream}
+    stream: true
+    frames: 5
+    framesTimeout: 5s
+    headers: [Cache-Control, X-Accel-Buffering]
+  - name: start an apply
+    as: gw_dee
+    request: {method: POST, path: /v1/me/hermes-gateways/apply}
+    ignore: [$.jobID]
