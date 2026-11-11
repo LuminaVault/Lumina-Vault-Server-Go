@@ -190,7 +190,7 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		paths := vaultpaths.Paths{Root: cfg.VaultRootPath}
 		// SecretBox: nil without LV_SECRET_MASTER_KEY, as in Swift.
 		box, _ := secretbox.New(cfg.LVSecretMasterKey)
-		embeddings := embedding.New(pool, embeddingConfig(cfg), box)
+		embeddings, embeddingKind := embedding.NewWithKind(pool, embeddingConfig(cfg), box)
 		// recap.themesEnabled builds the worker; its transport is the agent's LLM stack, set below.
 		var themes *me.ThemesWorker
 		if cfg.RecapThemesEnabled {
@@ -281,7 +281,7 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		disk := diskguard.New(paths.Root, cfg.StorageMinFreeBytes, cfg.StorageMinFreeRatio, diskguard.Options{})
 		memories := memorystore.New(pool, nil)
 		registered = append(registered, j1Jobs(pool, cfg, disk)...)
-		registered = append(registered, j2Jobs(pool, cfg, embeddings)...)
+		registered = append(registered, j2Jobs(pool, cfg, embeddings, embeddingKind)...)
 		agent, stopAgent := newAgent(ctx, pool, cfg, box, paths, identify, limits, embeddings, sink, meModule, disk)
 		agent.sockets = sockets
 		if themes != nil {

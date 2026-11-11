@@ -51,14 +51,21 @@ type Registry struct {
 // tenant with an enabled byok-embeddings install is routed through their own key.
 // box nil (no LV_SECRET_MASTER_KEY) skips the wrapper, as in App+build.swift.
 func New(pool *pgxpool.Pool, cfg Config, box *secretbox.Box) Service {
+	svc, _ := NewWithKind(pool, cfg, box)
+	return svc
+}
+
+// NewWithKind is New plus the registry's resolved active kind, which
+// EmbeddingReembedService reads (embeddingRegistry.activeKind in App+build.swift).
+func NewWithKind(pool *pgxpool.Pool, cfg Config, box *secretbox.Box) (Service, Kind) {
 	registry := Bootstrap(pool, cfg)
 	if box == nil {
-		return registry.Active
+		return registry.Active, registry.ActiveKind
 	}
 	return &tenantAware{
 		global:   registry.Active,
 		resolver: newPerTenantResolver(db.New(pool), box, keyedServiceFactory(registry.ActiveKind, cfg)),
-	}
+	}, registry.ActiveKind
 }
 
 // Bootstrap is EmbeddingProviderRegistry.bootstrap. It never fails: a provider

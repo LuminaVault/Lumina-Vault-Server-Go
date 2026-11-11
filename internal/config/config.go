@@ -63,6 +63,13 @@ type Config struct {
 	// J2 job switches, raw: read as Swift's reader.bool(default: true).
 	LearnedDigestEnabled string `env:"LEARNED_DIGEST_ENABLED" envDefault:"true"`
 	MeetingBriefEnabled  string `env:"MEETING_BRIEF_ENABLED" envDefault:"true"`
+	// EmbeddingReembedService (App+build.swift), raw; read in cmd/App/jobs_j2.go.
+	EmbeddingReembedEnabled        string `env:"EMBEDDING_REEMBED_ENABLED" envDefault:"false"`
+	EmbeddingHealEnabled           string `env:"EMBEDDING_HEAL_ENABLED" envDefault:"true"`
+	EmbeddingReembedBatchSize      string `env:"EMBEDDING_REEMBED_BATCH_SIZE" envDefault:"50"`
+	EmbeddingReembedPauseMS        string `env:"EMBEDDING_REEMBED_PAUSE_MILLISECONDS" envDefault:"2000"`
+	EmbeddingHealIntervalMinutes   string `env:"EMBEDDING_HEAL_INTERVAL_MINUTES" envDefault:"10"`
+	EmbeddingHealMaxBackoffMinutes string `env:"EMBEDDING_HEAL_MAX_BACKOFF_MINUTES" envDefault:"60"`
 	// Shared feed aggregator for the news ticker (news module). Raw strings:
 	// the module splits FEEDS_DEFAULT_FEEDS exactly as Swift does.
 	FeedsBaseURL      string `env:"FEEDS_BASE_URL"`
