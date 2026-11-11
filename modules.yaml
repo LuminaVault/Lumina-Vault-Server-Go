@@ -268,7 +268,7 @@ modules:
   mcp:
     wave: 5
     swiftDir: Sources/App/MCP
-    status: swift
+    status: parity
     prefixes: [/v1/mcp, /v1/me/agent-connections]
     jobs: []
   me-providers:

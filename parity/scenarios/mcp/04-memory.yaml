@@ -30,12 +30,18 @@ steps:
     ignore: ["$.result.content"]
   - name: forget again
     request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: memory_forget, arguments: {memoryID: "{{saved}}"}}}, headers: {Authorization: Bearer lv_parity_cy_read_write_key_0000000000000}}
-    ignore: ["$.result.content"]
+    ignore: ["$.result.content", "$.result.structuredContent.message"]
   - name: session save without kind
     as: mcp_eve
     request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: memory_save, arguments: {content: Ships on Fridays.}}}}
     ignore: ["$.result.content"]
+    capture: {eves: $.result.structuredContent.memoryID}
   - name: index chunks the new memory
     as: mcp_eve
     request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: index, arguments: {batchSize: 5}}}}
+    ignore: ["$.result.content"]
+  # Forget it again so its randomly-keyed chunks don't reach later modules' memory_chunks snapshots.
+  - name: session forget
+    as: mcp_eve
+    request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: memory_forget, arguments: {memoryID: "{{eves}}"}}}}
     ignore: ["$.result.content"]

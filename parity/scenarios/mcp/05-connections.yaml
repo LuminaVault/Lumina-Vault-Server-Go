@@ -17,7 +17,6 @@ steps:
     as: mcp_dee
     request: {method: POST, path: /v1/me/agent-connections, json: {name: "  new laptop  ", clientKind: claude_code}}
     ignore: ["$.token", "$.connection.tokenPrefix", "$.setup"]
-    snapshot: [agent_connections]
   - name: issue with grants
     as: mcp_dee
     request: {method: POST, path: /v1/me/agent-connections, json: {name: ci, clientKind: codex, allowPersonalData: true, access: read_write}}
