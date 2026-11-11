@@ -92,12 +92,22 @@ func (m *Module) compile(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	ctx := c.Request().Context()
-	progress := m.opts.Service.Progress()
-	runID := uuid.New()
-	rows, err := ResolveRows(ctx, m.pool, tenant, body.VaultFileIDs, body.ForceFull)
+	response, err := m.Compile(c.Request().Context(), llm.RequestContext(c), tenant, body.VaultFileIDs, body.ForceFull)
 	if err != nil {
 		return err
+	}
+	return wire.JSON(c, http.StatusOK, response)
+}
+
+// Compile is MemoryCompileController.compile(user:body:), shared with
+// /v1/skills/slash's /kb-compile. llmCtx carries the BYO Hermes resolution
+// when the caller's group has one.
+func (m *Module) Compile(ctx, llmCtx context.Context, tenant uuid.UUID, fileIDs []wire.UUID, forceFull bool) (memorycompile.Response, error) {
+	progress := m.opts.Service.Progress()
+	runID := uuid.New()
+	rows, err := ResolveRows(ctx, m.pool, tenant, fileIDs, forceFull)
+	if err != nil {
+		return memorycompile.Response{}, err
 	}
 	progress.Publish(ctx, memorycompile.StartedEvent(runID, len(rows)), tenant)
 
@@ -109,14 +119,14 @@ func (m *Module) compile(c *echo.Context) error {
 		}
 		progress.Publish(ctx, memorycompile.CompletedEvent(runID, empty), tenant)
 		m.recordUsage(ctx, tenant, runID, 0)
-		return wire.JSON(c, http.StatusOK, empty)
+		return empty, nil
 	}
 
 	started := time.Now()
-	result, err := m.opts.Service.CompileExistingVaultFiles(llm.RequestContext(c), tenant, ids.Upper(tenant), rows, nil, runID)
+	result, err := m.opts.Service.CompileExistingVaultFiles(llmCtx, tenant, ids.Upper(tenant), rows, nil, runID)
 	if err != nil {
 		progress.Publish(ctx, memorycompile.ErrorEvent(runID, fmt.Sprint(err)), tenant)
-		return err
+		return memorycompile.Response{}, err
 	}
 	elapsed := int(time.Since(started).Milliseconds())
 
@@ -138,7 +148,7 @@ func (m *Module) compile(c *echo.Context) error {
 	}
 	progress.Publish(ctx, memorycompile.CompletedEvent(runID, response), tenant)
 	m.recordUsage(ctx, tenant, runID, len(result.WrittenFiles))
-	return wire.JSON(c, http.StatusOK, response)
+	return response, nil
 }
 
 func (m *Module) recordUsage(ctx context.Context, tenant, runID uuid.UUID, files int) {

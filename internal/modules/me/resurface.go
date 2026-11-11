@@ -1,6 +1,7 @@
 package me
 
 import (
+	"context"
 	"fmt"
 	"lumina/internal/modules/me/db"
 	"lumina/internal/wire"
@@ -30,7 +31,7 @@ func (m *Module) getResurface(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	resp, err := m.resurface(c, u, limit, m.now())
+	resp, err := m.resurface(ctx(c), u, limit, m.now())
 	if err != nil {
 		return err
 	}
@@ -67,7 +68,7 @@ func resurfaceItem(r resurfaceRow, reason, why string) ResurfaceItemDTO {
 
 // resurface is MeResurfaceService.build: due, then on this day, then fading,
 // deduped by memory, at most limit.
-func (m *Module) resurface(c *echo.Context, u user, limit int, now time.Time) (ResurfaceResponse, error) {
+func (m *Module) resurface(cx context.Context, u user, limit int, now time.Time) (ResurfaceResponse, error) {
 	loc, _ := zone(u.timezone)
 	tz := zoneName(u.timezone)
 	picked := make([]ResurfaceItemDTO, 0, limit)
@@ -82,7 +83,7 @@ func (m *Module) resurface(c *echo.Context, u user, limit int, now time.Time) (R
 	}
 	reviewedBefore := now.Add(-recentlyReviewedWindow)
 
-	due, err := m.q.ResurfaceDue(ctx(c), db.ResurfaceDueParams{TenantID: u.id, ReviewedBefore: reviewedBefore, Now: now, Lim: int32(limit)}) //nolint:gosec // 1...10
+	due, err := m.q.ResurfaceDue(cx, db.ResurfaceDueParams{TenantID: u.id, ReviewedBefore: reviewedBefore, Now: now, Lim: int32(limit)}) //nolint:gosec // 1...10
 	if err != nil {
 		return ResurfaceResponse{}, err
 	}
@@ -98,7 +99,7 @@ func (m *Module) resurface(c *echo.Context, u user, limit int, now time.Time) (R
 	ann := anniversariesFor(now, loc)
 	today := dayKey(now, loc)
 	twoYearsAgo, _ := strconv.Atoi(today[:4])
-	otd, err := m.q.ResurfaceOnThisDay(ctx(c), db.ResurfaceOnThisDayParams{
+	otd, err := m.q.ResurfaceOnThisDay(cx, db.ResurfaceOnThisDayParams{
 		Tz: tz, TenantID: u.id, ReviewedBefore: reviewedBefore, Now: now,
 		CreatedBefore: now.Add(-onThisDayMinimumMemoAge),
 		MonthAgo:      ann.month, HalfYearAgo: ann.halfYear, YearAgo: ann.year,
@@ -120,7 +121,7 @@ func (m *Module) resurface(c *echo.Context, u user, limit int, now time.Time) (R
 		return ResurfaceResponse{Items: picked}, nil
 	}
 
-	fading, err := m.q.ResurfaceFading(ctx(c), db.ResurfaceFadingParams{
+	fading, err := m.q.ResurfaceFading(cx, db.ResurfaceFadingParams{
 		Tz: tz, TenantID: u.id, ReviewedBefore: reviewedBefore, Now: now,
 		Cutoff: now.Add(-reviewOverdueAge), Lim: int32(limit), //nolint:gosec // 1...10
 	})

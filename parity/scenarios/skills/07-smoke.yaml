@@ -1,0 +1,7 @@
+# Staging smoke: a fresh user's skills list, feed and a run history.
+module: skills
+smoke: true
+steps:
+  - {name: list, as: alice, request: {method: GET, path: /v1/skills}}
+  - {name: outputs, as: alice, request: {method: GET, path: /v1/skills/outputs}}
+  - {name: runs, as: alice, request: {method: GET, path: /v1/skills/daily-brief/runs}}

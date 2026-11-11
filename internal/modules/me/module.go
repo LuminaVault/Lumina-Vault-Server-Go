@@ -56,6 +56,7 @@ type Options struct {
 }
 
 type Module struct {
+	pool     *pgxpool.Pool
 	q        *db.Queries
 	identify echo.MiddlewareFunc
 	limits   *ratelimit.Store
@@ -69,6 +70,7 @@ type Module struct {
 // rate-limit store.
 func New(pool *pgxpool.Pool, identify echo.MiddlewareFunc, limits *ratelimit.Store, opts Options) *Module {
 	return &Module{
+		pool:     pool,
 		q:        db.New(pool),
 		identify: identify,
 		limits:   limits,

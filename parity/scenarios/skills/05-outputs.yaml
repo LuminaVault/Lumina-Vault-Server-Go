@@ -1,0 +1,13 @@
+# GET /v1/skills/outputs: the Today feed, its streak, activeRun and the cursor.
+module: skills
+steps:
+  - {name: no token, request: {method: GET, path: /v1/skills/outputs}}
+  - {name: feed, as: sk_dee, request: {method: GET, path: /v1/skills/outputs}}
+  - {name: page of 3 has a cursor, as: sk_dee, request: {method: GET, path: "/v1/skills/outputs?limit=3"}}
+  - {name: before, as: sk_dee, request: {method: GET, path: "/v1/skills/outputs?before=2026-01-20T10:00:00.123Z"}}
+  - {name: since, as: sk_dee, request: {method: GET, path: "/v1/skills/outputs?since=2026-01-17T10:00:00Z"}}
+  - {name: since without zone, as: sk_dee, request: {method: GET, path: "/v1/skills/outputs?since=2026-01-17T10:00:00.5"}}
+  - {name: junk dates are no bound, as: sk_dee, request: {method: GET, path: "/v1/skills/outputs?since=yesterday&before="}}
+  - {name: limit 0, as: sk_dee, request: {method: GET, path: "/v1/skills/outputs?limit=0"}}
+  - {name: hermes run active, as: sk_eve, request: {method: GET, path: /v1/skills/outputs}}
+  - {name: empty, as: sk_fay, request: {method: GET, path: /v1/skills/outputs}}
