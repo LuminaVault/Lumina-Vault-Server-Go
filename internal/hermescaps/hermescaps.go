@@ -271,7 +271,11 @@ func (s *Service) probeRemote(ctx context.Context, res *hermesresolve.Resolution
 	if status, _, err := s.get(ctx, appendPath(res.BaseURL, "api/jobs"), res.AuthHeader); err == nil && ok2xx(status) {
 		jobsReachable = true
 	}
-	if flags == nil {
+	// flags?.ingestionRemoteSourceURL: absent when /v1/capabilities didn't parse.
+	var remoteSourceURL *bool
+	if flags != nil {
+		remoteSourceURL = ptr(flags.RemoteSourceURL)
+	} else {
 		flags = &Flags{}
 	}
 	avail := func(b bool) Availability {
@@ -295,7 +299,7 @@ func (s *Service) probeRemote(ctx context.Context, res *hermesresolve.Resolution
 		MultimodalIngestion:         ptr(avail(flags.MultimodalIngestion)),
 		IngestionSupportedMimeTypes: flags.MimeTypes,
 		IngestionMaxSourceBytes:     flags.MaxSourceBytes,
-		IngestionRemoteSourceURL:    ptr(flags.RemoteSourceURL),
+		IngestionRemoteSourceURL:    remoteSourceURL,
 	}
 }
 
