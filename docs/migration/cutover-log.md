@@ -1802,6 +1802,31 @@ Beyond the pilot gate (D-wave2-early):
   later modules' `memory_chunks` snapshots.
 - Flip: only with the ws bundle.
 
+## skills (wave 5)
+
+### G0 entry: met 2026-11-11
+
+- Routes: 8. `GET /v1/skills`, `PATCH /v1/skills/:name`, `GET /v1/skills/:name/runs`,
+  `POST /v1/skills/:name/run`, `POST /v1/skills/slash`, `GET /v1/skills/outputs`, `POST /v1/jobs`,
+  `POST /v1/jobs/detect`.
+- `internal/modules/skills/runner.go` ports SkillRunner: cap guard, meter budget check, CerberusScope
+  routing, 6-iteration agent loop with the 13 tools in Swift's order (`tools.go`), outputs (memory,
+  vault file, push, chat message, job result), `skill_run_log` + `skills_state` persistence, cap
+  refund on failure. daily-brief composes the brief through `me.ComposeBrief` first.
+- `/v1/skills/slash`'s `/kb-compile` reuses `kbcompile.Compile`; device tools go through
+  `internal/devicetools` and this process's broker.
+- Kept from Swift, pinned until the post-archive security pass: `skills_state` PATCH updates every
+  row for the name.
+- Known gaps: `skill_run_log.error` is Swift's `String(describing:)` text; snapshots compare
+  `error IS NOT NULL`. A constant-segment 404 runs auth first in Go (differs only unauthenticated).
+
+### G1 parity: met 2026-11-11
+
+- `parity/scenarios/skills` 01-09 with `parity/seed/skills.sql` (views `parity_sk_runs`,
+  `parity_sk_state`, `parity_sk_briefs`), and `parity/scenarios-switched/llm/skills/01-run.yaml`
+  (jobs, cap, blocks, tool loop, slash `/patterns`, daily-brief) on the LLM stub.
+- Flip: only with the ws bundle (device tools resolve through `/v1/ws`).
+
 ## P9 minting + P10 auth rate limits (wave 8 prep)
 
 ### Landed 2026-11-11 (no route flips)
