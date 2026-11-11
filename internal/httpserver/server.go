@@ -4,10 +4,12 @@
 package httpserver
 
 import (
+	"context"
 	"log/slog"
 	"lumina/internal/config"
 	"lumina/internal/wire"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/labstack/echo/v5"
@@ -38,6 +40,9 @@ type Deps struct {
 	// Auth protects module routes. Nil only in tests that register no module.
 	Auth    echo.MiddlewareFunc
 	Modules []Module
+	// DeepHealth probes the Hermes gateway for /health/deep: reachable and the
+	// round-trip latency. Nil reports Hermes unreachable.
+	DeepHealth func(ctx context.Context) (reachable bool, latencyMs *int)
 }
 
 // AASA backs Sign in with Apple and passkeys for com.lumina.fernando (team
@@ -95,6 +100,16 @@ func New(cfg config.Config, deps Deps) *echo.Echo {
 	e.Use(oneSegmentParams())
 
 	e.GET("/health", func(c *echo.Context) error { return wire.Text(c, http.StatusOK, "ok") })
+	// Deep health (App+build.swift:3244): unauthenticated and secret-free. A Hermes
+	// outage makes this a 503 without failing the shallow /health readiness probe.
+	e.GET("/health/deep", func(c *echo.Context) error {
+		var reachable bool
+		var latency *int
+		if deps.DeepHealth != nil {
+			reachable, latency = deps.DeepHealth(c.Request().Context())
+		}
+		return c.Blob(deepHealthStatus(reachable), echo.MIMEApplicationJSON, deepHealthBody(reachable, latency))
+	})
 	e.GET("/", func(c *echo.Context) error { return wire.Text(c, http.StatusOK, "Hello!") })
 	e.GET("/.well-known/apple-app-site-association", func(c *echo.Context) error {
 		return c.Blob(http.StatusOK, echo.MIMEApplicationJSON, []byte(AASA))
@@ -218,4 +233,23 @@ func cors(origins []string) echo.MiddlewareFunc {
 			return h(c)
 		}
 	}
+}
+
+func deepHealthStatus(reachable bool) int {
+	if reachable {
+		return http.StatusOK
+	}
+	return http.StatusServiceUnavailable
+}
+
+// deepHealthBody is Swift's hand-built string, byte for byte.
+func deepHealthBody(reachable bool, latencyMs *int) []byte {
+	status, ms := "degraded", "null"
+	if reachable {
+		status = "ok"
+	}
+	if latencyMs != nil {
+		ms = strconv.Itoa(*latencyMs)
+	}
+	return []byte(`{"status":"` + status + `","hermes":{"reachable":` + strconv.FormatBool(reachable) + `,"latencyMs":` + ms + `}}`)
 }
