@@ -1,0 +1,36 @@
+# /v1/hermes/runs validation and error paths (wave 6C). The base Hermes is a dead
+# address, so a start that passes validation fails reaching it.
+module: hermes
+steps:
+  - {name: no token list, request: {method: GET, path: /v1/hermes/runs}}
+  - {name: no token start, request: {method: POST, path: /v1/hermes/runs, json: {prompt: hi}}}
+  - {name: no token get, request: {method: GET, path: /v1/hermes/runs/E6C00000-0000-4000-8000-0000000001A1}}
+  - {name: no token events, request: {method: GET, path: /v1/hermes/runs/E6C00000-0000-4000-8000-0000000001A1/events}}
+  - {name: no token approval, request: {method: POST, path: /v1/hermes/runs/E6C00000-0000-4000-8000-0000000001A1/approval, json: {choice: once}}}
+  - {name: no token stop, request: {method: POST, path: /v1/hermes/runs/E6C00000-0000-4000-8000-0000000001A1/stop}}
+  - {name: bad token, request: {method: GET, path: /v1/hermes/runs, headers: {Authorization: Bearer not.a.jwt}}}
+  - {name: bad id get, as: hr_ann, request: {method: GET, path: /v1/hermes/runs/nope}}
+  - {name: bad id events, as: hr_ann, request: {method: GET, path: /v1/hermes/runs/nope/events}}
+  - {name: bad id approval, as: hr_ann, request: {method: POST, path: /v1/hermes/runs/nope/approval, json: {choice: once}}}
+  - {name: bad id stop, as: hr_ann, request: {method: POST, path: /v1/hermes/runs/nope/stop}}
+  - {name: unknown run get, as: hr_ann, request: {method: GET, path: /v1/hermes/runs/E6C00000-0000-4000-8000-00000000FFFF}}
+  - {name: unknown run events, as: hr_ann, request: {method: GET, path: /v1/hermes/runs/E6C00000-0000-4000-8000-00000000FFFF/events}}
+  - {name: unknown run approval, as: hr_ann, request: {method: POST, path: /v1/hermes/runs/E6C00000-0000-4000-8000-00000000FFFF/approval, json: {choice: deny}}}
+  - {name: unknown run stop, as: hr_ann, request: {method: POST, path: /v1/hermes/runs/E6C00000-0000-4000-8000-00000000FFFF/stop}}
+  - {name: someone else's run, as: hr_ann, request: {method: GET, path: /v1/hermes/runs/E6C00000-0000-4000-8000-0000000001B1}}
+  - {name: someone else's events, as: hr_ann, request: {method: GET, path: /v1/hermes/runs/E6C00000-0000-4000-8000-0000000001B1/events}}
+  - {name: start malformed json, as: hr_ann, request: {method: POST, path: /v1/hermes/runs, raw: '{"prompt":'}}
+  - {name: start empty body, as: hr_ann, request: {method: POST, path: /v1/hermes/runs, raw: ''}}
+  - {name: start missing prompt, as: hr_ann, request: {method: POST, path: /v1/hermes/runs, json: {}}}
+  - {name: start prompt wrong type, as: hr_ann, request: {method: POST, path: /v1/hermes/runs, raw: '{"prompt":7}'}}
+  - {name: start empty prompt, as: hr_ann, request: {method: POST, path: /v1/hermes/runs, json: {prompt: ""}}}
+  - {name: start whitespace prompt, as: hr_ann, request: {method: POST, path: /v1/hermes/runs, json: {prompt: "  \n "}}}
+  - {name: start bad conversation id, as: hr_ann, request: {method: POST, path: /v1/hermes/runs, raw: '{"prompt":"hi","conversationID":"nope"}'}}
+  - {name: start hermes unreachable, as: hr_ann, request: {method: POST, path: /v1/hermes/runs, json: {prompt: hi}}}
+  - {name: approval malformed json, as: hr_ann, request: {method: POST, path: /v1/hermes/runs/E6C00000-0000-4000-8000-0000000001A1/approval, raw: '{"choice":'}}
+  - {name: approval missing choice, as: hr_ann, request: {method: POST, path: /v1/hermes/runs/E6C00000-0000-4000-8000-0000000001A1/approval, json: {}}}
+  - {name: approval bad choice, as: hr_ann, request: {method: POST, path: /v1/hermes/runs/E6C00000-0000-4000-8000-0000000001A1/approval, json: {choice: maybe}}}
+  - {name: approval choice wrong type, as: hr_ann, request: {method: POST, path: /v1/hermes/runs/E6C00000-0000-4000-8000-0000000001A1/approval, raw: '{"choice":1}'}}
+  - {name: approval nothing pending, as: hr_ann, request: {method: POST, path: /v1/hermes/runs/E6C00000-0000-4000-8000-0000000001A1/approval, json: {choice: once}}}
+  - {name: wrong method, as: hr_ann, request: {method: PUT, path: /v1/hermes/runs}}
+  - {name: wrong method on run, as: hr_ann, request: {method: DELETE, path: /v1/hermes/runs/E6C00000-0000-4000-8000-0000000001A1}}

@@ -56,6 +56,9 @@ func TestConfigEnvNamesComeFromSwiftKeys(t *testing.T) {
 		// and llm.provider.\(key.lowercased()).apikey with key = "openRouter".
 		"LLM_PROVIDER_OPEN_ROUTER_API_KEY": true,
 		"LLM_PROVIDER_OPENROUTER_APIKEY":   true,
+		// CommunityConfig reads it through flag("community.dailyPost.enabled", false),
+		// which the config-keys grep does not see.
+		"COMMUNITY_DAILY_POST_ENABLED": true,
 	}
 	raw, err := os.ReadFile("../../docs/migration/config-keys.txt")
 	require.NoError(t, err)

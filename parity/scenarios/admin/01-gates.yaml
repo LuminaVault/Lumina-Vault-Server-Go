@@ -1,0 +1,27 @@
+# Wave 7B gates. Every admin route checks X-Admin-Token before anything else, so
+# the sweeps that touch every user (recompute, prune, correlate, reconcile,
+# reap-orphans) are only called here, refused: run for real they would rewrite other
+# modules' fixtures, and correlate's failure lines carry transport error text.
+# /internal/metrics is behind METRICS_SECRET, not the admin token.
+module: admin
+steps:
+  - {name: hermes-profiles health no token, request: {method: GET, path: /v1/admin/hermes-profiles/health}}
+  - {name: hermes-profiles health wrong token, request: {method: GET, path: /v1/admin/hermes-profiles/health, headers: {X-Admin-Token: wrong}}}
+  - {name: a user bearer is not an admin token, as: alice, request: {method: POST, path: /v1/admin/memory/recompute}}
+  - {name: reconcile wrong token, request: {method: POST, path: /v1/admin/hermes-profiles/reconcile, headers: {X-Admin-Token: wrong}}}
+  - {name: reap-orphans no token, request: {method: POST, path: /v1/admin/hermes-profiles/reap-orphans}}
+  - {name: correlate all no token, request: {method: POST, path: /v1/admin/health/correlate}}
+  - {name: correlate one wrong token, request: {method: POST, path: /v1/admin/health/correlate/AD000000-0000-4000-8000-0000000000C3, headers: {X-Admin-Token: wrong}}}
+  - {name: recompute all wrong token, request: {method: POST, path: /v1/admin/memory/recompute, headers: {X-Admin-Token: wrong}}}
+  - {name: recompute one no token, request: {method: POST, path: /v1/admin/memory/recompute/AD000000-0000-4000-8000-0000000000A1}, snapshot: [parity_admin_memories]}
+  - {name: prune all wrong token, request: {method: POST, path: /v1/admin/memory/prune, headers: {X-Admin-Token: wrong}}, snapshot: [parity_admin_memories]}
+  - {name: prune one no token, request: {method: POST, path: /v1/admin/memory/prune/AD000000-0000-4000-8000-0000000000A1}}
+  - {name: backfill no token, request: {method: POST, path: /v1/admin/memory/chunks/backfill/AD000000-0000-4000-8000-0000000000C3}}
+  - {name: usage-events prune no token, request: {method: POST, path: /v1/admin/usage-events/prune}}
+  - {name: token checked before the userID, request: {method: POST, path: /v1/admin/memory/prune/not-a-uuid}}
+  - {name: metrics no bearer, request: {method: GET, path: /internal/metrics}}
+  - {name: metrics wrong bearer, request: {method: GET, path: /internal/metrics, headers: {Authorization: Bearer nope}}}
+  - {name: metrics bare secret, request: {method: GET, path: /internal/metrics, headers: {Authorization: parity-metrics-secret}}}
+  - {name: metrics lowercase scheme, request: {method: GET, path: /internal/metrics, headers: {Authorization: bearer parity-metrics-secret}}}
+  - {name: the admin token does not open metrics, request: {method: GET, path: /internal/metrics, headers: {X-Admin-Token: parity-admin-token}}}
+  - {name: metrics, request: {method: GET, path: /internal/metrics, headers: {Authorization: Bearer parity-metrics-secret}}}

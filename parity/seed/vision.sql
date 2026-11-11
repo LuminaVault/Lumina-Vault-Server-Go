@@ -50,5 +50,10 @@ VALUES
 
 -- usage_meter without `day`: CURRENT_DATE would differ between the two servers' runs
 -- if midnight UTC fell between them. A view, because snapshots read whole relations.
+-- usage_meter has no unique key and both servers meter after answering with a
+-- read-then-write, so back-to-back embeds can split one tenant-day into two rows
+-- (a Swift weakness Go keeps). Compare the totals, not the row split.
 CREATE VIEW parity_vision_usage AS
-  SELECT tenant_id, model, mtok_in, mtok_out, chars_out FROM usage_meter WHERE model LIKE 'vision.%';
+  SELECT tenant_id, model, sum(mtok_in) AS mtok_in, sum(mtok_out) AS mtok_out, sum(chars_out) AS chars_out
+    FROM usage_meter WHERE model LIKE 'vision.%'
+   GROUP BY tenant_id, model ORDER BY tenant_id, model;

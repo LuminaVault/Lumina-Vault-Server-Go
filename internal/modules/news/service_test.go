@@ -136,7 +136,7 @@ func TestCacheExpiresAfterTTL(t *testing.T) {
 }
 
 func TestCacheBounded(t *testing.T) {
-	c := &cache{entries: map[string]cacheEntry{}}
+	c := &cache{ttl: cacheTTL, entries: map[string]cacheEntry{}}
 	now := time.Now()
 	for i := range cacheMaxEntries {
 		c.set(fmt.Sprint(i), NewsTickerResponse{}, now)

@@ -1,0 +1,13 @@
+# Health correlation's skips need no LLM (parity/seed/admin.sql). usage_events
+# retention is off at 0 days. hermes-profiles health counts the whole database,
+# which every earlier scenario has shaped the same way on both sides; the gateway
+# is unroutable, so it's unreachable with no latency.
+module: admin
+steps:
+  - {name: correlate invalid userID, request: {method: POST, path: /v1/admin/health/correlate/zzz, headers: {X-Admin-Token: parity-admin-token}}}
+  - {name: correlate unknown user, request: {method: POST, path: /v1/admin/health/correlate/0DD00000-0000-4000-8000-000000000001, headers: {X-Admin-Token: parity-admin-token}}}
+  - {name: correlate no health events, request: {method: POST, path: /v1/admin/health/correlate/AD000000-0000-4000-8000-0000000000C3, headers: {X-Admin-Token: parity-admin-token}}}
+  - {name: correlate nothing this week, request: {method: POST, path: /v1/admin/health/correlate/AD000000-0000-4000-8000-0000000000D4, headers: {X-Admin-Token: parity-admin-token}}}
+  - {name: correlate already ran, request: {method: POST, path: /v1/admin/health/correlate/AD000000-0000-4000-8000-0000000000E5, headers: {X-Admin-Token: parity-admin-token}}, snapshot: [parity_admin_memories]}
+  - {name: usage-events retention off, request: {method: POST, path: /v1/admin/usage-events/prune, headers: {X-Admin-Token: parity-admin-token}}}
+  - {name: hermes-profiles health, request: {method: GET, path: /v1/admin/hermes-profiles/health, headers: {X-Admin-Token: parity-admin-token}}}

@@ -95,6 +95,19 @@ type Config struct {
 	Enabled        bool
 	PostingEnabled bool
 	AdminToken     string
+	// DailyPostEnabled is community.dailyPost.enabled; DailyPostHourUTC opens
+	// the two-hour publishing window (ParseHour).
+	DailyPostEnabled bool
+	DailyPostHourUTC int
+}
+
+// ParseHour is community.dailyPost.hourUtc: an integer, else 12, clamped to 0…23.
+func ParseHour(v string) int {
+	h, err := strconv.Atoi(v)
+	if err != nil {
+		h = 12
+	}
+	return min(max(h, 0), 23)
 }
 
 // ParseFlag is CommunityConfig's flag(): the value lowercased, equal to "true".
@@ -108,6 +121,7 @@ type Module struct {
 	identify  echo.MiddlewareFunc
 	limits    *ratelimit.Store
 	now       func() time.Time
+	daily     *DailyWorker
 }
 
 // New builds the module. identify is auth.Identify and limits the process's
@@ -1088,46 +1102,50 @@ const (
 	dailyStaleClaim  = 30 * time.Minute
 )
 
-// errNoGeneration stands in for DailyPostWorker.generate: writing the post needs
-// LLM routing (wave 5), so every claimed attempt fails here. Production keeps
-// /v1/admin/community on Swift until then. See the PR's gap note.
-var errNoGeneration = errors.New("daily post generation is not ported to Go (LLM routing, wave 5)")
+// errNoGeneration is the attempt's error when main has not wired a model
+// (UseModel): the day is claimed and the failed attempt recorded.
+var errNoGeneration = errors.New("daily post generation has no model configured")
 
-// dailyRun is DailyPostWorker.publishDaily without the post: it claims today,
-// records the failed attempt, and reports the day's row.
+// dailyRun is CommunityDailyAdminController: DailyPostWorker.publishDaily now,
+// whatever the hour.
 func (m *Module) dailyRun(c *echo.Context) error {
 	ctx := c.Request().Context()
 	now := m.now()
 	day := utcDay(now)
-	claimed, err := m.claim(ctx, day, now)
+	var outcome DailyOutcome
+	var err error
+	if m.daily != nil {
+		outcome, err = m.daily.PublishDaily(ctx, now)
+	} else {
+		outcome, err = m.recordUnwiredAttempt(ctx, day, now)
+	}
 	if err != nil {
 		return err
+	}
+	out := AdminCommunityDailyRunResult{Day: outcome.Day, Status: AdminCommunityDailyRunResultStatus(outcome.Status), TopicKey: outcome.TopicKey}
+	if outcome.PostID != nil {
+		out.PostId = &wire.UUID{UUID: *outcome.PostID}
+	}
+	if outcome.SourceKind != nil {
+		kind := AdminCommunityDailyRunResultSourceKind(*outcome.SourceKind)
+		out.SourceKind = &kind
+	}
+	return wire.JSON(c, http.StatusOK, out)
+}
+
+func (m *Module) recordUnwiredAttempt(ctx context.Context, day string, now time.Time) (DailyOutcome, error) {
+	claimed, err := m.claim(ctx, day, now)
+	if err != nil {
+		return DailyOutcome{}, err
 	}
 	if claimed {
 		if err := m.q.MarkDayFailed(ctx, db.MarkDayFailedParams{
 			MaxAttempts: dailyMaxAttempts, LastError: new(errNoGeneration.Error()), Day: day,
 		}); err != nil {
-			return err
+			return DailyOutcome{}, err
 		}
 	}
-	out := AdminCommunityDailyRunResult{Day: day, Status: None}
-	row, err := m.q.DayOutcome(ctx, day)
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-	case err != nil:
-		return err
-	default:
-		out.Status = AdminCommunityDailyRunResultStatus(row.Status)
-		out.TopicKey = row.TopicKey
-		if row.PostID != nil {
-			out.PostId = &wire.UUID{UUID: *row.PostID}
-		}
-		if row.SourceKind != nil {
-			kind := AdminCommunityDailyRunResultSourceKind(*row.SourceKind)
-			out.SourceKind = &kind
-		}
-	}
-	return wire.JSON(c, http.StatusOK, out)
+	return m.dayOutcome(ctx, day)
 }
 
 // claim is true when this caller owns today's attempt. A failed attempt, or a

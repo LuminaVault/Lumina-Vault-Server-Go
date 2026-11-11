@@ -27,6 +27,8 @@ x-no-external: &no-external
   - "inference-api.nousresearch.com:127.0.0.1"
   - "api.cohere.com:127.0.0.1"
   - "api-atlas.nomic.ai:127.0.0.1"
+  - "app.photon.codes:127.0.0.1"
+  - "spectrum.photon.codes:127.0.0.1"
 
 x-common-env: &common-env
   POSTGRES_HOST: pg
@@ -87,6 +89,8 @@ x-common-env: &common-env
   COMMUNITY_ENABLED: "true"
   COMMUNITY_POSTING_ENABLED: "true"
   ADMIN_TOKEN: parity-admin-token
+  # /internal/metrics (wave 7B). State "unconfigured" empties it: 404 "metrics disabled".
+  METRICS_SECRET: parity-metrics-secret
   # RevenueCat webhook (billing). Empty in the switched state "unconfigured".
   REVENUECAT_WEBHOOK_SECRET: parity-rc-secret
   # Marketplace: the stub also answers as the plugin runner.
@@ -155,6 +159,7 @@ services:
       COMMUNITY_ENABLED: ${SWITCH_COMMUNITY_ENABLED:-true}
       COMMUNITY_POSTING_ENABLED: ${SWITCH_COMMUNITY_POSTING_ENABLED:-true}
       ADMIN_TOKEN: ${SWITCH_ADMIN_TOKEN-parity-admin-token}
+      METRICS_SECRET: ${SWITCH_METRICS_SECRET-parity-metrics-secret}
       REVENUECAT_WEBHOOK_SECRET: ${SWITCH_REVENUECAT_WEBHOOK_SECRET-parity-rc-secret}
       PLUGIN_ARTIFACT_SIGNING_KEY: ${SWITCH_SIGNING_KEY-parity-signing-key-parity-signing-key-0000}
       PLUGIN_RUNNER_TOKEN: ${SWITCH_RUNNER_TOKEN-parity-runner-token}
@@ -188,6 +193,7 @@ services:
       COMMUNITY_ENABLED: ${SWITCH_COMMUNITY_ENABLED:-true}
       COMMUNITY_POSTING_ENABLED: ${SWITCH_COMMUNITY_POSTING_ENABLED:-true}
       ADMIN_TOKEN: ${SWITCH_ADMIN_TOKEN-parity-admin-token}
+      METRICS_SECRET: ${SWITCH_METRICS_SECRET-parity-metrics-secret}
       REVENUECAT_WEBHOOK_SECRET: ${SWITCH_REVENUECAT_WEBHOOK_SECRET-parity-rc-secret}
       PLUGIN_ARTIFACT_SIGNING_KEY: ${SWITCH_SIGNING_KEY-parity-signing-key-parity-signing-key-0000}
       PLUGIN_RUNNER_TOKEN: ${SWITCH_RUNNER_TOKEN-parity-runner-token}

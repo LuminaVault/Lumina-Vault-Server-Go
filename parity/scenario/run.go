@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"io"
 	"lumina/internal/auth"
-	"lumina/internal/ids"
 	"lumina/parity/normalize"
 	"net/http"
 	"regexp"
@@ -20,7 +19,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 )
 
@@ -378,22 +376,12 @@ func capture(raw []byte, captures map[string]string, vars map[string]string) err
 	return nil
 }
 
-// Mint signs a session token the way Swift's SessionToken does (uppercase
-// sub and jti, HS256 with the active kid). Only the parity harness mints in Go
-// before wave 8.
+// Mint signs a session token with auth.MintAccess, Go's production minter
+// (P9). Every scenario step that carries a user therefore checks that a token
+// Go mints passes Swift's JWTAuthenticator, the Go-to-Swift half of the
+// cross-server requirement (wave-6-8-plan "How sessions survive the cutover").
 func Mint(keys auth.Keyset, user uuid.UUID) (string, error) {
-	key := keys.Active()
-	now := time.Now()
-	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, auth.Claims{RegisteredClaims: jwt.RegisteredClaims{
-		Subject:   ids.Upper(user),
-		ExpiresAt: jwt.NewNumericDate(now.Add(time.Hour)),
-		IssuedAt:  jwt.NewNumericDate(now),
-		ID:        ids.Upper(uuid.New()),
-	}})
-	if key.Kid != "" {
-		tok.Header["kid"] = key.Kid
-	}
-	return tok.SignedString(key.Secret)
+	return keys.MintAccess(user, time.Now(), "")
 }
 
 // JSONBody is a small helper for transcripts written to disk.

@@ -316,13 +316,13 @@ modules:
   integrations:
     wave: 6
     swiftDir: Sources/App/Integrations
-    status: swift
+    status: parity
     prefixes: [/v1/integrations]
     jobs: []
   me-gateways:
     wave: 6
     swiftDir: Sources/App/Me
-    status: swift
+    status: parity
     prefixes: [/v1/gateways, /v1/me/hermes-gateways]
     jobs: []
   plugins:
@@ -346,7 +346,7 @@ modules:
   admin:
     wave: 7
     swiftDir: Sources/App/Admin
-    status: swift
+    status: parity
     prefixes: [/internal, /v1/admin/health, /v1/admin/hermes-profiles, /v1/admin/memory, /v1/admin/usage-events, /v1/admin/users]
     jobs: []
   billing:
