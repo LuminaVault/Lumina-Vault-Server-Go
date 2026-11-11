@@ -117,11 +117,14 @@ func (s *Store) Status(ctx context.Context, id, tenant uuid.UUID) (string, bool,
 	return st, true, nil
 }
 
-// Ready reports whether the pending-action table exists.
-func Ready(ctx context.Context, pool *pgxpool.Pool) bool {
+// Ready reports whether the pending-action table exists. An error means the
+// database could not say, which is not the same as a missing table.
+func Ready(ctx context.Context, pool *pgxpool.Pool) (bool, error) {
 	var ok bool
-	err := pool.QueryRow(ctx, `SELECT to_regclass('public.assistant_pending_actions') IS NOT NULL`).Scan(&ok)
-	return err == nil && ok
+	if err := pool.QueryRow(ctx, `SELECT to_regclass('public.assistant_pending_actions') IS NOT NULL`).Scan(&ok); err != nil {
+		return false, err
+	}
+	return ok, nil
 }
 
 // ActiveSpaceName is the name of the space c names, if it is a space in vault.

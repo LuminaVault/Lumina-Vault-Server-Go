@@ -832,19 +832,21 @@ func TestTheBuiltAppRunsTheLoopOnTheTrialRoute(t *testing.T) {
 
 	fs := q.send(user, conversation, body(qaBody{}))
 
-	// The real stack adds routing and usage frames around each round.
-	var shown []map[string]any
-	for _, f := range fs {
-		if f["type"] != "routing" && f["type"] != "usage" {
-			shown = append(shown, f)
-		}
-	}
-	types := frameTypes(shown)
-	require.Equal(t, "assistant_action", types[0], types)
-	assert.Equal(t, "done", shown[0]["payload"].(map[string]any)["kind"])
-	for _, kind := range types[1 : len(types)-1] {
-		assert.Equal(t, "token", kind, types)
-	}
+	// Exactly what the client receives. Each round is one decided call, and
+	// the transport publishes its routing frame before the call and its usage
+	// frame after it, as Swift's RoutedLLMTransport.completeDecided does
+	// (publishSelectedRoute, then publishUsage). The chip comes between the
+	// rounds; the reply is streamed as tokens after the last one.
+	require.Equal(t, []string{
+		"routing", "usage", "assistant_action",
+		"routing", "usage",
+		"token", "token", "token", "token",
+		"done",
+	}, frameTypes(fs))
+	assert.Equal(t, "done", fs[2]["payload"].(map[string]any)["kind"])
+	assert.Equal(t, "selected", fs[0]["payload"].(map[string]any)["phase"])
+	assert.Equal(t, fs[0]["payload"].(map[string]any)["executionID"], fs[3]["payload"].(map[string]any)["executionID"],
+		"both rounds report the one decision picked for the question")
 	assert.Equal(t, "Answer from the stub.", tokens(fs))
 	assert.Equal(t, "done", fs[len(fs)-1]["type"])
 	assert.False(t, hasFrame(fs, "follow_ups"))
@@ -1434,7 +1436,7 @@ func TestARefusedToolNeverRunsEndToEnd(t *testing.T) {
 	adapter := newAdapter(llm.Anthropic)
 	q := newQA(t, pool, qaOptions{router: &fixedRouter{decision: decision(haikuRoute)}, adapters: []llm.Adapter{adapter}})
 	user, conversation := q.seed("pro")
-	saved := quickassistant.NewRunner(qaDeps(t, pool, nil), user, user, "qa", nil, nil, nil).
+	saved := quickassistant.NewRunner(qaDeps(t, pool, nil), user, user, nil, nil, nil).
 		Run(context.Background(), "memory_save", map[string]any{"content": "original text"})
 	require.NotContains(t, saved.ModelContent, "did not run")
 	var memoryID uuid.UUID

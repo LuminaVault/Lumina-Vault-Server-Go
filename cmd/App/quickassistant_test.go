@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"lumina/internal/auth"
 	"lumina/internal/config"
 	"lumina/internal/dbtest"
@@ -80,4 +82,22 @@ func TestEnabledWithoutTableStaysOff(t *testing.T) {
 	require.Nil(t, qa)
 	require.Nil(t, module)
 	require.Zero(t, quickModules(t, a))
+}
+
+// Task 12 review M1: a database that cannot answer at boot keeps the feature
+// off too, but the log names the database, not a missing migration.
+func TestEnabledWithAFailingDatabaseStaysOffAndSaysWhy(t *testing.T) {
+	a, pool := qaAgent(t, "true")
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	pool.Close()
+
+	qa, module := a.quickAssistant()
+
+	require.Nil(t, qa)
+	require.Nil(t, module)
+	require.Contains(t, logs.String(), "assistant_pending_actions could not be checked")
+	require.NotContains(t, logs.String(), "assistant_pending_actions missing")
 }

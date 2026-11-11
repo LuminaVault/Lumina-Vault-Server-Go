@@ -440,6 +440,8 @@ func (m *Module) runTurn(ctx context.Context, t turn, yield func(StreamEvent) bo
 					m.log.ErrorContext(work, "assistant turn persist failed", "error", err)
 				}
 			}
+			// No link auto-save on a reply: Swift's reply branch returns before
+			// its HER-274 linkCapture block too.
 			yield(StreamEvent{Type: "done"})
 			return
 		}

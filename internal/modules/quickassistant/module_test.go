@@ -32,18 +32,24 @@ import (
 var qaKeys = auth.NewKeyset(auth.Key{Kid: "t", Secret: []byte("test-secret-test-secret-test-0000")})
 
 // confirmPhone stands in for the phone: it records every command and answers
-// ok, or times out, after delay.
+// ok, or times out, or fails with failWith, after delay. started, when set,
+// runs once the command is recorded and before the delay.
 type confirmPhone struct {
 	mu       sync.Mutex
 	commands []devicerpc.Command
 	timeout  bool
+	failWith string
 	delay    time.Duration
+	started  func()
 }
 
 func (p *confirmPhone) Request(ctx context.Context, _ uuid.UUID, cmd devicerpc.Command) (devicerpc.Result, error) {
 	p.mu.Lock()
 	p.commands = append(p.commands, cmd)
 	p.mu.Unlock()
+	if p.started != nil {
+		p.started()
+	}
 	if p.delay > 0 {
 		select {
 		case <-time.After(p.delay):
@@ -53,6 +59,9 @@ func (p *confirmPhone) Request(ctx context.Context, _ uuid.UUID, cmd devicerpc.C
 	}
 	if p.timeout {
 		return devicerpc.Result{}, devicerpc.ErrTimeout
+	}
+	if p.failWith != "" {
+		return devicerpc.Result{ID: cmd.ID, OK: false, Error: &p.failWith}, nil
 	}
 	return devicerpc.Result{ID: cmd.ID, OK: true, Payload: map[string]string{}}, nil
 }
@@ -112,7 +121,7 @@ func newWorld(g rig, o worldOptions) world {
 func (w world) runner(vault uuid.UUID) *Runner {
 	d := w.g.deps
 	d.Devices = w.phone
-	return NewRunner(d, w.user, vault, "qa-user", nil, &w.conversation, nil)
+	return NewRunner(d, w.user, vault, nil, &w.conversation, nil)
 }
 
 // proposeCalendar makes a pending calendar card the way the assistant does.
@@ -145,9 +154,18 @@ type outcome struct {
 
 func (w world) resolveAs(user, id uuid.UUID, verb string, headers ...string) outcome {
 	w.g.t.Helper()
+	out, err := w.tryResolveAs(user, id, verb, headers...)
+	require.NoError(w.g.t, err, out.body)
+	return out
+}
+
+// tryResolveAs is resolveAs without assertions, safe off the test goroutine.
+func (w world) tryResolveAs(user, id uuid.UUID, verb string, headers ...string) (outcome, error) {
 	req := httptest.NewRequest(http.MethodPost, "/v1/assistant/actions/"+id.String()+"/"+verb, nil)
 	token, err := scenario.Mint(qaKeys, user)
-	require.NoError(w.g.t, err)
+	if err != nil {
+		return outcome{}, err
+	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	for i := 0; i+1 < len(headers); i += 2 {
 		req.Header.Set(headers[i], headers[i+1])
@@ -156,9 +174,9 @@ func (w world) resolveAs(user, id uuid.UUID, verb string, headers ...string) out
 	w.e.ServeHTTP(rec, req)
 	out := outcome{code: rec.Code, body: rec.Body.String()}
 	if rec.Code == http.StatusOK {
-		require.NoError(w.g.t, json.Unmarshal(rec.Body.Bytes(), &out.resolution), out.body)
+		err = json.Unmarshal(rec.Body.Bytes(), &out.resolution)
 	}
-	return out
+	return out, err
 }
 
 func (w world) confirm(id uuid.UUID, headers ...string) outcome {
@@ -243,15 +261,18 @@ func TestConcurrentConfirmsRunOnce(t *testing.T) {
 
 	var wg sync.WaitGroup
 	results := make([]outcome, 2)
+	errs := make([]error, 2)
 	for i := range results {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			results[i] = w.confirm(id)
+			results[i], errs[i] = w.tryResolveAs(w.user, id, "confirm")
 		}()
 	}
 	wg.Wait()
 
+	require.NoError(t, errs[0])
+	require.NoError(t, errs[1])
 	statuses := []string{string(results[0].resolution.Status), string(results[1].resolution.Status)}
 	sort.Strings(statuses)
 	require.Equal(t, []string{"alreadyResolved", "confirmed"}, statuses)
@@ -345,6 +366,21 @@ func TestAFailedExecutionStaysFailedAndARetryDoesNothing(t *testing.T) {
 	require.Zero(t, w.g.count(`SELECT count(*) FROM device_command_queue WHERE tenant_id = $1`, w.user))
 }
 
+// The phone answered but could not add the event, for a reason other than
+// consent.
+func TestAPhoneThatCannotAddTheEventFails(t *testing.T) {
+	w := newWorld(newRig(t), worldOptions{phone: &confirmPhone{failWith: "calendar is read-only"}})
+	id := w.proposeCalendar("Dentist")
+
+	out := w.confirm(id)
+
+	require.Equal(t, StatusFailed, out.resolution.Status)
+	require.Equal(t, "The event could not be added. Check Calendar before trying again.", out.resolution.Message)
+	require.Len(t, w.phone.sent(), 1)
+	require.Equal(t, "failed", w.status(id))
+	require.Equal(t, []storedMessage{{Role: "assistant", Content: out.resolution.Message}}, w.messages())
+}
+
 // MARK: - Forget
 
 func TestConfirmForgetDeletesTheMemory(t *testing.T) {
@@ -433,16 +469,19 @@ func TestACancelledRequestStillFinishesTheRun(t *testing.T) {
 
 	// The phone is still answering when the request goes away.
 	for _, timeout := range []bool{false, true} {
-		w := newWorld(g, worldOptions{phone: &confirmPhone{timeout: timeout, delay: 500 * time.Millisecond}})
-		id := w.proposeCalendar("Dentist")
 		ctx, cancel := context.WithCancel(context.Background())
-		go func() {
-			time.Sleep(200 * time.Millisecond)
-			cancel()
-		}()
+		// The request goes away the moment the phone has the command, while
+		// it is still answering.
+		phone := &confirmPhone{timeout: timeout, delay: 200 * time.Millisecond, started: cancel}
+		w := newWorld(g, worldOptions{phone: phone})
+		id := w.proposeCalendar("Dentist")
 
-		_, _ = w.module.confirmAction(ctx, id, w.user)
+		res, err := w.module.confirmAction(ctx, id, w.user)
 		cancel()
+
+		require.NoError(t, err)
+		require.Error(t, ctx.Err())
+		require.NotEqual(t, StatusAlreadyResolved, res.Status)
 
 		require.Len(t, w.phone.sent(), 1)
 		want := "confirmed"

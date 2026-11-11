@@ -40,7 +40,7 @@ func (g rig) conversation(user uuid.UUID) uuid.UUID {
 func (g rig) proposer(actor, vault uuid.UUID, phone DeviceRequester, loc *time.Location, conv uuid.UUID) *Runner {
 	d := g.deps
 	d.Devices = phone
-	return NewRunner(d, actor, vault, "qa-user", loc, &conv, nil)
+	return NewRunner(d, actor, vault, loc, &conv, nil)
 }
 
 type pendingRow struct {
@@ -433,14 +433,15 @@ func TestAProposalDeletesThisUsersRowsExpiredOverADayAgo(t *testing.T) {
 	require.True(t, exists(othersOld))
 }
 
-func TestCardsStripControlAndFormatCharacters(t *testing.T) {
+func TestCardsAndTranscriptStripControlAndFormatCharacters(t *testing.T) {
 	g := newRig(t)
-	me := g.user()
-	g.allow(me, devicetools.DomainCalendar, true)
-	r := g.proposer(me, me, &fakePhone{}, nil, g.conversation(me))
+	w := newWorld(g, worldOptions{})
+	me := w.user
+	w.allowCalendar(true, true)
+	r := w.runner(me)
 
 	event := r.Run(context.Background(), "calendar_create", map[string]any{
-		"title": "Pay‮evil\nrent", "start": calendarStart, "location": "  Room\x1b[31m 5  ",
+		"title": "Pay\u202eevil\nrent", "start": calendarStart, "location": "  Room\x1b[31m 5  ",
 	})
 	require.NotNil(t, event.Action)
 	require.False(t, hasControlOrFormat(event.Action.Summary), event.Action.Summary)
@@ -449,11 +450,20 @@ func TestCardsStripControlAndFormatCharacters(t *testing.T) {
 	// The stored arguments are what the phone gets: trimmed, not cleaned.
 	require.Equal(t, "Room\x1b[31m 5", g.storedArg(event.Action.ID.UUID, "location"))
 
-	memoryID := g.memory(me, "red \x1b[31mtext‮", nil, time.Now())
+	memoryID := g.memory(me, "red \x1b[31mtext\u202e", nil, time.Now())
 	forget := r.Run(context.Background(), "memory_forget", map[string]any{"memoryID": memoryID.String()})
 	require.NotNil(t, forget.Action)
 	require.Contains(t, forget.Action.Summary, "red [31mtext")
 	require.False(t, hasControlOrFormat(forget.Action.Summary))
+
+	// The confirmation line, and so the transcript, is cleaned as well.
+	out := w.confirm(event.Action.ID.UUID)
+	require.Equal(t, StatusConfirmed, out.resolution.Status)
+	require.False(t, hasControlOrFormat(out.resolution.Message), out.resolution.Message)
+	require.Contains(t, out.resolution.Message, "Payevil rent")
+	messages := w.messages()
+	require.Len(t, messages, 1)
+	require.Equal(t, out.resolution.Message, messages[0].Content)
 }
 
 // Review Focus 3: with no device requester calendar_create is not offered, and

@@ -123,7 +123,14 @@ func (a *agent) quickAssistant() (*chat.QuickAssistant, httpserver.Module) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if !quickassistant.Ready(ctx, a.pool) {
+	ready, err := quickassistant.Ready(ctx, a.pool)
+	if err != nil {
+		// Off until the next restart, but say it was the database, not the
+		// migration.
+		slog.Error("quick assistant disabled: assistant_pending_actions could not be checked", "error", err)
+		return nil, nil
+	}
+	if !ready {
 		slog.Error("quick assistant disabled: assistant_pending_actions missing")
 		return nil, nil
 	}

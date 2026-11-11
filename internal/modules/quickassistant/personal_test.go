@@ -47,7 +47,7 @@ func (g rig) allow(user uuid.UUID, domain string, writes bool) {
 func (g rig) phoneRunner(actor, vault uuid.UUID, phone DeviceRequester, loc *time.Location) *Runner {
 	d := g.deps
 	d.Devices = phone
-	return NewRunner(d, actor, vault, "qa-user", loc, nil, nil)
+	return NewRunner(d, actor, vault, loc, nil, nil)
 }
 
 type storedReminder struct {

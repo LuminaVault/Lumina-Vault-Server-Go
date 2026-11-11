@@ -267,8 +267,23 @@ func TestCascadesFromUserVaultAndConversation(t *testing.T) {
 func TestReadyReportsTheTable(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
-	require.True(t, Ready(ctx, e.pool))
-	_, err := e.pool.Exec(ctx, `DROP TABLE assistant_pending_actions`)
+	ready, err := Ready(ctx, e.pool)
 	require.NoError(t, err)
-	require.False(t, Ready(ctx, e.pool))
+	require.True(t, ready)
+	_, err = e.pool.Exec(ctx, `DROP TABLE assistant_pending_actions`)
+	require.NoError(t, err)
+	ready, err = Ready(ctx, e.pool)
+	require.NoError(t, err)
+	require.False(t, ready)
+}
+
+// A database that cannot answer is an error, not a missing table, so boot can
+// say which it was.
+func TestReadyReportsAFailedQueryAsAnError(t *testing.T) {
+	e := newEnv(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	ready, err := Ready(ctx, e.pool)
+	require.Error(t, err)
+	require.False(t, ready)
 }

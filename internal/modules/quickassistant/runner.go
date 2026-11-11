@@ -139,7 +139,6 @@ func (s *TurnState) noteProposal() {
 type Runner struct {
 	Deps
 	Actor, Vault uuid.UUID
-	Username     string
 	// Loc is the turn's zone when known. Chips show times in it, and a time
 	// the model wrote with no offset is read in it. Nil means unknown.
 	Loc *time.Location
@@ -154,9 +153,9 @@ type Runner struct {
 }
 
 // NewRunner is a runner for one turn.
-func NewRunner(d Deps, actor, vault uuid.UUID, username string, loc *time.Location, conv *uuid.UUID, log *slog.Logger) *Runner {
+func NewRunner(d Deps, actor, vault uuid.UUID, loc *time.Location, conv *uuid.UUID, log *slog.Logger) *Runner {
 	return &Runner{
-		Deps: d, Actor: actor, Vault: vault, Username: username, Loc: loc,
+		Deps: d, Actor: actor, Vault: vault, Loc: loc,
 		ConversationID: conv, Now: time.Now, Log: log, turn: &TurnState{}, timeout: toolTimeout,
 	}
 }

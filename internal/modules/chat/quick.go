@@ -35,7 +35,10 @@ func (m *Module) newQuickTurn(ctx context.Context, c quickassistant.Context, in 
 	spaceName := quickassistant.ActiveSpaceName(ctx, m.pool, t.vault, c)
 	system := quickassistant.System(c, spaceName, m.now(), in.scheduleLoc)
 	// As classic does: a BYOK user's pinned model, with no fallbacks. A pinned
-	// model that rejects tools fails round 1 and lands on classic.
+	// model that rejects tools fails round 1 and lands on classic. A provider
+	// with no Shared id, or a preference that could not be read, leaves the
+	// loop unpinned, as Swift's ConversationController does (its `try?` read
+	// and `toShared()` guard).
 	var pinned *llm.WireRoute
 	if p := in.pref; p != nil && p.Mode == llm.ModeBYOK && p.PrimaryModel != "" {
 		if id, ok := p.PrimaryProvider.ToShared(); ok {
@@ -51,7 +54,7 @@ func (m *Module) newQuickTurn(ctx context.Context, c quickassistant.Context, in 
 		messages: quickassistant.AddingSystemText(system, prompt, true),
 		// A nil zone stays nil (ruling 80): chips and offset-less times then
 		// read as unknown rather than as UTC.
-		runner: quickassistant.NewRunner(qa.Deps, t.actor, t.vault, t.user.Username, in.turnLoc, &conv, m.log),
+		runner: quickassistant.NewRunner(qa.Deps, t.actor, t.vault, in.turnLoc, &conv, m.log),
 		pinned: pinned,
 	}
 }

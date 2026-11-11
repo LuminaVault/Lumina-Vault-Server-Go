@@ -98,7 +98,7 @@ func (g rig) sharedVault(owner, member uuid.UUID, role string) uuid.UUID {
 }
 
 func (g rig) runner(actor, vault uuid.UUID) *Runner {
-	return NewRunner(g.deps, actor, vault, "qa-user", nil, nil, nil)
+	return NewRunner(g.deps, actor, vault, nil, nil, nil)
 }
 
 func (g rig) count(sql string, args ...any) int {
@@ -182,7 +182,7 @@ func TestBrowseListsTheTurnVaultInPathOrder(t *testing.T) {
 
 	// pathPrefix is not exercised: mcp's range compares in the database's
 	// collation, as Swift's does, and under en_US.utf8 it matches nothing
-	// (ruling 75, report Task 8R).
+	// (ruling 81: browse keeps mcp's collation; ruling 75 is reversed).
 	result := g.runner(viewer, vault).Run(context.Background(), "browse", map[string]any{"limit": 2.0})
 
 	out := decodeObject(t, result.ModelContent)
@@ -456,7 +456,7 @@ func TestProposalsStopAtThreeCardsPerTurn(t *testing.T) {
 	me := g.user()
 	conversation := uuid.New()
 	g.exec(`INSERT INTO conversations (id, tenant_id, title, created_at, updated_at) VALUES ($1, $2, 't', now(), now())`, conversation, me)
-	r := NewRunner(g.deps, me, me, "qa-user", nil, &conversation, nil)
+	r := NewRunner(g.deps, me, me, nil, &conversation, nil)
 
 	for i := range 3 {
 		result, err := r.propose(context.Background(), "memory_forget", me, map[string]any{"memoryID": "X"}, "card")
@@ -489,7 +489,7 @@ func TestAHungToolIsCutOffByTheRunnersOwnTimeout(t *testing.T) {
 	me := g.user()
 	deps := g.deps
 	deps.MCP = mcpService(t, g.pool, g.paths, hangingEmbeddings{})
-	r := NewRunner(deps, me, me, "qa-user", nil, nil, nil)
+	r := NewRunner(deps, me, me, nil, nil, nil)
 	r.timeout = 100 * time.Millisecond
 
 	start := time.Now()
@@ -521,9 +521,14 @@ func TestAZeroValueRunnerAnswersInsteadOfPanicking(t *testing.T) {
 	require.Equal(t, toolFailed, r.Run(context.Background(), "health_query", map[string]any{}).ModelContent)
 	require.Equal(t, toolFailed, r.Run(context.Background(), "app_reminder_create",
 		map[string]any{"title": "x", "fireAt": time.Now().Add(time.Hour).UTC().Format(time.RFC3339)}).ModelContent)
+	// A conversation gets propose past its first check, so the nil Store is
+	// what it meets.
+	conversation := uuid.New()
+	r.ConversationID = &conversation
 	result, err := r.propose(context.Background(), "memory_forget", uuid.New(), map[string]any{}, "card")
-	require.NoError(t, err)
+	require.ErrorIs(t, err, errMissingDependency)
 	require.Nil(t, result.Action)
+	r.ConversationID = nil
 	// The zero timeout is the default, not an instant deadline, and the turn
 	// is counted.
 	require.NotNil(t, r.Run(context.Background(), "open_screen", map[string]any{"screen": "home"}).Action)
