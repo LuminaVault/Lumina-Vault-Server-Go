@@ -10,6 +10,7 @@ import (
 	"lumina/internal/embedding"
 	"lumina/internal/entitlement"
 	"lumina/internal/hermesresolve"
+	"lumina/internal/hermesruns"
 	"lumina/internal/httpserver"
 	"lumina/internal/idempotency"
 	"lumina/internal/llm"
@@ -68,6 +69,9 @@ type agent struct {
 	// compile is the kb-compile route, set by modules(); /v1/skills/slash's
 	// /kb-compile runs through it.
 	compile *kbcompile.Module
+	// runs is the one HermesRunsService (6C), shared by chat and /v1/hermes/runs;
+	// nil without the endpoint resolver.
+	runs *hermesruns.Service
 }
 
 func newAgent(ctx context.Context, pool *pgxpool.Pool, cfg config.Config, box *secretbox.Box, paths vaultpaths.Paths, identify echo.MiddlewareFunc,
@@ -92,8 +96,12 @@ func newAgent(ctx context.Context, pool *pgxpool.Pool, cfg config.Config, box *s
 		pool: pool, cfg: cfg, box: box, paths: paths, identify: identify, limits: limits,
 		embeddings: embeddings, sink: sink, today: today, disk: disk, stack: stack,
 		memories: memorystore.New(pool, hits),
+		runs:     newHermesRuns(pool, cfg, hermesResolver(pool, cfg, box)),
 	}
 	return a, func() {
+		if a.runs != nil {
+			a.runs.StopAll()
+		}
 		cancel()
 		<-done
 		stack.Transport.Wait()

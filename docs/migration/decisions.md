@@ -693,3 +693,46 @@ port."
 - `FixDashboard` stays off for the same reason: it is a deliberate difference, not a port.
 - Order now: 5C chat first, then the rest of the port.
 - The other answers above stand.
+
+## D-6c-runs: Go owns hermes runs; how the chat bridge changes; the double watcher
+
+Wave 6C ports `/v1/hermes/runs` (6 routes) and `HermesRunsService` to `internal/hermesruns` and
+`internal/modules/hermesruns`. One service instance serves both the routes and chat's escalation (B12), as
+`App+build.swift:2228-2232` does in Swift.
+
+**The chat bridge.** `cmd/App/chat.go` chooses chat's `HermesRuns` as follows:
+
+- `CHAT_HERMES_RUNS_BRIDGE_URL` set: `chat.Bridge`, as deployed today. An escalated turn starts its run on Swift, and
+  Swift's watcher follows it. Nothing changes for production until the 6C flip.
+- Unset: `runsStarter`, the in-process Go service. The run is keyed on the session key chat passes, and Go's watcher
+  follows it.
+
+At the 6C flip, the one infra commit that moves `/v1/hermes/runs` and chat to Go (B12) also removes
+`CHAT_HERMES_RUNS_BRIDGE_URL` and adds `HermesRunsService` to `LV_GO_JOBS`. After that a run started from chat and one
+started on `/v1/hermes/runs` share one watcher budget (8 per tenant, 32 per process), as in Swift. `chat.Bridge` stays
+in the tree until Swift is archived, so the flip can be rolled back by setting the env var again.
+
+**Boot re-attach is a job.** `HermesRunsService` (the job) runs `Reattach` once at boot. Active runs younger than
+300 s get a poll watcher. Older ones are marked `lost` without contacting Hermes. The job then holds until shutdown
+and cancels every watcher. Go runs it only when `LV_GO_JOBS` names it (jobs.md: never both servers). Watchers started
+by a request run whatever `LV_GO_JOBS` says. The process stop (`agent.go`) cancels them too.
+
+**Accepted risk: the double watcher.** Swift's only gate on its re-attach is `LV_SECRET_MASTER_KEY`, which also
+mounts its routes, so it can't be switched off alone.
+
+- After the flip, a Swift restart within 300 s of a Go-started run re-attaches it. Both servers then watch it, which
+  duplicates the push and appends each polled change twice. The second copy gets the next `seq`, so nothing is lost
+  and the feed stays ordered.
+- Before the flip, with the job off, a Go restart leaves Go-started runs (parity and tests only) unwatched until they
+  age past 300 s. They then read as their last persisted status.
+- Mitigation: don't restart Swift in the 300 s after a Go run starts. Or, if it bites, add a Swift flag that skips
+  `run()`. Swift's archive ends it.
+
+**Swift behaviour kept.**
+
+- The run id path parameter fails with Hummingbird's message.
+- An unparseable `conversationID` on list is ignored, not rejected.
+- `pending_approval.requestedAt` is stored as Fluent writes a `Date` in jsonb (seconds since 2001-01-01).
+- An unknown status string reads as `lost`.
+- Event payload numbers come back as doubles.
+- The push goes out with no rate limit of its own (category prefs only).

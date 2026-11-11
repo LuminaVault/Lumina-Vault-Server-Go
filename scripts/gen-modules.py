@@ -61,6 +61,7 @@ WAVES = {
     # to flipping /v1/ws at the end of wave 5, ahead of the rest of App.
     "LLMRouter": 5, "LLMVoice": 5, "LLMChat": 5, "LLMAdmin": 5, "WS": 5,
     "SkillsCron": 6,
+    "Soul": 8,  # 8D: /v1/soul splits out of auth (18788ca)
 }
 
 # Some Swift dirs hold controllers that belong to a later wave
@@ -82,6 +83,7 @@ SPLITS = {
     "Sources/App/LLM/LLMController.swift": "LLMChat",
     "Sources/App/LLM/Routing/LLMHealthController.swift": "LLMAdmin",
     "Sources/App/Skills/CronBridgeController.swift": "SkillsCron",
+    "Sources/App/Auth/SoulController.swift": "Soul",
 }
 # Routes whose controller also holds routes of the parent module, or that are
 # registered in App+build.swift.
@@ -138,6 +140,7 @@ HELD = {
 # /v1/calendar/oauth/callback, which only finds OAuth sessions from its own process.
 COUPLED = {"Calendar": {"Mail"}}
 SWIFT_DIRS = {
+    "Soul": "Sources/App/Auth",
     "App": "Sources/App/App+build.swift",
     "MeGateways": "Sources/App/Me",
     "MeProviders": "Sources/App/Me",
