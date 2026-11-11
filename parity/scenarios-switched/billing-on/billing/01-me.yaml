@@ -1,0 +1,4 @@
+# BILLING_ENFORCEMENT_ENABLED=true: /v1/auth/me/billing reports it.
+module: billing
+steps:
+  - {name: enforcement reported, as: bl_gus, request: {method: GET, path: /v1/auth/me/billing}}

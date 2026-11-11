@@ -107,6 +107,23 @@ func WritePaywall(c *echo.Context, capability Capability) error {
 	return wire.JSON(c, http.StatusPaymentRequired, paywallFor(capability))
 }
 
+// BYOExemption is BYOEntitlementPolicy.exemption(for:tier:input:): "ownHermes",
+// "ownKey", or "" for none. Archived and ultimate-only capabilities are never
+// exempt; own Hermes wins over own key. tier is the stored column (user.tierEnum),
+// not the effective tier.
+func BYOExemption(c Capability, tier string, ownHermes, ownKey bool) string {
+	if tier == "archived" || c.RequiresUltimate() {
+		return ""
+	}
+	if ownHermes {
+		return "ownHermes"
+	}
+	if ownKey {
+		return "ownKey"
+	}
+	return ""
+}
+
 // HasUsableCredential answers BYOEntitlementPolicy's "own key" question.
 type HasUsableCredential func(ctx context.Context, tenant uuid.UUID) bool
 
@@ -138,12 +155,13 @@ func MiddlewareWithHermes(pool *pgxpool.Pool, c Capability, enforcementEnabled b
 			if Entitled(tier, override, c) {
 				return next(ctx)
 			}
-			// BYOEntitlementPolicy.exemption.
+			// byoExemption: own Hermes is free to check, so it goes first; the
+			// credential reads happen only when an exemption is possible at all.
 			if !c.RequiresUltimate() && tier != "archived" {
-				if ownHermes != nil && ownHermes(ctx) {
+				if ownHermes != nil && BYOExemption(c, tier, ownHermes(ctx), false) != "" {
 					return next(ctx)
 				}
-				if hasCredential != nil && hasCredential(ctx.Request().Context(), tenant) {
+				if hasCredential != nil && BYOExemption(c, tier, false, hasCredential(ctx.Request().Context(), tenant)) != "" {
 					return next(ctx)
 				}
 			}
