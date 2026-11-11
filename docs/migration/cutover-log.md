@@ -1884,3 +1884,28 @@ Beyond the pilot gate (D-wave2-early):
   `parity/scenarios-switched/agents/settings/01-hermes.yaml` (save, verify, probe, cache, replace,
   unreachable, delete on the LLM stub), with `parity/seed/settings.sql` and its `parity_st_hermes`
   view. `agents_state` now also requires stub calls on `/v1/models` and `/v1/capabilities`.
+
+## system (wave 7)
+
+### G0 entry: met 2026-11-11
+
+- Routes: 7 under `/v1/system/hermes`, behind the JWT then `X-Admin-Token` (empty token 404 "admin
+  disabled", mismatch 401 "admin token invalid"), mounted only with the secret box, as in Swift:
+  `version`, `update`, `update/current`, `update/:jobID`, `update/:jobID/stream` (SSE),
+  `update/:jobID/rollback`, `reprovision`.
+- The whole engine is ported: CentralHermesManager (blue-green temp container, cutover, restore,
+  loopback health probe), the step engine, auto and manual rollback, tenant reprovision. Docker is
+  an interface. Production has no docker binary (O1), so `NoDocker` fails every call as Swift's
+  spawn does: an update fails at `preflight`, a manual rollback fails at restore, `reprovision`
+  is a 500, and `version` falls back to the channel tag. Tenant reprovision runs through a
+  no-docker container manager until 6D's `hermescontainers` lifecycle is wired in.
+- Config: `HERMES_CENTRAL_{CONTAINER_NAME,TEMP_CONTAINER_NAME,REGISTRY_IMAGE,CHANNEL_TAG,
+  VOLUME_PATH,PORT,TEMP_PORT}`, `HERMES_PER_TENANT_NETWORK`, `HERMES_API_KEY` (Swift's defaults).
+- Swift tests: `HermesUpdateServiceTests` 3, all ported against a stub Docker and probe (owner
+  rejected waivers 2026-11-11).
+
+### G1 parity: met 2026-11-11
+
+- `parity/scenarios/system/01-hermes-update.yaml` with `parity/seed/system.sql`. Seeded jobs are
+  compared whole, including the stream. Ignored for jobs the scenario starts: clock times,
+  `errorMessage` and step `detail` (Swift's Process or docker stderr text).

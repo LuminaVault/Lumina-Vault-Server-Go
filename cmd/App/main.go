@@ -53,6 +53,7 @@ import (
 	"lumina/internal/modules/selfimprovement"
 	"lumina/internal/modules/sessions"
 	"lumina/internal/modules/spaces"
+	"lumina/internal/modules/system"
 	"lumina/internal/modules/teams"
 	"lumina/internal/modules/todos"
 	"lumina/internal/modules/tts"
@@ -273,6 +274,13 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		// Wave 5: Swift builds grokController in the SecretBox branch, so no key, no routes.
 		if box != nil {
 			deps.Modules = append(deps.Modules, grok.New(hermescontainers.New(pool, box), entitlement.PremiumGuardMiddleware(pool), nil))
+			deps.Modules = append(deps.Modules, system.New(pool, system.Options{
+				Identify: identify, AdminToken: cfg.AdminToken, PerTenant: true,
+				ContainerName: cfg.HermesCentralContainerName, RegistryImage: cfg.HermesCentralRegistryImage,
+				ChannelTag: cfg.HermesCentralChannelTag, TempName: cfg.HermesCentralTempName,
+				Network: cfg.HermesCentralNetwork, VolumePath: cfg.HermesCentralVolumePath,
+				Port: cfg.HermesCentralPort, TempPort: cfg.HermesCentralTempPort, APIKey: cfg.HermesAPIKey,
+			}))
 		}
 		deps.Modules = append(deps.Modules, billing.New(pool, billing.Options{
 			WebhookSecret: cfg.RevenueCatWebhookSecret, AdminToken: cfg.AdminToken, EnforcementEnabled: entitlement.EnforcementEnabled(cfg.BillingEnforcementEnabled),

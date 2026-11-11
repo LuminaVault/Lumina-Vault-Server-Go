@@ -116,6 +116,17 @@ type Config struct {
 	CommunityPostingEnabled string `env:"COMMUNITY_POSTING_ENABLED" envDefault:"true"`
 	AdminToken              string `env:"ADMIN_TOKEN"`
 
+	// hermes.central.* (system module, /v1/system/hermes).
+	HermesCentralContainerName string `env:"HERMES_CENTRAL_CONTAINER_NAME" envDefault:"luminavault-hermes"`
+	HermesCentralRegistryImage string `env:"HERMES_CENTRAL_REGISTRY_IMAGE" envDefault:"ghcr.io/luminavault/luminavault-hermes"`
+	HermesCentralChannelTag    string `env:"HERMES_CENTRAL_CHANNEL_TAG" envDefault:"latest"`
+	HermesCentralTempName      string `env:"HERMES_CENTRAL_TEMP_CONTAINER_NAME" envDefault:"luminavault-hermes-next"`
+	HermesCentralVolumePath    string `env:"HERMES_CENTRAL_VOLUME_PATH" envDefault:"/app/data/hermes"`
+	HermesCentralPort          int    `env:"HERMES_CENTRAL_PORT" envDefault:"8642"`
+	HermesCentralTempPort      int    `env:"HERMES_CENTRAL_TEMP_PORT" envDefault:"8643"`
+	// hermes.perTenant.network, shared with the container manager.
+	HermesCentralNetwork string `env:"HERMES_PER_TENANT_NETWORK" envDefault:"luminavault-hermes-net"`
+
 	// WASM plugin runner and artifact store (marketplace module).
 	PluginRunnerURL          string `env:"PLUGIN_RUNNER_URL" envDefault:"http://plugin-runner:8090"`
 	PluginRunnerToken        string `env:"PLUGIN_RUNNER_TOKEN"`
