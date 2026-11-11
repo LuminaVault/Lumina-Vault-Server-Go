@@ -12,7 +12,7 @@ import (
 
 func j2Names(cfg config.Config, kind embedding.Kind) []string {
 	var names []string
-	for _, j := range j2Jobs(nil, cfg, nil, kind) {
+	for _, j := range j2Jobs(nil, cfg, nil, kind, nil) {
 		names = append(names, j.Name)
 	}
 	slices.Sort(names)
@@ -25,16 +25,18 @@ func TestJ2JobsFollowSwiftStartConditions(t *testing.T) {
 	all := config.Config{
 		LVEnvironment: "production", LearnedDigestEnabled: "true", MeetingBriefEnabled: "true",
 		EmbeddingReembedEnabled: "false", EmbeddingHealEnabled: "true",
+		KnowledgeGraphWorkerEnabled: "TRUE",
 	}
-	want := []string{"EmbeddingReembedService", "LearnedDigestScheduler", "MeetingBriefScheduler"}
+	want := []string{"EmbeddingReembedService", "KnowledgeExtractionWorker", "LearnedDigestScheduler", "MeetingBriefScheduler"}
 	require.Equal(t, want, j2Names(all, embedding.KindOpenRouter))
 
 	all.LVGoJobs = want
-	_, err := jobs.New(all, j2Jobs(nil, all, nil, embedding.KindOpenRouter), jobs.Options{})
+	_, err := jobs.New(all, j2Jobs(nil, all, nil, embedding.KindOpenRouter, nil), jobs.Options{})
 	require.NoError(t, err)
 
 	off := all
 	off.LearnedDigestEnabled, off.MeetingBriefEnabled, off.EmbeddingHealEnabled = "false", "0", "no"
+	off.KnowledgeGraphWorkerEnabled = "1" // Swift compares the string with "true", so "1" is off
 	require.Empty(t, j2Names(off, embedding.KindOpenRouter))
 	garbage := all
 	garbage.LearnedDigestEnabled = "maybe" // reader.bool falls back to the default

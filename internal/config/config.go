@@ -70,6 +70,9 @@ type Config struct {
 	EmbeddingReembedPauseMS        string `env:"EMBEDDING_REEMBED_PAUSE_MILLISECONDS" envDefault:"2000"`
 	EmbeddingHealIntervalMinutes   string `env:"EMBEDDING_HEAL_INTERVAL_MINUTES" envDefault:"10"`
 	EmbeddingHealMaxBackoffMinutes string `env:"EMBEDDING_HEAL_MAX_BACKOFF_MINUTES" envDefault:"60"`
+	// KnowledgeExtractionWorker: Swift compares the lowercased string with "true".
+	KnowledgeGraphWorkerEnabled          string `env:"KNOWLEDGE_GRAPH_WORKER_ENABLED" envDefault:"true"`
+	KnowledgeGraphModelExtractionEnabled string `env:"KNOWLEDGE_GRAPH_MODEL_EXTRACTION_ENABLED" envDefault:"false"`
 	// Shared feed aggregator for the news ticker (news module). Raw strings:
 	// the module splits FEEDS_DEFAULT_FEEDS exactly as Swift does.
 	FeedsBaseURL      string `env:"FEEDS_BASE_URL"`
