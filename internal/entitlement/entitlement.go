@@ -101,6 +101,12 @@ func paywallFor(c Capability) paywall {
 	return paywall{Paywall: true, PaywallID: "default", RequiredTier: "pro"}
 }
 
+// WritePaywall writes EntitlementMiddleware.paywallResponse(for:) as a 402, for
+// handlers that check entitlement themselves (Swift's EntitlementDeniedError).
+func WritePaywall(c *echo.Context, capability Capability) error {
+	return wire.JSON(c, http.StatusPaymentRequired, paywallFor(capability))
+}
+
 // HasUsableCredential answers BYOEntitlementPolicy's "own key" question.
 type HasUsableCredential func(ctx context.Context, tenant uuid.UUID) bool
 

@@ -1,0 +1,8 @@
+# PATCH on a skill with no changes and with only enabled; then list reflects it.
+module: skills
+steps:
+  - {name: empty body new row, as: sk_cy, request: {method: PATCH, path: /v1/skills/capture-enrich, json: {}}, snapshot: [skills_state]}
+  - {name: empty body existing row writes nothing, as: sk_cy, request: {method: PATCH, path: /v1/skills/capture-enrich, json: {}}, snapshot: [skills_state]}
+  - {name: nulls are nothing, as: sk_cy, request: {method: PATCH, path: /v1/skills/capture-enrich, raw: '{"enabled":null,"scheduleOverride":null,"apnsCategory":null}'}}
+  - {name: enabled only, as: sk_cy, request: {method: PATCH, path: /v1/skills/capture-enrich, json: {enabled: false}}, snapshot: [skills_state]}
+  - {name: list after, as: sk_cy, request: {method: GET, path: /v1/skills}}

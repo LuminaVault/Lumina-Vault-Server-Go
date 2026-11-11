@@ -1,0 +1,10 @@
+# GET /v1/skills: built-ins merged with skills_state, today's run counts, the tier's
+# daily cap, and mirrored Hermes skills. One user per tier for dailyRunCap.
+module: skills
+steps:
+  - {name: no token, request: {method: GET, path: /v1/skills}}
+  - {name: bad token, request: {method: GET, path: /v1/skills, headers: {Authorization: Bearer not.a.jwt}}}
+  - {name: trial with state and mirror, as: sk_ann, request: {method: GET, path: /v1/skills}}
+  - {name: pro, as: sk_ben, request: {method: GET, path: /v1/skills}}
+  - {name: ultimate, as: sk_cy, request: {method: GET, path: /v1/skills}}
+  - {name: lapsed, as: sk_fay, request: {method: GET, path: /v1/skills}}
