@@ -60,6 +60,9 @@ type Config struct {
 	GoogleCalendarClientSecret string  `env:"OAUTH_GOOGLE_CALENDAR_CLIENT_SECRET"`
 	GoogleCalendarRedirectURI  string  `env:"OAUTH_GOOGLE_CALENDAR_REDIRECT_URI"`
 	MeetingBriefMaxDistance    float64 `env:"MEETING_BRIEF_MAX_DISTANCE" envDefault:"0.4"`
+	// J2 job switches, raw: read as Swift's reader.bool(default: true).
+	LearnedDigestEnabled string `env:"LEARNED_DIGEST_ENABLED" envDefault:"true"`
+	MeetingBriefEnabled  string `env:"MEETING_BRIEF_ENABLED" envDefault:"true"`
 	// Shared feed aggregator for the news ticker (news module). Raw strings:
 	// the module splits FEEDS_DEFAULT_FEEDS exactly as Swift does.
 	FeedsBaseURL      string `env:"FEEDS_BASE_URL"`
