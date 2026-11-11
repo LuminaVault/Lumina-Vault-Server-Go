@@ -1,0 +1,16 @@
+# PUT /v1/admin/users/:userID/tier-override (Admin/BillingAdminController.swift),
+# behind X-Admin-Token. Billing's route under the admin prefix.
+module: billing
+steps:
+  - {name: no admin token, request: {method: PUT, path: /v1/admin/users/B1110000-0000-4000-8000-0000000000A8/tier-override, json: {tierOverride: pro}}}
+  - {name: wrong admin token, request: {method: PUT, path: /v1/admin/users/B1110000-0000-4000-8000-0000000000A8/tier-override, headers: {X-Admin-Token: wrong}, json: {tierOverride: pro}}}
+  - {name: bad user id, request: {method: PUT, path: /v1/admin/users/nope/tier-override, headers: {X-Admin-Token: parity-admin-token}, json: {tierOverride: pro}}}
+  - {name: invalid enum, request: {method: PUT, path: /v1/admin/users/B1110000-0000-4000-8000-0000000000A8/tier-override, headers: {X-Admin-Token: parity-admin-token}, json: {tierOverride: godmode}}}
+  - {name: missing field, request: {method: PUT, path: /v1/admin/users/B1110000-0000-4000-8000-0000000000A8/tier-override, headers: {X-Admin-Token: parity-admin-token}, json: {}}}
+  - {name: unknown user, request: {method: PUT, path: /v1/admin/users/B1110000-0000-4000-8000-0000000000FF/tier-override, headers: {X-Admin-Token: parity-admin-token}, json: {tierOverride: pro}}}
+  - name: grant ultimate
+    request: {method: PUT, path: /v1/admin/users/b1110000-0000-4000-8000-0000000000a8/tier-override, headers: {X-Admin-Token: parity-admin-token}, json: {tierOverride: ultimate}}
+    snapshot: [parity_bl_users]
+  - name: a user with an expiry
+    request: {method: PUT, path: /v1/admin/users/B1110000-0000-4000-8000-0000000000F6/tier-override, headers: {X-Admin-Token: parity-admin-token}, json: {tierOverride: none}}
+    snapshot: [parity_bl_users]
