@@ -11,7 +11,6 @@ import (
 	"io"
 	"log/slog"
 	"lumina/internal/achievementsink"
-	"lumina/internal/apns"
 	"lumina/internal/auth"
 	"lumina/internal/capture"
 	"lumina/internal/entitlement"
@@ -48,9 +47,14 @@ type Options struct {
 	Chat          llm.ChatService
 	Enrichment    *capture.EnrichmentService // ChatURLPreEnricher; nil disables it
 	Usage         *usagemeter.Meter
-	Push          *apns.Service
+	Push          Pusher
 	Achievements  *achievementsink.Sink
 	Latches       *onboardlatch.Latches
+}
+
+// Pusher is the APNs side effect, apns.Service in production.
+type Pusher interface {
+	NotifyLLMReply(ctx context.Context, tenant uuid.UUID, username, content string) error
 }
 
 // Module is the route.
@@ -85,13 +89,31 @@ func (m *Module) Register(r httpserver.Router, _ echo.MiddlewareFunc) {
 
 // chatRequest is LuminaVaultShared's ChatRequest; stream defaults to false.
 type chatRequest struct {
-	Messages    []llm.CompletionMessage `json:"messages"`
-	Model       *string                 `json:"model,omitempty"`
-	Temperature *float64                `json:"temperature,omitempty"`
-	Stream      *bool                   `json:"stream,omitempty"`
-	Tools       *[]llm.ChatTool         `json:"tools,omitempty"`
-	ToolChoice  json.RawMessage         `json:"tool_choice,omitempty"`
-	SessionID   *string                 `json:"session_id,omitempty"`
+	Messages    []chatMessage   `json:"messages"`
+	Model       *string         `json:"model,omitempty"`
+	Temperature *float64        `json:"temperature,omitempty"`
+	Stream      *bool           `json:"stream,omitempty"`
+	Tools       *[]llm.ChatTool `json:"tools,omitempty"`
+	ToolChoice  json.RawMessage `json:"tool_choice,omitempty"`
+	SessionID   *string         `json:"session_id,omitempty"`
+}
+
+// chatMessage is LuminaVaultShared's ChatMessage: tool_calls may be absent or null.
+type chatMessage struct {
+	Role      string              `json:"role"`
+	Content   string              `json:"content"`
+	ToolCalls *[]llm.ChatToolCall `json:"tool_calls,omitempty"`
+}
+
+func completionMessages(in []chatMessage) []llm.CompletionMessage {
+	out := make([]llm.CompletionMessage, len(in))
+	for i, m := range in {
+		out[i] = llm.CompletionMessage{Role: m.Role, Content: m.Content}
+		if m.ToolCalls != nil {
+			out[i].ToolCalls = *m.ToolCalls
+		}
+	}
+	return out
 }
 
 type userRow struct {
@@ -126,9 +148,10 @@ func (m *Module) chat(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
+	messages := completionMessages(body.Messages)
 	skip, _ := wire.HeaderValue(c.Request(), "X-Skip-URL-Enrichment")
 	if strings.ToLower(skip) != "true" && m.opts.Enrichment != nil {
-		body.Messages = m.enrich(base, body.Messages)
+		messages = m.enrich(base, messages)
 	}
 	degraded := false
 	if m.opts.Usage != nil {
@@ -142,7 +165,7 @@ func (m *Module) chat(c *echo.Context) error {
 			return &llm.UsageCapExceededError{RetryAfter: decision.RetryAfter}
 		}
 	}
-	req := llm.CompletionRequest{Messages: body.Messages, Temperature: body.Temperature, ToolChoice: body.ToolChoice}
+	req := llm.CompletionRequest{Messages: messages, Temperature: body.Temperature, ToolChoice: body.ToolChoice}
 	if body.Model != nil {
 		req.Model = *body.Model
 	}
@@ -150,9 +173,9 @@ func (m *Module) chat(c *echo.Context) error {
 		req.Tools = *body.Tools
 	}
 	latest := ""
-	for i := len(body.Messages) - 1; i >= 0; i-- {
-		if body.Messages[i].Role == "user" {
-			latest = body.Messages[i].Content
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].Role == "user" {
+			latest = messages[i].Content
 			break
 		}
 	}
@@ -173,14 +196,8 @@ func (m *Module) chat(c *echo.Context) error {
 		}
 		return err
 	}
-	// Push delivery is best effort and never blocks the reply.
 	if m.opts.Push != nil {
-		content, username := resp.Message.Content, user.username
-		go func() {
-			if err := m.opts.Push.NotifyLLMReply(context.Background(), actor, username, content); err != nil {
-				m.log.Warn("push notify failed", "error", err)
-			}
-		}()
+		m.dispatchPush(actor, user.username, resp.Message.Content)
 	}
 	if m.opts.Achievements != nil {
 		m.opts.Achievements.Enqueue(actor, achievements.EventChatCompleted)
@@ -192,6 +209,21 @@ func (m *Module) chat(c *echo.Context) error {
 		c.Response().Header().Set("X-LuminaVault-Degraded", "true")
 	}
 	return wire.JSON(c, http.StatusOK, resp)
+}
+
+// dispatchPush is LLMController's detached push: best effort, never blocking the reply.
+// A cancellation is silent; any other failure is logged. The channel closes when the
+// attempt is over.
+func (m *Module) dispatchPush(tenant uuid.UUID, username, content string) <-chan struct{} {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		err := m.opts.Push.NotifyLLMReply(context.Background(), tenant, username, content)
+		if err != nil && !errors.Is(err, context.Canceled) {
+			m.log.Warn("llm.chat push notify failed", "tenant", tenant, "error", err)
+		}
+	}()
+	return done
 }
 
 // MARK: - ChatURLPreEnricher
