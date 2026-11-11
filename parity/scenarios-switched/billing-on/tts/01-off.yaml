@@ -1,0 +1,6 @@
+# Still not mounted.
+module: tts
+steps:
+  - name: "not mounted"
+    as: vb_trial
+    request: {"method": "POST", "path": "/v1/tts", "json": {"text": "hello"}}

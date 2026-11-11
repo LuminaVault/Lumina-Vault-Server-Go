@@ -262,7 +262,7 @@ modules:
   llm-voice:
     wave: 5
     swiftDir: Sources/App/LLM
-    status: swift
+    status: parity
     prefixes: [/v1/audio, /v1/transcribe]
     jobs: []
   mcp:
@@ -292,7 +292,7 @@ modules:
   tts:
     wave: 5
     swiftDir: Sources/App/TTS
-    status: swift
+    status: parity
     prefixes: [/v1/tts]
     jobs: []
   ws:

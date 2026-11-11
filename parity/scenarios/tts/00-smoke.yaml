@@ -1,0 +1,12 @@
+# TTS_BASE_URL unset and no LLM_PROVIDER_OPENAI_API_KEY: the route isn't there on either server.
+module: tts
+smoke: true
+steps:
+  - name: "not mounted"
+    as: alice
+    request: {"method": "POST", "path": "/v1/tts", "json": {"text": "hello"}}
+  - name: "not mounted, no token"
+    request: {"method": "POST", "path": "/v1/tts", "json": {"text": "hello"}}
+  - name: "not mounted, get"
+    as: alice
+    request: {"method": "GET", "path": "/v1/tts"}

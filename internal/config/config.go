@@ -2,7 +2,7 @@
 // variables the Swift server reads, so the sealed api-env-* secrets and the
 // infra values files serve both images unchanged. Every env tag here must be
 // KeyToEnv of a key in docs/migration/config-keys.txt (enforced by a test);
-// LV_GO_JOBS is the one Go-only name.
+// LV_GO_JOBS and TTS_BASE_URL are the only Go-only names.
 package config
 
 import (
@@ -68,6 +68,22 @@ type Config struct {
 	// Image embeddings (vision module): vision.embed.*. The sealed api-env spells the
 	// key VISION_EMBED_PROVIDER_COHERE_APIKEY. Swift's encoder reads only _API_KEY, and
 	// so does Go: until someone seals that name, both answer 503 (see cutover-log).
+	// Speech to text (internal/modules/voice). An empty base URL means the in-cluster
+	// whisper; there is deliberately no default here, so the URL lives in one place.
+	TranscribeProvider            string  `env:"TRANSCRIBE_PROVIDER" envDefault:"openai_compatible"`
+	TranscribeOpenAIBaseURL       string  `env:"TRANSCRIBE_PROVIDER_OPENAI_BASE_URL"`
+	TranscribeOpenAIAPIKey        string  `env:"TRANSCRIBE_PROVIDER_OPENAI_API_KEY"`
+	TranscribeOpenAIModel         string  `env:"TRANSCRIBE_PROVIDER_OPENAI_MODEL"`
+	TranscribeOpenAIMtokPerSecond float64 `env:"TRANSCRIBE_RATECARD_OPENAI_MTOK_PER_SECOND"`
+	TranscribeOpenAIImputedPerMin float64 `env:"TRANSCRIBE_RATECARD_OPENAI_IMPUTED_USD_PER_AUDIO_MINUTE"`
+	TranscribeStubText            string  `env:"TRANSCRIBE_STUB_TEXT" envDefault:"stub transcript"`
+	TranscribeStubLanguage        string  `env:"TRANSCRIBE_STUB_LANGUAGE" envDefault:"en"`
+	TranscribeStubConfidence      float64 `env:"TRANSCRIBE_STUB_CONFIDENCE" envDefault:"0.95"`
+	TranscribeStubDurationSeconds float64 `env:"TRANSCRIBE_STUB_DURATION_SECONDS" envDefault:"30"`
+	// TTSBaseURL is Go-only and turns /v1/tts on: a self-hosted, OpenAI-shaped speech
+	// service, base URL with its version prefix. See cmd/App/main.go.
+	TTSBaseURL                     string  `env:"TTS_BASE_URL"`
+	TTSDefaultModel                string  `env:"TTS_DEFAULT_MODEL" envDefault:"tts-1"`
 	VisionEmbedProvider            string  `env:"VISION_EMBED_PROVIDER" envDefault:"cohere"`
 	VisionEmbedProviderCohereKey   string  `env:"VISION_EMBED_PROVIDER_COHERE_API_KEY"`
 	VisionEmbedProviderCohereURL   string  `env:"VISION_EMBED_PROVIDER_COHERE_BASE_URL" envDefault:"https://api.cohere.com"`
