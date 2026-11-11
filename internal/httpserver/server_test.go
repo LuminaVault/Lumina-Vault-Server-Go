@@ -231,3 +231,16 @@ func TestErrorBodiesMatchGolden(t *testing.T) {
 		}
 	}
 }
+
+// KB/LegacyCompileAliasTests.swift: both legacy paths are 308s to memory-compile, no auth.
+func TestLegacyCompileAliasRedirects(t *testing.T) {
+	for _, tc := range []struct{ method, path, to string }{
+		{http.MethodPost, "/v1/kb-compile", "/v1/memory-compile"},
+		{http.MethodGet, "/v1/kb-compile/pending", "/v1/memory-compile/pending"},
+	} {
+		rec := do(t, newTestServer(), httptest.NewRequest(tc.method, tc.path, nil))
+		if rec.Code != http.StatusPermanentRedirect || rec.Header().Get("Location") != tc.to {
+			t.Fatalf("%s %s: %d %q", tc.method, tc.path, rec.Code, rec.Header().Get("Location"))
+		}
+	}
+}
