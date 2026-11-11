@@ -39,6 +39,7 @@ var (
 
 type Module struct {
 	q         *db.Queries
+	consent   *ConsentReader
 	embedder  embedding.Service
 	analytics *posthog.Client
 	devices   *devicerpc.Broker
@@ -57,7 +58,7 @@ type Options struct {
 }
 
 func New(pool *pgxpool.Pool, opts Options) *Module {
-	return &Module{q: db.New(pool), embedder: opts.Embedder, analytics: opts.Analytics, devices: opts.Devices, now: time.Now}
+	return &Module{q: db.New(pool), consent: NewConsentReader(pool), embedder: opts.Embedder, analytics: opts.Analytics, devices: opts.Devices, now: time.Now}
 }
 
 func (m *Module) Register(r httpserver.Router, authMW echo.MiddlewareFunc) {
@@ -138,11 +139,7 @@ func (m *Module) snapshot(ctx context.Context, tenant uuid.UUID) (AppleConsentRe
 
 // isAllowed is AppleConsentController.isAllowed: fails closed on any error.
 func (m *Module) isAllowed(ctx context.Context, tenant uuid.UUID, d domain) (allowed, writes bool) {
-	row, err := m.q.ConsentFor(ctx, db.ConsentForParams{TenantID: tenant, Domain: string(d)})
-	if err != nil {
-		return false, false
-	}
-	return row.Allowed, row.AllowWrites
+	return m.consent.IsAllowed(ctx, tenant, string(d))
 }
 
 func (m *Module) purgeDomain(ctx context.Context, tenant uuid.UUID, d domain) error {

@@ -8,6 +8,8 @@ import (
 	"lumina/internal/embedding"
 	"lumina/internal/memorystore"
 	"lumina/internal/migrations"
+	"lumina/internal/modules/apple"
+	"lumina/internal/modules/reminders"
 	"lumina/internal/soul"
 	"lumina/internal/swiftstr"
 	"lumina/internal/vaultaccess"
@@ -50,6 +52,8 @@ func newRig(t *testing.T) rig {
 		Soul:       soul.New(paths, t.TempDir()),
 		Paths:      paths,
 		Store:      NewStore(pool),
+		Reminders:  reminders.NewStore(pool),
+		Consent:    apple.NewConsentReader(pool),
 	}}
 }
 

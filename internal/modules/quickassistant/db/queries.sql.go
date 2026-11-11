@@ -63,6 +63,53 @@ func (q *Queries) BrowseFiles(ctx context.Context, arg BrowseFilesParams) ([]Bro
 	return items, nil
 }
 
+const calendarWindow = `-- name: CalendarWindow :many
+SELECT title, starts_at, ends_at, location
+FROM calendar_events
+WHERE tenant_id = $1
+  AND status <> 'cancelled'
+  AND starts_at >= NOW()
+  AND starts_at < NOW() + ($2::int * INTERVAL '1 day')
+ORDER BY starts_at ASC
+`
+
+type CalendarWindowParams struct {
+	TenantID uuid.UUID
+	Days     int32
+}
+
+type CalendarWindowRow struct {
+	Title    string
+	StartsAt time.Time
+	EndsAt   time.Time
+	Location *string
+}
+
+func (q *Queries) CalendarWindow(ctx context.Context, arg CalendarWindowParams) ([]CalendarWindowRow, error) {
+	rows, err := q.db.Query(ctx, calendarWindow, arg.TenantID, arg.Days)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CalendarWindowRow
+	for rows.Next() {
+		var i CalendarWindowRow
+		if err := rows.Scan(
+			&i.Title,
+			&i.StartsAt,
+			&i.EndsAt,
+			&i.Location,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const cancelPendingAction = `-- name: CancelPendingAction :one
 UPDATE assistant_pending_actions SET status = 'cancelled', args = '{}'::jsonb, summary = ''
 WHERE id = $1 AND tenant_id = $2 AND status = 'pending'
@@ -217,6 +264,61 @@ func (q *Queries) FileAtPath(ctx context.Context, arg FileAtPathParams) (string,
 	return path, err
 }
 
+const healthDaily = `-- name: HealthDaily :many
+
+SELECT event_type, unit, date_trunc('day', recorded_at)::timestamptz AS day,
+       COALESCE(SUM(value_numeric), 0)::float8 AS total,
+       COALESCE(AVG(value_numeric), 0)::float8 AS avg
+FROM health_events
+WHERE tenant_id = $1
+  AND ($2::text IS NULL OR event_type = $2::text)
+  AND recorded_at >= NOW() - ($3::int * INTERVAL '1 day')
+GROUP BY event_type, unit, day ORDER BY day
+`
+
+type HealthDailyParams struct {
+	TenantID uuid.UUID
+	Metric   *string
+	Days     int32
+}
+
+type HealthDailyRow struct {
+	EventType string
+	Unit      *string
+	Day       time.Time
+	Total     float64
+	Avg       float64
+}
+
+// Personal reads (Swift: PersonalDataTools.swift), always on the actor's own
+// account.
+// Daily aggregates; Swift reads a missing sum or average as 0.
+func (q *Queries) HealthDaily(ctx context.Context, arg HealthDailyParams) ([]HealthDailyRow, error) {
+	rows, err := q.db.Query(ctx, healthDaily, arg.TenantID, arg.Metric, arg.Days)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []HealthDailyRow
+	for rows.Next() {
+		var i HealthDailyRow
+		if err := rows.Scan(
+			&i.EventType,
+			&i.Unit,
+			&i.Day,
+			&i.Total,
+			&i.Avg,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const insertPendingAction = `-- name: InsertPendingAction :exec
 
 INSERT INTO assistant_pending_actions
@@ -260,6 +362,45 @@ WHERE id = $1 AND status = 'confirmed'
 func (q *Queries) MarkPendingActionFailed(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, markPendingActionFailed, id)
 	return err
+}
+
+const openAppleReminders = `-- name: OpenAppleReminders :many
+SELECT title, due_at, notes
+FROM apple_reminders
+WHERE tenant_id = $1 AND completed = false
+ORDER BY due_at ASC NULLS LAST
+LIMIT $2
+`
+
+type OpenAppleRemindersParams struct {
+	TenantID uuid.UUID
+	Limit    int32
+}
+
+type OpenAppleRemindersRow struct {
+	Title string
+	DueAt *time.Time
+	Notes *string
+}
+
+func (q *Queries) OpenAppleReminders(ctx context.Context, arg OpenAppleRemindersParams) ([]OpenAppleRemindersRow, error) {
+	rows, err := q.db.Query(ctx, openAppleReminders, arg.TenantID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []OpenAppleRemindersRow
+	for rows.Next() {
+		var i OpenAppleRemindersRow
+		if err := rows.Scan(&i.Title, &i.DueAt, &i.Notes); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const pendingActionStatus = `-- name: PendingActionStatus :one

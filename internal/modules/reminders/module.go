@@ -39,6 +39,7 @@ var (
 
 type Module struct {
 	q          *db.Queries
+	store      *Store
 	classifier Classifier
 	now        func() time.Time
 }
@@ -49,7 +50,7 @@ func New(pool *pgxpool.Pool, transport ChatTransport, model string) *Module {
 	if transport == nil {
 		transport = UnavailableTransport{}
 	}
-	return &Module{q: db.New(pool), classifier: Classifier{Transport: transport, Model: model}, now: time.Now}
+	return &Module{q: db.New(pool), store: NewStore(pool), classifier: Classifier{Transport: transport, Model: model}, now: time.Now}
 }
 
 func (m *Module) Register(r httpserver.Router, authMW echo.MiddlewareFunc) {
@@ -109,24 +110,9 @@ func (m *Module) create(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	title := strings.TrimSpace(body.Title)
-	if title == "" {
-		return errTitleReq
-	}
-	if err := validateCron(body.RecurrenceCron); err != nil {
-		return err
-	}
 	// recurrenceCron is stored as sent: "" is valid and kept as "" on create
 	// (only PATCH maps "" to nil), as in Swift.
-	r, err := m.q.CreateReminder(c.Request().Context(), db.CreateReminderParams{
-		ID:             uuid.New(),
-		TenantID:       auth.UserID(c),
-		Title:          title,
-		Body:           body.Body,
-		FireAt:         body.FireAt.Time,
-		RecurrenceCron: body.RecurrenceCron,
-		CreatedAt:      m.now(),
-	})
+	r, err := m.store.Create(c.Request().Context(), auth.UserID(c), body.Title, body.Body, body.FireAt.Time, body.RecurrenceCron)
 	if err != nil {
 		return err
 	}

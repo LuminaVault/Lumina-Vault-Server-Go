@@ -81,3 +81,33 @@ LIMIT $2;
 SELECT path FROM vault_files
 WHERE tenant_id = $1 AND path = $2
 LIMIT 1;
+
+-- Personal reads (Swift: PersonalDataTools.swift), always on the actor's own
+-- account.
+
+-- name: HealthDaily :many
+-- Daily aggregates; Swift reads a missing sum or average as 0.
+SELECT event_type, unit, date_trunc('day', recorded_at)::timestamptz AS day,
+       COALESCE(SUM(value_numeric), 0)::float8 AS total,
+       COALESCE(AVG(value_numeric), 0)::float8 AS avg
+FROM health_events
+WHERE tenant_id = sqlc.arg(tenant_id)
+  AND (sqlc.narg(metric)::text IS NULL OR event_type = sqlc.narg(metric)::text)
+  AND recorded_at >= NOW() - (sqlc.arg(days)::int * INTERVAL '1 day')
+GROUP BY event_type, unit, day ORDER BY day;
+
+-- name: CalendarWindow :many
+SELECT title, starts_at, ends_at, location
+FROM calendar_events
+WHERE tenant_id = sqlc.arg(tenant_id)
+  AND status <> 'cancelled'
+  AND starts_at >= NOW()
+  AND starts_at < NOW() + (sqlc.arg(days)::int * INTERVAL '1 day')
+ORDER BY starts_at ASC;
+
+-- name: OpenAppleReminders :many
+SELECT title, due_at, notes
+FROM apple_reminders
+WHERE tenant_id = $1 AND completed = false
+ORDER BY due_at ASC NULLS LAST
+LIMIT $2;

@@ -8,9 +8,12 @@ import (
 	"fmt"
 	"log/slog"
 	"lumina/internal/chunkindex"
+	"lumina/internal/devicerpc"
 	"lumina/internal/embedding"
 	"lumina/internal/ids"
 	"lumina/internal/memorystore"
+	"lumina/internal/modules/apple"
+	"lumina/internal/modules/reminders"
 	"lumina/internal/soul"
 	"lumina/internal/swiftstr"
 	"lumina/internal/vaultaccess"
@@ -64,7 +67,19 @@ type Deps struct {
 	Embeddings embedding.Service
 	Soul       *soul.Service
 	Paths      vaultpaths.Paths
-	Store      *Store
+	Reminders  *reminders.Store
+	Consent    *apple.ConsentReader
+	// Devices reaches the user's phone. Nil until P5 (Decision 3, ruling 61):
+	// calendar_create is not offered, the Apple Reminders mirror is skipped
+	// and a device read answers offline at once.
+	Devices DeviceRequester
+	Store   *Store
+}
+
+// DeviceRequester sends one command to the tenant's phone and waits for its
+// result. *devicerpc.Broker satisfies it.
+type DeviceRequester interface {
+	Request(ctx context.Context, tenant uuid.UUID, cmd devicerpc.Command) (devicerpc.Result, error)
 }
 
 // TurnState is what one turn has done so far: whether a personal tool ran,
@@ -200,9 +215,16 @@ func (r *Runner) dispatch(ctx context.Context, tool Tool, args map[string]any, p
 		return r.openScreen(args)
 	case "memory_save":
 		return r.saveMemory(ctx, args, personalRanBefore)
+	case "app_reminder_create", "app_reminders_list":
+		return r.personal(ctx, tool.Name, args)
 	}
-	if tool.Writes || tool.Personal {
+	// calendar_create and memory_forget are confirm tools; until they are
+	// proposed here (Task 10), a write that reaches this point does not run.
+	if tool.Writes {
 		return modelOnly(notAvailable), nil
+	}
+	if tool.Personal {
+		return r.personal(ctx, tool.Name, args)
 	}
 	access, err := r.Access.ResolveVault(ctx, r.Actor, r.Vault, vaultaccess.Read)
 	if err != nil {
@@ -226,7 +248,9 @@ func (r *Runner) definition(name string) (Tool, bool) {
 	return Tool{}, false
 }
 
-func (r *Runner) definitionOptions() DefinitionOptions { return DefinitionOptions{} }
+func (r *Runner) definitionOptions() DefinitionOptions {
+	return DefinitionOptions{DeviceWrites: r.Devices != nil}
+}
 
 // unknownArgument is MCPToolGate.unknownArgument: the first argument, in
 // sorted order, that the tool's schema does not name.
