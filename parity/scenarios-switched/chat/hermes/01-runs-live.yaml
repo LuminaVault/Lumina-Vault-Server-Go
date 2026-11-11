@@ -22,8 +22,11 @@ steps:
     as: hr_cy
     ignore: ["$.hermesRunID"]
     request: {method: GET, path: "/v1/hermes/runs/{{done}}"}
+  # The marker embeds the run's id mid-string, which no placeholder masks; the
+  # snapshot still compares the rows.
   - name: the answer landed in the conversation
     as: hr_cy
+    ignore: ["$.messages[0].content"]
     request: {method: GET, path: /v1/conversations/E6C00000-0000-4000-8000-0000000002C1}
     snapshot: [conversation_messages]
 
