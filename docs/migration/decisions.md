@@ -633,3 +633,50 @@ Each PR's body has the full list. Recorded here: what later waves need, and what
 - `vision-cohere` failed once on #39 attempt 1 (`parity_vision_usage$[1].mtok_in` 3 vs 2) and passed on rerun.
   Suspected fire-and-forget goroutine; not proven.
 - One local `modules/profiles` failure is unexplained.
+
+## D-owner-2026-11-11: owner answered "all recommended"
+
+Asked on 2026-11-05 (16 questions) and 2026-11-11 (decisions raised by the wave 5, J1 and wave 6 prep PRs).
+The owner replied "all recommended" on 2026-11-11. Each line is the recommendation that now stands.
+
+**Wave 5 shape**
+
+1. Chat escalation: option A, the bridge. 5C ports with it; 6C runs order with 5C (B12).
+2. `hermes-stub` on staging: yes. An infra PR adds it; staging is never pointed at production Hermes.
+3. `coder/websocket`: yes. P5 (`internal/ws`, `internal/devicerpc`) uses it, then 5F, 5J, then 5E.
+4. Jobs with no Swift flag (`CronScheduler`, `LegacyJobWorkflowMigrator`, `HermesRunsService`, `ReminderScheduler`,
+   `CalendarSyncWorker`) move at Swift replicas 0 (O4).
+
+**Security and data fixes, made in Go now** (each is a deliberate difference from Swift, pinned by a test and named in
+the cutover log)
+
+5. SSRF: outbound fetches go through `internal/ssrfguard`, including BYOK base URLs (5A had none).
+6. `internal/vaultfiles`: refuse symlink escapes and `link/../nope.md` (the `TestSwiftWeakness*` cases). Snapshot
+   restore paths in self-improvement go through the same checks.
+7. Storage quota: enforced.
+8. `/v1/memory/graph`: disclosure scrub.
+9. Share-sheet note deletion: fixed.
+- `skills_state`: a save touches only its own row, not every row of the tenant.
+
+**Product and operations**
+
+10. A production test account for smokes: yes, and the owner tries the app on a phone.
+11. Vision stays off.
+12. `/v1/tts` mounts only with a self-hosted `TTS_BASE_URL`; the web speak button is hidden.
+13. Docker-backed routes (O1): port the routes and wire, with a signed waiver for what can't run in a pod with no docker.
+    The owner runs the `kubectl exec` docker check before 6D/6E/6F/7C flip.
+14. Pruning, scoring, retention: ported, off (O3). Turning pruning on is a separate decision.
+15. Skills-cron in wave 6; `/v1/ws` bundled with a Swift restart; ParallelExecutor unported; `bootstrap-admin` ported and
+    backfills retired (O5); `go-webauthn` (O6); 7-day soak (O7); dashboard hold dropped if `cronJobs` is always `[]` (O8);
+    reminder classifier through `internal/llm` (O9).
+16. Infra merges stay the owner's (O10). Go repo PRs merge when fully green.
+
+**From the PRs**
+
+- 5A: `FixDashboard` on (Swift's `/v1/router/dashboard` 500 is a bug); `ParallelExecutorTests` waived; `photon` added
+  to the spec's `HermesGatewayID`.
+- 5B: the `TTS_BASE_URL` gate stands (item 12).
+- P1: mid-stream connection errors classify as `upstream_unreachable`.
+- 5H: spec follows Swift (`/runs` limit default 50, `curator/runs` body optional).
+- J1: Swift's leak-report flag name is checked against the D-keys rule before it is switched off.
+- Wave 6 prep: Go keeps `service.instance.id = hostname`.
