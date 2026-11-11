@@ -53,9 +53,9 @@ func (s *ReminderScheduler) logger() *slog.Logger {
 }
 
 type dueReminder struct {
-	id, tenant            uuid.UUID
-	title, body           string
-	recurrenceCron        *string
+	id, tenant     uuid.UUID
+	title, body    string
+	recurrenceCron *string
 }
 
 // Tick is ReminderScheduler.tick(at:): fires every due reminder and returns how

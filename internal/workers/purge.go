@@ -248,12 +248,15 @@ func modificationTime(path string) *time.Time {
 }
 
 func readNames(dir string) ([]string, error) {
-	f, err := os.Open(dir)
+	f, err := os.Open(dir) //nolint:gosec // a purge root or a directory found under one, never request input
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
-	return f.Readdirnames(-1)
+	names, err := f.Readdirnames(-1)
+	if closeErr := f.Close(); err == nil {
+		err = closeErr
+	}
+	return names, err
 }
 
 // removeError is FilesystemEntry.RemoveError.
