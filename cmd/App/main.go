@@ -234,6 +234,7 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		)
 		deps.Modules = append(deps.Modules, memoryModule(pool, cfg, box, identify, limits, paths, embeddings, sink, meModule))
 		deps.Modules = append(deps.Modules, selfImprovementModule(pool, cfg, box, identify, paths))
+		deps.Modules = append(deps.Modules, soulModule(pool, cfg, box, identify, limits, paths, sink))
 		// Wave 4: knowledge, vision and the compile probe. /v1/vision spends a platform
 		// key, so it has its own gate. Both groups read billing.enforcementEnabled.
 		enforcement := entitlement.EnforcementEnabled(cfg.BillingEnforcementEnabled)

@@ -1,0 +1,17 @@
+# A tenant on its own Hermes can't write SOUL.md: assertWritableSoul answers 409 on put, compose
+# and delete. Put checks before decoding the body, compose after, and a dry run is allowed.
+# HermesRemoteCapabilitiesService.isUserOverride comes from the resolver; a failed resolution
+# (soul_priv's private address) counts as managed.
+module: soul
+steps:
+  - {name: read still answers, as: soul_byo, request: {method: GET, path: /v1/soul}, ignore: ["$.markdown"]}
+  - {name: put conflicts, as: soul_byo, request: {method: PUT, path: /v1/soul, json: {markdown: mine}}}
+  - {name: put conflicts before decoding, as: soul_byo, request: {method: PUT, path: /v1/soul, raw: "not json", headers: {Content-Type: application/json}}}
+  - {name: compose conflicts, as: soul_byo, request: {method: POST, path: /v1/soul/compose, json: {agent_name: X}}}
+  - {name: compose with dry run false conflicts, as: soul_byo, request: {method: POST, path: /v1/soul/compose, json: {dry_run: false}}}
+  - {name: compose decodes first, as: soul_byo, request: {method: POST, path: /v1/soul/compose, json: {tone: loud}}}
+  - {name: dry run is allowed, as: soul_byo, request: {method: POST, path: /v1/soul/compose, json: {agent_name: X, dry_run: true}}, ignore: ["$.markdown"]}
+  - {name: delete conflicts, as: soul_byo, request: {method: DELETE, path: /v1/soul}, files: [soul_byo]}
+  - {name: failed resolution is managed, as: soul_priv, request: {method: PUT, path: /v1/soul, json: {markdown: "# Managed\n"}}, files: [soul_priv]}
+  - {name: compose on failed resolution, as: soul_priv, request: {method: POST, path: /v1/soul/compose, json: {agent_name: Priv}}, ignore: ["$.markdown"], files: [soul_priv], filesNormalizeContent: true}
+  - {name: delete on failed resolution, as: soul_priv, request: {method: DELETE, path: /v1/soul}, files: [soul_priv], filesNormalizeContent: true}
