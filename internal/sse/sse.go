@@ -11,6 +11,7 @@ package sse
 
 import (
 	"context"
+	"io"
 	"log/slog"
 	"lumina/internal/wire"
 	"net/http"
@@ -28,13 +29,17 @@ const (
 	ingestionEventName = "ingestion"
 	ingestionInterval  = 2 * time.Second
 	ingestionMaxPolls  = 360
+
+	maxDrainedBody = 2 << 20
 )
 
 // Event is one frame. Data is marshalled as Foundation's JSONEncoder writes it:
 // compact, keys in struct order, no HTML escaping, "/" escaped as "\/". Dates in
-// it should be wire.Time, which matches .iso8601.
+// it should be wire.Time, which matches .iso8601. Name, when set, replaces
+// Options.EventName for this frame.
 type Event struct {
 	ID   int64
+	Name string
 	Data any
 }
 
@@ -49,9 +54,22 @@ type Source interface {
 
 // Options describe a stream. Ingestion returns the ones Swift uses.
 type Options struct {
+	// EventName names frames whose Event has no Name.
 	EventName string
 	Interval  time.Duration
-	MaxPolls  int
+	// MaxPolls caps the rounds. Zero means no cap: the stream ends only when the
+	// source is terminal or the client goes away.
+	MaxPolls int
+	// Heartbeat is the comment written after an empty round. Empty means
+	// ": heartbeat\n\n".
+	Heartbeat string
+	// UntilDrained ends a terminal source only on an empty round, and polls again
+	// straight after a round that had events. Otherwise the first terminal check
+	// ends the stream, and every round waits Interval.
+	UntilDrained bool
+	// FinishOnError ends the stream normally on a poll or encoding failure, where
+	// the default aborts the connection.
+	FinishOnError bool
 }
 
 // Ingestion is IngestionSSEResponse: 360 polls, 2 s apart, so 12 minutes.
@@ -66,24 +84,44 @@ func Ingestion() Options {
 //
 // A poll or encoding failure aborts the connection instead of ending the stream
 // cleanly, because in Swift a throw from the body writer does the same. A client
-// can then tell "the server failed" from "the stream is finished".
+// can then tell "the server failed" from "the stream is finished". FinishOnError
+// is for the Swift stream that catches its own failures.
 func Serve(c *echo.Context, src Source, after int64, opts Options) error {
+	drainBody(c.Request())
 	w, rc, ok := start(c)
 	if !ok {
 		return nil
 	}
 
 	ctx := c.Request().Context()
-	cursor := after
-	for range opts.MaxPolls {
-		events, err := src.Events(ctx, cursor)
-		if err != nil {
+	fail := func(err error) {
+		if !opts.FinishOnError {
 			abort(ctx, err)
 		}
+		if ctx.Err() == nil {
+			slog.ErrorContext(ctx, "sse stream failed", "error", err)
+		}
+	}
+	heartbeatFrame := []byte(heartbeat)
+	if opts.Heartbeat != "" {
+		heartbeatFrame = []byte(opts.Heartbeat)
+	}
+	cursor := after
+	for poll := 0; opts.MaxPolls == 0 || poll < opts.MaxPolls; poll++ {
+		events, err := src.Events(ctx, cursor)
+		if err != nil {
+			fail(err)
+			return nil
+		}
 		for _, ev := range events {
-			frame, err := Frame(ev, opts.EventName)
+			name := ev.Name
+			if name == "" {
+				name = opts.EventName
+			}
+			frame, err := Frame(ev, name)
 			if err != nil {
-				abort(ctx, err)
+				fail(err)
+				return nil
 			}
 			if !write(w, rc, frame) {
 				return nil
@@ -92,13 +130,17 @@ func Serve(c *echo.Context, src Source, after int64, opts Options) error {
 		}
 		terminal, err := src.Terminal(ctx)
 		if err != nil {
-			abort(ctx, err)
-		}
-		if terminal {
+			fail(err)
 			return nil
 		}
-		if len(events) == 0 && !write(w, rc, []byte(heartbeat)) {
+		if terminal && (!opts.UntilDrained || len(events) == 0) {
 			return nil
+		}
+		if len(events) == 0 && !write(w, rc, heartbeatFrame) {
+			return nil
+		}
+		if opts.UntilDrained && len(events) > 0 {
+			continue
 		}
 		select {
 		case <-ctx.Done():
@@ -107,6 +149,15 @@ func Serve(c *echo.Context, src Source, after int64, opts Options) error {
 		}
 	}
 	return nil
+}
+
+// drainBody reads a body nobody asked for, up to Hummingbird's limit. net/http
+// only watches the connection once the body has been read, so without this a
+// stream would never see its client leave.
+func drainBody(r *http.Request) {
+	if r.Body != nil {
+		_, _ = io.Copy(io.Discard, io.LimitReader(r.Body, maxDrainedBody))
+	}
 }
 
 // start commits the 200 and the three stream headers. False means the client has
@@ -169,6 +220,26 @@ func Cursor(c *echo.Context) int64 {
 	}
 	if n, err := strconv.ParseInt(r.Header.Get(headerLastEventID), 10, 64); err == nil {
 		return n
+	}
+	return 0
+}
+
+// HeaderFirstCursor is WorkflowController.runEventStream's starting point:
+//
+//	header["Last-Event-ID"].flatMap { Int64($0) } ?? query["after"].flatMap { Int64($0) } ?? 0
+//
+// the reverse of Cursor.
+func HeaderFirstCursor(c *echo.Context) int64 {
+	r := c.Request()
+	if raw, ok := wire.HeaderValue(r, headerLastEventID); ok {
+		if n, err := strconv.ParseInt(raw, 10, 64); err == nil {
+			return n
+		}
+	}
+	if raw, ok := rawQueryValue(r.URL.RawQuery, "after"); ok {
+		if n, err := strconv.ParseInt(raw, 10, 64); err == nil {
+			return n
+		}
 	}
 	return 0
 }

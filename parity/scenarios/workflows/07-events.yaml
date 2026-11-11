@@ -1,0 +1,110 @@
+# The event list and stream. Swift's WorkflowEventStore can't decode a row (it asks for
+# columns named runID and createdAt), so any run with events is a 500 on the list and a
+# stream that ends at once. A run with no events answers normally. Keep-alives and timing
+# aren't compared; internal/modules/workflows' tests cover frames with decoding on.
+module: workflows
+steps:
+  - name: "list: no events"
+    as: "wf_evt"
+    request: {"method": "GET", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000E3/events"}
+  - name: "list: a run with events and provider data"
+    as: "wf_evt"
+    request: {"method": "GET", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000E1/events"}
+  - name: "list: a terminal run with events"
+    as: "wf_evt"
+    request: {"method": "GET", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000E4/events"}
+  - name: "list: after"
+    as: "wf_evt"
+    request: {"method": "GET", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000E1/events?after=1"}
+  - name: "list: after everything"
+    as: "wf_evt"
+    request: {"method": "GET", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000E1/events?after=999999"}
+  - name: "list: after words"
+    as: "wf_evt"
+    request: {"method": "GET", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000E1/events?after=abc"}
+  - name: "list: after words, no events"
+    as: "wf_evt"
+    request: {"method": "GET", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000E3/events?after=abc"}
+  - name: "list: after negative"
+    as: "wf_evt"
+    request: {"method": "GET", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000E3/events?after=-1"}
+  - name: "list: after empty"
+    as: "wf_evt"
+    request: {"method": "GET", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000E3/events?after="}
+  - name: "list: someone else's run"
+    as: "wf_evt"
+    request: {"method": "GET", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000F2/events"}
+  - name: "stream: terminal, nothing to send"
+    as: "wf_evt"
+    request: {"method": "GET", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000E3/events/stream"}
+    headers: ["Cache-Control", "X-Accel-Buffering"]
+    stream: true
+    frames: 1
+  - name: "stream: failed, with events"
+    as: "wf_evt"
+    request: {"method": "GET", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000E4/events/stream"}
+    headers: ["Cache-Control", "X-Accel-Buffering"]
+    stream: true
+    frames: 2
+  - name: "stream: paused counts as terminal"
+    as: "wf_evt"
+    request: {"method": "GET", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000E5/events/stream"}
+    headers: ["Cache-Control", "X-Accel-Buffering"]
+    stream: true
+    frames: 1
+  - name: "stream: running, with events"
+    as: "wf_evt"
+    request: {"method": "GET", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000E1/events/stream"}
+    headers: ["Cache-Control", "X-Accel-Buffering"]
+    stream: true
+    frames: 3
+  - name: "stream: after in the query"
+    as: "wf_evt"
+    request: {"method": "GET", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000E3/events/stream?after=1"}
+    headers: ["Cache-Control", "X-Accel-Buffering"]
+    stream: true
+    frames: 1
+  - name: "stream: Last-Event-ID"
+    as: "wf_evt"
+    request: {"method": "GET", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000E3/events/stream", "headers": {"Last-Event-ID": "5"}}
+    headers: ["Cache-Control", "X-Accel-Buffering"]
+    stream: true
+    frames: 1
+  - name: "stream: a bad Last-Event-ID"
+    as: "wf_evt"
+    request: {"method": "GET", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000E3/events/stream?after=2", "headers": {"Last-Event-ID": "abc"}}
+    stream: true
+    frames: 1
+  - name: "stream: both, past the events"
+    as: "wf_evt"
+    request: {"method": "GET", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000E4/events/stream?after=1", "headers": {"Last-Event-ID": "999999"}}
+    stream: true
+    frames: 2
+  - name: "stream: both, query past the events"
+    as: "wf_evt"
+    request: {"method": "GET", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000E4/events/stream?after=999999", "headers": {"Last-Event-ID": "1"}}
+    stream: true
+    frames: 2
+  - name: "stream: a body is read first"
+    as: "wf_evt"
+    request: {"method": "GET", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000E3/events/stream", "raw": "{\"a\":1}"}
+    stream: true
+    frames: 1
+  - name: "stream: someone else's run"
+    as: "wf_evt"
+    request: {"method": "GET", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000F2/events/stream"}
+    headers: ["Cache-Control", "X-Accel-Buffering"]
+    stream: true
+    frames: 1
+  - name: "stream: cancelled while open"
+    as: "wf_evt"
+    request: {"method": "GET", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000E2/events/stream"}
+    headers: ["Cache-Control", "X-Accel-Buffering"]
+    stream: true
+    frames: 1
+    framesTimeout: "6s"
+    trigger: {"as": "wf_evt", "request": {"method": "POST", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000E2/cancel"}}
+  - name: "the cancel landed"
+    as: "wf_evt"
+    request: {"method": "GET", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000E2"}
+    snapshot: ["workflow_run_events"]

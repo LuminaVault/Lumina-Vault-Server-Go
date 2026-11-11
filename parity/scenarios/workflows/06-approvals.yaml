@@ -1,0 +1,66 @@
+# WorkflowService.decide. It isn't one transaction: a bad memory attachment answers 400
+# with the approval already decided.
+module: workflows
+steps:
+  - name: "pending"
+    as: "wf_apr"
+    request: {"method": "GET", "path": "/v1/workflows/approvals"}
+  - name: "the waiting run"
+    as: "wf_apr"
+    request: {"method": "GET", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000D1"}
+  - name: "approve with a note"
+    as: "wf_apr"
+    request: {"method": "POST", "path": "/v1/workflows/approvals/F1070000-0000-4000-8000-0000000000A1/decision", "json": {"approved": true, "note": "Looks right"}}
+    snapshot: ["workflow_approvals", "workflow_runs", "workflow_run_events", "workflow_node_runs"]
+  - name: "deciding again does nothing"
+    as: "wf_apr"
+    request: {"method": "POST", "path": "/v1/workflows/approvals/F1070000-0000-4000-8000-0000000000A1/decision", "json": {"approved": false, "note": "Changed my mind"}}
+    snapshot: ["workflow_approvals", "workflow_runs", "workflow_run_events", "workflow_node_runs"]
+  - name: "reject without a note"
+    as: "wf_apr"
+    request: {"method": "POST", "path": "/v1/workflows/approvals/F1070000-0000-4000-8000-0000000000A2/decision", "json": {"approved": false}}
+    snapshot: ["workflow_approvals", "workflow_runs", "workflow_run_events", "workflow_node_runs"]
+  - name: "approve with memories"
+    as: "wf_apr"
+    request: {"method": "POST", "path": "/v1/workflows/approvals/F1070000-0000-4000-8000-0000000000A3/decision", "json": {"approved": true, "memoryIDs": ["F1090000-0000-4000-8000-0000000000A1", "F1090000-0000-4000-8000-0000000000A1"]}}
+    snapshot: ["workflow_approvals", "workflow_runs", "workflow_run_events", "workflow_node_runs"]
+  - name: "no node run behind it"
+    as: "wf_apr"
+    request: {"method": "POST", "path": "/v1/workflows/approvals/F1070000-0000-4000-8000-0000000000A4/decision", "json": {"approved": true, "note": null, "memoryIDs": []}}
+    snapshot: ["workflow_approvals", "workflow_runs", "workflow_run_events", "workflow_node_runs"]
+  - name: "already approved in the seed"
+    as: "wf_apr"
+    request: {"method": "POST", "path": "/v1/workflows/approvals/F1070000-0000-4000-8000-0000000000A5/decision", "json": {"approved": false}}
+    snapshot: ["workflow_approvals", "workflow_runs", "workflow_run_events", "workflow_node_runs"]
+  - name: "someone else's memory: the approval is decided anyway"
+    as: "wf_apr"
+    request: {"method": "POST", "path": "/v1/workflows/approvals/F1070000-0000-4000-8000-0000000000A6/decision", "json": {"approved": true, "memoryIDs": ["F1090000-0000-4000-8000-0000000000B1"]}}
+    snapshot: ["workflow_approvals", "workflow_runs", "workflow_run_events", "workflow_node_runs"]
+  - name: "expired but still pending"
+    as: "wf_apr"
+    request: {"method": "POST", "path": "/v1/workflows/approvals/F1070000-0000-4000-8000-0000000000A7/decision", "json": {"approved": false, "memoryIDs": ["F1090000-0000-4000-8000-0000000000A1"]}}
+    snapshot: ["workflow_approvals", "workflow_runs", "workflow_run_events", "workflow_node_runs"]
+  - name: "decision: approved missing"
+    as: "wf_apr"
+    request: {"method": "POST", "path": "/v1/workflows/approvals/F1070000-0000-4000-8000-0000000000A7/decision", "json": {}}
+  - name: "decision: approved a string"
+    as: "wf_apr"
+    request: {"method": "POST", "path": "/v1/workflows/approvals/F1070000-0000-4000-8000-0000000000A7/decision", "json": {"approved": "yes"}}
+  - name: "decision: approved null"
+    as: "wf_apr"
+    request: {"method": "POST", "path": "/v1/workflows/approvals/F1070000-0000-4000-8000-0000000000A7/decision", "json": {"approved": null}}
+  - name: "decision: a bad memory id"
+    as: "wf_apr"
+    request: {"method": "POST", "path": "/v1/workflows/approvals/F1070000-0000-4000-8000-0000000000A7/decision", "json": {"approved": true, "memoryIDs": ["nope"]}}
+  - name: "decision: memoryIDs a string"
+    as: "wf_apr"
+    request: {"method": "POST", "path": "/v1/workflows/approvals/F1070000-0000-4000-8000-0000000000A7/decision", "json": {"approved": true, "memoryIDs": "x"}}
+  - name: "decision: note a number"
+    as: "wf_apr"
+    request: {"method": "POST", "path": "/v1/workflows/approvals/F1070000-0000-4000-8000-0000000000A7/decision", "json": {"approved": true, "note": 1}}
+  - name: "pending now"
+    as: "wf_apr"
+    request: {"method": "GET", "path": "/v1/workflows/approvals"}
+  - name: "runs now"
+    as: "wf_apr"
+    request: {"method": "GET", "path": "/v1/workflows/runs"}

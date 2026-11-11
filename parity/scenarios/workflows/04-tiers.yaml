@@ -1,0 +1,202 @@
+# What each tier may do. free and lapsed can't author but can read; trial reads details
+# and not lists; archived can't do either. Routes without Swift's mapErrors (limits,
+# list runs, approvals) answer a bare 500 where the others say 403.
+module: workflows
+steps:
+  - name: "wf_fay: limits"
+    as: "wf_fay"
+    request: {"method": "GET", "path": "/v1/workflows/limits"}
+  - name: "wf_fay: list"
+    as: "wf_fay"
+    request: {"method": "GET", "path": "/v1/workflows"}
+  - name: "wf_fay: detail"
+    as: "wf_fay"
+    request: {"method": "GET", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000A4"}
+  - name: "wf_fay: all runs"
+    as: "wf_fay"
+    request: {"method": "GET", "path": "/v1/workflows/runs"}
+  - name: "wf_fay: create"
+    as: "wf_fay"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": "wf_fay made this", "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+    snapshot: ["parity_workflows"]
+  - name: "wf_fay: approvals"
+    as: "wf_fay"
+    request: {"method": "GET", "path": "/v1/workflows/approvals"}
+  - name: "wf_fay: validate"
+    as: "wf_fay"
+    request: {"method": "POST", "path": "/v1/workflows/validate", "json": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}
+  - name: "wf_fay: versions"
+    as: "wf_fay"
+    request: {"method": "GET", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000A4/versions"}
+  - name: "wf_fay: its runs"
+    as: "wf_fay"
+    request: {"method": "GET", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000A4/runs"}
+  - name: "wf_fay: draft"
+    as: "wf_fay"
+    request: {"method": "PUT", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000A4/draft", "json": {"expectedRevision": 3, "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+  - name: "wf_fay: publish"
+    as: "wf_fay"
+    request: {"method": "POST", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000A4/publish"}
+  - name: "wf_fay: run"
+    as: "wf_fay"
+    request: {"method": "POST", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000A4/runs", "json": {"input": {}}}
+  - name: "wf_fay: restore"
+    as: "wf_fay"
+    request: {"method": "POST", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000A4/versions/1/restore"}
+  - name: "wf_fay: rotate"
+    as: "wf_fay"
+    request: {"method": "POST", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000A4/webhook/rotate"}
+    ignore: ["$.path", "$.secret"]
+  - name: "wf_fay: run detail"
+    as: "wf_fay"
+    request: {"method": "GET", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000F3"}
+  - name: "wf_fay: events"
+    as: "wf_fay"
+    request: {"method": "GET", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000F3/events"}
+  - name: "wf_fay: cancel"
+    as: "wf_fay"
+    request: {"method": "POST", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000F3/cancel"}
+  - name: "wf_fay: retry"
+    as: "wf_fay"
+    request: {"method": "POST", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000F3/retry"}
+  - name: "wf_fay: resume"
+    as: "wf_fay"
+    request: {"method": "POST", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000F3/resume"}
+  - name: "wf_tia: limits"
+    as: "wf_tia"
+    request: {"method": "GET", "path": "/v1/workflows/limits"}
+  - name: "wf_tia: list"
+    as: "wf_tia"
+    request: {"method": "GET", "path": "/v1/workflows"}
+  - name: "wf_tia: detail"
+    as: "wf_tia"
+    request: {"method": "GET", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000A5"}
+  - name: "wf_tia: all runs"
+    as: "wf_tia"
+    request: {"method": "GET", "path": "/v1/workflows/runs"}
+  - name: "wf_tia: create"
+    as: "wf_tia"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": "wf_tia made this", "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+    snapshot: ["parity_workflows"]
+  - name: "wf_tia: approvals"
+    as: "wf_tia"
+    request: {"method": "GET", "path": "/v1/workflows/approvals"}
+  - name: "wf_tia: validate"
+    as: "wf_tia"
+    request: {"method": "POST", "path": "/v1/workflows/validate", "json": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}
+  - name: "wf_tia: versions"
+    as: "wf_tia"
+    request: {"method": "GET", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000A5/versions"}
+  - name: "wf_tia: its runs"
+    as: "wf_tia"
+    request: {"method": "GET", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000A5/runs"}
+  - name: "wf_tia: draft"
+    as: "wf_tia"
+    request: {"method": "PUT", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000A5/draft", "json": {"expectedRevision": 3, "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+  - name: "wf_tia: publish"
+    as: "wf_tia"
+    request: {"method": "POST", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000A5/publish"}
+  - name: "wf_tia: run"
+    as: "wf_tia"
+    request: {"method": "POST", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000A5/runs", "json": {"input": {}}}
+  - name: "wf_tia: restore"
+    as: "wf_tia"
+    request: {"method": "POST", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000A5/versions/1/restore"}
+  - name: "wf_tia: rotate"
+    as: "wf_tia"
+    request: {"method": "POST", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000A5/webhook/rotate"}
+    ignore: ["$.path", "$.secret"]
+  - name: "wf_lea: limits"
+    as: "wf_lea"
+    request: {"method": "GET", "path": "/v1/workflows/limits"}
+  - name: "wf_lea: list"
+    as: "wf_lea"
+    request: {"method": "GET", "path": "/v1/workflows"}
+  - name: "wf_lea: detail"
+    as: "wf_lea"
+    request: {"method": "GET", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000A6"}
+  - name: "wf_lea: all runs"
+    as: "wf_lea"
+    request: {"method": "GET", "path": "/v1/workflows/runs"}
+  - name: "wf_lea: create"
+    as: "wf_lea"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": "wf_lea made this", "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+    snapshot: ["parity_workflows"]
+  - name: "wf_lea: approvals"
+    as: "wf_lea"
+    request: {"method": "GET", "path": "/v1/workflows/approvals"}
+  - name: "wf_lea: validate"
+    as: "wf_lea"
+    request: {"method": "POST", "path": "/v1/workflows/validate", "json": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}
+  - name: "wf_lea: versions"
+    as: "wf_lea"
+    request: {"method": "GET", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000A6/versions"}
+  - name: "wf_lea: its runs"
+    as: "wf_lea"
+    request: {"method": "GET", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000A6/runs"}
+  - name: "wf_lea: draft"
+    as: "wf_lea"
+    request: {"method": "PUT", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000A6/draft", "json": {"expectedRevision": 3, "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+  - name: "wf_lea: publish"
+    as: "wf_lea"
+    request: {"method": "POST", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000A6/publish"}
+  - name: "wf_lea: run"
+    as: "wf_lea"
+    request: {"method": "POST", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000A6/runs", "json": {"input": {}}}
+  - name: "wf_lea: restore"
+    as: "wf_lea"
+    request: {"method": "POST", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000A6/versions/1/restore"}
+  - name: "wf_lea: rotate"
+    as: "wf_lea"
+    request: {"method": "POST", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000A6/webhook/rotate"}
+    ignore: ["$.path", "$.secret"]
+  - name: "wf_lea: run detail"
+    as: "wf_lea"
+    request: {"method": "GET", "path": "/v1/workflows/runs/F10C0000-0000-4000-8000-0000000000F1"}
+  - name: "wf_arc: limits"
+    as: "wf_arc"
+    request: {"method": "GET", "path": "/v1/workflows/limits"}
+  - name: "wf_arc: list"
+    as: "wf_arc"
+    request: {"method": "GET", "path": "/v1/workflows"}
+  - name: "wf_arc: detail"
+    as: "wf_arc"
+    request: {"method": "GET", "path": "/v1/workflows/F10A0000-0000-4000-8000-0000000000A7"}
+  - name: "wf_arc: all runs"
+    as: "wf_arc"
+    request: {"method": "GET", "path": "/v1/workflows/runs"}
+  - name: "wf_arc: create"
+    as: "wf_arc"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": "wf_arc made this", "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+    snapshot: ["parity_workflows"]
+  - name: "wf_ovr: limits with a pro override"
+    as: "wf_ovr"
+    request: {"method": "GET", "path": "/v1/workflows/limits"}
+  - name: "wf_ovr: create with a pro override"
+    as: "wf_ovr"
+    request: {"method": "POST", "path": "/v1/workflows", "json": {"name": "Override", "definition": {"trigger": "manual", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}]}}}
+    snapshot: ["parity_workflows"]
+  - name: "wf_ovu: limits with an ultimate override"
+    as: "wf_ovu"
+    request: {"method": "GET", "path": "/v1/workflows/limits"}
+  - name: "wf_ovu: a 5 minute schedule"
+    as: "wf_ovu"
+    request: {"method": "POST", "path": "/v1/workflows/validate", "json": {"trigger": "schedule", "nodes": [{"id": "F10D0000-0000-4000-8000-000000000001", "kind": "trigger", "name": "Start", "x": 0, "y": 0, "configuration": {}}, {"id": "F10D0000-0000-4000-8000-000000000002", "kind": "output", "name": "Result", "x": 200.5, "y": 10, "configuration": {"value": "{{event}}"}}], "edges": [{"id": "F10E0000-0000-4000-8000-000000000102", "sourceNodeID": "F10D0000-0000-4000-8000-000000000001", "sourcePort": "output", "targetNodeID": "F10D0000-0000-4000-8000-000000000002", "targetPort": "input"}], "triggerConfiguration": {"cron": "0,5 * * * *"}}}
+  - name: "wf_spd: limits show spend"
+    as: "wf_spd"
+    request: {"method": "GET", "path": "/v1/workflows/limits"}
+  - name: "wf_cat: ultimate's limits"
+    as: "wf_cat"
+    request: {"method": "GET", "path": "/v1/workflows/limits"}
+  - name: "alice's limits"
+    as: "alice"
+    request: {"method": "GET", "path": "/v1/workflows/limits"}
+  - name: "alice's list"
+    as: "alice"
+    request: {"method": "GET", "path": "/v1/workflows"}
+  - name: "bob's list"
+    as: "bob"
+    request: {"method": "GET", "path": "/v1/workflows"}
+  - name: "bob's runs"
+    as: "bob"
+    request: {"method": "GET", "path": "/v1/workflows/runs"}

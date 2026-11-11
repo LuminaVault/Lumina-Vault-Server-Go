@@ -27,3 +27,4 @@ tmp/
 /templ
 swift-transcripts/
 __pycache__/
+.vendor/
