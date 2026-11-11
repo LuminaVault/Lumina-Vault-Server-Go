@@ -296,6 +296,7 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 			deps.Modules = append(deps.Modules, workflowsModule(pool, cfg, box, identify, limits))
 		}
 		deps.Modules = append(deps.Modules, agent.modules(links, enrichment)...)
+		deps.Modules = append(deps.Modules, agent.containerModules()...)
 		// /v1/ws (5J) flips with kb-compile, the device result route, mcp and skills.
 		deps.Modules = append(deps.Modules, wsroute.New(pool, sockets, identify))
 		deps.Modules = append(deps.Modules, agent.agentsModule())

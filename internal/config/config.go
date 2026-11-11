@@ -167,6 +167,15 @@ type Config struct {
 	// does. Off unmounts /v1/workflows, /v1/workflow-templates and /v1/workflow-hooks.
 	CerberusStudioEnabled string `env:"CERBERUS_STUDIO_ENABLED" envDefault:"true"`
 
+	// Hermes tenant containers (wave 6D/6E). DockerBinaryPath is forked for every
+	// container operation; in a pod with no docker each call fails as in Swift.
+	DockerBinaryPath       string `env:"DOCKER_BINARY_PATH" envDefault:"/usr/bin/docker"`
+	HermesPerTenantNetwork string `env:"HERMES_PER_TENANT_NETWORK" envDefault:"luminavault-hermes-net"`
+	// PhotonSidecarToken gates POST /v1/gateways/photon/inbound; empty disables it.
+	// PhotonSidecarURL is read only to warn: the sidecar client is not ported.
+	PhotonSidecarURL   string `env:"PHOTON_SIDECAR_URL" envDefault:"http://photon-sidecar:8789"`
+	PhotonSidecarToken string `env:"PHOTON_SIDECAR_TOKEN"`
+
 	// JinaAPIKey is Jina's reader, tier-2 of link enrichment. Unset still calls it,
 	// without the header, as in Swift.
 	JinaAPIKey string `env:"JINA_API_KEY"`
