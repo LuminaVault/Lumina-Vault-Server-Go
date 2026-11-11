@@ -1,0 +1,115 @@
+# Approve and reject against a real raw/SOUL.md, put there through the vault routes. The Hermes
+# profile copy lies outside the vault tree, so module_test.go covers it.
+module: self-improvement
+steps:
+  - name: "approve with no token"
+    request: {method: POST, path: "/v1/me/improvement/changes/5e1f2000-0000-4000-8000-000000000014/approve"}
+  - name: "approve with a bad token"
+    request: {method: POST, path: "/v1/me/improvement/changes/5e1f2000-0000-4000-8000-000000000014/approve", headers: {Authorization: Bearer not-a-token}}
+  - name: "approve with no token and a bad id answers 400 first"
+    request: {method: POST, path: "/v1/me/improvement/changes/nope/approve"}
+  - name: "reject with no token"
+    request: {method: POST, path: "/v1/me/improvement/changes/5e1f2000-0000-4000-8000-000000000014/reject"}
+  - name: "approve with a bad id"
+    as: si_soul
+    request: {method: POST, path: "/v1/me/improvement/changes/nope/approve"}
+  - name: "approve with bare hex"
+    as: si_soul
+    request: {method: POST, path: "/v1/me/improvement/changes/5e1f2000000040008000000000000014/approve"}
+  - name: "approve an unknown change"
+    as: si_soul
+    request: {method: POST, path: "/v1/me/improvement/changes/5e1f9999-0000-4000-8000-000000000000/approve"}
+  - name: "approve another tenant's change"
+    as: si_soul
+    request: {method: POST, path: "/v1/me/improvement/changes/5e1f2000-0000-4000-8000-000000000009/approve"}
+    snapshot: [self_improvement_changes]
+  - name: "reject another tenant's change"
+    as: si_soul
+    request: {method: POST, path: "/v1/me/improvement/changes/5e1f2000-0000-4000-8000-000000000009/reject"}
+  - name: "approve with no SOUL.md: the default template has another hash"
+    as: si_soul
+    request: {method: POST, path: "/v1/me/improvement/changes/5e1f2000-0000-4000-8000-000000000014/approve"}
+    snapshot: [self_improvement_changes]
+    files: [si_soul]
+  - name: "si_soul uploads the base document"
+    as: si_soul
+    request: {method: POST, path: "/v1/vault/files?path=base.md", raw: "# SOUL.md\n\n## Identity\n\nStable voice.\n", headers: {Content-Type: text/markdown}}
+  - name: "si_soul moves it to SOUL.md"
+    as: si_soul
+    request: {method: POST, path: /v1/vault/files/move, json: {path: inbox/base.md, newPath: SOUL.md}}
+  - name: "approve with the wrong base goes stale and writes nothing"
+    as: si_soul
+    request: {method: POST, path: "/v1/me/improvement/changes/5e1f2000-0000-4000-8000-000000000015/approve"}
+    snapshot: [self_improvement_changes]
+    files: [si_soul]
+  - name: "approve with no base goes stale"
+    as: si_soul
+    request: {method: POST, path: "/v1/me/improvement/changes/5e1f2000-0000-4000-8000-000000000016/approve"}
+    snapshot: [self_improvement_changes]
+    files: [si_soul]
+  - name: "approve with no proposal fails"
+    as: si_soul
+    request: {method: POST, path: "/v1/me/improvement/changes/5e1f2000-0000-4000-8000-000000000017/approve"}
+    snapshot: [self_improvement_changes]
+    files: [si_soul]
+  - name: "a proposal over 64 KiB is a 500 and stays pending"
+    as: si_soul
+    request: {method: POST, path: "/v1/me/improvement/changes/5e1f2000-0000-4000-8000-000000000018/approve"}
+    snapshot: [self_improvement_changes]
+    files: [si_soul]
+  - name: "and again"
+    as: si_soul
+    request: {method: POST, path: "/v1/me/improvement/changes/5e1f2000-0000-4000-8000-000000000018/approve"}
+  - name: "approve applies, with the core injected"
+    as: si_soul
+    request: {method: POST, path: "/v1/me/improvement/changes/5e1f2000-0000-4000-8000-000000000019/approve"}
+    snapshot: [self_improvement_changes]
+    files: [si_soul]
+  - name: "a decided change conflicts"
+    as: si_soul
+    request: {method: POST, path: "/v1/me/improvement/changes/5e1f2000-0000-4000-8000-000000000019/approve"}
+  - name: "rejecting a decided change conflicts"
+    as: si_soul
+    request: {method: POST, path: "/v1/me/improvement/changes/5e1f2000-0000-4000-8000-000000000019/reject"}
+  - name: "a stale change stays decided"
+    as: si_soul
+    request: {method: POST, path: "/v1/me/improvement/changes/5e1f2000-0000-4000-8000-000000000015/approve"}
+  - name: "the base no longer matches"
+    as: si_soul
+    request: {method: POST, path: "/v1/me/improvement/changes/5e1f2000-0000-4000-8000-00000000001a/approve"}
+    snapshot: [self_improvement_changes]
+    files: [si_soul]
+  - name: "reject leaves SOUL.md alone"
+    as: si_soul
+    request: {method: POST, path: "/v1/me/improvement/changes/5e1f2000-0000-4000-8000-00000000001b/reject"}
+    snapshot: [self_improvement_changes]
+    files: [si_soul]
+  - name: "rejecting the oversized proposal works"
+    as: si_soul
+    request: {method: POST, path: "/v1/me/improvement/changes/5e1f2000-0000-4000-8000-000000000018/reject"}
+    snapshot: [self_improvement_changes]
+  - name: "list the outcomes"
+    as: si_soul
+    request: {method: GET, path: "/v1/me/improvement/changes"}
+  - name: "si_bin uploads a file that is not UTF-8"
+    as: si_bin
+    request: {method: POST, path: "/v1/vault/files?path=base.md", base64: "//5hYmM=", headers: {Content-Type: text/markdown}}
+  - name: "si_bin moves it to SOUL.md"
+    as: si_bin
+    request: {method: POST, path: /v1/vault/files/move, json: {path: inbox/base.md, newPath: SOUL.md}}
+  - name: "SOUL.md that is not UTF-8 reads as the default, so it goes stale"
+    as: si_bin
+    request: {method: POST, path: "/v1/me/improvement/changes/5e1f2000-0000-4000-8000-00000000001e/approve"}
+    snapshot: [self_improvement_changes]
+    files: [si_bin]
+  - name: "si_bom uploads the base document with a BOM"
+    as: si_bom
+    request: {method: POST, path: "/v1/vault/files?path=base.md", base64: "77u/IyBTT1VMLm1kCgojIyBJZGVudGl0eQoKU3RhYmxlIHZvaWNlLgo=", headers: {Content-Type: text/markdown}}
+  - name: "si_bom moves it to SOUL.md"
+    as: si_bom
+    request: {method: POST, path: /v1/vault/files/move, json: {path: inbox/base.md, newPath: SOUL.md}}
+  - name: "the BOM drops before the hash, so it applies"
+    as: si_bom
+    request: {method: POST, path: "/v1/me/improvement/changes/5e1f2000-0000-4000-8000-00000000001f/approve"}
+    snapshot: [self_improvement_changes]
+    files: [si_bom]

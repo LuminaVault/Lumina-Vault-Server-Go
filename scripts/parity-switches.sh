@@ -25,6 +25,7 @@
 #   tts-on          /v1/tts mounted: Swift on a fake OpenAI key, Go on TTS_BASE_URL, both on the LLM stub
 #   tts-billing     tts-on with BILLING_ENFORCEMENT_ENABLED=true
 #   no-master-key   LV_SECRET_MASTER_KEY empty: /v1/grok is not mounted
+#   improvement-off SELF_IMPROVEMENT_ENABLED=false and an empty SELF_IMPROVEMENT_ECONOMY_MODEL: /v1/me/improvement read-only, status unavailable
 #
 #   llm             HERMES_GATEWAY_URL on the LLM stub, and capture.autoFile.enabled on:
 #                   the model-calling routes' success paths (group 4F)
@@ -196,6 +197,7 @@ run_state vision-cohere-down SWITCH_VISION_COHERE_API_KEY=parity-cohere-key SWIT
 run_state studio-off SWITCH_CERBERUS_STUDIO_ENABLED=false
 run_state studio-on SWITCH_CERBERUS_STUDIO_ENABLED=true SWITCH_OPENROUTER_API_KEY=parity-openrouter-key
 run_state billing-on SWITCH_BILLING_ENFORCEMENT_ENABLED=true
+run_state improvement-off SWITCH_SELF_IMPROVEMENT_ENABLED=false SWITCH_SELF_IMPROVEMENT_ECONOMY_MODEL=
 voice_states
 run_state no-master-key SWITCH_LV_SECRET_MASTER_KEY=
 "${COMPOSE[@]}" up -d --build --force-recreate llmstub

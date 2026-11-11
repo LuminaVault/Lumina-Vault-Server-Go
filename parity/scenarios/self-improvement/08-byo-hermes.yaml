@@ -1,0 +1,59 @@
+# A tenant on its own Hermes is read only. HermesRemoteCapabilitiesService.isUserOverride comes
+# from the resolver, and a failed resolution is no override.
+module: self-improvement
+steps:
+  - name: "status is read only"
+    as: si_byo
+    request: {method: GET, path: "/v1/me/improvement"}
+    snapshot: [self_improvement_settings]
+  - name: "a failed resolution counts as no override"
+    as: si_priv
+    request: {method: GET, path: "/v1/me/improvement"}
+  - name: "out-of-range settings answer first"
+    as: si_byo
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":{\"enabled\":true,\"curatorEnabled\":true,\"intervalHours\":1,\"minimumIdleHours\":2,\"consolidate\":true,\"pruneBuiltins\":false,\"backupKeep\":5,\"soulReviewEnabled\":true,\"reviewComplexSessions\":true,\"soulReviewWindowDays\":14,\"soulReviewCooldownHours\":24,\"modelMode\":\"economy\"}}"}
+  - name: "put conflicts"
+    as: si_byo
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":{\"enabled\":true,\"curatorEnabled\":true,\"intervalHours\":168,\"minimumIdleHours\":2,\"consolidate\":true,\"pruneBuiltins\":false,\"backupKeep\":5,\"soulReviewEnabled\":true,\"reviewComplexSessions\":true,\"soulReviewWindowDays\":14,\"soulReviewCooldownHours\":24,\"modelMode\":\"economy\"}}"}
+  - name: "dry curator conflicts"
+    as: si_byo
+    request: {method: POST, path: "/v1/me/improvement/curator/runs"}
+  - name: "live curator conflicts"
+    as: si_byo
+    request: {method: POST, path: "/v1/me/improvement/curator/runs", raw: "{\"dryRun\":false}"}
+  - name: "soul has its own message"
+    as: si_byo
+    request: {method: POST, path: "/v1/me/improvement/soul/reviews"}
+  - name: "a bad resource name answers first"
+    as: si_byo
+    request: {method: PATCH, path: "/v1/me/improvement/resources/skill/a.b", raw: "{\"pinned\":true}"}
+  - name: "pin conflicts"
+    as: si_byo
+    request: {method: PATCH, path: "/v1/me/improvement/resources/skill/alpha", raw: "{\"pinned\":true}"}
+  - name: "approve conflicts"
+    as: si_byo
+    request: {method: POST, path: "/v1/me/improvement/changes/5e1f2000-0000-4000-8000-000000000020/approve"}
+  - name: "reject conflicts"
+    as: si_byo
+    request: {method: POST, path: "/v1/me/improvement/changes/5e1f2000-0000-4000-8000-000000000020/reject"}
+  - name: "rollback conflicts"
+    as: si_byo
+    request: {method: POST, path: "/v1/me/improvement/runs/5e1f1000-0000-4000-8000-000000000029/rollback"}
+    snapshot: [self_improvement_runs, skills_state]
+    files: [si_byo]
+  - name: "reads still answer"
+    as: si_byo
+    request: {method: GET, path: "/v1/me/improvement/runs"}
+  - name: "changes still answer"
+    as: si_byo
+    request: {method: GET, path: "/v1/me/improvement/changes"}
+    snapshot: [self_improvement_changes]
+  - name: "resources still answer"
+    as: si_byo
+    request: {method: GET, path: "/v1/me/improvement/resources"}
+  - name: "managed on the failed resolution"
+    as: si_priv
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":{\"enabled\":true,\"curatorEnabled\":true,\"intervalHours\":168,\"minimumIdleHours\":2,\"consolidate\":true,\"pruneBuiltins\":false,\"backupKeep\":5,\"soulReviewEnabled\":true,\"reviewComplexSessions\":true,\"soulReviewWindowDays\":14,\"soulReviewCooldownHours\":24,\"modelMode\":\"economy\"}}"}
+  - name: "queueing works on the failed resolution"
+    as: si_priv
+    request: {method: POST, path: "/v1/me/improvement/curator/runs"}

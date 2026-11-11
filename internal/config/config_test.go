@@ -97,6 +97,25 @@ func TestLoadUsageAndSelfImprovementDefaults(t *testing.T) {
 	require.True(t, cfg.SelfImprovementEnabled)
 }
 
+func TestSelfImprovementEconomyModel(t *testing.T) {
+	for _, c := range []struct {
+		name    string
+		environ map[string]string
+		want    string
+	}{
+		{"unset is the degrade model's default", map[string]string{}, "hermes-3-small"},
+		{"unset follows the degrade model", map[string]string{"USAGE_DEGRADE_MODEL": "cheap"}, "cheap"},
+		{"set wins", map[string]string{"USAGE_DEGRADE_MODEL": "cheap", "SELF_IMPROVEMENT_ECONOMY_MODEL": "eco"}, "eco"},
+		{"set but empty stays empty", map[string]string{"USAGE_DEGRADE_MODEL": "cheap", "SELF_IMPROVEMENT_ECONOMY_MODEL": ""}, ""},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			cfg, err := config.LoadFrom(c.environ)
+			require.NoError(t, err)
+			require.Equal(t, c.want, cfg.SelfImprovementEconomyModel)
+		})
+	}
+}
+
 func TestLoadEmptyOriginsMeansNone(t *testing.T) {
 	cfg, err := config.LoadFrom(map[string]string{})
 	require.NoError(t, err)

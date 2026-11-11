@@ -1,0 +1,123 @@
+# curator/runs and soul/reviews queue rows; SelfImprovementScheduler stays in Swift, and is off here.
+# Both decode under try?, so a bad body means the default rather than a 400.
+module: self-improvement
+steps:
+  - name: "curator with no token"
+    request: {method: POST, path: "/v1/me/improvement/curator/runs"}
+  - name: "curator with a bad token"
+    request: {method: POST, path: "/v1/me/improvement/curator/runs", headers: {Authorization: Bearer not-a-token}}
+  - name: "curator with no token and a body"
+    request: {method: POST, path: "/v1/me/improvement/curator/runs", raw: "{\"dryRun\":false}"}
+  - name: "soul with no token"
+    request: {method: POST, path: "/v1/me/improvement/soul/reviews"}
+  - name: "soul with a bad token"
+    request: {method: POST, path: "/v1/me/improvement/soul/reviews", headers: {Authorization: Bearer not-a-token}}
+  - name: "soul with no token and a non-manual trigger answers 400 first"
+    request: {method: POST, path: "/v1/me/improvement/soul/reviews", raw: "{\"trigger\":\"weekly\"}"}
+  - name: "wrong method on curator"
+    as: si_enq
+    request: {method: GET, path: "/v1/me/improvement/curator/runs"}
+  - name: "wrong method on soul"
+    as: si_enq
+    request: {method: GET, path: "/v1/me/improvement/soul/reviews"}
+  - name: "an empty body is a dry run and writes no settings row"
+    as: si_foe
+    request: {method: POST, path: "/v1/me/improvement/curator/runs"}
+    snapshot: [self_improvement_settings, self_improvement_runs]
+  - name: "the same again answers the active run"
+    as: si_foe
+    request: {method: POST, path: "/v1/me/improvement/curator/runs", raw: "{\"dryRun\":true}"}
+    snapshot: [self_improvement_runs]
+  - name: "a live run conflicts with the active dry run"
+    as: si_foe
+    request: {method: POST, path: "/v1/me/improvement/curator/runs", raw: "{\"dryRun\":false}"}
+    snapshot: [self_improvement_settings]
+  - name: "a malformed body is the default dry run"
+    as: si_foe
+    request: {method: POST, path: "/v1/me/improvement/curator/runs", raw: "{"}
+    snapshot: [self_improvement_runs]
+  - name: "a wrong type is the default dry run"
+    as: si_foe
+    request: {method: POST, path: "/v1/me/improvement/curator/runs", raw: "{\"dryRun\":\"no\"}"}
+  - name: "null is the default dry run"
+    as: si_foe
+    request: {method: POST, path: "/v1/me/improvement/curator/runs", raw: "{\"dryRun\":null}"}
+  - name: "a missing key is the default dry run"
+    as: si_foe
+    request: {method: POST, path: "/v1/me/improvement/curator/runs", raw: "{}"}
+  - name: "an array is the default dry run"
+    as: si_foe
+    request: {method: POST, path: "/v1/me/improvement/curator/runs", raw: "[]"}
+  - name: "live run"
+    as: si_enq
+    request: {method: POST, path: "/v1/me/improvement/curator/runs", raw: "{\"dryRun\":false}"}
+    snapshot: [self_improvement_runs]
+  - name: "the live run answers again"
+    as: si_enq
+    request: {method: POST, path: "/v1/me/improvement/curator/runs", raw: "{\"dryRun\":false}"}
+    snapshot: [self_improvement_runs]
+  - name: "a dry run conflicts with the active live run"
+    as: si_enq
+    request: {method: POST, path: "/v1/me/improvement/curator/runs", raw: "{\"dryRun\":true}"}
+  - name: "dry run with the curator off still queues"
+    as: si_off
+    request: {method: POST, path: "/v1/me/improvement/curator/runs", raw: "{\"dryRun\":true}"}
+    snapshot: [self_improvement_runs]
+  - name: "live run with the curator off"
+    as: si_off
+    request: {method: POST, path: "/v1/me/improvement/curator/runs", raw: "{\"dryRun\":false}"}
+  - name: "live run with everything off"
+    as: si_offall
+    request: {method: POST, path: "/v1/me/improvement/curator/runs", raw: "{\"dryRun\":false}"}
+  - name: "soul with its review off"
+    as: si_off
+    request: {method: POST, path: "/v1/me/improvement/soul/reviews"}
+  - name: "soul with everything off"
+    as: si_offall
+    request: {method: POST, path: "/v1/me/improvement/soul/reviews"}
+  - name: "soul refuses weekly"
+    as: si_enq
+    request: {method: POST, path: "/v1/me/improvement/soul/reviews", raw: "{\"trigger\":\"weekly\"}"}
+  - name: "soul refuses complex_session"
+    as: si_enq
+    request: {method: POST, path: "/v1/me/improvement/soul/reviews", raw: "{\"trigger\":\"complex_session\"}"}
+  - name: "soul with an unknown trigger is manual"
+    as: si_enq
+    request: {method: POST, path: "/v1/me/improvement/soul/reviews", raw: "{\"trigger\":\"nope\"}"}
+    snapshot: [self_improvement_runs]
+  - name: "soul answers the active run"
+    as: si_enq
+    request: {method: POST, path: "/v1/me/improvement/soul/reviews"}
+    snapshot: [self_improvement_runs]
+  - name: "soul with an explicit manual trigger"
+    as: si_enq
+    request: {method: POST, path: "/v1/me/improvement/soul/reviews", raw: "{\"trigger\":\"manual\"}"}
+  - name: "soul with a wrong type"
+    as: si_enq
+    request: {method: POST, path: "/v1/me/improvement/soul/reviews", raw: "{\"trigger\":1}"}
+  - name: "soul with a malformed body"
+    as: si_enq
+    request: {method: POST, path: "/v1/me/improvement/soul/reviews", raw: "{"}
+  - name: "soul with null"
+    as: si_enq
+    request: {method: POST, path: "/v1/me/improvement/soul/reviews", raw: "{\"trigger\":null}"}
+  - name: "soul creates the settings row"
+    as: si_chg
+    request: {method: POST, path: "/v1/me/improvement/soul/reviews"}
+    snapshot: [self_improvement_settings]
+  - name: "the running live soul review answers"
+    as: si_act
+    request: {method: POST, path: "/v1/me/improvement/soul/reviews"}
+    snapshot: [self_improvement_runs]
+  - name: "the queued dry curator run answers"
+    as: si_act
+    request: {method: POST, path: "/v1/me/improvement/curator/runs"}
+  - name: "a live curator run conflicts with it"
+    as: si_act
+    request: {method: POST, path: "/v1/me/improvement/curator/runs", raw: "{\"dryRun\":false}"}
+  - name: "the running dry soul review conflicts"
+    as: si_act2
+    request: {method: POST, path: "/v1/me/improvement/soul/reviews"}
+  - name: "runs list what was queued"
+    as: si_enq
+    request: {method: GET, path: "/v1/me/improvement/runs"}
