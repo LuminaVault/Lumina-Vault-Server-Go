@@ -7,7 +7,7 @@ INSERT INTO users (id, email, password_hash, is_verified, username, tier, create
   ('5c100000-0000-4000-8000-0000000000c3', 'sk-cy@parity.test', 'x', true, 'sk_cy', 'ultimate', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
   ('5c100000-0000-4000-8000-0000000000d4', 'sk-dee@parity.test', 'x', true, 'sk_dee', 'trial', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
   ('5c100000-0000-4000-8000-0000000000e5', 'sk-eve@parity.test', 'x', true, 'sk_eve', 'trial', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
-  ('5c100000-0000-4000-8000-0000000000f6', 'sk-fay@parity.test', 'x', true, 'sk_fay', '', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
+  ('5c100000-0000-4000-8000-0000000000f6', 'sk-fay@parity.test', 'x', true, 'sk_fay', 'lapsed', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
   ('5c100000-0000-4000-8000-0000000000a7', 'sk-gus@parity.test', 'x', true, 'sk_gus', 'trial', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
   ('5c100000-0000-4000-8000-0000000000b8', 'sk-hal@parity.test', 'x', true, 'sk_hal', 'trial', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
 

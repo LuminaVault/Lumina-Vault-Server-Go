@@ -7,4 +7,4 @@ steps:
   - {name: trial with state and mirror, as: sk_ann, request: {method: GET, path: /v1/skills}}
   - {name: pro, as: sk_ben, request: {method: GET, path: /v1/skills}}
   - {name: ultimate, as: sk_cy, request: {method: GET, path: /v1/skills}}
-  - {name: empty tier reads as trial, as: sk_fay, request: {method: GET, path: /v1/skills}}
+  - {name: lapsed, as: sk_fay, request: {method: GET, path: /v1/skills}}
