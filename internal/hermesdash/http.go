@@ -45,7 +45,6 @@ func (r Response) JSON() any { return decodeAny(r.Body) }
 func (r Response) Object() (map[string]any, bool) { return asObject(r.JSON()) }
 
 // errTooLarge marks a body over the cap (NIOTooManyBytesError).
-var errTooLarge = errors.New("body too large")
 
 // execute is AsyncHTTPClientHermesHTTP.execute: one request with a timeout and a
 // body cap. A body over the cap is bodyTooLarge(url, cap).

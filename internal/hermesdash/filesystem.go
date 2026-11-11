@@ -107,7 +107,7 @@ func (f *Filesystem) ListSkills(context.Context) ([]Skill, error) {
 		if strings.HasPrefix(name, ".") {
 			continue
 		}
-		data, err := os.ReadFile(filepath.Join(root, name, "SKILL.md"))
+		data, err := os.ReadFile(filepath.Join(root, name, "SKILL.md")) //nolint:gosec // name is a directory entry of the skills root
 		if err != nil || !utf8.Valid(data) {
 			continue
 		}
@@ -133,7 +133,7 @@ func (f *Filesystem) SkillContent(_ context.Context, name string) (string, error
 	if err != nil {
 		return "", err
 	}
-	data, err := os.ReadFile(file)
+	data, err := os.ReadFile(file) //nolint:gosec // resolved inside the Hermes root
 	if err != nil || !utf8.Valid(data) {
 		return "", NotFound("skill:" + name)
 	}
@@ -194,7 +194,7 @@ func (f *Filesystem) CreateSkill(_ context.Context, name, content string) error 
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil { //nolint:gosec // Hermes reads these as another user, as Swift writes them
 		return err
 	}
 	return atomicWrite([]byte(content), file)
@@ -226,7 +226,7 @@ func FrontmatterDescription(content string) string {
 }
 
 func loadConfig(path string) map[string]any {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // resolved inside the Hermes root
 	if err != nil || !utf8.Valid(data) {
 		return map[string]any{}
 	}
@@ -496,10 +496,10 @@ func patchJob(jobs *[]map[string]any, id string, patch func(map[string]any)) (Jo
 func (f *Filesystem) mutateJobs(now time.Time, body func(*[]map[string]any) (Job, error)) (Job, error) {
 	path := f.cronJobsPath()
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil { //nolint:gosec // Hermes reads these as another user, as Swift writes them
 		return Job{}, err
 	}
-	lock, err := os.OpenFile(filepath.Join(dir, ".jobs.lock"), os.O_CREATE|os.O_RDWR, 0o600)
+	lock, err := os.OpenFile(filepath.Join(dir, ".jobs.lock"), os.O_CREATE|os.O_RDWR, 0o600) //nolint:gosec // resolved inside the Hermes root
 	if err != nil {
 		return Job{}, InvalidResponse("jobs.lock")
 	}
@@ -509,7 +509,7 @@ func (f *Filesystem) mutateJobs(now time.Time, body func(*[]map[string]any) (Job
 	}
 	defer func() { _ = syscall.Flock(int(lock.Fd()), syscall.LOCK_UN) }()
 	envelope := map[string]any{"jobs": []any{}}
-	if data, err := os.ReadFile(path); err == nil {
+	if data, err := os.ReadFile(path); err == nil { //nolint:gosec // resolved inside the Hermes root
 		var existing map[string]any
 		if json.Unmarshal(data, &existing) == nil && existing != nil {
 			envelope = existing
@@ -599,7 +599,7 @@ func (f *Filesystem) JobRunOutput(_ context.Context, jobID, runKey string) (*str
 	if ParseOutputStamp(runKey) == nil {
 		return nil, nil
 	}
-	data, err := os.ReadFile(filepath.Join(f.jobOutputDirectory(id), runKey+".md"))
+	data, err := os.ReadFile(filepath.Join(f.jobOutputDirectory(id), runKey+".md")) //nolint:gosec // resolved inside the Hermes root
 	if err != nil || !utf8.Valid(data) {
 		return nil, nil
 	}
@@ -675,7 +675,7 @@ func (f *Filesystem) ReadText(_ context.Context, path string) (string, error) {
 	if st, err := os.Stat(file); err == nil && st.Size() > FileBodyCap {
 		return "", BodyTooLarge(file, FileBodyCap)
 	}
-	data, err := os.ReadFile(file)
+	data, err := os.ReadFile(file) //nolint:gosec // resolved inside the Hermes root
 	if err != nil {
 		return "", NotFound(file)
 	}
@@ -705,7 +705,7 @@ func (f *Filesystem) Mkdir(_ context.Context, path string) error {
 	if err != nil {
 		return err
 	}
-	return os.MkdirAll(dir, 0o755)
+	return os.MkdirAll(dir, 0o755) //nolint:gosec // Hermes reads these as another user, as Swift writes them
 }
 
 // resolveInsideRoot validates the path and pins it under the root. Symlinks
@@ -744,7 +744,7 @@ func atomicWrite(data []byte, path string) error {
 	var b [16]byte
 	_, _ = rand.Read(b[:])
 	tmp := filepath.Join(filepath.Dir(path), "."+filepath.Base(path)+".lv-tmp-"+strings.ToUpper(hex.EncodeToString(b[:])))
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	if err := os.WriteFile(tmp, data, 0o644); err != nil { //nolint:gosec // Hermes reads these as another user, as Swift writes them
 		return err
 	}
 	if err := os.Rename(tmp, path); err != nil {

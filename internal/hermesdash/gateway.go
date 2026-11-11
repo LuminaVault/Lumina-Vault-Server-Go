@@ -2,6 +2,7 @@ package hermesdash
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"lumina/internal/swiftstr"
 	"net/http"
@@ -163,7 +164,7 @@ func (g *Gateway) send(ctx context.Context, method, path string, q query, body m
 	}
 	resp, err := execute(ctx, g.HTTP, method, target, header, payload, Timeout, cap)
 	if err != nil {
-		if _, ok := err.(*Error); !ok {
+		if te := (*Error)(nil); !errors.As(err, &te) {
 			slog.DebugContext(ctx, "hermes gateway request failed", "path", path)
 		}
 		return Response{}, asTransportError(err, path)

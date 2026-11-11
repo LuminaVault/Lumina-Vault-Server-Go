@@ -2,6 +2,7 @@ package hermesdash
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"lumina/internal/ssrfguard"
 	"net/http"
@@ -636,7 +637,7 @@ func (d *Dashboard) send(ctx context.Context, method, path string, q query, body
 	for attempt := 1; ; attempt++ {
 		resp, err := execute(ctx, d.HTTP, method, target, header, payload, Timeout, cap)
 		if err != nil {
-			if _, ok := err.(*Error); !ok {
+			if te := (*Error)(nil); !errors.As(err, &te) {
 				slog.DebugContext(ctx, "hermes dashboard request failed", "path", path)
 			}
 			return Response{}, asTransportError(err, path)

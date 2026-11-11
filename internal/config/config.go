@@ -138,8 +138,11 @@ type Config struct {
 	// Wave 3 account/health. HermesDataRoot holds profiles/<id>/ (account
 	// deletion soft-renames it). BillingEnforcementEnabled stays a string:
 	// Swift enables it only when it lowercases to "true" (entitlement package).
-	HermesDataRoot            string `env:"HERMES_DATA_ROOT" envDefault:"/app/data/hermes"`
-	BillingEnforcementEnabled string `env:"BILLING_ENFORCEMENT_ENABLED" envDefault:"false"`
+	HermesDataRoot string `env:"HERMES_DATA_ROOT" envDefault:"/app/data/hermes"`
+	// HermesPerTenantDataRootBase is hermes.perTenant.dataRootBase: the per-tenant
+	// container volumes the Hermes mirror (6B) reads for managed tenants.
+	HermesPerTenantDataRootBase string `env:"HERMES_PER_TENANT_DATA_ROOT_BASE" envDefault:"/app/data/hermes-tenants"`
+	BillingEnforcementEnabled   string `env:"BILLING_ENFORCEMENT_ENABLED" envDefault:"false"`
 
 	// Job J1 (internal/workers). AccountDeletionPurgeAfterDays is
 	// account.deletion.purgeAfterDays, the recovery window before DeletedDataPurgeService

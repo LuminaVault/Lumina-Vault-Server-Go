@@ -299,6 +299,9 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 			deps.Modules = append(deps.Modules, workflowsModule(pool, cfg, box, identify, limits))
 		}
 		deps.Modules = append(deps.Modules, agent.modules(links, enrichment)...)
+		if m := agent.hermesMirrorModule(); m != nil { // 6B: needs the secret box and the resolver, as in Swift
+			deps.Modules = append(deps.Modules, m)
+		}
 		// /v1/ws (5J) flips with kb-compile, the device result route, mcp and skills.
 		deps.Modules = append(deps.Modules, wsroute.New(pool, sockets, identify))
 		deps.Modules = append(deps.Modules, agent.agentsModule())
