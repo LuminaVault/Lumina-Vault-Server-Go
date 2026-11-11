@@ -3,10 +3,9 @@ package ws
 import (
 	"context"
 	"log/slog"
+	"lumina/internal/ids"
 	"net/http"
 	"time"
-
-	"lumina/internal/ids"
 
 	"github.com/coder/websocket"
 	"github.com/google/uuid"

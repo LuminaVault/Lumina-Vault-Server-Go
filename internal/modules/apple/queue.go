@@ -1,28 +1,22 @@
 package apple
 
-// The enqueue half of Swift's DeviceCommandQueue (a socket write that timed
-// out is stored and announced with a push) runs inside PersonalDataTools,
-// which MCP and Skills call; it stays in Swift until those modules move. Go
+import "lumina/internal/devicerpc"
+
+// The enqueue half of Swift's DeviceCommandQueue is devicerpc.Queue, which the
+// personal-data tools (MCP, Skills) call when a socket write times out. Go
 // serves the read (pending) and the result routes over the same
-// device_command_queue table. These two helpers are ported with their tests
-// so the enqueue port has them.
+// device_command_queue table. These two names stay for this module's tests.
 
-// Queueable is DeviceCommandQueue.queueable: only writes queue; a read the
-// phone missed is simply unavailable.
-var Queueable = []string{"reminder_create", "calendar_create"}
+// Queueable is DeviceCommandQueue.queueable, as strings.
+var Queueable = func() []string {
+	out := make([]string, len(devicerpc.Queueable))
+	for i, k := range devicerpc.Queueable {
+		out[i] = string(k)
+	}
+	return out
+}()
 
-// Announcement is DeviceCommandQueue.announcement(for:), the push body.
+// Announcement is devicerpc.Announcement for a raw kind.
 func Announcement(kind string, payload map[string]string) string {
-	title := payload["title"]
-	if title == "" {
-		title = "an item"
-	}
-	switch kind {
-	case "reminder_create":
-		return "Open LuminaVault to add the reminder “" + title + "”."
-	case "calendar_create":
-		return "Open LuminaVault to add “" + title + "” to your calendar."
-	default:
-		return "Open LuminaVault to finish a request from Lumina."
-	}
+	return devicerpc.Announcement(devicerpc.Kind(kind), payload)
 }

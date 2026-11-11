@@ -1,10 +1,9 @@
 package ws_test
 
 import (
+	"lumina/internal/ws"
 	"strings"
 	"testing"
-
-	"lumina/internal/ws"
 
 	"github.com/stretchr/testify/require"
 )

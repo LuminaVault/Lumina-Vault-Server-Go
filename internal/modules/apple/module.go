@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"lumina/internal/auth"
+	"lumina/internal/devicerpc"
 	"lumina/internal/embedding"
 	"lumina/internal/httpserver"
 	"lumina/internal/ids"
@@ -40,6 +41,7 @@ type Module struct {
 	q         *db.Queries
 	embedder  embedding.Service
 	analytics *posthog.Client
+	devices   *devicerpc.Broker
 	now       func() time.Time
 }
 
@@ -49,10 +51,13 @@ type Options struct {
 	Embedder embedding.Service
 	// Analytics is PostHogAnalytics. Nil means analytics are off.
 	Analytics *posthog.Client
+	// Devices is DeviceCommandBroker, whose waiters the result route resumes.
+	// Nil skips that step.
+	Devices *devicerpc.Broker
 }
 
 func New(pool *pgxpool.Pool, opts Options) *Module {
-	return &Module{q: db.New(pool), embedder: opts.Embedder, analytics: opts.Analytics, now: time.Now}
+	return &Module{q: db.New(pool), embedder: opts.Embedder, analytics: opts.Analytics, devices: opts.Devices, now: time.Now}
 }
 
 func (m *Module) Register(r httpserver.Router, authMW echo.MiddlewareFunc) {
@@ -277,14 +282,21 @@ func (m *Module) captureSync(event string, tenant uuid.UUID, out AppleSyncRespon
 // commandResult is DeviceCommandController.result. The `:id` path segment is
 // never read (Swift ignores it too); the body's id is what counts.
 //
-// Swift also resumes DeviceCommandBroker's in-memory continuation here. Go
-// holds no live device RPCs (the broker's callers, MCP and Skills, stay in
-// Swift), so only the DB-backed queue is updated. See coupling.md row 7.
+// As in Swift, it first resumes the broker's in-memory waiter for the id, then
+// marks a queued twin delivered. Go's broker has waiters only once MCP and
+// Skills send through it; until then the resume finds none. See coupling.md row 7.
 func (m *Module) commandResult(c *echo.Context) error {
 	ctx, tenant := c.Request().Context(), auth.UserID(c)
 	body, err := wire.Bind[deviceCommandResult](c)
 	if err != nil {
 		return err
+	}
+	if m.devices != nil {
+		r := devicerpc.Result{ID: body.ID.UUID, OK: body.Ok, Error: body.Error}
+		if body.Payload != nil {
+			r.Payload = *body.Payload
+		}
+		m.devices.Resolve(r)
 	}
 	now := m.now()
 	ok := body.Ok

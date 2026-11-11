@@ -3,14 +3,13 @@ package ws_test
 import (
 	"context"
 	"errors"
+	"lumina/internal/ws"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
 	"time"
-
-	"lumina/internal/ws"
 
 	"github.com/coder/websocket"
 	"github.com/google/uuid"
@@ -152,9 +151,12 @@ func (s server) dial(t *testing.T, tenant string, header http.Header) *websocket
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	c, _, err := websocket.Dial(ctx, s.url+"?tenant="+tenant+"&user=u", &websocket.DialOptions{HTTPHeader: header})
+	c, resp, err := websocket.Dial(ctx, s.url+"?tenant="+tenant+"&user=u", &websocket.DialOptions{HTTPHeader: header})
 	require.NoError(t, err)
-	t.Cleanup(func() { c.CloseNow() })
+	if resp.Body != nil {
+		_ = resp.Body.Close()
+	}
+	t.Cleanup(func() { _ = c.CloseNow() })
 	require.Eventually(t, func() bool { return len(s.m.Connections(tenant)) > 0 }, 2*time.Second, 10*time.Millisecond)
 	return c
 }
