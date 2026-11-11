@@ -199,6 +199,7 @@ func TestCerberusRouter(t *testing.T) {
 			assert.Equal(t, ModeManaged, d.CredentialMode)
 			require.NotNil(t, d.Cerberus)
 			assert.Equal(t, ModeManaged, d.Cerberus.Mode)
+			assert.Equal(t, DisclosureHidden, DisclosureForMode(d.Cerberus.Mode))
 			assert.Zero(t, d.Cerberus.PredictedCostUsdMicros)
 			assert.Zero(t, d.Cerberus.BudgetReservationUsdMicros)
 			assert.False(t, d.Cerberus.BudgetDenied)

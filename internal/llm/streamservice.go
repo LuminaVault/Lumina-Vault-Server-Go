@@ -138,6 +138,12 @@ func (s *GatewayStreamService) ChatStream(ctx context.Context, sessionKey, sessi
 				return
 			}
 		}
+		// runStream ends quietly when its context is cancelled mid-body, as Swift
+		// does for a cancelled Task. The watchdog's cancel is not the client's:
+		// Swift throws HermesStreamIdleTimeout there, so the caller sees an error.
+		if cause := context.Cause(ctx); errors.Is(cause, errStreamIdle) {
+			yield(Chunk{}, cause)
+		}
 	}
 }
 
@@ -240,13 +246,33 @@ func gatewayErrorCode(raw json.RawMessage) string {
 	return ""
 }
 
+// DecidedStreamTransport is DecidedStreamTransport: a transport that can execute a
+// routing decision someone else already made (the free lane's).
+type DecidedStreamTransport interface {
+	ChatStreamDecided(ctx context.Context, payload []byte, sessionKey, sessionID string, decision Decision) Stream
+}
+
+var _ DecidedStreamTransport = (*Transport)(nil)
+
+// freeLaneUnroutableMessage is the user message of free_lane_unroutable.
+const freeLaneUnroutableMessage = "Free messages are unavailable right now. Add your own API key in Settings, or upgrade."
+
+// ErrFreeLaneUnroutable is the UpstreamErrorResponse a free-lane turn fails with
+// when the transport can't execute the lane's decision. A 502.
+func ErrFreeLaneUnroutable() *UpstreamErrorResponse {
+	return &UpstreamErrorResponse{Reason: "free_lane_unroutable", Message: freeLaneUnroutableMessage}
+}
+
 // RoutedStreamService is RoutedHermesLLMStreamService: it routes a user-facing stream
 // by mode. A parallel strategy and BYOK go through the transport, a free-lane decision
 // is executed as decided, and everything else rides the managed gateway (Fallback),
 // with Cerberus's Auto pick when it made one.
 type RoutedStreamService struct {
-	Fallback    StreamService
-	Transport   *Transport
+	Fallback StreamService
+	// Transport serves parallel and BYOK turns. A free-lane turn needs it to be a
+	// DecidedStreamTransport too (*Transport is); otherwise the turn fails closed
+	// with free_lane_unroutable rather than ride the paid gateway.
+	Transport   ChatTransport
 	Preferences PreferenceSource
 	Router      Router
 	Telemetry   *RouterTelemetryService
@@ -316,12 +342,17 @@ func (s *RoutedStreamService) ChatStream(ctx context.Context, sessionKey, sessio
 				yield(Chunk{}, err)
 				return
 			}
+			routed, ok := s.Transport.(DecidedStreamTransport)
+			if !ok || routed == nil {
+				yield(Chunk{}, ErrFreeLaneUnroutable())
+				return
+			}
 			payload, err := makeOpenAIPayload(plan.freeLane.Primary.ModelID, req)
 			if err != nil {
 				yield(Chunk{}, err)
 				return
 			}
-			forward(s.Transport.ChatStreamDecided(ctx, payload, sessionKey, sessionID, *plan.freeLane))
+			forward(routed.ChatStreamDecided(ctx, payload, sessionKey, sessionID, *plan.freeLane))
 			return
 		}
 		started := time.Now()
@@ -388,19 +419,27 @@ func (s *RoutedStreamService) managedPlan(ctx context.Context, req ChatRequest) 
 	if c.BudgetDenied {
 		return managedPlan{}, &UsageCapExceededError{RetryAfter: time.Hour}
 	}
-	publishManagedRoute(values, decision)
+	publishManagedRoute(values, decision, req.Messages)
 	return managedPlan{route: &managedAutoRoute{metadata: c, prompt: prompt, modelID: decision.Primary.ModelID}}, nil
 }
 
 // publishManagedRoute surfaces the decision on the sinks: the routing event (the chat
 // SSE scrubs identity before the wire) and the real provenance for telemetry.
-func publishManagedRoute(values Values, decision Decision) {
+func publishManagedRoute(values Values, decision Decision, messages []ChatMessage) {
 	c := decision.Cerberus
 	if sink := values.CerberusSink; sink != nil {
-		sink(CerberusEvent{Routing: &RoutingEvent{
+		// Routing fires before the first token, so this is the only place the
+		// context gauge gets its numerator. Both numbers are estimates.
+		event := &RoutingEvent{
 			ExecutionID: c.ExecutionID, ProfileID: c.ProfileID, ProfileName: c.ProfileName,
 			TaskType: c.TaskType, Strategy: c.Strategy, ActiveRoutes: c.Routes,
-		}})
+		}
+		tokens := EstimatePromptTokens(messages)
+		event.PromptTokens = &tokens
+		if window, ok := ContextWindowForModel(decision.Primary.ModelID); ok {
+			event.ContextWindowTokens = &window
+		}
+		sink(CerberusEvent{Routing: event})
 	}
 	if sink := values.RouteOutcomeSink; sink != nil {
 		sink(ModelProvenance{

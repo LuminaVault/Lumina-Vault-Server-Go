@@ -12,7 +12,14 @@
 // WithValues. Streams are iter.Seq2 values: breaking out of the range loop
 // cancels the upstream call.
 //
-// Not ported is ParallelExecutor, which waits for the parallel controllers. Transport
-// has the hook it plugs into (EnsembleExecutor). The read side of credentials and
-// preferences is here, their write side moves with wave 5.
+// Request-path callers use two services, built once from the Stack:
+// Stack.StreamService (RoutedHermesLLMStreamService, chat and /v1/query/stream) and
+// Stack.ChatService (RoutedHermesLLMService, /v1/llm/chat). Both resolve model
+// disclosure through DisclosureFor; ClassifyToolErrors and SanitizeToolOutput are
+// HermesToolErrorClassifier; IsEmptyCompletion and EmptyCompletionMessage are
+// ChatStreamCompletionPolicy.
+//
+// Not ported is ParallelExecutor (cerberus.parallelEnabled is off in production).
+// Transport has the hook it plugs into (EnsembleExecutor). The read side of
+// credentials and preferences is here, their write side moves with wave 5.
 package llm
