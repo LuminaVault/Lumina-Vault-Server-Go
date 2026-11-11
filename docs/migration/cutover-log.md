@@ -1801,3 +1801,27 @@ Beyond the pilot gate (D-wave2-early):
 - Memories saved over MCP are forgotten within the scenario, so their randomly keyed chunks never reach
   later modules' `memory_chunks` snapshots.
 - Flip: only with the ws bundle.
+
+## system (wave 7)
+
+### G0 entry: met 2026-11-11
+
+- Routes: 7 under `/v1/system/hermes`, behind the JWT then `X-Admin-Token` (empty token 404 "admin
+  disabled", mismatch 401 "admin token invalid"), mounted only with the secret box, as in Swift:
+  `version`, `update`, `update/current`, `update/:jobID`, `update/:jobID/stream` (SSE),
+  `update/:jobID/rollback`, `reprovision`.
+- Decision O1: no docker in the pod. The routes, the `hermes_update_jobs` rows and the SSE stream
+  are ported. The step engine runs up to its first docker call, which fails as Swift's does: an
+  update fails at `preflight`, a manual rollback fails at restore with Swift's message, and
+  `reprovision` is a 500 (`ensureNetworkExists` throws). `version` falls back to the channel tag.
+- Config: `HERMES_CENTRAL_CONTAINER_NAME`, `HERMES_CENTRAL_REGISTRY_IMAGE`,
+  `HERMES_CENTRAL_CHANNEL_TAG` (Swift's `hermes.central.*` defaults).
+- Swift tests: `HermesUpdateServiceTests` 3. `second update while one is running is rejected` is
+  ported. The happy path and the unhealthy-version rollback drive docker to success; a waiver is
+  proposed in the PR (O1).
+
+### G1 parity: met 2026-11-11
+
+- `parity/scenarios/system/01-hermes-update.yaml` with `parity/seed/system.sql`. Seeded jobs are
+  compared whole, including the stream. Ignored for jobs the scenario starts: clock times,
+  `errorMessage` and step `detail` (Swift's Process or docker stderr text).
