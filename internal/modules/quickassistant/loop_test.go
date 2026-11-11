@@ -135,10 +135,18 @@ type recordingRunner struct {
 	calls   []ranCall
 	results map[string]ToolResult
 	after   func()
+	// during runs inside Run, before the tool's work is "done"; ctxDone then
+	// records whether the ctx the tool was given had been cancelled.
+	during  func()
+	ctxDone []bool
 }
 
-func (r *recordingRunner) Run(_ context.Context, name string, args map[string]any) ToolResult {
+func (r *recordingRunner) Run(ctx context.Context, name string, args map[string]any) ToolResult {
+	if r.during != nil {
+		r.during()
+	}
 	r.mu.Lock()
+	r.ctxDone = append(r.ctxDone, ctx.Err() != nil)
 	r.calls = append(r.calls, ranCall{name, args})
 	result, ok := r.results[name]
 	r.mu.Unlock()
@@ -692,6 +700,41 @@ func TestStoppedAfterAnActionKeepsItsRecord(t *testing.T) {
 	reply := mustReply(t, newHarness(tr).answer(ctx, runner, nil))
 
 	if !reply.ShouldPersist || reply.IsAnswer || reply.Text != "This request was stopped before it finished. Already done: Saved a memory." {
+		t.Errorf("reply = %+v", reply)
+	}
+}
+
+// A tool already running finishes even if the turn is cancelled under it, as
+// Swift's cooperative cancellation lets it: a write must not commit half-way
+// or commit with no chip. The loop then stops before the next call and round.
+func TestATurnCancelledDuringAToolLetsThatToolFinish(t *testing.T) {
+	tr := newTransport(paidDecision(1000), toolsStep(
+		call("c1", "app_reminder_create", reminderArguments),
+		call("c2", "memory_save", `{"content":"x"}`),
+	), textStep("never"))
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	runner := &recordingRunner{
+		results: map[string]ToolResult{"app_reminder_create": {ModelContent: "set", Action: doneAction("Reminder set")}},
+		during:  cancel,
+	}
+	log := &eventLog{}
+
+	reply := mustReply(t, newHarness(tr).answer(ctx, runner, log))
+
+	if got := runner.names(); !reflect.DeepEqual(got, []string{"app_reminder_create"}) {
+		t.Errorf("runner ran %v", got)
+	}
+	if !reflect.DeepEqual(runner.ctxDone, []bool{false}) {
+		t.Errorf("the running tool's ctx was cancelled under it: %v", runner.ctxDone)
+	}
+	if n := len(tr.sent()); n != 1 {
+		t.Errorf("%d rounds, want no round after the cancel", n)
+	}
+	if len(log.actions()) != 1 {
+		t.Errorf("actions = %v", log.actions())
+	}
+	if reply.Text != "This request was stopped before it finished. Already done: Reminder set." || !reply.ShouldPersist || reply.IsAnswer {
 		t.Errorf("reply = %+v", reply)
 	}
 }

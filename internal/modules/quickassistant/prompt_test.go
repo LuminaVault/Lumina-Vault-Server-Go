@@ -274,3 +274,15 @@ func TestAddingSystemTextJoinsTheFirstSystemMessage(t *testing.T) {
 		t.Errorf("no messages = %#v", empty)
 	}
 }
+
+// Swift's caller substitutes GMT when TurnLocation finds no zone; a nil
+// location here is UTC rather than a panic.
+func TestANilLocationIsUTC(t *testing.T) {
+	if got, want := Clock(justAfterMidnightUTC, nil), Clock(justAfterMidnightUTC, time.UTC); got != want {
+		t.Errorf("Clock(nil) = %q, want %q", got, want)
+	}
+	got := System(Context{CurrentTab: "home"}, nil, justAfterMidnightUTC, nil)
+	if want := System(Context{CurrentTab: "home"}, nil, justAfterMidnightUTC, time.UTC); got != want {
+		t.Errorf("System(nil) differs from System(UTC)")
+	}
+}

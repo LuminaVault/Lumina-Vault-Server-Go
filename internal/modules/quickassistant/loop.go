@@ -37,6 +37,8 @@ type ToolResult struct {
 }
 
 // ToolRunner is QuickAssistantToolRunning: runs one tool the policy allows.
+// Run gets a context that is not cancelled with the turn, so a started tool
+// finishes; a runner that needs a bound sets its own timeout.
 // The loop has already refused what the policy refuses, capped the round and
 // parsed the arguments; the runner does the rest (Task 8).
 type ToolRunner interface {
@@ -275,7 +277,10 @@ func (t *turn) runCall(index int, c wireToolCall) string {
 	}
 	t.toolCallCount++
 	t.ranPersonalTool = t.ranPersonalTool || TouchesPersonalData(name)
-	result := t.tools.Run(t.ctx, name, args)
+	// A started tool runs to its result, as under Swift's cooperative
+	// cancellation: a disconnect must not abort a write half-way or let it
+	// commit without its chip. Cancellation is checked between calls instead.
+	result := t.tools.Run(context.WithoutCancel(t.ctx), name, args)
 	if a := result.Action; a != nil {
 		t.actionEmitted = true
 		t.emit(Frame(*a))

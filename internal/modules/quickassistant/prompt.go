@@ -17,7 +17,11 @@ const ActionsUnavailable = "You cannot take actions in the app right now. If the
 // System is QuickAssistantPrompt.system: the Quick Assistant's own system text.
 // It goes in front of the ordinary chat prompt, which already carries persona,
 // memories, schedule and SOUL.
+//
+// A nil loc is UTC, as Swift's caller substitutes GMT when TurnLocation finds
+// no zone.
 func System(c Context, spaceName *string, now time.Time, loc *time.Location) string {
+	loc = orUTC(loc)
 	var whereTheUserIs []string
 	if tab, ok := tabName(c.CurrentTab); ok {
 		whereTheUserIs = append(whereTheUserIs, "The user is on the "+tab+" tab, but may ask about anything in the app.")
@@ -64,7 +68,9 @@ func System(c Context, spaceName *string, now time.Time, loc *time.Location) str
 
 // Clock is QuickAssistantPrompt.clock:
 // "It is Thursday, 5 November 2026, 23:30 (America/Santiago, UTC-03:00)."
+// A nil loc is UTC.
 func Clock(now time.Time, loc *time.Location) string {
+	loc = orUTC(loc)
 	local := now.In(loc)
 	_, seconds := local.Zone()
 	return "It is " + local.Format("Monday, 2 January 2006, 15:04") + " (" + loc.String() + ", " + offset(seconds) + ")."
@@ -112,6 +118,13 @@ func loadZone(identifier string) *time.Location {
 	loc, err := time.LoadLocation(identifier)
 	if err != nil {
 		return nil
+	}
+	return loc
+}
+
+func orUTC(loc *time.Location) *time.Location {
+	if loc == nil {
+		return time.UTC
 	}
 	return loc
 }
