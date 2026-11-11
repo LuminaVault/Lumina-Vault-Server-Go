@@ -8,10 +8,13 @@ import (
 	"lumina/internal/auth"
 	"lumina/internal/config"
 	"lumina/internal/dbtest"
+	"lumina/internal/devicerpc"
 	"lumina/internal/embedding"
 	"lumina/internal/httpserver"
+	"lumina/internal/ids"
 	"lumina/internal/migrations"
 	"lumina/internal/modules/apple"
+	"lumina/internal/ws"
 	"lumina/parity/scenario"
 	"net/http"
 	"net/http/httptest"
@@ -60,10 +63,13 @@ func setup(t *testing.T, fixtures bool, cfg embedding.Config) env {
 	}
 	e := httpserver.New(config.Config{}, httpserver.Deps{
 		Auth:    auth.Middleware(keys, auth.PGUsers(pool)),
-		Modules: []httpserver.Module{apple.New(pool, apple.Options{Embedder: embedding.New(pool, cfg, nil)})},
+		Modules: []httpserver.Module{apple.New(pool, apple.Options{Embedder: embedding.New(pool, cfg, nil), Devices: devices})},
 	})
 	return env{t: t, e: e, pool: pool}
 }
+
+// devices is the broker every test server resumes; it sends nowhere.
+var devices = devicerpc.New(ws.NewManager(), 5*time.Second)
 
 var defaultOpts = embedding.Config{Provider: "deterministic", MonthlyCap: 2_000_000}
 
@@ -439,6 +445,37 @@ func TestOnlyWritesQueueAndThePushSaysWhatIsWaiting(t *testing.T) {
 	require.Equal(t, "Open LuminaVault to add the reminder “Call mom”.", apple.Announcement("reminder_create", map[string]string{"title": "Call mom"}))
 	require.Equal(t, "Open LuminaVault to add “an item” to your calendar.", apple.Announcement("calendar_create", map[string]string{}))
 	require.Equal(t, "Open LuminaVault to finish a request from Lumina.", apple.Announcement("device_fetch", nil))
+}
+
+// Swift's result route resumes the broker's waiter before touching the queue,
+// whoever's queue row it is.
+func TestResultResumesTheBrokersPendingRequest(t *testing.T) {
+	v := setup(t, false, defaultOpts)
+	command := devicerpc.NewCommand(devicerpc.KindDeviceFetch, "calendar", nil)
+	type out struct {
+		r   devicerpc.Result
+		err error
+	}
+	done := make(chan out, 1)
+	go func() {
+		r, err := devices.Request(context.Background(), alice, command)
+		done <- out{r, err}
+	}()
+	body := fmt.Sprintf(`{"id":%q,"ok":true,"payload":{"items":"[]"}}`, ids.Upper(command.ID))
+	require.Eventually(t, func() bool {
+		r := v.do(alice, http.MethodPost, "/v1/devices/command/x/result", body)
+		require.Equal(t, http.StatusOK, r.code)
+		select {
+		case got := <-done:
+			require.NoError(t, got.err)
+			require.True(t, got.r.OK)
+			require.Equal(t, map[string]string{"items": "[]"}, got.r.Payload)
+			require.Nil(t, got.r.Error)
+			return true
+		default:
+			return false
+		}
+	}, 3*time.Second, 50*time.Millisecond)
 }
 
 // Every success body must validate against api/openapi.yaml (decisions.md D2).
