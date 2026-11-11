@@ -14,6 +14,7 @@ import (
 	"lumina/internal/chunkindex"
 	"lumina/internal/config"
 	"lumina/internal/db"
+	"lumina/internal/devicerpc"
 	"lumina/internal/diskguard"
 	"lumina/internal/embedding"
 	"lumina/internal/entitlement"
@@ -70,6 +71,7 @@ import (
 	"lumina/internal/usagemeter"
 	"lumina/internal/vaultfiles"
 	"lumina/internal/vaultpaths"
+	"lumina/internal/ws"
 	"net"
 	"net/url"
 	"os"
@@ -194,6 +196,9 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		// can still enqueue.
 		sink, stopSink := startAchievementSink(ctx, pool, cfg, func(tenant uuid.UUID, _ achievements.Sub) { meModule.InvalidateToday(tenant) })
 		defer stopSink()
+		// One socket map and device-RPC broker per process (P5); 5J mounts /v1/ws on sockets.
+		sockets := ws.NewManager()
+		deviceRPC := devicerpc.New(sockets, 0)
 		// Migrated modules (modules.yaml status ≥ parity). Traffic only reaches
 		// them through the api ingress.extraPaths that name them.
 		deps.Modules = []httpserver.Module{
@@ -203,7 +208,7 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 			profiles.New(pool),
 			sessions.New(pool),
 			// apple, devices and reminders flip together (D-shared-prefixes).
-			apple.New(pool, apple.Options{Embedder: embeddings, Analytics: analytics}),
+			apple.New(pool, apple.Options{Embedder: embeddings, Analytics: analytics, Devices: deviceRPC}),
 			devices.New(pool, cfg.APNSBundleID),
 			reminders.New(pool, nil, cfg.HermesDefaultModel),
 			achievements.New(pool, identify, limits),
@@ -229,6 +234,7 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		)
 		deps.Modules = append(deps.Modules, memoryModule(pool, cfg, box, identify, limits, paths, embeddings, sink, meModule))
 		deps.Modules = append(deps.Modules, selfImprovementModule(pool, cfg, box, identify, paths))
+		deps.Modules = append(deps.Modules, soulModule(pool, cfg, box, identify, limits, paths, sink))
 		// Wave 4: knowledge, vision and the compile probe. /v1/vision spends a platform
 		// key, so it has its own gate. Both groups read billing.enforcementEnabled.
 		enforcement := entitlement.EnforcementEnabled(cfg.BillingEnforcementEnabled)

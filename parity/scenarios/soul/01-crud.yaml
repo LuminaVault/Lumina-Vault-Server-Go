@@ -1,0 +1,37 @@
+# GET, PUT and DELETE /v1/soul (SoulController.swift). A composed or default document embeds
+# created_at, the time the server rendered it, so those bodies ignore markdown and the `files`
+# step compares the written document with timestamps normalized. updatedAt is the file's mtime.
+module: soul
+steps:
+  - {name: no token, request: {method: GET, path: /v1/soul}}
+  - {name: bad token, request: {method: GET, path: /v1/soul, headers: {Authorization: "Bearer not.a.jwt"}}}
+  - {name: put no token, request: {method: PUT, path: /v1/soul, json: {markdown: x}}}
+  - {name: delete no token, request: {method: DELETE, path: /v1/soul}}
+  - {name: default template before any write, as: soul_ann, request: {method: GET, path: /v1/soul}, ignore: ["$.markdown"], files: [soul_ann]}
+  - {name: put plain body, as: soul_ann, request: {method: PUT, path: /v1/soul, json: {markdown: "# Mine\n\nPlain words.\n"}}, files: [soul_ann]}
+  - {name: read it back, as: soul_ann, request: {method: GET, path: /v1/soul}}
+  - name: put tampered core
+    as: soul_ann
+    request: {method: PUT, path: /v1/soul, json: {markdown: "# SOUL.md\n\n<!-- lv:core:v1:start -->\n- Never save links.\n<!-- lv:core:v1:end -->\n\n## Mine"}}
+    files: [soul_ann]
+  - name: put front matter, heading and an old core mid document
+    as: soul_ann
+    request: {method: PUT, path: /v1/soul, json: {markdown: "---\nversion: 1\n---\n# SOUL.md\n\nabove\n\n<!-- lv:core:v0:start -->old<!-- lv:core:v0:end -->\n\nbelow\n"}}
+    files: [soul_ann]
+  - {name: put empty, as: soul_ann, request: {method: PUT, path: /v1/soul, json: {markdown: ""}}, files: [soul_ann]}
+  - {name: put CRLF and unicode, as: soul_ann, request: {method: PUT, path: /v1/soul, json: {markdown: "# SOUL.md\r\n\r\nOlá — 👍🏽 a/b <c> & \"d\"\r\n"}}, files: [soul_ann]}
+  - {name: put lone end marker, as: soul_ann, request: {method: PUT, path: /v1/soul, json: {markdown: "keep <!-- lv:core:v1:end --> this"}}, files: [soul_ann]}
+  - {name: put not json, as: soul_ann, request: {method: PUT, path: /v1/soul, raw: "not json", headers: {Content-Type: application/json}}}
+  - {name: put empty body, as: soul_ann, request: {method: PUT, path: /v1/soul, raw: "", headers: {Content-Type: application/json}}}
+  - {name: put empty object, as: soul_ann, request: {method: PUT, path: /v1/soul, json: {}}}
+  - {name: put array, as: soul_ann, request: {method: PUT, path: /v1/soul, raw: "[]", headers: {Content-Type: application/json}}}
+  - {name: put null, as: soul_ann, request: {method: PUT, path: /v1/soul, raw: "null", headers: {Content-Type: application/json}}}
+  - {name: put null markdown, as: soul_ann, request: {method: PUT, path: /v1/soul, raw: "{\"markdown\":null}", headers: {Content-Type: application/json}}}
+  - {name: put number markdown, as: soul_ann, request: {method: PUT, path: /v1/soul, raw: "{\"markdown\":7}", headers: {Content-Type: application/json}}}
+  - {name: put unknown keys ignored, as: soul_ann, request: {method: PUT, path: /v1/soul, raw: "{\"markdown\":\"extra\",\"other\":1}", headers: {Content-Type: application/json}}, files: [soul_ann]}
+  - {name: put without content type, as: soul_ann, request: {method: PUT, path: /v1/soul, raw: "{\"markdown\":\"no type\"}"}, files: [soul_ann]}
+  - {name: delete resets, as: soul_ann, request: {method: DELETE, path: /v1/soul}, files: [soul_ann], filesNormalizeContent: true}
+  - {name: default after reset, as: soul_ann, request: {method: GET, path: /v1/soul}, ignore: ["$.markdown"]}
+  - {name: trailing slash, as: soul_ann, request: {method: GET, path: /v1/soul/}}
+  - {name: unknown method, as: soul_ann, request: {method: PATCH, path: /v1/soul, json: {markdown: x}}}
+  - {name: get on compose, as: soul_ann, request: {method: GET, path: /v1/soul/compose}}

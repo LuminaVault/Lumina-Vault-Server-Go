@@ -1,0 +1,64 @@
+# POST /v1/soul/compose (SOULComposer.render). The body embeds created_at, so it ignores
+# markdown; each persisted composition is compared on the volume with timestamps normalized.
+# Clamps: agent_name 64 Characters, other_priority 256, three voice samples of 2 KiB each.
+module: soul
+steps:
+  - {name: compose no token, request: {method: POST, path: /v1/soul/compose, json: {}}}
+  - {name: compose defaults, as: soul_cy, request: {method: POST, path: /v1/soul/compose, json: {}}, ignore: ["$.markdown"], files: [soul_cy], filesNormalizeContent: true}
+  - name: legacy four fields
+    as: soul_cy
+    request: {method: POST, path: /v1/soul/compose, json: {agent_name: Legacy, tone: warm, role: second_brain, autonomy: suggest}}
+    ignore: ["$.markdown"]
+    files: [soul_cy]
+    filesNormalizeContent: true
+  - {name: read the composition back, as: soul_cy, request: {method: GET, path: /v1/soul}, ignore: ["$.markdown"]}
+  - name: every field
+    as: soul_cy
+    request:
+      method: POST
+      path: /v1/soul/compose
+      json: {agent_name: "  Athena  ", tone: concise_technical, role: coworker, autonomy: act, priorities: [focus, health, learning, family, money, creative, other], other_priority: "wood carving", format: prose, length: long, emojis: true, voice_samples: ["hey what's up", "ship it", "third", "FOURTH-DROPPED"], dry_run: false}
+    ignore: ["$.markdown"]
+    files: [soul_cy]
+    filesNormalizeContent: true
+  - name: comments and line breaks in free text
+    as: soul_cy
+    request: {method: POST, path: /v1/soul/compose, json: {tone: playful, role: coach, autonomy: ask_first, priorities: [other], other_priority: "x <!-- lv:core:v1:start --> y\nz -->\r\nw", voice_samples: ["  ", "", "multi\nline\n\nsample", "crlf\r\nsample", "<!-- hidden --> text"]}}
+    ignore: ["$.markdown"]
+    files: [soul_cy]
+    filesNormalizeContent: true
+  - name: clamps
+    as: soul_cy
+    request:
+      method: POST
+      path: /v1/soul/compose
+      json: {agent_name: "🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹", tone: formal, other_priority: "pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp", voice_samples: ["ééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé"]}
+    ignore: ["$.markdown"]
+    files: [soul_cy]
+    filesNormalizeContent: true
+  - name: casual, dry and short
+    as: soul_cy
+    request: {method: POST, path: /v1/soul/compose, json: {agent_name: "Ünïcødé ✨", tone: casual, format: bullets, length: short, emojis: false, priorities: [focus, focus]}}
+    ignore: ["$.markdown"]
+    files: [soul_cy]
+    filesNormalizeContent: true
+  - {name: nulls read as absent, as: soul_cy, request: {method: POST, path: /v1/soul/compose, raw: "{\"agent_name\":null,\"tone\":null,\"priorities\":null,\"emojis\":null,\"dry_run\":null}", headers: {Content-Type: application/json}}, ignore: ["$.markdown"], files: [soul_cy], filesNormalizeContent: true}
+  - {name: dry run writes nothing, as: soul_dee, request: {method: POST, path: /v1/soul/compose, json: {agent_name: Preview, tone: dry, dry_run: true}}, ignore: ["$.markdown"], files: [soul_dee]}
+  - {name: still the default, as: soul_dee, request: {method: GET, path: /v1/soul}, ignore: ["$.markdown"]}
+  - {name: unknown tone, as: soul_dee, request: {method: POST, path: /v1/soul/compose, json: {tone: loud}}}
+  - {name: unknown role, as: soul_dee, request: {method: POST, path: /v1/soul/compose, json: {role: boss}}}
+  - {name: unknown autonomy, as: soul_dee, request: {method: POST, path: /v1/soul/compose, json: {autonomy: always}}}
+  - {name: unknown priority, as: soul_dee, request: {method: POST, path: /v1/soul/compose, json: {priorities: [focus, nap]}}}
+  - {name: unknown format, as: soul_dee, request: {method: POST, path: /v1/soul/compose, json: {format: table}}}
+  - {name: unknown length, as: soul_dee, request: {method: POST, path: /v1/soul/compose, json: {length: medium}}}
+  - {name: tone of the wrong case, as: soul_dee, request: {method: POST, path: /v1/soul/compose, json: {tone: Warm}}}
+  - {name: role as a number, as: soul_dee, request: {method: POST, path: /v1/soul/compose, raw: "{\"role\":1}", headers: {Content-Type: application/json}}}
+  - {name: emojis as a string, as: soul_dee, request: {method: POST, path: /v1/soul/compose, raw: "{\"emojis\":\"yes\"}", headers: {Content-Type: application/json}}}
+  - {name: dry run as a string, as: soul_dee, request: {method: POST, path: /v1/soul/compose, raw: "{\"dry_run\":\"true\"}", headers: {Content-Type: application/json}}}
+  - {name: voice samples as a string, as: soul_dee, request: {method: POST, path: /v1/soul/compose, raw: "{\"voice_samples\":\"hi\"}", headers: {Content-Type: application/json}}}
+  - {name: null voice sample, as: soul_dee, request: {method: POST, path: /v1/soul/compose, raw: "{\"voice_samples\":[\"a\",null]}", headers: {Content-Type: application/json}}}
+  - {name: null priority, as: soul_dee, request: {method: POST, path: /v1/soul/compose, raw: "{\"priorities\":[null]}", headers: {Content-Type: application/json}}}
+  - {name: agent name as a number, as: soul_dee, request: {method: POST, path: /v1/soul/compose, raw: "{\"agent_name\":5}", headers: {Content-Type: application/json}}}
+  - {name: compose array, as: soul_dee, request: {method: POST, path: /v1/soul/compose, raw: "[]", headers: {Content-Type: application/json}}}
+  - {name: compose not json, as: soul_dee, request: {method: POST, path: /v1/soul/compose, raw: "{", headers: {Content-Type: application/json}}}
+  - {name: compose empty body, as: soul_dee, request: {method: POST, path: /v1/soul/compose, raw: "", headers: {Content-Type: application/json}}, files: [soul_dee]}

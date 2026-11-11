@@ -3,12 +3,13 @@
 // loads it on every turn, so a write lands in two places: the tenant's raw directory
 // and the user's Hermes profile.
 //
-// /v1/soul itself is wave 8. SOULService.reset, updatedAt and needsCoreMigration
-// have no caller until then, and the composer's non-default inputs arrive with it.
+// /v1/soul (wave 8) is internal/modules/soul. needsCoreMigration has no caller in
+// Go: SOULCoreMigrationJob stays in Swift.
 package soul
 
 import (
 	"fmt"
+	"lumina/internal/ids"
 	"lumina/internal/vaultfiles"
 	"lumina/internal/vaultpaths"
 	"os"
@@ -53,23 +54,7 @@ func New(paths vaultpaths.Paths, hermesDataRoot string) *Service {
 // RenderDefault is SOULDefaultTemplate.render, which is SOULComposer.render with
 // every input at its default. The core is already where Inject puts it.
 func RenderDefault(username string, now time.Time) string {
-	return strings.Join([]string{
-		"---\nversion: 2\nusername: " + username + "\ncreated_at: " + now.UTC().Format("2006-01-02T15:04:05Z") + "\n---",
-		"# SOUL.md",
-		Core,
-		"## Identity",
-		"I am Hermes, your second brain — I remember everything so you don't have to. I read this file on every reply, so it defines who I am for " + username + ".",
-		"## Chat voice",
-		"Warm, encouraging, and plain-spoken. Lead with empathy, stay direct.",
-		"- Format: Bullets and short sections over walls of text.\n- Length: Short and scannable by default; go deep only when asked.\n- No emojis.",
-		"## Published content voice",
-		"When drafting anything that leaves this vault (posts, replies, messages on connected channels), switch to a neutral, professional voice: clear, factual, no inside jokes, no emojis unless the platform calls for them. Publishing itself always requires explicit authorization (see core covenant).",
-		"## What matters to me",
-		"- Whatever the current mission needs — tell me and update this list.",
-		"## Operations",
-		"Propose actions and wait for a clear go-ahead before acting. Keep continuity across sessions by leaning on memory rather than re-asking.",
-		"<!-- Anything below this line is free-form notes the user wrote about themselves. -->",
-	}, "\n\n")
+	return Compose(ComposeInput{}, username, now)
 }
 
 func (s *Service) vaultPath(tenant uuid.UUID) string {
@@ -134,15 +119,60 @@ func (s *Service) InitIfMissing(tenant uuid.UUID, username string, now time.Time
 	return err
 }
 
+// Reset is SOULService.reset: the default template through Write.
+func (s *Service) Reset(tenant uuid.UUID, username string, now time.Time) (string, error) {
+	return s.Write(tenant, username, RenderDefault(username, now))
+}
+
+// UpdatedAt is SOULService.updatedAt: the vault copy's modification time, and
+// false when there's no file.
+func (s *Service) UpdatedAt(tenant uuid.UUID) (time.Time, bool) {
+	info, err := os.Stat(s.vaultPath(tenant))
+	if err != nil {
+		return time.Time{}, false
+	}
+	return info.ModTime(), true
+}
+
+// NeedsCoreMigration is SOULService.needsCoreMigration: the vault copy exists and
+// is UTF-8 but lacks the canonical core.
+func (s *Service) NeedsCoreMigration(tenant uuid.UUID) bool {
+	data, err := os.ReadFile(s.vaultPath(tenant)) //nolint:gosec // a fixed name under the tenant's raw directory
+	if err != nil {
+		return false
+	}
+	text, ok := vaultfiles.DecodeUTF8(data)
+	return ok && !ContainsCanonicalCore(text)
+}
+
+// ContainsCanonicalCore is SOULCore.containsCanonicalCore.
+func ContainsCanonicalCore(markdown string) bool { return strings.Contains(markdown, Core) }
+
+// NotWritableError is HermesDataError.notWritable. The controller answers it with a
+// 503 carrying Error(). Reason embeds the OS error, which Foundation words
+// differently, so the text can't match Swift's byte for byte.
+type NotWritableError struct {
+	Path   string
+	Reason string
+}
+
+func (e *NotWritableError) Error() string {
+	return "Hermes profiles directory not writable at " + e.Path + ". " + e.Reason +
+		" Ensure data/hermes/profiles exists and is writable by the hummingbird user (see docs/startup.md and docker/hermes-entrypoint.sh)."
+}
+
 // ensureProfilesWritable is HermesDataPathService.ensureProfilesDirectoryWritable.
 func (s *Service) ensureProfilesWritable() error {
 	profiles := filepath.Join(s.hermesRoot, "profiles")
 	if err := os.MkdirAll(profiles, 0o755); err != nil { //nolint:gosec // the mode Foundation's createDirectory leaves; Hermes reads this tree
-		return fmt.Errorf("could not create profiles directory: %w", err)
+		return &NotWritableError{Path: profiles, Reason: fmt.Sprintf("could not create profiles directory: %v", err)}
 	}
-	probe := filepath.Join(profiles, ".write-probe-"+uuid.NewString())
+	probe := filepath.Join(profiles, ".write-probe-"+ids.Upper(uuid.New()))
 	if err := os.WriteFile(probe, nil, 0o644); err != nil { //nolint:gosec // an empty probe, removed at once
-		return fmt.Errorf("profiles directory is not writable: %w", err)
+		return &NotWritableError{Path: profiles, Reason: fmt.Sprintf("profiles directory is not writable by the app process: %v", err)}
 	}
-	return os.Remove(probe)
+	if err := os.Remove(probe); err != nil {
+		return &NotWritableError{Path: profiles, Reason: fmt.Sprintf("profiles directory is not writable by the app process: %v", err)}
+	}
+	return nil
 }

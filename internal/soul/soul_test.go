@@ -207,3 +207,51 @@ func TestReadNeverReadsTheHermesCopy(t *testing.T) {
 	require.NoError(t, os.WriteFile(h.hermesFile(), []byte("from hermes"), 0o600))
 	require.Equal(t, RenderDefault(h.username, fixedNow), h.read())
 }
+
+// Ported from SOULServiceTests: reset writes default template and overwrites prior content.
+func TestResetWritesDefaultTemplateAndOverwritesPriorContent(t *testing.T) {
+	h := newHarness(t)
+	h.write(t, "# Custom\n")
+	reset, err := h.service.Reset(h.tenant, h.username, fixedNow)
+	require.NoError(t, err)
+	require.Contains(t, reset, "# SOUL.md")
+	require.True(t, ContainsCanonicalCore(reset))
+	require.Equal(t, reset, h.read())
+	require.Equal(t, RenderDefault(h.username, fixedNow), reset)
+}
+
+// Ported from SOULServiceTests: needs core migration detects legacy files.
+func TestNeedsCoreMigrationDetectsLegacyFiles(t *testing.T) {
+	h := newHarness(t)
+	require.False(t, h.service.NeedsCoreMigration(h.tenant))
+	require.NoError(t, h.paths.EnsureTenantDirectories(h.tenant))
+	require.NoError(t, os.WriteFile(h.vaultFile(), []byte("# Legacy SOUL\n"), 0o600))
+	require.True(t, h.service.NeedsCoreMigration(h.tenant))
+	h.write(t, h.read())
+	require.False(t, h.service.NeedsCoreMigration(h.tenant))
+	require.Contains(t, h.read(), "# Legacy SOUL")
+}
+
+func TestUpdatedAtIsTheVaultCopysModificationTime(t *testing.T) {
+	h := newHarness(t)
+	_, ok := h.service.UpdatedAt(h.tenant)
+	require.False(t, ok)
+	h.write(t, "body")
+	when := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	require.NoError(t, os.Chtimes(h.vaultFile(), when, when))
+	got, ok := h.service.UpdatedAt(h.tenant)
+	require.True(t, ok)
+	require.True(t, got.Equal(when))
+}
+
+func TestWriteReportsAnUnwritableProfilesDirectory(t *testing.T) {
+	h := newHarness(t)
+	require.NoError(t, os.MkdirAll(h.hermes, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(h.hermes, "profiles"), nil, 0o600)) // a file where the directory goes
+	_, err := h.service.Write(h.tenant, h.username, "body")
+	var notWritable *NotWritableError
+	require.ErrorAs(t, err, &notWritable)
+	require.Equal(t, filepath.Join(h.hermes, "profiles"), notWritable.Path)
+	require.True(t, strings.HasPrefix(err.Error(), "Hermes profiles directory not writable at "+notWritable.Path+". could not create profiles directory: "))
+	require.True(t, strings.HasSuffix(err.Error(), " Ensure data/hermes/profiles exists and is writable by the hummingbird user (see docs/startup.md and docker/hermes-entrypoint.sh)."))
+}

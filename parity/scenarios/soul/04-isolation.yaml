@@ -1,0 +1,9 @@
+# Each tenant reads and writes only its own SOUL.md.
+module: soul
+steps:
+  - {name: eve writes, as: soul_eve, request: {method: PUT, path: /v1/soul, json: {markdown: "eve only"}}, files: [soul_eve]}
+  - {name: ben writes, as: soul_ben, request: {method: PUT, path: /v1/soul, json: {markdown: "ben only"}}, files: [soul_ben]}
+  - {name: eve reads her own, as: soul_eve, request: {method: GET, path: /v1/soul}}
+  - {name: ben reads his own, as: soul_ben, request: {method: GET, path: /v1/soul}}
+  - {name: ben resets, as: soul_ben, request: {method: DELETE, path: /v1/soul}, files: [soul_ben, soul_eve], filesNormalizeContent: true}
+  - {name: eve is untouched, as: soul_eve, request: {method: GET, path: /v1/soul}}

@@ -1,0 +1,34 @@
+# soulByUser: 30 a minute per user, shared by every /v1/soul route. The 31st answers 429.
+module: soul
+steps:
+  - {name: "read 1", as: soul_rl, request: {method: GET, path: /v1/soul}, ignore: ["$.markdown"]}
+  - {name: "read 2", as: soul_rl, request: {method: GET, path: /v1/soul}, ignore: ["$.markdown"]}
+  - {name: "read 3", as: soul_rl, request: {method: GET, path: /v1/soul}, ignore: ["$.markdown"]}
+  - {name: "read 4", as: soul_rl, request: {method: GET, path: /v1/soul}, ignore: ["$.markdown"]}
+  - {name: "read 5", as: soul_rl, request: {method: GET, path: /v1/soul}, ignore: ["$.markdown"]}
+  - {name: "read 6", as: soul_rl, request: {method: GET, path: /v1/soul}, ignore: ["$.markdown"]}
+  - {name: "read 7", as: soul_rl, request: {method: GET, path: /v1/soul}, ignore: ["$.markdown"]}
+  - {name: "read 8", as: soul_rl, request: {method: GET, path: /v1/soul}, ignore: ["$.markdown"]}
+  - {name: "read 9", as: soul_rl, request: {method: GET, path: /v1/soul}, ignore: ["$.markdown"]}
+  - {name: "read 10", as: soul_rl, request: {method: GET, path: /v1/soul}, ignore: ["$.markdown"]}
+  - {name: "read 11", as: soul_rl, request: {method: GET, path: /v1/soul}, ignore: ["$.markdown"]}
+  - {name: "read 12", as: soul_rl, request: {method: GET, path: /v1/soul}, ignore: ["$.markdown"]}
+  - {name: "read 13", as: soul_rl, request: {method: GET, path: /v1/soul}, ignore: ["$.markdown"]}
+  - {name: "read 14", as: soul_rl, request: {method: GET, path: /v1/soul}, ignore: ["$.markdown"]}
+  - {name: "read 15", as: soul_rl, request: {method: GET, path: /v1/soul}, ignore: ["$.markdown"]}
+  - {name: "read 16", as: soul_rl, request: {method: GET, path: /v1/soul}, ignore: ["$.markdown"]}
+  - {name: "read 17", as: soul_rl, request: {method: GET, path: /v1/soul}, ignore: ["$.markdown"]}
+  - {name: "read 18", as: soul_rl, request: {method: GET, path: /v1/soul}, ignore: ["$.markdown"]}
+  - {name: "read 19", as: soul_rl, request: {method: GET, path: /v1/soul}, ignore: ["$.markdown"]}
+  - {name: "read 20", as: soul_rl, request: {method: GET, path: /v1/soul}, ignore: ["$.markdown"]}
+  - {name: "read 21", as: soul_rl, request: {method: GET, path: /v1/soul}, ignore: ["$.markdown"]}
+  - {name: "read 22", as: soul_rl, request: {method: GET, path: /v1/soul}, ignore: ["$.markdown"]}
+  - {name: "read 23", as: soul_rl, request: {method: GET, path: /v1/soul}, ignore: ["$.markdown"]}
+  - {name: "read 24", as: soul_rl, request: {method: GET, path: /v1/soul}, ignore: ["$.markdown"]}
+  - {name: "read 25", as: soul_rl, request: {method: GET, path: /v1/soul}, ignore: ["$.markdown"]}
+  - {name: "read 26", as: soul_rl, request: {method: GET, path: /v1/soul}, ignore: ["$.markdown"]}
+  - {name: "read 27", as: soul_rl, request: {method: GET, path: /v1/soul}, ignore: ["$.markdown"]}
+  - {name: "read 28", as: soul_rl, request: {method: GET, path: /v1/soul}, ignore: ["$.markdown"]}
+  - {name: "read 29", as: soul_rl, request: {method: GET, path: /v1/soul}, ignore: ["$.markdown"]}
+  - {name: "read 30", as: soul_rl, request: {method: GET, path: /v1/soul}, ignore: ["$.markdown"]}
+  - {name: "compose is limited too", as: soul_rl, request: {method: POST, path: /v1/soul/compose, json: {dry_run: true}}}

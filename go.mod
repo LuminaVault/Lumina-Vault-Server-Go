@@ -4,6 +4,7 @@ go 1.27.4
 
 require (
 	github.com/caarlos0/env/v11 v11.4.2
+	github.com/coder/websocket v1.8.15
 	github.com/exaring/otelpgx v0.13.0
 	github.com/getkin/kin-openapi v0.142.0
 	github.com/golang-jwt/jwt/v5 v5.3.1

@@ -372,5 +372,11 @@ modules:
     wave: 8
     swiftDir: Sources/App/Auth
     status: swift
-    prefixes: [/v1/auth/email, /v1/auth/forgot-password, /v1/auth/login, /v1/auth/logout, /v1/auth/mfa, /v1/auth/oauth, /v1/auth/pairing, /v1/auth/phone, /v1/auth/refresh, /v1/auth/register, /v1/auth/resend-reset, /v1/auth/reset-password, /v1/auth/webauthn, /v1/soul]
+    prefixes: [/v1/auth/email, /v1/auth/forgot-password, /v1/auth/login, /v1/auth/logout, /v1/auth/mfa, /v1/auth/oauth, /v1/auth/pairing, /v1/auth/phone, /v1/auth/refresh, /v1/auth/register, /v1/auth/resend-reset, /v1/auth/reset-password, /v1/auth/webauthn]
+    jobs: []
+  soul:
+    wave: 8
+    swiftDir: Sources/App/Auth
+    status: parity
+    prefixes: [/v1/soul]
     jobs: []
