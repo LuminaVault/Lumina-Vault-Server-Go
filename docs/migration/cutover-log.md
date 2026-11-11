@@ -1801,3 +1801,33 @@ Beyond the pilot gate (D-wave2-early):
 - Memories saved over MCP are forgotten within the scenario, so their randomly keyed chunks never reach
   later modules' `memory_chunks` snapshots.
 - Flip: only with the ws bundle.
+
+## admin (wave 7B)
+
+### G0 entry: met 2026-11-11
+
+- Routes: 12. `GET /internal/metrics` (`METRICS_SECRET` bearer, JSON `{"users":n}`, 404 "metrics disabled" when
+  unset); behind `X-Admin-Token`: hermes-profiles `health`, `reconcile`, `reap-orphans`; health `correlate` and
+  `correlate/:userID`; memory `recompute`, `recompute/:userID`, `prune`, `prune/:userID`, `chunks/backfill/:userID`
+  (always registered: Swift always builds ChunkBackfillService); `usage-events/prune`.
+- P8: `internal/hermesprofile` exports `Ensure` and `Find`, and adds `Reconciler` (reconcile, reap-orphans, health)
+  and `GatewayProbe` (GET `<gateway>/v1/models`, 1 s timeout, 30 s cache per URL, any HTTP response reachable).
+  8E's `/health/deep` reuses `GatewayProbe`. HermesProfileReconcilerService's 04:00 job is not ported (job move rule).
+- Health correlation calls the routed transport, as Swift's routedTransport. Kept Swift weakness:
+  `NO_CORRELATION` is saved as a memory (`TestSwiftWeaknessNoCorrelationIsSaved`).
+- Config: `METRICS_SECRET`, `USAGE_EVENTS_RETENTION_DAYS` (0, off), `USAGE_EVENTS_RETENTION_BATCH_SIZE` (5000,
+  clamped to 1...10000).
+- Swift tests: `MetricsSecretMiddleware` 5, `UsageEventsRetention` 6, `MemoryScoring` 5 and the prompt test of
+  `HealthCorrelationService` as unit tests; `MemoryPruningService` 4, `HealthCorrelationService` 5,
+  `HermesProfileReconciler` 4 and `HermesProfileService` 5 as DB tests. `MemoryKeepGate`: the verdict parser in
+  `internal/keepjudge` (LLMMemoryKeepJudge, ported unwired). Its worker test drives MemoryIndexWorker, a W5 job not
+  in Go yet, so it lands with that worker.
+- Not scheduled (B6, O3): nothing in the cluster calls the sweeps today, and Go adds no job for them.
+
+### G1 parity: met 2026-11-11
+
+- `parity/scenarios/admin` 01-03 with `parity/seed/admin.sql`; `scenarios-switched/unconfigured/admin`.
+- The all-user sweeps (recompute, prune, correlate, reconcile, reap-orphans) are compared refused only: run for real
+  they would rewrite later modules' fixtures, and correlate's failure lines carry transport error text. Unit and DB
+  tests cover them.
+- Flip: B5 (Isis) in the same infra PR, and not before 7A's `/v1/admin/users` (flip-blockers.md, admin).

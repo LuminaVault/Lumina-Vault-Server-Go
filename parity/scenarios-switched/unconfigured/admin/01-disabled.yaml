@@ -1,0 +1,7 @@
+# ADMIN_TOKEN and METRICS_SECRET empty: every wave 7B route answers 404, token or not.
+module: admin
+steps:
+  - {name: admin route no token, request: {method: POST, path: /v1/admin/usage-events/prune}}
+  - {name: admin route with the usual token, request: {method: GET, path: /v1/admin/hermes-profiles/health, headers: {X-Admin-Token: parity-admin-token}}}
+  - {name: metrics no bearer, request: {method: GET, path: /internal/metrics}}
+  - {name: metrics with the usual bearer, request: {method: GET, path: /internal/metrics, headers: {Authorization: Bearer parity-metrics-secret}}}

@@ -189,6 +189,20 @@ Fixes that later remove the held routes and gaps (Go only unless stated; no modu
   doesn't move the archive date, because Swift has to outlive wave 5 regardless. Owner's call.
 - **Swift change.** None. **Unlocks.** 1 module.
 
+### admin: Isis reads `/internal/metrics` from the Swift Service (B5)
+
+- **Real today?** Yes. Isis calls `http://api-production.horus.svc.cluster.local:8080/internal/metrics` directly
+  (infra `apps/isis/values.yaml:42`, `LUMINAVAULT_METRICS_URL`), not through the Ingress, so `extraPaths` can't move it.
+  `allow-metrics-from-isis-api` (`cluster/network-policies/horus.yaml:736`) admits Isis only to pods labelled
+  `api-production`. At Swift replicas 0 the LuminaVault card goes "unavailable".
+- **Fix, in the flip's infra PR.** Repoint `apps/isis/values.yaml:42` at the Go Service
+  (`api-go-production.horus.svc.cluster.local:8080`), and add Go's pod label (`api-go-production`) to
+  `allow-metrics-from-isis-api`. Go reads `METRICS_SECRET` (wave 7B) from the same sealed env; check it's set there, or
+  Go answers 404 "metrics disabled".
+- **Also.** `/v1/admin/users` (tier-override) is wave 7A's route under the admin prefix. Flip `admin` only once 7A has
+  ported it, or hold `/v1/admin/users` on Swift in the same PR.
+- **Swift change.** None. **Unlocks.** 1 module.
+
 ## Gap found that wasn't recorded: server-side PostHog events
 
 Go has no PostHog client, and `POSTHOG_PROJECT_TOKEN` is in production's sealed env. Each flip silently ends that module's

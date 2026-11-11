@@ -87,6 +87,8 @@ x-common-env: &common-env
   COMMUNITY_ENABLED: "true"
   COMMUNITY_POSTING_ENABLED: "true"
   ADMIN_TOKEN: parity-admin-token
+  # /internal/metrics (wave 7B). State "unconfigured" empties it: 404 "metrics disabled".
+  METRICS_SECRET: parity-metrics-secret
   # Marketplace: the stub also answers as the plugin runner.
   PLUGIN_RUNNER_URL: http://feeds:8080
   PLUGIN_RUNNER_TOKEN: parity-runner-token
@@ -153,6 +155,7 @@ services:
       COMMUNITY_ENABLED: ${SWITCH_COMMUNITY_ENABLED:-true}
       COMMUNITY_POSTING_ENABLED: ${SWITCH_COMMUNITY_POSTING_ENABLED:-true}
       ADMIN_TOKEN: ${SWITCH_ADMIN_TOKEN-parity-admin-token}
+      METRICS_SECRET: ${SWITCH_METRICS_SECRET-parity-metrics-secret}
       PLUGIN_ARTIFACT_SIGNING_KEY: ${SWITCH_SIGNING_KEY-parity-signing-key-parity-signing-key-0000}
       PLUGIN_RUNNER_TOKEN: ${SWITCH_RUNNER_TOKEN-parity-runner-token}
       HYBRID_EXECUTION_ENABLED: ${SWITCH_HYBRID_EXECUTION_ENABLED:-true}
@@ -185,6 +188,7 @@ services:
       COMMUNITY_ENABLED: ${SWITCH_COMMUNITY_ENABLED:-true}
       COMMUNITY_POSTING_ENABLED: ${SWITCH_COMMUNITY_POSTING_ENABLED:-true}
       ADMIN_TOKEN: ${SWITCH_ADMIN_TOKEN-parity-admin-token}
+      METRICS_SECRET: ${SWITCH_METRICS_SECRET-parity-metrics-secret}
       PLUGIN_ARTIFACT_SIGNING_KEY: ${SWITCH_SIGNING_KEY-parity-signing-key-parity-signing-key-0000}
       PLUGIN_RUNNER_TOKEN: ${SWITCH_RUNNER_TOKEN-parity-runner-token}
       HYBRID_EXECUTION_ENABLED: ${SWITCH_HYBRID_EXECUTION_ENABLED:-true}

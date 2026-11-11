@@ -346,7 +346,7 @@ modules:
   admin:
     wave: 7
     swiftDir: Sources/App/Admin
-    status: swift
+    status: parity
     prefixes: [/internal, /v1/admin/health, /v1/admin/hermes-profiles, /v1/admin/memory, /v1/admin/usage-events, /v1/admin/users]
     jobs: []
   billing:
