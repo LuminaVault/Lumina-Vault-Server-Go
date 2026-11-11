@@ -1,0 +1,7 @@
+# Staging smoke: a fresh user's session lists the tools and previews a setup.
+module: mcp
+smoke: true
+steps:
+  - {name: tools list, as: alice, request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/list}}}
+  - {name: preview, as: alice, request: {method: GET, path: "/v1/me/agent-connections/preview?clientKind=claude_code"}}
+  - {name: list, as: alice, request: {method: GET, path: /v1/me/agent-connections}}

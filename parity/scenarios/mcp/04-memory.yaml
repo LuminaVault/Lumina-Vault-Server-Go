@@ -1,0 +1,41 @@
+# Memory writes through a read-write key, then as the user.
+module: mcp
+steps:
+  - name: save
+    request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: memory_save, arguments: {content: "  Prefers Python for scripts.  ", kind: preference, tags: [lang, " tools "]}}}, headers: {Authorization: Bearer lv_parity_cy_read_write_key_0000000000000}}
+    ignore: ["$.result.content"]
+    capture: {saved: $.result.structuredContent.memoryID}
+  - name: an exact repeat is a duplicate
+    request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: memory_save, arguments: {content: Prefers Python for scripts.}}}, headers: {Authorization: Bearer lv_parity_cy_read_write_key_0000000000000}}
+    ignore: ["$.result.content"]
+  - {name: save blank content, request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: memory_save, arguments: {content: "  "}}}, headers: {Authorization: Bearer lv_parity_cy_read_write_key_0000000000000}}}
+  - {name: save unknown kind, request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: memory_save, arguments: {content: x, kind: rumour}}}, headers: {Authorization: Bearer lv_parity_cy_read_write_key_0000000000000}}}
+  - {name: save tags not an array, request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: memory_save, arguments: {content: x, tags: lang}}}, headers: {Authorization: Bearer lv_parity_cy_read_write_key_0000000000000}}}
+  - {name: save blank tag, request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: memory_save, arguments: {content: x, tags: [" "]}}}, headers: {Authorization: Bearer lv_parity_cy_read_write_key_0000000000000}}}
+  - {name: save too many tags, request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: memory_save, arguments: {content: x, tags: [a, b, c, d, e, f, g, h, i, j, k]}}}, headers: {Authorization: Bearer lv_parity_cy_read_write_key_0000000000000}}}
+  - {name: save unknown space, request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: memory_save, arguments: {content: x, space: work}}}, headers: {Authorization: Bearer lv_parity_cy_read_write_key_0000000000000}}}
+  - name: update
+    request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: memory_update, arguments: {memoryID: "{{saved}}", content: Prefers Go for scripts.}}}, headers: {Authorization: Bearer lv_parity_cy_read_write_key_0000000000000}}
+    ignore: ["$.result.content"]
+  - name: update an unknown memory
+    request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: memory_update, arguments: {memoryID: 3C904000-0000-4000-8000-00000000FFFF, content: x}}}, headers: {Authorization: Bearer lv_parity_cy_read_write_key_0000000000000}}
+    ignore: ["$.result.content"]
+  - name: update another account's memory
+    request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: memory_update, arguments: {memoryID: 3C904000-0000-4000-8000-000000000001, content: x}}}, headers: {Authorization: Bearer lv_parity_cy_read_write_key_0000000000000}}
+    ignore: ["$.result.content"]
+  - {name: update bad id, request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: memory_update, arguments: {memoryID: nope, content: x}}}, headers: {Authorization: Bearer lv_parity_cy_read_write_key_0000000000000}}}
+  - {name: update without content, request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: memory_update, arguments: {memoryID: "{{saved}}"}}}, headers: {Authorization: Bearer lv_parity_cy_read_write_key_0000000000000}}}
+  - name: forget
+    request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: memory_forget, arguments: {memoryID: "{{saved}}"}}}, headers: {Authorization: Bearer lv_parity_cy_read_write_key_0000000000000}}
+    ignore: ["$.result.content"]
+  - name: forget again
+    request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: memory_forget, arguments: {memoryID: "{{saved}}"}}}, headers: {Authorization: Bearer lv_parity_cy_read_write_key_0000000000000}}
+    ignore: ["$.result.content"]
+  - name: session save without kind
+    as: mcp_eve
+    request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: memory_save, arguments: {content: Ships on Fridays.}}}}
+    ignore: ["$.result.content"]
+  - name: index chunks the new memory
+    as: mcp_eve
+    request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: index, arguments: {batchSize: 5}}}}
+    ignore: ["$.result.content"]

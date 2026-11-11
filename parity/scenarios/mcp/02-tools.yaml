@@ -1,0 +1,69 @@
+# Read tools over mcp_ann's seeded vault, as a session JWT.
+module: mcp
+steps:
+  - name: status
+    as: mcp_ann
+    request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: status}}}
+    ignore: ["$.result.content"]
+  - name: browse
+    as: mcp_ann
+    request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: browse, arguments: {}}}}
+    ignore: ["$.result.content"]
+  - name: browse with prefix and limit
+    as: mcp_ann
+    request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: browse, arguments: {pathPrefix: notes/b, limit: 1}}}}
+    ignore: ["$.result.content"]
+  - {name: browse limit zero, as: mcp_ann, request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: browse, arguments: {limit: 0}}}}}
+  - {name: browse limit too big, as: mcp_ann, request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: browse, arguments: {limit: 501}}}}}
+  - name: browse limit as a string is the default
+    as: mcp_ann
+    request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: browse, arguments: {limit: "1"}}}}
+    ignore: ["$.result.content"]
+  - name: browse fractional limit truncates
+    as: mcp_ann
+    request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: browse, arguments: {limit: 1.9}}}}
+    ignore: ["$.result.content"]
+  - name: recent
+    as: mcp_ann
+    request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: recent, arguments: {limit: 5}}}}
+    ignore: ["$.result.content"]
+  - name: read an indexed file that is not on disk
+    as: mcp_ann
+    request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: read, arguments: {path: notes/alpha.md}}}}
+    ignore: ["$.result.content"]
+  - name: read a missing path
+    as: mcp_ann
+    request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: read, arguments: {path: nope.md}}}}
+    ignore: ["$.result.content"]
+  - {name: read blank path, as: mcp_ann, request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: read, arguments: {path: "  "}}}}}
+  - {name: read without path, as: mcp_ann, request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: read, arguments: {}}}}}
+  - {name: read maxChars too big, as: mcp_ann, request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: read, arguments: {path: notes/alpha.md, maxChars: 100001}}}}}
+  - name: links
+    as: mcp_ann
+    request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: links, arguments: {path: notes/alpha.md}}}}
+    ignore: ["$.result.content"]
+  - name: context
+    as: mcp_ann
+    request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: context, arguments: {path: notes/beta.md, siblingLimit: 3}}}}
+    ignore: ["$.result.content"]
+  - {name: context sibling limit too big, as: mcp_ann, request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: context, arguments: {path: notes/beta.md, siblingLimit: 101}}}}}
+  - name: memory context
+    as: mcp_ann
+    request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: memory_context}}}
+    ignore: ["$.result.content", "$.result.structuredContent.soul"]  # default SOUL embeds the current second
+  - name: memory context in a space
+    as: mcp_ann
+    request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: memory_context, arguments: {space: work}}}}
+    ignore: ["$.result.content", "$.result.structuredContent.soul"]  # default SOUL embeds the current second
+  - {name: memory context unknown space, as: mcp_ann, request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: memory_context, arguments: {space: play}}}}}
+  - name: memory context inbox is everything
+    as: mcp_ann
+    request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: memory_context, arguments: {space: inbox}}}}
+    ignore: ["$.result.content", "$.result.structuredContent.soul"]  # default SOUL embeds the current second
+  - {name: search without query, as: mcp_ann, request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: search, arguments: {}}}}}
+  - {name: search blank query, as: mcp_ann, request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: search, arguments: {query: " "}}}}}
+  - {name: search limit too big, as: mcp_ann, request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: search, arguments: {query: x, limit: 51}}}}}
+  - {name: search unknown space, as: mcp_ann, request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: search, arguments: {query: x, space: nope}}}}}
+  - {name: index batch too big, as: mcp_ann, request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: index, arguments: {batchSize: 201}}}}}
+  - {name: foreign vault header, as: mcp_ann, request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: status}}, headers: {X-Vault-ID: 3C900000-0000-4000-8000-0000000000E5}}}
+  - {name: bad vault header, as: mcp_ann, request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: status}}, headers: {X-Vault-ID: nope}}}

@@ -105,7 +105,7 @@ func (t tool) listing() map[string]any {
 		"annotations": map[string]any{
 			"readOnlyHint":    !t.writes,
 			"destructiveHint": t.destructive,
-			"idempotentHint":  !(t.personal && t.writes),
+			"idempotentHint":  !t.personal || !t.writes,
 		},
 	}
 }

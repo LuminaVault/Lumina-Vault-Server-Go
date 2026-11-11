@@ -25,7 +25,7 @@ import (
 // Agent tokens (AgentConnectionService).
 const (
 	TokenPrefix      = "lv_"
-	PlaceholderToken = "PASTE_YOUR_KEY_HERE__create_one_below"
+	PlaceholderToken = "PASTE_YOUR_KEY_HERE__create_one_below" //nolint:gosec // a placeholder shown in setup previews, not a credential
 	tokenBytes       = 32
 	displayPrefixLen = len(TokenPrefix) + 8
 	maxNameLen       = 60

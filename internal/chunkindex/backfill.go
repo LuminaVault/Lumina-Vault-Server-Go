@@ -118,7 +118,7 @@ func (b *Backfiller) readSource(tenant uuid.UUID, path *string) (string, bool) {
 	if err != nil {
 		return "", false
 	}
-	data, err := os.ReadFile(target)
+	data, err := os.ReadFile(target) //nolint:gosec // resolved inside the tenant's raw root
 	if err != nil {
 		return "", false
 	}

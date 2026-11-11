@@ -1,0 +1,43 @@
+# Agent keys on /v1/mcp: the write and personal-data grants, and consent.
+module: mcp
+steps:
+  - name: read-only key reads
+    request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: memory_context}}, headers: {Authorization: Bearer lv_parity_ben_read_only_key_0000000000000}}
+    ignore: ["$.result.content", "$.result.structuredContent.soul"]  # default SOUL embeds the current second
+  - name: read-only key cannot save
+    request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: memory_save, arguments: {content: x}}}, headers: {Authorization: Bearer lv_parity_ben_read_only_key_0000000000000}}
+    ignore: ["$.result.content"]
+  - name: read-only key cannot index
+    request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: index}}, headers: {Authorization: Bearer lv_parity_ben_read_only_key_0000000000000}}
+    ignore: ["$.result.content"]
+  - name: write check comes before argument validation
+    request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: memory_forget, arguments: {memoryID: nope}}}, headers: {Authorization: Bearer lv_parity_ben_read_only_key_0000000000000}}
+    ignore: ["$.result.content"]
+  - name: key without the personal grant
+    request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: health_query}}, headers: {Authorization: Bearer lv_parity_ben_read_only_key_0000000000000}}
+    ignore: ["$.result.content"]
+  - name: read-only key and a personal write is refused as read-only first
+    request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: reminder_create, arguments: {title: x}}}, headers: {Authorization: Bearer lv_parity_ben_read_only_key_0000000000000}}
+    ignore: ["$.result.content"]
+  - name: granted key without consent
+    request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: health_query, arguments: {days: 7}}}, headers: {Authorization: Bearer lv_parity_cy_read_write_key_0000000000000}}
+    ignore: ["$.result.content"]
+  - name: calendar without consent
+    request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: calendar_query}}, headers: {Authorization: Bearer lv_parity_cy_read_write_key_0000000000000}}
+    ignore: ["$.result.content"]
+  - name: reminders without consent
+    request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: reminders_list}}, headers: {Authorization: Bearer lv_parity_cy_read_write_key_0000000000000}}
+    ignore: ["$.result.content"]
+  - name: create without consent
+    request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: calendar_create, arguments: {title: x, start: "2026-12-01T10:00:00Z"}}}, headers: {Authorization: Bearer lv_parity_cy_read_write_key_0000000000000}}
+    ignore: ["$.result.content"]
+  - {name: create without start, request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: calendar_create, arguments: {title: x}}}, headers: {Authorization: Bearer lv_parity_cy_read_write_key_0000000000000}}}
+  - {name: reminder blank title, request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: reminder_create, arguments: {title: " "}}}, headers: {Authorization: Bearer lv_parity_cy_read_write_key_0000000000000}}}
+  - name: session JWT needs no personal grant
+    as: mcp_cy
+    request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: health_query}}}
+    ignore: ["$.result.content"]
+  - name: key last used is touched
+    as: mcp_cy
+    request: {method: GET, path: /v1/me/agent-connections}
+    ignore: ["$.connections[*].lastUsedAt"]

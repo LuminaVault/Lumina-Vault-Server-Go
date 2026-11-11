@@ -1,0 +1,50 @@
+# /v1/me/agent-connections. A new key's token is random, so it, its prefix and the setup
+# that embeds it are ignored; preview is fully deterministic.
+module: mcp
+steps:
+  - {name: no token, request: {method: GET, path: /v1/me/agent-connections}}
+  - {name: bad token, request: {method: GET, path: /v1/me/agent-connections, headers: {Authorization: Bearer not.a.jwt}}}
+  - {name: an agent key is not a session, request: {method: GET, path: /v1/me/agent-connections, headers: {Authorization: Bearer lv_parity_dee_listed_key_00000000000000000}}}
+  - {name: list, as: mcp_dee, request: {method: GET, path: /v1/me/agent-connections}}
+  - {name: list someone else's has none of dee's, as: mcp_eve, request: {method: GET, path: /v1/me/agent-connections}}
+  - {name: preview default, as: mcp_dee, request: {method: GET, path: /v1/me/agent-connections/preview}}
+  - {name: preview claude code, as: mcp_dee, request: {method: GET, path: "/v1/me/agent-connections/preview?clientKind=claude_code"}}
+  - {name: preview codex, as: mcp_dee, request: {method: GET, path: "/v1/me/agent-connections/preview?clientKind=codex"}}
+  - {name: preview hermes, as: mcp_dee, request: {method: GET, path: "/v1/me/agent-connections/preview?clientKind=hermes"}}
+  - {name: preview bad kind, as: mcp_dee, request: {method: GET, path: "/v1/me/agent-connections/preview?clientKind=cursor"}}
+  - {name: preview empty kind, as: mcp_dee, request: {method: GET, path: "/v1/me/agent-connections/preview?clientKind="}}
+  - name: issue
+    as: mcp_dee
+    request: {method: POST, path: /v1/me/agent-connections, json: {name: "  new laptop  ", clientKind: claude_code}}
+    ignore: ["$.token", "$.connection.tokenPrefix", "$.setup"]
+    snapshot: [agent_connections]
+  - name: issue with grants
+    as: mcp_dee
+    request: {method: POST, path: /v1/me/agent-connections, json: {name: ci, clientKind: codex, allowPersonalData: true, access: read_write}}
+    ignore: ["$.token", "$.connection.tokenPrefix", "$.setup"]
+  - {name: issue blank name, as: mcp_dee, request: {method: POST, path: /v1/me/agent-connections, json: {name: "   ", clientKind: other}}}
+  - {name: issue name too long, as: mcp_dee, request: {method: POST, path: /v1/me/agent-connections, json: {name: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", clientKind: other}}}
+  - {name: issue bad kind, as: mcp_dee, request: {method: POST, path: /v1/me/agent-connections, json: {name: x, clientKind: cursor}}}
+  - {name: issue bad access, as: mcp_dee, request: {method: POST, path: /v1/me/agent-connections, json: {name: x, clientKind: other, access: admin}}}
+  - {name: issue missing kind, as: mcp_dee, request: {method: POST, path: /v1/me/agent-connections, json: {name: x}}}
+  - {name: issue name wrong type, as: mcp_dee, request: {method: POST, path: /v1/me/agent-connections, json: {name: 7, clientKind: other}}}
+  - {name: issue malformed, as: mcp_dee, request: {method: POST, path: /v1/me/agent-connections, raw: '{"name":'}}
+  - {name: issue empty body, as: mcp_dee, request: {method: POST, path: /v1/me/agent-connections, raw: ''}}
+  - {name: issue array body, as: mcp_dee, request: {method: POST, path: /v1/me/agent-connections, raw: '[]'}}
+  - {name: update nothing, as: mcp_dee, request: {method: PATCH, path: /v1/me/agent-connections/3C901000-0000-4000-8000-000000000004, json: {}}}
+  - {name: update nulls are nothing, as: mcp_dee, request: {method: PATCH, path: /v1/me/agent-connections/3C901000-0000-4000-8000-000000000004, raw: '{"allowPersonalData":null,"access":null}'}}
+  - {name: update bad access, as: mcp_dee, request: {method: PATCH, path: /v1/me/agent-connections/3C901000-0000-4000-8000-000000000004, json: {access: admin}}}
+  - {name: update grants, as: mcp_dee, request: {method: PATCH, path: /v1/me/agent-connections/3C901000-0000-4000-8000-000000000004, json: {allowPersonalData: true}}}
+  - {name: update access, as: mcp_dee, request: {method: PATCH, path: /v1/me/agent-connections/3c901000-0000-4000-8000-000000000004, json: {access: read_write}}}
+  - {name: update bad id, as: mcp_dee, request: {method: PATCH, path: /v1/me/agent-connections/nope, json: {access: read}}}
+  - {name: update someone else's, as: mcp_eve, request: {method: PATCH, path: /v1/me/agent-connections/3C901000-0000-4000-8000-000000000004, json: {access: read}}}
+  - {name: update revoked, as: mcp_ben, request: {method: PATCH, path: /v1/me/agent-connections/3C901000-0000-4000-8000-000000000003, json: {access: read}}}
+  - {name: revoke someone else's, as: mcp_eve, request: {method: DELETE, path: /v1/me/agent-connections/3C901000-0000-4000-8000-000000000004}}
+  - {name: revoke bad id, as: mcp_dee, request: {method: DELETE, path: /v1/me/agent-connections/preview}}
+  - {name: revoke, as: mcp_dee, request: {method: DELETE, path: /v1/me/agent-connections/3C901000-0000-4000-8000-000000000004}}
+  - {name: revoke again, as: mcp_dee, request: {method: DELETE, path: /v1/me/agent-connections/3C901000-0000-4000-8000-000000000004}}
+  - {name: revoked key no longer authenticates, request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: ping}, headers: {Authorization: Bearer lv_parity_dee_listed_key_00000000000000000}}}
+  - name: list after
+    as: mcp_dee
+    request: {method: GET, path: /v1/me/agent-connections}
+    ignore: ["$.connections[*].tokenPrefix"]
