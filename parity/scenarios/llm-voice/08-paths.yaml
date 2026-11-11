@@ -1,0 +1,32 @@
+# Only POST, and Hummingbird's handling of empty segments.
+module: llm-voice
+steps:
+  - name: "get transcribe"
+    as: vo_misc
+    request: {"method": "GET", "path": "/v1/transcribe"}
+  - name: "put transcribe"
+    as: vo_misc
+    request: {"method": "PUT", "path": "/v1/transcribe", "raw": "x"}
+  - name: "get transcriptions"
+    as: vo_misc
+    request: {"method": "GET", "path": "/v1/audio/transcriptions"}
+  - name: "delete transcriptions"
+    as: vo_misc
+    request: {"method": "DELETE", "path": "/v1/audio/transcriptions"}
+  - name: "get speech"
+    as: vo_misc
+    request: {"method": "GET", "path": "/v1/audio/speech"}
+  - name: "the group has no route"
+    as: vo_misc
+    request: {"method": "POST", "path": "/v1/audio"}
+  - name: "nor does a sibling"
+    as: vo_misc
+    request: {"method": "POST", "path": "/v1/audio/translations", "json": {}}
+  - name: "trailing slash on transcribe"
+    as: vo_misc
+    request: {"method": "POST", "path": "/v1/transcribe/", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "text/plain"}}
+  - name: "trailing slash on speech"
+    as: vo_misc
+    request: {"method": "POST", "path": "/v1/audio/speech/", "json": {}}
+  - name: "no token on an unknown path has no envelope"
+    request: {"method": "POST", "path": "/v1/audio/translations", "json": {}}

@@ -1,0 +1,44 @@
+# Every accepted type, with no DNS for whisper: 502, and a row whose outcome is network.
+module: llm-voice
+steps:
+  - name: "audio/m4a"
+    as: vo_mime1
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "audio/m4a"}}
+  - name: "audio/x-m4a"
+    as: vo_mime1
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "audio/x-m4a"}}
+  - name: "audio/mp4"
+    as: vo_mime1
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "audio/mp4"}}
+  - name: "audio/wav"
+    as: vo_mime1
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "audio/wav"}}
+  - name: "audio/x-wav"
+    as: vo_mime1
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "audio/x-wav"}}
+  - name: "audio/wave"
+    as: vo_mime1
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "audio/wave"}}
+  - name: "audio/mpeg"
+    as: vo_mime1
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "audio/mpeg"}}
+  - name: "audio/mpga"
+    as: vo_mime1
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "audio/mpga"}}
+  - name: "audio/webm"
+    as: vo_mime1
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "audio/webm"}}
+  - name: "audio/ogg"
+    as: vo_mime1
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "audio/ogg"}}
+    snapshot: ["parity_voice_usage"]
+  - name: "audio/opus"
+    as: vo_mime2
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "audio/opus"}}
+  - name: "audio/flac"
+    as: vo_mime2
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "audio/flac"}}
+  - name: "audio/x-flac"
+    as: vo_mime2
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "audio/x-flac"}}
+    snapshot: ["parity_voice_usage"]

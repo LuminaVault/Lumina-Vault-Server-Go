@@ -1227,6 +1227,47 @@ Beyond the pilot gate (D-wave2-early):
 - Go tests: `internal/modules/memory` has 70 tests, on Postgres where they need it,
   including spec conformance. `internal/memorystore/provenance_test.go` has 2.
 
+## llm-voice (wave 5)
+
+### G0 entry: met 2026-11-05
+
+- Routes: 3: `POST /v1/transcribe`, `POST /v1/audio/transcriptions`, `POST /v1/audio/speech` (the 501).
+- Prefix: `/v1/audio`, `/v1/transcribe`, disjoint (`internal/manifest`).
+- Coupling: writes `usage_events` (metric `voice_transcribe`) and `usage_meter`. Hermes calls whisper
+  directly, so voice rows stay at zero in production; accepted.
+- Jobs: none.
+- Swift tests: `MultipartFormParserTests` 15, `OpenAICompatibleTranscribeAdapterTests` 7,
+  `TranscribeProviderConfigTests` 9, `TranscribeServiceUsageTests` 8, `VoiceUsageTests` 12.
+
+### G1 parity: met 2026-11-05
+
+- CI run https://github.com/LuminaVault/Lumina-Vault-Server-Go/actions/runs/42071272337 on `b4f3711`: 165
+  scenarios and every switch state, 0 differences. The stub answered 62 calls on `/v1/audio/transcriptions`.
+- Not compared: the in-flight limit under concurrency and a slow upload (both Go tests), metrics, daily
+  limits other than free's cap of 10.
+- For G2: send one scoped audio token through the ingress. Check the sealed `TRANSCRIBE_PROVIDER` and
+  `TRANSCRIBE_PROVIDER_OPENAI_BASE_URL`: this group couldn't read them.
+
+## tts (wave 5)
+
+### G0 entry: met 2026-11-05
+
+- Routes: 1: `POST /v1/tts`, mounted only when `TTS_BASE_URL` is set. Unset, it returns 404, which is
+  production's inferred behaviour. A `curl` settles that. Owner to confirm: open question 12.
+- Prefix: `/v1/tts`, disjoint (`internal/manifest`).
+- Coupling: upserts `usage_meter` characters. No OpenAI speech adapter: the service is self-hosted and gets
+  no `Authorization` header.
+- Jobs: none.
+- Swift tests: `OpenAITTSAdapterTests` 5, against the self-hosted service. The bearer-key assertion is
+  inverted, since Go sends none.
+
+### G1 parity: met 2026-11-05
+
+- CI run https://github.com/LuminaVault/Lumina-Vault-Server-Go/actions/runs/42071272337 on `b4f3711`: switch
+  states `tts-on`, `tts-billing` and `billing-on`, plus the off state, 0 differences. The stub answered 42
+  calls on `/v1/audio/speech`.
+- Not compared: `RouteTelemetry`, which Go has no equivalent for, and metrics.
+
 ## Flip batches 3 and 4: account, onboarding, marketplace, calendar, mail
 
 ### G2 staging deploy: smoke met 2026-11-05, on `aaad82e`

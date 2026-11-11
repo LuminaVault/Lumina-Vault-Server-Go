@@ -1,0 +1,163 @@
+# The hand-rolled multipart reader, from the outside. Valid forms get as far as whisper, which has no DNS here.
+module: llm-voice
+steps:
+  - name: "no content type"
+    as: vo_form1
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "base64": "UklGRiQAAABXQVZF", "headers": {}}
+  - name: "json"
+    as: vo_form1
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "json": {"model": "whisper-1"}}
+  - name: "multipart with no boundary"
+    as: vo_form1
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.ogg\"\r\nContent-Type: audio/ogg\r\n\r\nOggS\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data"}}
+  - name: "an empty boundary"
+    as: vo_form1
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.ogg\"\r\nContent-Type: audio/ogg\r\n\r\nOggS\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary="}}
+  - name: "a boundary in the first position isn't one"
+    as: vo_form1
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.ogg\"\r\nContent-Type: audio/ogg\r\n\r\nOggS\r\n--zz--\r\n", "headers": {"Content-Type": "boundary=zz"}}
+  - name: "a quoted boundary"
+    as: vo_form1
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.ogg\"\r\nContent-Type: audio/ogg\r\n\r\nOggS\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=\"zz\""}}
+  - name: "an uppercase parameter name"
+    as: vo_form1
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.ogg\"\r\nContent-Type: audio/ogg\r\n\r\nOggS\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; BOUNDARY=zz"}}
+  - name: "the media type isn't looked at"
+    as: vo_form1
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.ogg\"\r\nContent-Type: audio/ogg\r\n\r\nOggS\r\n--zz--\r\n", "headers": {"Content-Type": "application/json; boundary=zz"}}
+  - name: "the first boundary parameter wins"
+    as: vo_form1
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.ogg\"\r\nContent-Type: audio/ogg\r\n\r\nOggS\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz; boundary=yy"}}
+  - name: "not multipart at all"
+    as: vo_form1
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "hello", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "an empty body"
+    as: vo_form1
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "no closing delimiter"
+    as: vo_form1
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"n\"\r\n\r\nvalue", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "no CRLF after the delimiter"
+    as: vo_form1
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zzjunk", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "no blank line"
+    as: vo_form1
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"n\"\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "a part with no name"
+    as: vo_form1
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data\r\n\r\nv\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "a part with no disposition"
+    as: vo_form1
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Type: text/plain\r\n\r\nv\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "headers that aren't UTF-8"
+    as: vo_form1
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "base64": "LS16eg0KQ29udGVudC1EaXNwb3NpdGlvbjogZm9ybS1kYXRhOyBuYW1lPSL/Ig0KDQp2DQotLXp6LS0NCg==", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "33 parts"
+    as: vo_form1
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"n0\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n1\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n2\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n3\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n4\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n5\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n6\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n7\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n8\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n9\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n10\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n11\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n12\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n13\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n14\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n15\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n16\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n17\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n18\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n19\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n20\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n21\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n22\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n23\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n24\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n25\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n26\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n27\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n28\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n29\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n30\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n31\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n32\"\r\n\r\nv\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "32 parts, none of them file"
+    as: vo_form1
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"n0\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n1\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n2\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n3\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n4\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n5\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n6\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n7\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n8\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n9\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n10\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n11\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n12\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n13\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n14\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n15\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n16\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n17\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n18\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n19\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n20\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n21\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n22\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n23\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n24\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n25\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n26\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n27\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n28\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n29\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n30\"\r\n\r\nv\r\n--zz\r\nContent-Disposition: form-data; name=\"n31\"\r\n\r\nv\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "an opening delimiter closed at once"
+    as: vo_form1
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "missing file"
+    as: vo_form2
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\nwhisper-1\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "the field name is case sensitive"
+    as: vo_form2
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"File\"; filename=\"audio.ogg\"\r\nContent-Type: audio/ogg\r\n\r\nOggS\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "an empty file"
+    as: vo_form2
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.ogg\"\r\nContent-Type: audio/ogg\r\n\r\n\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "the first file wins"
+    as: vo_form2
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.ogg\"\r\nContent-Type: audio/ogg\r\n\r\n\r\n--zz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.ogg\"\r\nContent-Type: audio/ogg\r\n\r\nOggS\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "a preamble is skipped"
+    as: vo_form2
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "ignored\r\n--zz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.ogg\"\r\nContent-Type: audio/ogg\r\n\r\nOggS\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "an epilogue is ignored"
+    as: vo_form2
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.ogg\"\r\nContent-Type: audio/ogg\r\n\r\nOggS\r\n--zz--\r\ntrailing junk", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "whitespace after the delimiter"
+    as: vo_form2
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz \t\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.ogg\"\r\nContent-Type: audio/ogg\r\n\r\nOggS\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "no file name, no type"
+    as: vo_form2
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"file\"\r\n\r\nOggS\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "no extension, no type"
+    as: vo_form2
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio\"\r\n\r\nOggS\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "no extension, octet-stream"
+    as: vo_form2
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio\"\r\nContent-Type: application/octet-stream\r\n\r\nOggS\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "no extension, accepted type"
+    as: vo_form2
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio\"\r\nContent-Type: audio/ogg\r\n\r\nOggS\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "no file name, type with parameters"
+    as: vo_form2
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"file\"\r\nContent-Type: AUDIO/OGG; x=1\r\n\r\nOggS\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "unknown extension, accepted type"
+    as: vo_form2
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a.aac\"\r\nContent-Type: audio/ogg\r\n\r\nOggS\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "unknown extension, unknown type"
+    as: vo_form2
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a.bin\"\r\nContent-Type: application/octet-stream\r\n\r\nOggS\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "the extension beats octet-stream"
+    as: vo_form2
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a.ogg\"\r\nContent-Type: application/octet-stream\r\n\r\nOggS\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "the extension is folded"
+    as: vo_form2
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"A.OGG\"\r\n\r\nOggS\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "the last dot counts"
+    as: vo_form2
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a.b.mp3\"\r\n\r\nOggS\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "only an extension"
+    as: vo_form2
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"file\"; filename=\".ogg\"\r\n\r\nOggS\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "a semicolon cuts the file name"
+    as: vo_form2
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a;b.ogg\"\r\n\r\nOggS\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "an unquoted file name"
+    as: vo_form2
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=file; filename=a.ogg\r\n\r\nOggS\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "extension ogg"
+    as: vo_form3
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a.ogg\"\r\n\r\nOggS\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "extension oga"
+    as: vo_form3
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a.oga\"\r\n\r\nOggS\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "extension opus"
+    as: vo_form3
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a.opus\"\r\n\r\nOggS\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "extension m4a"
+    as: vo_form3
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a.m4a\"\r\n\r\nOggS\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "extension mp4"
+    as: vo_form3
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a.mp4\"\r\n\r\nOggS\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "extension mp3"
+    as: vo_form3
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a.mp3\"\r\n\r\nOggS\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "extension mpeg"
+    as: vo_form3
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a.mpeg\"\r\n\r\nOggS\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "extension mpga"
+    as: vo_form3
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a.mpga\"\r\n\r\nOggS\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "extension wav"
+    as: vo_form3
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a.wav\"\r\n\r\nOggS\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "extension webm"
+    as: vo_form3
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a.webm\"\r\n\r\nOggS\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "extension flac"
+    as: vo_form3
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a.flac\"\r\n\r\nOggS\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "model, language, temperature and prompt are ignored"
+    as: vo_form3
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\ngpt-4\r\n--zz\r\nContent-Disposition: form-data; name=\"language\"\r\n\r\nxx\r\n--zz\r\nContent-Disposition: form-data; name=\"temperature\"\r\n\r\n9\r\n--zz\r\nContent-Disposition: form-data; name=\"prompt\"\r\n\r\np\r\n--zz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.ogg\"\r\nContent-Type: audio/ogg\r\n\r\nOggS\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+    snapshot: ["parity_voice_usage"]
+  - name: "upstream failure keeps its message"
+    as: vo_form3
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.ogg\"\r\nContent-Type: audio/ogg\r\n\r\nOggS\r\n--zz\r\nContent-Disposition: form-data; name=\"response_format\"\r\n\r\nverbose_json\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}

@@ -1,0 +1,31 @@
+# 10 MB and 25 MB.
+module: llm-voice
+steps:
+  - name: "transcribe exactly the cap"
+    as: vo_cap
+    request: {"method": "POST", "path": "/v1/transcribe", "fill": {"text": "x", "size": 10485760}, "headers": {"Content-Type": "audio/wav"}}
+    snapshot: ["parity_voice_usage"]
+  - name: "transcribe one over"
+    as: vo_cap
+    request: {"method": "POST", "path": "/v1/transcribe", "fill": {"text": "x", "size": 10485761}, "headers": {"Content-Type": "audio/wav"}}
+  - name: "transcribe one over, chunked"
+    as: vo_cap
+    request: {"method": "POST", "path": "/v1/transcribe", "fill": {"text": "x", "size": 10485761}, "chunked": true, "headers": {"Content-Type": "audio/wav"}}
+  - name: "transcribe the cap, chunked"
+    as: vo_cap
+    request: {"method": "POST", "path": "/v1/transcribe", "fill": {"text": "x", "size": 10485760}, "chunked": true, "headers": {"Content-Type": "audio/wav"}}
+  - name: "transcribe the type is checked first"
+    as: vo_cap
+    request: {"method": "POST", "path": "/v1/transcribe", "fill": {"text": "x", "size": 10485761}, "headers": {"Content-Type": "text/plain"}}
+  - name: "audio the cap reads and isn't multipart"
+    as: vo_cap
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "fill": {"text": "x", "size": 26214400}, "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "audio one over"
+    as: vo_cap
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "fill": {"text": "x", "size": 26214401}, "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "audio one over, chunked"
+    as: vo_cap
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "fill": {"text": "x", "size": 26214401}, "chunked": true, "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "audio the boundary is checked first"
+    as: vo_cap
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "fill": {"text": "x", "size": 26214401}, "headers": {"Content-Type": "application/octet-stream"}}
