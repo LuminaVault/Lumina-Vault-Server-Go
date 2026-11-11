@@ -81,3 +81,24 @@ WHERE kn.kind = 'entity'
   AND kn.tenant_id = ANY(@vault_ids::uuid[])
   AND ke.tenant_id = ANY(@vault_ids::uuid[])
   AND ke.memory_id = ANY(@memory_ids::uuid[]);
+
+-- Top-k nearest neighbours per selected memory. Both sides are bound to the admitted vault ids and
+-- to the selected memory ids, and a memory is never its own neighbour. Never reads the all-pairs
+-- self-join in the memory module.
+-- name: SimilarMemories :many
+SELECT m.id AS from_id, n.id AS to_id, n.similarity::float8 AS similarity
+FROM memories m
+CROSS JOIN LATERAL (
+  SELECT c.id, 1 - (c.embedding <=> m.embedding) AS similarity
+  FROM memories c
+  WHERE c.tenant_id = ANY(@vault_ids::uuid[])
+    AND c.id = ANY(@memory_ids::uuid[])
+    AND c.id <> m.id
+    AND c.embedding IS NOT NULL
+  ORDER BY c.embedding <=> m.embedding
+  LIMIT @per_node::int
+) n
+WHERE m.tenant_id = ANY(@vault_ids::uuid[])
+  AND m.id = ANY(@memory_ids::uuid[])
+  AND m.embedding IS NOT NULL
+  AND n.similarity >= @min_similarity::float8;

@@ -325,6 +325,66 @@ func (q *Queries) NoteLinks(ctx context.Context, arg NoteLinksParams) ([]NoteLin
 	return items, nil
 }
 
+const similarMemories = `-- name: SimilarMemories :many
+SELECT m.id AS from_id, n.id AS to_id, n.similarity::float8 AS similarity
+FROM memories m
+CROSS JOIN LATERAL (
+  SELECT c.id, 1 - (c.embedding <=> m.embedding) AS similarity
+  FROM memories c
+  WHERE c.tenant_id = ANY($1::uuid[])
+    AND c.id = ANY($2::uuid[])
+    AND c.id <> m.id
+    AND c.embedding IS NOT NULL
+  ORDER BY c.embedding <=> m.embedding
+  LIMIT $3::int
+) n
+WHERE m.tenant_id = ANY($1::uuid[])
+  AND m.id = ANY($2::uuid[])
+  AND m.embedding IS NOT NULL
+  AND n.similarity >= $4::float8
+`
+
+type SimilarMemoriesParams struct {
+	VaultIds      []uuid.UUID
+	MemoryIds     []uuid.UUID
+	PerNode       int32
+	MinSimilarity float64
+}
+
+type SimilarMemoriesRow struct {
+	FromID     uuid.UUID
+	ToID       uuid.UUID
+	Similarity float64
+}
+
+// Top-k nearest neighbours per selected memory. Both sides are bound to the admitted vault ids and
+// to the selected memory ids, and a memory is never its own neighbour. Never reads the all-pairs
+// self-join in the memory module.
+func (q *Queries) SimilarMemories(ctx context.Context, arg SimilarMemoriesParams) ([]SimilarMemoriesRow, error) {
+	rows, err := q.db.Query(ctx, similarMemories,
+		arg.VaultIds,
+		arg.MemoryIds,
+		arg.PerNode,
+		arg.MinSimilarity,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SimilarMemoriesRow
+	for rows.Next() {
+		var i SimilarMemoriesRow
+		if err := rows.Scan(&i.FromID, &i.ToID, &i.Similarity); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const spaces = `-- name: Spaces :many
 
 SELECT s.id, s.tenant_id, s.name

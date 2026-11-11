@@ -57,6 +57,10 @@ type params struct {
 const (
 	defaultLimit = 400
 	maxLimit     = 2000
+
+	// similar edges: top 3 neighbours per memory at cosine similarity 0.78 or higher.
+	minSimilarity  = 0.78
+	similarPerNode = 3
 )
 
 var errInvalidVaults = wire.NewError(http.StatusBadRequest, "invalid vaults")
@@ -148,6 +152,18 @@ func (m *Module) graph(c *echo.Context) error {
 			if s.NoteID != nil {
 				rels = append(rels, relation{From: s.MemoryID.String(), To: s.NoteID.String(), Kind: "source"})
 			}
+		}
+	}
+	if p.links["similar"] && len(memoryIDs) > 0 {
+		sims, err := m.q.SimilarMemories(ctx, db.SimilarMemoriesParams{
+			VaultIds: vaultIDs, MemoryIds: memoryIDs, MinSimilarity: minSimilarity, PerNode: similarPerNode,
+		})
+		if err != nil {
+			return err
+		}
+		for _, s := range sims {
+			w := s.Similarity
+			rels = append(rels, relation{From: s.FromID.String(), To: s.ToID.String(), Kind: "similar", Weight: &w})
 		}
 	}
 	hubs, hubRels, err := m.hubs(ctx, p.links, vaultIDs, items, memoryIDs)

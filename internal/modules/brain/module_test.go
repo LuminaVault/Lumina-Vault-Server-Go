@@ -604,3 +604,79 @@ func TestLinksParamDropsHubKinds(t *testing.T) {
 		require.Equal(t, "tag", e.Kind)
 	}
 }
+
+const (
+	vecFirstHalf  = `array_cat(array_fill(1::real, ARRAY[768]), array_fill(0::real, ARRAY[768]))::vector`
+	vecSecondHalf = `array_cat(array_fill(0::real, ARRAY[768]), array_fill(1::real, ARRAY[768]))::vector`
+)
+
+type similarGraph struct {
+	Edges []struct {
+		From   string   `json:"from"`
+		To     string   `json:"to"`
+		Kind   string   `json:"kind"`
+		Weight *float64 `json:"weight"`
+	} `json:"edges"`
+}
+
+func getSimilar(t *testing.T, v env, query string) similarGraph {
+	t.Helper()
+	rec := v.do(alice, http.MethodGet, "/v1/brain/graph"+query, "")
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	validate(t, http.MethodGet, "/v1/brain/graph"+query, rec)
+	var out similarGraph
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &out))
+	return out
+}
+
+func (g similarGraph) similar() (out []string) {
+	for _, e := range g.Edges {
+		if e.Kind == "similar" {
+			out = append(out, e.From+">"+e.To)
+		}
+	}
+	return out
+}
+
+// embed gives M1 and M2 the same embedding and a third memory in alice's vault an orthogonal one.
+func embed(t *testing.T, v env) (m3 string) {
+	t.Helper()
+	m3 = "00000000-0000-4000-8000-0000000002a3"
+	exec(t, v, `INSERT INTO memories (id, tenant_id, content, created_at, updated_at) VALUES ($1, $2, 'third', now(), now())`, m3, alice)
+	exec(t, v, `UPDATE memories SET embedding = `+vecFirstHalf+` WHERE id = ANY($1::uuid[])`, []string{m1, m2})
+	exec(t, v, `UPDATE memories SET embedding = `+vecSecondHalf+` WHERE id = $1`, m3)
+	return m3
+}
+
+func TestSimilarIsOffByDefault(t *testing.T) {
+	v := setup(t)
+	embed(t, v)
+	require.Empty(t, getSimilar(t, v, "").similar())
+	require.Empty(t, getSimilar(t, v, "?links=tag,source").similar())
+}
+
+func TestSimilarOptIn(t *testing.T) {
+	v := setup(t)
+	m3 := embed(t, v)
+	g := getSimilar(t, v, "?links=similar")
+	require.Len(t, g.similar(), 1)
+	for _, e := range g.Edges {
+		require.Equal(t, "similar", e.Kind)
+		require.ElementsMatch(t, []string{m1, m2}, []string{e.From, e.To})
+		require.NotContains(t, []string{e.From, e.To}, m3)
+		require.NotNil(t, e.Weight)
+		require.GreaterOrEqual(t, *e.Weight, 0.78)
+	}
+}
+
+func TestSimilarStaysInScope(t *testing.T) {
+	v := setup(t)
+	embed(t, v)
+	exec(t, v, `UPDATE memories SET embedding = `+vecFirstHalf+` WHERE id = $1`, bm)
+	g := getSimilar(t, v, "?links=similar")
+	require.Len(t, g.similar(), 1)
+	for _, e := range g.Edges {
+		require.NotEqual(t, bm, e.From)
+		require.NotEqual(t, bm, e.To)
+	}
+}
