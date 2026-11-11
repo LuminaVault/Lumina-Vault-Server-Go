@@ -1,0 +1,47 @@
+# Reads over seeded terminal runs (wave 6C): list order and filters, get, the
+# events replay as SSE (it closes once a terminal run is drained) and stop on a
+# terminal run, which changes nothing.
+module: hermes
+steps:
+  - {name: list, as: hr_ben, request: {method: GET, path: /v1/hermes/runs}}
+  - {name: list limit 1, as: hr_ben, request: {method: GET, path: "/v1/hermes/runs?limit=1"}}
+  - {name: list limit 0, as: hr_ben, request: {method: GET, path: "/v1/hermes/runs?limit=0"}}
+  - {name: list limit 500, as: hr_ben, request: {method: GET, path: "/v1/hermes/runs?limit=500"}}
+  - {name: list bad limit, as: hr_ben, request: {method: GET, path: "/v1/hermes/runs?limit=many"}}
+  - {name: list by conversation, as: hr_ben, request: {method: GET, path: "/v1/hermes/runs?conversationID=E6C00000-0000-4000-8000-0000000002B1"}}
+  - {name: list by lowercase conversation, as: hr_ben, request: {method: GET, path: "/v1/hermes/runs?conversationID=e6c00000-0000-4000-8000-0000000002b1"}}
+  - {name: list by empty conversation, as: hr_ben, request: {method: GET, path: "/v1/hermes/runs?conversationID=E6C00000-0000-4000-8000-0000000002C1"}}
+  - {name: list by bad conversation, as: hr_ben, request: {method: GET, path: "/v1/hermes/runs?conversationID=nope"}}
+  - {name: list nothing, as: hr_dee, request: {method: GET, path: /v1/hermes/runs}}
+  - {name: get completed, as: hr_ben, request: {method: GET, path: /v1/hermes/runs/E6C00000-0000-4000-8000-0000000001B1}}
+  - {name: get lowercase id, as: hr_ben, request: {method: GET, path: /v1/hermes/runs/e6c00000-0000-4000-8000-0000000001b1}}
+  - {name: get failed, as: hr_ben, request: {method: GET, path: /v1/hermes/runs/E6C00000-0000-4000-8000-0000000001B2}}
+  - {name: get unknown status with a pending approval, as: hr_ben, request: {method: GET, path: /v1/hermes/runs/E6C00000-0000-4000-8000-0000000001B3}}
+  - name: events replay
+    as: hr_ben
+    stream: true
+    frames: 10
+    framesTimeout: 10s
+    request: {method: GET, path: /v1/hermes/runs/E6C00000-0000-4000-8000-0000000001B1/events}
+  - name: events after a cursor
+    as: hr_ben
+    stream: true
+    frames: 10
+    framesTimeout: 10s
+    request: {method: GET, path: "/v1/hermes/runs/E6C00000-0000-4000-8000-0000000001B1/events?after=2"}
+  - name: events after the end
+    as: hr_ben
+    stream: true
+    frames: 10
+    framesTimeout: 10s
+    request: {method: GET, path: "/v1/hermes/runs/E6C00000-0000-4000-8000-0000000001B1/events?after=3"}
+  - name: events of a failed run
+    as: hr_ben
+    stream: true
+    frames: 10
+    framesTimeout: 10s
+    request: {method: GET, path: /v1/hermes/runs/E6C00000-0000-4000-8000-0000000001B2/events}
+  - name: stop a terminal run
+    as: hr_ben
+    request: {method: POST, path: /v1/hermes/runs/E6C00000-0000-4000-8000-0000000001B1/stop}
+    snapshot: [hermes_runs]

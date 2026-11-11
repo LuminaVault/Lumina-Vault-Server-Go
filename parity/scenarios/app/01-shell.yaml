@@ -1,0 +1,12 @@
+# The app shell (App+build.swift): GET /, /health, the Apple app-site association,
+# and the legacy kb-compile aliases, which are 308s with no auth. The harness
+# doesn't follow redirects, so the Location header is compared.
+module: app
+steps:
+  - {name: hello, request: {method: GET, path: /}}
+  - {name: health, request: {method: GET, path: /health}}
+  - {name: apple app site association, request: {method: GET, path: /.well-known/apple-app-site-association}}
+  - {name: legacy compile, request: {method: POST, path: /v1/kb-compile}, headers: [Location]}
+  - {name: legacy compile with a bearer, as: alice, request: {method: POST, path: /v1/kb-compile, json: {}}, headers: [Location]}
+  - {name: legacy pending, request: {method: GET, path: /v1/kb-compile/pending}, headers: [Location]}
+  - {name: legacy compile wrong method, request: {method: GET, path: /v1/kb-compile}}

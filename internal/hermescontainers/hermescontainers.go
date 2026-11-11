@@ -1,7 +1,8 @@
-// Package hermescontainers is the read side of LuminaVaultServer's
-// HermesContainerManager (Sources/App/Hermes): a tenant's container row, with its
-// API key decrypted. It writes nothing, starts nothing and needs no Docker. The
-// lifecycle (ensureRunning, eviction, reprovision) is wave 6, and extends this.
+// Package hermescontainers is LuminaVaultServer's HermesContainerManager
+// (Sources/App/Hermes). Manager is the read side: a tenant's container row, with
+// its API key decrypted, needing no Docker. Lifecycle adds the docker-backed
+// lifecycle (ensureRunning, seeding, eviction, reprovision, gateway apply) over
+// the Docker interface (P4).
 package hermescontainers
 
 import (
@@ -66,4 +67,8 @@ func (m *Manager) Handle(ctx context.Context, tenant uuid.UUID) (*Handle, error)
 		return nil, err
 	}
 	return &h, nil
+}
+
+func sealedOf(ciphertext, nonce []byte) secretbox.Sealed {
+	return secretbox.Sealed{Ciphertext: ciphertext, Nonce: nonce}
 }
