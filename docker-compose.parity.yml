@@ -197,17 +197,22 @@ services:
       VISION_EMBED_PROVIDER_COHERE_API_KEY: ${SWITCH_VISION_COHERE_API_KEY-}
       VISION_EMBED_PROVIDER_COHERE_BASE_URL: ${SWITCH_VISION_COHERE_BASE_URL:-https://api.cohere.com}
       LV_SECRET_MASTER_KEY: ${SWITCH_LV_SECRET_MASTER_KEY-AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=}
+      # State "chat": escalated turns start their Hermes run on swift2-switched, which
+      # shares this database (owner decision 1, option A, until wave 6C).
+      CHAT_HERMES_RUNS_BRIDGE_URL: ${SWITCH_CHAT_BRIDGE_URL:-}
     ports: ["18084:8080"]
     depends_on: { pg: { condition: service_healthy }, feeds: { condition: service_started } }
     profiles: [switched]
 
-  # A second Swift for the LLM stub self-test (scripts/parity-switches.sh).
+  # A second Swift for the LLM stub self-test, and the runs bridge target in state
+  # "chat" (scripts/parity-switches.sh).
   swift2-switched:
     image: ${PARITY_SWIFT_IMAGE:-lv-swift:fdbed9b0}
     extra_hosts: *no-external
     environment:
       <<: *common-env
-      POSTGRES_DATABASE: parity_swift2_switched
+      # State "chat" points it at parity_go_switched: the Go server's runs bridge.
+      POSTGRES_DATABASE: ${SWITCH_SWIFT2_DB:-parity_swift2_switched}
       HERMES_GATEWAY_URL: ${SWITCH_HERMES_GATEWAY_URL:-http://127.0.0.1:9}
       CAPTURE_AUTO_FILE_ENABLED: ${SWITCH_CAPTURE_AUTO_FILE_ENABLED:-false}
     ports: ["18086:8080"]

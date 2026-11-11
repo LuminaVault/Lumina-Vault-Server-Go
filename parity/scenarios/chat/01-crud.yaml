@@ -1,0 +1,47 @@
+# Conversations CRUD on seeds (parity/seed/chat.sql). No step reaches the model.
+module: chat
+steps:
+  - {name: get routed, as: chat_amy, request: {method: GET, path: /v1/conversations/C4A70000-0000-4000-8000-0000000001A2}}
+  - {name: get with an unknown stored provider, as: chat_amy, request: {method: GET, path: /v1/conversations/C4A70000-0000-4000-8000-0000000001A3}}
+  - {name: get lowercase id, as: chat_amy, request: {method: GET, path: /v1/conversations/c4a70000-0000-4000-8000-0000000001a1}}
+  - {name: traces, as: chat_amy, request: {method: GET, path: /v1/conversations/C4A70000-0000-4000-8000-0000000001A1/traces}}
+  - {name: traces of a conversation with none, as: chat_amy, request: {method: GET, path: /v1/conversations/C4A70000-0000-4000-8000-0000000001A2/traces}}
+  - name: create with defaults
+    as: chat_amy
+    request: {method: POST, path: /v1/conversations, json: {}}
+    capture: {plain: $.id}
+    snapshot: [conversations]
+  - name: create with a title and a pinned memory
+    as: chat_amy
+    request: {method: POST, path: /v1/conversations, json: {title: Pinned, pinnedMemoryIDs: [C4A70000-0000-4000-8000-0000000003A1]}}
+    capture: {pinned: $.id}
+  - name: create with a null pinned list
+    as: chat_amy
+    request: {method: POST, path: /v1/conversations, raw: '{"title":"Null pins","pinnedMemoryIDs":null}'}
+  - name: create with a route override
+    as: chat_amy
+    request: {method: POST, path: /v1/conversations, json: {title: Routed new, routeOverride: {provider: openRouter, model: openai/gpt-4o-mini}}}
+  - name: create with an unknown model
+    as: chat_amy
+    request: {method: POST, path: /v1/conversations, json: {title: Bad model, routeOverride: {provider: openRouter, model: not/a-model}}}
+  - name: create with an unknown provider
+    as: chat_amy
+    request: {method: POST, path: /v1/conversations, json: {title: Bad provider, routeOverride: {provider: nope, model: m}}}
+  - name: create with someone else's pinned memory
+    as: chat_amy
+    request: {method: POST, path: /v1/conversations, json: {title: Foreign, pinnedMemoryIDs: [C4A70000-0000-4000-8000-0000000003A8]}}
+  - name: create with an unknown pinned memory
+    as: chat_amy
+    request: {method: POST, path: /v1/conversations, json: {title: Unknown, pinnedMemoryIDs: [C4A70000-0000-4000-8000-00000000FFFF]}}
+  - {name: the new one reads back, as: chat_amy, request: {method: GET, path: "/v1/conversations/{{pinned}}"}}
+  - {name: list after creates, as: chat_amy, request: {method: GET, path: /v1/conversations}}
+  - name: delete
+    as: chat_amy
+    request: {method: DELETE, path: /v1/conversations/C4A70000-0000-4000-8000-0000000001A4}
+    snapshot: [conversations]
+  - {name: deleted is gone, as: chat_amy, request: {method: GET, path: /v1/conversations/C4A70000-0000-4000-8000-0000000001A4}}
+  - {name: delete again, as: chat_amy, request: {method: DELETE, path: /v1/conversations/C4A70000-0000-4000-8000-0000000001A4}}
+  - name: delete cascades to messages
+    as: chat_amy
+    request: {method: DELETE, path: "/v1/conversations/{{plain}}"}
+    snapshot: [conversation_messages]

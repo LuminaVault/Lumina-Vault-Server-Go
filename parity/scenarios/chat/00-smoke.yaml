@@ -1,0 +1,9 @@
+# Reads only: seeded conversations, the inbox and both preference documents.
+module: chat
+smoke: true
+steps:
+  - {name: list conversations, as: chat_amy, request: {method: GET, path: /v1/conversations}}
+  - {name: one conversation with its messages, as: chat_amy, request: {method: GET, path: /v1/conversations/C4A70000-0000-4000-8000-0000000001A1}}
+  - {name: inbox, as: chat_eve, request: {method: GET, path: /v1/chat/inbox}}
+  - {name: chat preferences default, as: chat_cid, request: {method: GET, path: /v1/me/chat-preferences}}
+  - {name: hybrid preferences stored, as: chat_dee, request: {method: GET, path: /v1/me/preferences/hybrid-execution}}

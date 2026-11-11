@@ -1,0 +1,7 @@
+# POST /v1/llm/chat with the gateway unroutable: every step stops before the model
+# or fails on it the same way.
+module: llm-chat
+smoke: true
+steps:
+  - {name: no token, request: {method: POST, path: /v1/llm/chat, json: {messages: [{role: user, content: hi}]}}}
+  - {name: empty messages, as: chat_ivy, request: {method: POST, path: /v1/llm/chat, json: {messages: []}}}

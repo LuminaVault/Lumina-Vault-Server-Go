@@ -1,0 +1,12 @@
+# HYBRID_EXECUTION_ENABLED=false: the local-execution routes and the hybrid preference
+# document are not mounted. The rest of chat is.
+module: chat
+steps:
+  - {name: prepare is not mounted, as: chat_fay, request: {method: POST, path: /v1/conversations/C4A70000-0000-4000-8000-0000000001F1/messages/prepare, json: {content: hi}}}
+  - {name: commit is not mounted, as: chat_fay, request: {method: POST, path: /v1/conversations/C4A70000-0000-4000-8000-0000000001F1/messages/commit, json: {}}}
+  - {name: tools is not mounted, as: chat_fay, request: {method: POST, path: /v1/conversations/C4A70000-0000-4000-8000-0000000001F1/local-executions/C4A70000-0000-4000-8000-00000000FFFF/tools, json: {}}}
+  - {name: cancel is not mounted, as: chat_fay, request: {method: DELETE, path: /v1/conversations/C4A70000-0000-4000-8000-0000000001F1/local-executions/C4A70000-0000-4000-8000-00000000FFFF}}
+  - {name: hybrid preferences are not mounted, as: chat_dee, request: {method: GET, path: /v1/me/preferences/hybrid-execution}}
+  - {name: hybrid preferences put is not mounted, as: chat_dee, request: {method: PUT, path: /v1/me/preferences/hybrid-execution, json: {}}}
+  - {name: chat preferences still are, as: chat_dee, request: {method: GET, path: /v1/me/chat-preferences}}
+  - {name: conversations still are, as: chat_fay, request: {method: GET, path: /v1/conversations}}

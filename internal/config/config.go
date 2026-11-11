@@ -200,6 +200,17 @@ type Config struct {
 	HybridExecutionEnabled   string  `env:"HYBRID_EXECUTION_ENABLED" envDefault:"true"`
 	MemoryRelatedMaxDistance float64 `env:"MEMORY_RELATED_MAX_DISTANCE" envDefault:"0.45"`
 
+	// Chat (wave 5C). LocalExecutionToolBrokerEnabled is localExecution.toolBroker.enabled
+	// and AutoSaveLinksEnabled autoSaveLinks.enabled, both read with lowercased() == "true".
+	// ChatRetrievalMaxDistance is chat.retrieval.maxDistance (ChatGrounding's floor).
+	// ChatHermesRunsBridgeURL is Go only: the Swift API that starts an escalated turn's
+	// Hermes run (owner decision 1, option A) until wave 6C ports HermesRunsService.
+	// Empty means no runs service, so chat never escalates, as Swift without one.
+	LocalExecutionToolBrokerEnabled string  `env:"LOCAL_EXECUTION_TOOL_BROKER_ENABLED" envDefault:"true"`
+	AutoSaveLinksEnabled            string  `env:"AUTO_SAVE_LINKS_ENABLED" envDefault:"true"`
+	ChatRetrievalMaxDistance        float64 `env:"CHAT_RETRIEVAL_MAX_DISTANCE" envDefault:"0.6"`
+	ChatHermesRunsBridgeURL         string  `env:"CHAT_HERMES_RUNS_BRIDGE_URL"`
+
 	// Product analytics (posthog package). Off unless both are set, as in Swift.
 	PostHogProjectToken string `env:"POSTHOG_PROJECT_TOKEN"`
 	PostHogHost         string `env:"POSTHOG_HOST"`

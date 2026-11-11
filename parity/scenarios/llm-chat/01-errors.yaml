@@ -1,0 +1,11 @@
+module: llm-chat
+steps:
+  - {name: bad token, request: {method: POST, path: /v1/llm/chat, json: {messages: []}, headers: {Authorization: Bearer not.a.jwt}}}
+  - {name: malformed json, as: chat_ivy, request: {method: POST, path: /v1/llm/chat, raw: '{"messages":'}}
+  - {name: empty body, as: chat_ivy, request: {method: POST, path: /v1/llm/chat, raw: ''}}
+  - {name: missing messages, as: chat_ivy, request: {method: POST, path: /v1/llm/chat, json: {}}}
+  - {name: messages wrong type, as: chat_ivy, request: {method: POST, path: /v1/llm/chat, raw: '{"messages":"hi"}'}}
+  - {name: message missing role, as: chat_ivy, request: {method: POST, path: /v1/llm/chat, json: {messages: [{content: hi}]}}}
+  - {name: stream wrong type, as: chat_ivy, request: {method: POST, path: /v1/llm/chat, raw: '{"messages":[{"role":"user","content":"hi"}],"stream":"yes"}'}}
+  - {name: gateway down, as: chat_ivy, request: {method: POST, path: /v1/llm/chat, json: {messages: [{role: user, content: hello}]}, headers: {X-Skip-URL-Enrichment: "true"}}}
+  - {name: wrong method, as: chat_ivy, request: {method: GET, path: /v1/llm/chat}}
