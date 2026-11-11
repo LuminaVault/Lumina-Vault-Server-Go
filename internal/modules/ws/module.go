@@ -6,7 +6,8 @@
 // Hummingbird's `router.ws` (hummingbird-websocket 2.7.0, WebSocketRouter.swift)
 // registers a plain GET whose handler runs shouldUpgrade:
 //   - .dontUpgrade (Swift's closure returns it when JWTAuthenticator attached no
-//     user) answers 405 with an empty body, upgrade headers or not;
+//     user) answers 405 with an empty body to a plain GET, and NIO's upgrader
+//     turns it into a bare 400 for a real handshake;
 //   - .upgrade answers 200 with an empty body, and the channel switches protocols
 //     only when the request asked for a WebSocket. A plain GET with a valid token
 //     therefore gets 200 and nothing else.
@@ -64,11 +65,16 @@ func (m *Module) Register(r httpserver.Router, _ echo.MiddlewareFunc) {
 }
 
 func (m *Module) serve(c *echo.Context) error {
+	req := c.Request()
 	user, ok := auth.Identity(c)
 	if !ok {
+		// A handshake NIO's upgrader refuses is a bare 400 (parity transcript
+		// ws/01-upgrade); only a plain GET reaches the route's 405.
+		if isUpgrade(req) {
+			return c.NoContent(http.StatusBadRequest)
+		}
 		return c.NoContent(http.StatusMethodNotAllowed)
 	}
-	req := c.Request()
 	if !isUpgrade(req) {
 		return c.NoContent(http.StatusOK)
 	}

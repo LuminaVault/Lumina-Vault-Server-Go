@@ -69,7 +69,7 @@ func newServer(t *testing.T, sockets *ws.Manager) *httptest.Server {
 	return srv
 }
 
-func TestNoIdentityIs405(t *testing.T) {
+func TestNoIdentityIs405Or400(t *testing.T) {
 	srv := newServer(t, ws.NewManager())
 	for _, upgrade := range []bool{false, true} {
 		req, _ := http.NewRequest(http.MethodGet, srv.URL+wsroute.Path, nil)
@@ -82,7 +82,11 @@ func TestNoIdentityIs405(t *testing.T) {
 		resp, err := http.DefaultClient.Do(req)
 		require.NoError(t, err)
 		_ = resp.Body.Close()
-		require.Equal(t, http.StatusMethodNotAllowed, resp.StatusCode, "upgrade=%v", upgrade)
+		want := http.StatusMethodNotAllowed
+		if upgrade {
+			want = http.StatusBadRequest
+		}
+		require.Equal(t, want, resp.StatusCode, "upgrade=%v", upgrade)
 	}
 }
 
