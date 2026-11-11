@@ -1848,3 +1848,7 @@ Beyond the pilot gate (D-wave2-early):
 - Swift tests: `JWTKeyLoader` 10, `SessionToken` 3, `JWTAuthenticatorE2E` 7, `PasswordHasher` 2,
   `RateLimitMiddleware` (auth flat, all names unique), `RateLimitStorageFactory` memory cases,
   `ValkeyPersistDriverIntegration` on the memory store. `SessionTokenScope` was already ported.
+- **8A TODO (issueTokens):** P9 ports only the minter and the refresh store. The 8A port of `AuthService.issueTokens`
+  must, on every session issued (register, login, refresh, OAuth, pairing, MFA), apply the
+  `BILLING_TIER_OVERRIDE_EMAILS` allowlist (#78 parses it; `applyTierOverrideAllowlist`: only raises, never
+  overwrites `ultimate`), then `$set is_internal`, put `hpid` only for a `ready` profile, and cover the allowlist with a test.
