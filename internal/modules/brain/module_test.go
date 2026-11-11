@@ -487,10 +487,28 @@ func TestModelAuthorHub(t *testing.T) {
 	}
 }
 
-func TestModelContributionInOtherVaultIsIgnored(t *testing.T) {
+func TestModelAuthorHubInTeamVault(t *testing.T) {
 	v := setup(t)
-	// Rows filed under bob's tenant for alice's memories must not be read.
-	for _, mem := range []string{m1, m2} {
+	m3 := "00000000-0000-4000-8000-0000000002a4"
+	exec(t, v, `INSERT INTO memories (id, tenant_id, content, created_at, updated_at) VALUES ($1, $2, 'team third', now(), now())`, m3, teamVault)
+	// tenant_id is the contributing user, not the vault. It is bob, who is not one of alice's
+	// vault ids: with alice's own id the old tenant filter would match her personal vault id.
+	for _, mem := range []string{m2, m3} {
+		exec(t, v, `INSERT INTO memory_contributions (id, tenant_id, memory_id, operation, actor_kind, source_kind, provider, model)
+			VALUES (gen_random_uuid(), $1, $2, 'create', 'model', 'extraction', 'anthropic', 'claude-haiku-5-5')`, bob, mem)
+	}
+	g := getHubs(t, v, "")
+	id := "author:model:anthropic/claude-haiku-5-5"
+	_, _, _, weight, ok := g.node(id)
+	require.True(t, ok)
+	require.Equal(t, 2, weight)
+}
+
+func TestModelContributionForOutOfScopeMemoryIsIgnored(t *testing.T) {
+	v := setup(t)
+	bm2 := "00000000-0000-4000-8000-0000000002b2"
+	exec(t, v, `INSERT INTO memories (id, tenant_id, content, created_at, updated_at) VALUES ($1, $2, 'bob two', now(), now())`, bm2, bob)
+	for _, mem := range []string{bm, bm2} {
 		exec(t, v, `INSERT INTO memory_contributions (id, tenant_id, memory_id, operation, actor_kind, source_kind, provider, model)
 			VALUES (gen_random_uuid(), $1, $2, 'create', 'model', 'extraction', 'p', 'm')`, bob, mem)
 	}

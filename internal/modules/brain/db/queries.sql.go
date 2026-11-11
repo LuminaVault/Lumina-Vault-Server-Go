@@ -247,7 +247,8 @@ func (q *Queries) MemorySources(ctx context.Context, arg MemorySourcesParams) ([
 const modelAuthors = `-- name: ModelAuthors :many
 SELECT DISTINCT mc.memory_id, mc.provider, mc.model::text AS model
 FROM memory_contributions mc
-WHERE mc.tenant_id = ANY($1::uuid[])
+JOIN memories m ON m.id = mc.memory_id
+WHERE m.tenant_id = ANY($1::uuid[])
   AND mc.memory_id = ANY($2::uuid[])
   AND mc.actor_kind = 'model'
   AND mc.model IS NOT NULL
@@ -264,6 +265,7 @@ type ModelAuthorsRow struct {
 	Model    string
 }
 
+// Scoped through the memory: memory_contributions.tenant_id is the contributing user, not a vault.
 func (q *Queries) ModelAuthors(ctx context.Context, arg ModelAuthorsParams) ([]ModelAuthorsRow, error) {
 	rows, err := q.db.Query(ctx, modelAuthors, arg.VaultIds, arg.MemoryIds)
 	if err != nil {

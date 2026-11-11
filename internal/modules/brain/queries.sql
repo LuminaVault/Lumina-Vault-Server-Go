@@ -62,10 +62,12 @@ SELECT u.id, u.username
 FROM users u
 WHERE u.id = ANY(@user_ids::uuid[]);
 
+-- Scoped through the memory: memory_contributions.tenant_id is the contributing user, not a vault.
 -- name: ModelAuthors :many
 SELECT DISTINCT mc.memory_id, mc.provider, mc.model::text AS model
 FROM memory_contributions mc
-WHERE mc.tenant_id = ANY(@vault_ids::uuid[])
+JOIN memories m ON m.id = mc.memory_id
+WHERE m.tenant_id = ANY(@vault_ids::uuid[])
   AND mc.memory_id = ANY(@memory_ids::uuid[])
   AND mc.actor_kind = 'model'
   AND mc.model IS NOT NULL;
