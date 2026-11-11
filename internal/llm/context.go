@@ -122,6 +122,10 @@ type Values struct {
 	RouteOutcomeSink      func(ModelProvenance)
 	CerberusSink          func(CerberusEvent)
 	FailoverSink          func(FailoverNotice)
+	// PreDecidedRoute is a decision the caller already picked (and so already
+	// claimed any free-lane grant for). RoutedStreamService streams it as
+	// decided instead of picking again.
+	PreDecidedRoute *Decision
 }
 
 type valuesKey struct{}
