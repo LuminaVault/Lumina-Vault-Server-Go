@@ -169,3 +169,22 @@ func (q *Queries) PendingActionStatus(ctx context.Context, arg PendingActionStat
 	err := row.Scan(&status)
 	return status, err
 }
+
+const spaceName = `-- name: SpaceName :one
+SELECT name FROM spaces
+WHERE tenant_id = $1 AND id = $2
+`
+
+type SpaceNameParams struct {
+	VaultID uuid.UUID
+	ID      uuid.UUID
+}
+
+// The active space's name, only for a space in this vault: the id is client
+// input (Swift: ConversationController.activeSpaceName).
+func (q *Queries) SpaceName(ctx context.Context, arg SpaceNameParams) (string, error) {
+	row := q.db.QueryRow(ctx, spaceName, arg.VaultID, arg.ID)
+	var name string
+	err := row.Scan(&name)
+	return name, err
+}

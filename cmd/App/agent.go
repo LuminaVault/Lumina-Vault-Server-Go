@@ -18,6 +18,7 @@ import (
 	"lumina/internal/modules/imports"
 	"lumina/internal/modules/kbcompile"
 	"lumina/internal/modules/knowledge"
+	"lumina/internal/modules/mcp"
 	"lumina/internal/modules/me"
 	"lumina/internal/modules/memoryagent"
 	"lumina/internal/modules/spaces"
@@ -68,6 +69,9 @@ type agent struct {
 	// compile is the kb-compile route, set by modules(); /v1/skills/slash's
 	// /kb-compile runs through it.
 	compile *kbcompile.Module
+	// mcp is /v1/mcp's tool service, set by mcpModule(); Quick Assistant's vault
+	// tools run through the same instance (Decision 1).
+	mcp *mcp.Service
 }
 
 func newAgent(ctx context.Context, pool *pgxpool.Pool, cfg config.Config, box *secretbox.Box, paths vaultpaths.Paths, identify echo.MiddlewareFunc,

@@ -3,6 +3,7 @@ package quickassistant
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"lumina/internal/auth"
@@ -15,6 +16,7 @@ import (
 	"lumina/internal/wire"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -39,16 +41,18 @@ var errActionNotFound = wire.NewError(http.StatusNotFound, "action not found")
 
 // Options are the middleware the routes run behind.
 type Options struct {
-	// Identify authenticates the request (Swift's jwtAuthenticator). Nil falls
-	// back to the server's auth middleware.
+	// Identify authenticates the request (Swift's jwtAuthenticator).
 	Identify echo.MiddlewareFunc
 	// Gate is chat's EntitlementMiddleware(requires: .memoryQuery). It checks
-	// the tier and consumes nothing (ruling 29). Nil mounts none.
+	// the tier and consumes nothing (ruling 29).
 	Gate echo.MiddlewareFunc
-	// Limits backs RateLimitMiddleware(policy: .conversationByUser). Nil
-	// mounts none.
+	// Limits backs RateLimitMiddleware(policy: .conversationByUser).
 	Limits *ratelimit.Store
 }
+
+// errUnguarded is New refusing to build routes that would run without their
+// identity, gate or rate limit: missing wiring fails closed, never open.
+var errUnguarded = errors.New("quick assistant routes need Identify, Gate and Limits")
 
 // Module is QuickAssistantActionsController: it resolves the confirm cards the
 // Quick Assistant shows.
@@ -71,11 +75,19 @@ type Module struct {
 	// afterClaim runs right after a successful claim. Tests use it to drop the
 	// request at that moment.
 	afterClaim func()
+	// forgetTimeout bounds a confirmed forget, as toolTimeout bounds the
+	// runner's calls: the run is detached from the request, so nothing else
+	// would stop a hung database holding it open.
+	forgetTimeout time.Duration
 }
 
 // New builds the module. d.Devices nil means a confirmed calendar_create
 // fails generically (Decision 3); such a row cannot be made without a device.
-func New(pool *pgxpool.Pool, d Deps, opts Options) *Module {
+// It refuses (errUnguarded) when opts lacks Identify, Gate or Limits.
+func New(pool *pgxpool.Pool, d Deps, opts Options) (*Module, error) {
+	if opts.Identify == nil || opts.Gate == nil || opts.Limits == nil {
+		return nil, errUnguarded
+	}
 	store := d.Store
 	if store == nil {
 		store = NewStore(pool)
@@ -83,22 +95,17 @@ func New(pool *pgxpool.Pool, d Deps, opts Options) *Module {
 	return &Module{
 		pool: pool, deps: d, store: store, q: db.New(pool), opts: opts,
 		tier: ratelimit.PGTier(pool), log: slog.Default().With("module", "quickassistant"),
-	}
+		forgetTimeout: toolTimeout,
+	}, nil
 }
 
 // Register mounts Swift's group: jwt, conversationByUser, then Entitlement
 // .memoryQuery. It is called only when Quick Assistant is enabled.
-func (m *Module) Register(r httpserver.Router, authMW echo.MiddlewareFunc) {
-	identify := m.opts.Identify
-	if identify == nil {
-		identify = authMW
-	}
-	chain := []echo.MiddlewareFunc{identify}
-	if m.opts.Limits != nil {
-		chain = append(chain, ratelimit.TieredMiddleware(m.opts.Limits, ratelimit.ConversationByUser, ratelimit.UserOrIPKey, m.tier))
-	}
-	if m.opts.Gate != nil {
-		chain = append(chain, m.opts.Gate)
+func (m *Module) Register(r httpserver.Router, _ echo.MiddlewareFunc) {
+	chain := []echo.MiddlewareFunc{
+		m.opts.Identify,
+		ratelimit.TieredMiddleware(m.opts.Limits, ratelimit.ConversationByUser, ratelimit.UserOrIPKey, m.tier),
+		m.opts.Gate,
 	}
 	r.POST("/v1/assistant/actions/:id/confirm", m.confirm, chain...)
 	r.POST("/v1/assistant/actions/:id/cancel", m.cancel, chain...)
@@ -257,6 +264,8 @@ func (m *Module) forgetMemory(ctx context.Context, args map[string]any, vault, u
 	if m.deps.MCP == nil {
 		return false, genericFailure
 	}
+	ctx, cancel := context.WithTimeout(ctx, m.forgetTimeout)
+	defer cancel()
 	out, err := m.deps.MCP.CallAsSession(ctx, "memory_forget", args, vault, user)
 	if err != nil {
 		m.log.WarnContext(ctx, "quick assistant forget failed", "error_type", fmt.Sprintf("%T", err))

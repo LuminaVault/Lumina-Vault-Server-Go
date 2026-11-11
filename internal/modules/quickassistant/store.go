@@ -123,3 +123,17 @@ func Ready(ctx context.Context, pool *pgxpool.Pool) bool {
 	err := pool.QueryRow(ctx, `SELECT to_regclass('public.assistant_pending_actions') IS NOT NULL`).Scan(&ok)
 	return err == nil && ok
 }
+
+// ActiveSpaceName is the name of the space c names, if it is a space in vault.
+// The id is client input, so a space from anywhere else, or any failure,
+// reads as no space (Swift's try?).
+func ActiveSpaceName(ctx context.Context, pool *pgxpool.Pool, vault uuid.UUID, c Context) *string {
+	if c.ActiveSpaceID == nil {
+		return nil
+	}
+	name, err := db.New(pool).SpaceName(ctx, db.SpaceNameParams{VaultID: vault, ID: c.ActiveSpaceID.UUID})
+	if err != nil {
+		return nil
+	}
+	return &name
+}

@@ -11,6 +11,7 @@ import (
 	"lumina/internal/llm"
 	"lumina/internal/memorystore"
 	"lumina/internal/modules/memoryagent"
+	"lumina/internal/modules/quickassistant"
 	"lumina/internal/onboardlatch"
 	"lumina/internal/sse"
 	"lumina/internal/swiftstr"
@@ -18,6 +19,7 @@ import (
 	"lumina/internal/wire"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v5"
@@ -228,6 +230,14 @@ func (m *Module) streamReply(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
+	// Decoded only when Quick Assistant is on: off, the field is ignored
+	// whatever it holds, as Swift production ignores it.
+	var quick *quickassistant.Context
+	if m.opts.QuickAssistant != nil && len(body.QuickAssistant) > 0 && string(body.QuickAssistant) != "null" {
+		if quick, err = wire.Decode[quickassistant.Context](body.QuickAssistant); err != nil {
+			return err
+		}
+	}
 	var attachments []Attachment
 	if body.Attachments != nil {
 		attachments = *body.Attachments
@@ -255,8 +265,9 @@ func (m *Module) streamReply(c *echo.Context) error {
 	}
 
 	// Escalation, before any grounding work. Only for clients that can skip a frame
-	// type they don't know (chat.hermes_run).
-	if m.opts.Runs != nil && clientcaps.FromRequest(c.Request()).Supports(clientcaps.ChatHermesRun) {
+	// type they don't know (chat.hermes_run). A Quick Assistant turn never
+	// escalates: it stays on this stream so its card can show what the loop does.
+	if quick == nil && m.opts.Runs != nil && clientcaps.FromRequest(c.Request()).Supports(clientcaps.ChatHermesRun) {
 		mode := ModeAuto
 		if body.AgentMode != nil {
 			mode = string(*body.AgentMode)
@@ -294,20 +305,39 @@ func (m *Module) streamReply(c *echo.Context) error {
 	hits := groundingHits(pinned, semantic)
 	m.recordMemoryRetrievals(base, vault, actor, len(hits))
 
-	schedule := scheduleContext(base, m.pool, actor, location(user.Timezone), m.now())
-	disclosure := llm.DisclosureHidden
-	if m.opts.Preferences != nil {
-		if pref, err := m.opts.Preferences.Get(base, actor); err == nil && pref != nil && pref.Mode == llm.ModeBYOK {
-			disclosure = llm.DisclosureVisible
+	// A Quick Assistant turn runs on the device's clock when it names a real
+	// zone; classic chat keeps the account's, as before.
+	scheduleLoc := location(user.Timezone)
+	var turnLoc *time.Location
+	if quick != nil {
+		turnLoc = quickassistant.TurnLocation(quick.TimeZone, user.Timezone)
+		scheduleLoc = turnLoc
+		if scheduleLoc == nil {
+			scheduleLoc = time.UTC
 		}
+	}
+	schedule := scheduleContext(base, m.pool, actor, scheduleLoc, m.now())
+	disclosure := llm.DisclosureHidden
+	var pref *llm.Preference
+	if m.opts.Preferences != nil {
+		if got, err := m.opts.Preferences.Get(base, actor); err == nil {
+			pref = got
+		}
+	}
+	if pref != nil && pref.Mode == llm.ModeBYOK {
+		disclosure = llm.DisclosureVisible
 	}
 	var soulText *string
 	if disclosure == llm.DisclosureVisible {
 		soulText = soulExcerpt(m.opts.Soul, actor, user.Username)
 	}
+	prior := historyMessages(history)
+	if m.opts.QuickAssistant != nil {
+		prior = quickassistant.MergeAdjacentAssistant(prior)
+	}
 	temperature := 0.4
 	req := llm.ChatRequest{
-		Messages:    BuildPrompt(historyMessages(history), hits, schedule, soulText, disclosure == llm.DisclosureHidden),
+		Messages:    BuildPrompt(prior, hits, schedule, soulText, disclosure == llm.DisclosureHidden),
 		Model:       m.opts.DefaultModel,
 		Temperature: &temperature,
 	}
@@ -316,8 +346,21 @@ func (m *Module) streamReply(c *echo.Context) error {
 		sessionKey: ids.Upper(vault), sessionID: ids.Upper(convID), req: req, hits: hits,
 		disclosure: disclosure, parallel: parallel, content: content,
 	}
+	if quick != nil {
+		// This prompt runs only when the loop could not, so it says actions are
+		// off and sets no temperature (Haiku 5.5 refuses one).
+		t.req.Messages = quickassistant.AddingSystemText(
+			quickassistant.ActionsUnavailable+"\n"+quickassistant.Clock(m.now(), scheduleLoc), t.req.Messages, false)
+		t.req.Temperature = nil
+		t.qa = m.newQuickTurn(base, *quick, quickInputs{
+			prior: prior, hits: hits, schedule: schedule, pref: pref, turnLoc: turnLoc, scheduleLoc: scheduleLoc,
+		}, t)
+	}
 	stream := sse.Produce(base, func(ctx context.Context, yield func(StreamEvent) bool) error {
 		m.runTurn(ctx, t, yield)
+		if m.afterTurn != nil {
+			m.afterTurn()
+		}
 		return nil
 	})
 	return sse.ServeStream(c, stream, func(err error) any { return errorFrame(err) })
@@ -348,6 +391,8 @@ type turn struct {
 	disclosure            llm.Disclosure
 	parallel              llm.ParallelStrategy
 	content               string
+	// qa is the Quick Assistant loop to try first; nil for a classic turn.
+	qa *quickTurn
 }
 
 // runTurn is the stream task of streamReply: sources, tokens (with routing, usage and
@@ -365,7 +410,7 @@ func (m *Module) runTurn(ctx context.Context, t turn, yield func(StreamEvent) bo
 	route := &routeBox{}
 	vault, billing, conv := t.vault, t.billing, t.conv.ID
 	user := &llm.User{ID: t.user.ID, Tier: t.user.Tier, TierOverride: t.user.TierOverride, PrivacyNoCNOrigin: t.user.PrivacyNoCNOrigin}
-	streamCtx := llm.WithValues(ctx, func(v *llm.Values) {
+	bind := func(v *llm.Values) {
 		v.AnalyticsVaultID = &vault
 		v.BillingTenantID = &billing
 		v.RouteOutcomeSink = route.set
@@ -379,7 +424,38 @@ func (m *Module) runTurn(ctx context.Context, t turn, yield func(StreamEvent) bo
 		v.CerberusScope = &llm.CerberusScope{Surface: llm.SurfaceChat, SpaceID: t.conv.SpaceID, ConversationID: &conv}
 		v.FailoverSink = func(n llm.FailoverNotice) { yield(fallbackFrame(llm.ScrubFailoverNotice(n, t.disclosure))) }
 		v.CurrentUser = user
-	})
+	}
+	streamCtx := llm.WithValues(ctx, bind)
+	if t.qa != nil {
+		outcome := m.answerQuick(ctx, t, bind, yield)
+		if reply := outcome.Reply; reply != nil {
+			// Not ctx: a dismissed card cancels it, and a write that already ran
+			// must keep its record.
+			if reply.ShouldPersist {
+				work := context.WithoutCancel(ctx)
+				if err := m.persistTurn(work, t, assistantRecord{
+					Text: reply.Text, SourceIDs: sourceIDs, ToolCalls: reply.ToolCallCount, Route: route.get(),
+					Indexable: reply.Indexable(), IsAnswer: reply.IsAnswer,
+				}); err != nil {
+					m.log.ErrorContext(work, "assistant turn persist failed", "error", err)
+				}
+			}
+			yield(StreamEvent{Type: "done"})
+			return
+		}
+		// Nobody is listening, and the classic path would only reserve again.
+		if ctx.Err() != nil {
+			return
+		}
+		// Only this binding: the classic stream reuses the free-lane decision
+		// the loop already paid its one grant for.
+		if decided := outcome.PreDecided; decided != nil {
+			streamCtx = llm.WithValues(ctx, func(v *llm.Values) {
+				bind(v)
+				v.PreDecidedRoute = decided
+			})
+		}
+	}
 	var buffer strings.Builder
 	tokens := 0
 	toolCalls := map[string]bool{}
@@ -417,7 +493,10 @@ func (m *Module) runTurn(ctx context.Context, t turn, yield func(StreamEvent) bo
 
 	// Persistence and side effects; failures are logged, the stream already succeeded.
 	work := context.WithoutCancel(ctx)
-	if err := m.persistTurn(work, t, answer, sourceIDs, len(toolCalls), route.get()); err != nil {
+	if err := m.persistTurn(work, t, assistantRecord{
+		Text: answer, SourceIDs: sourceIDs, ToolCalls: len(toolCalls), Route: route.get(),
+		Indexable: true, IsAnswer: true, ReviewComplex: true,
+	}); err != nil {
 		m.log.ErrorContext(work, "assistant turn persist failed", "error", err)
 	}
 
@@ -445,7 +524,8 @@ func (m *Module) runTurn(ctx context.Context, t turn, yield func(StreamEvent) bo
 	}
 
 	followUps := []string{}
-	if m.opts.FollowUps != nil {
+	// A Quick Assistant turn sends an empty list: nobody taps a chip in the card.
+	if m.opts.FollowUps != nil && t.qa == nil {
 		if got := m.opts.FollowUps.Generate(ctx, t.sessionKey, t.sessionID, answer, dtos); got != nil {
 			followUps = got
 		}
@@ -456,34 +536,54 @@ func (m *Module) runTurn(ctx context.Context, t turn, yield func(StreamEvent) bo
 	yield(StreamEvent{Type: "done"})
 }
 
+// assistantRecord is AssistantTurnRecord: what to write for one assistant turn.
+// A classic turn sets every flag; a Quick Assistant reply sets its own.
+type assistantRecord struct {
+	Text      string
+	SourceIDs []uuid.UUID
+	ToolCalls int
+	Route     *llm.ModelProvenance
+	// Indexable: the reply may become a memory through the output index.
+	Indexable bool
+	// IsAnswer: a real answer, so it counts for the first-query latch and the
+	// grounded-answer metric.
+	IsAnswer bool
+	// ReviewComplex: the turn may start a self-improvement review. Quick
+	// Assistant turns may not: that is background model work a single question
+	// should not cost.
+	ReviewComplex bool
+}
+
 // persistTurn writes the assistant message, the output-index job, the turn trace and
 // the conversation's updated_at, then the activation side effects.
-func (m *Module) persistTurn(ctx context.Context, t turn, answer string, sourceIDs []uuid.UUID, toolCalls int, route *llm.ModelProvenance) error {
+func (m *Module) persistTurn(ctx context.Context, t turn, rec assistantRecord) error {
 	msgID := uuid.New()
 	if err := m.insertMessage(ctx, messageRow{
-		ID: msgID, ConversationID: t.conv.ID, Role: "assistant", Content: answer, SourceMemoryIDs: sourceIDs,
-		ToolCallCount: toolCalls, CreatedAt: m.now(),
+		ID: msgID, ConversationID: t.conv.ID, Role: "assistant", Content: rec.Text, SourceMemoryIDs: rec.SourceIDs,
+		ToolCallCount: rec.ToolCalls, CreatedAt: m.now(),
 	}, nil); err != nil {
 		return err
 	}
-	output := memorystore.EnqueueOutputParams{
-		Tenant: t.vault, Source: memorystore.SourceChat, SourceID: ids.Upper(msgID), ConversationMessageID: &msgID, Content: answer,
-	}
-	if route != nil {
-		output.Provider, output.Model = &route.Provider, &route.Model
-	}
-	if err := m.opts.Memories.EnqueueOutput(ctx, output); err != nil {
-		return err
+	if rec.Indexable {
+		output := memorystore.EnqueueOutputParams{
+			Tenant: t.vault, Source: memorystore.SourceChat, SourceID: ids.Upper(msgID), ConversationMessageID: &msgID, Content: rec.Text,
+		}
+		if rec.Route != nil {
+			output.Provider, output.Model = &rec.Route.Provider, &rec.Route.Model
+		}
+		if err := m.opts.Memories.EnqueueOutput(ctx, output); err != nil {
+			return err
+		}
 	}
 	if m.opts.Traces != nil {
 		provider, model := llm.ProviderID("openRouter"), "unknown"
-		if route != nil {
-			if knownProvider(route.Provider) {
-				provider = llm.ProviderID(route.Provider)
+		if rec.Route != nil {
+			if knownProvider(rec.Route.Provider) {
+				provider = llm.ProviderID(rec.Route.Provider)
 			}
-			model = route.Model
+			model = rec.Route.Model
 		}
-		count := toolCalls
+		count := rec.ToolCalls
 		m.opts.Traces.Record(ctx, llm.TraceTurn{
 			TenantID: t.vault, ConversationMessageID: &msgID, Provider: provider, Model: model, ToolCallCount: &count,
 		})
@@ -491,12 +591,16 @@ func (m *Module) persistTurn(ctx context.Context, t turn, answer string, sourceI
 	if err := m.touchConversation(ctx, t.conv.ID); err != nil {
 		return err
 	}
-	m.opts.Analytics.Capture("chat_grounded_answer", ids.Upper(t.actor), map[string]any{
-		"grounded_hits": len(sourceIDs), "used_tools": toolCalls > 0,
-	})
+	if rec.IsAnswer {
+		m.opts.Analytics.Capture("chat_grounded_answer", ids.Upper(t.actor), map[string]any{
+			"grounded_hits": len(rec.SourceIDs), "used_tools": rec.ToolCalls > 0,
+		})
+	}
 	m.opts.Activity.NoteActivity(ctx, t.actor, m.now())
-	m.opts.Activity.TriggerComplexSession(ctx, t.actor, toolCalls, false)
-	if m.opts.Latches != nil {
+	if rec.ReviewComplex {
+		m.opts.Activity.TriggerComplexSession(ctx, t.actor, rec.ToolCalls, false)
+	}
+	if rec.IsAnswer && m.opts.Latches != nil {
 		m.opts.Latches.Latch(ctx, onboardlatch.FirstQuery, t.actor)
 	}
 	return nil

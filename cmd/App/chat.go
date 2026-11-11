@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"log/slog"
 	"lumina/internal/apns"
 	linkcapture "lumina/internal/capture"
 	"lumina/internal/chunkindex"
@@ -10,15 +11,19 @@ import (
 	"lumina/internal/httpserver"
 	"lumina/internal/ids"
 	"lumina/internal/llm"
+	"lumina/internal/modules/apple"
 	"lumina/internal/modules/chat"
 	"lumina/internal/modules/llmchat"
 	"lumina/internal/modules/memoryagent"
+	"lumina/internal/modules/quickassistant"
+	"lumina/internal/modules/reminders"
 	"lumina/internal/onboardlatch"
 	"lumina/internal/posthog"
 	"lumina/internal/selfimprove"
 	"lumina/internal/skills"
 	"lumina/internal/soul"
 	"lumina/internal/usagemeter"
+	"lumina/internal/vaultaccess"
 	"net/url"
 	"strings"
 	"time"
@@ -79,6 +84,8 @@ func (a *agent) chatModules(links *linkcapture.Service, enrichment *linkcapture.
 	if bridge := chat.NewBridge(cfg.ChatHermesRunsBridgeURL); bridge != nil {
 		opts.Runs = bridge
 	}
+	quick, quickRoutes := a.quickAssistant()
+	opts.QuickAssistant = quick
 
 	catalog := a.skillCatalog()
 	selectorTransport := llmchat.SelectorTransport{Transport: a.stack.Transport}
@@ -99,5 +106,50 @@ func (a *agent) chatModules(links *linkcapture.Service, enrichment *linkcapture.
 		Achievements: a.sink,
 		Latches:      onboardlatch.New(a.pool),
 	})
-	return []httpserver.Module{chat.New(a.pool, opts), llmRoute}
+	modules := []httpserver.Module{chat.New(a.pool, opts), llmRoute}
+	if quickRoutes != nil {
+		modules = append(modules, quickRoutes)
+	}
+	return modules
+}
+
+// quickAssistant is Quick Assistant's half of the chat wiring: the loop the
+// stream runs and the confirm/cancel routes. Both nil when
+// QUICK_ASSISTANT_ENABLED is off, or when it is on but the pending-action
+// table is missing, so chat stays exactly what it was.
+func (a *agent) quickAssistant() (*chat.QuickAssistant, httpserver.Module) {
+	if !strings.EqualFold(a.cfg.QuickAssistantEnabled, "true") {
+		return nil, nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if !quickassistant.Ready(ctx, a.pool) {
+		slog.Error("quick assistant disabled: assistant_pending_actions missing")
+		return nil, nil
+	}
+	if a.mcp == nil {
+		slog.Error("quick assistant disabled: the /v1/mcp tool service is not built")
+		return nil, nil
+	}
+	deps := quickassistant.Deps{
+		Pool: a.pool, Access: vaultaccess.New(a.pool), MCP: a.mcp,
+		Reminders: reminders.NewStore(a.pool), Consent: apple.NewConsentReader(a.pool),
+		Store: quickassistant.NewStore(a.pool),
+		// Devices stays nil until the /v1/ws cutover (P5/5J): no calendar_create, no Apple mirror.
+		Devices: nil,
+	}
+	routes, err := quickassistant.New(a.pool, deps, quickassistant.Options{
+		Identify: a.identify, Gate: a.gate(entitlement.MemoryQuery), Limits: a.limits,
+	})
+	if err != nil {
+		slog.Error("quick assistant disabled: its routes cannot be guarded", "error", err)
+		return nil, nil
+	}
+	return &chat.QuickAssistant{
+		Service: &quickassistant.Service{
+			Transport: a.stack.Transport, Model: a.cfg.HermesDefaultModel, Release: a.stack.Telemetry.Release,
+			Tools: quickassistant.Definitions(quickassistant.DefinitionOptions{DeviceWrites: false}),
+		},
+		Deps: deps,
+	}, routes
 }

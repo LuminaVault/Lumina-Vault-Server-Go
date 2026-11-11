@@ -78,6 +78,8 @@ type worldOptions struct {
 	noDevices   bool
 	enforcement bool
 	user        uuid.UUID
+	// forgetTimeout replaces the confirmed forget's bound when set.
+	forgetTimeout time.Duration
 }
 
 func newWorld(g rig, o worldOptions) world {
@@ -93,11 +95,15 @@ func newWorld(g rig, o worldOptions) world {
 		d.Devices = o.phone
 	}
 	users := auth.PGUsers(g.pool)
-	module := New(g.pool, d, Options{
+	module, err := New(g.pool, d, Options{
 		Identify: auth.Identify(qaKeys, users),
 		Gate:     entitlement.Middleware(g.pool, entitlement.MemoryQuery, o.enforcement, nil),
 		Limits:   ratelimit.NewStore(),
 	})
+	require.NoError(g.t, err)
+	if o.forgetTimeout > 0 {
+		module.forgetTimeout = o.forgetTimeout
+	}
 	e := httpserver.New(config.Config{}, httpserver.Deps{Auth: auth.Middleware(qaKeys, users), Modules: []httpserver.Module{module}})
 	return world{g: g, user: o.user, conversation: g.conversation(o.user), phone: o.phone, module: module, e: e}
 }
@@ -624,4 +630,51 @@ func TestConfirmCalendarWithoutDevicesFailsGenerically(t *testing.T) {
 	require.Empty(t, w.phone.sent())
 	require.Equal(t, "failed", w.status(id))
 	require.Len(t, w.messages(), 1)
+}
+
+// MARK: - Wiring
+
+// R87 M1: the routes never mount without their limiter, gate or identity.
+func TestNewRefusesToMountWithoutItsMiddleware(t *testing.T) {
+	mw := func(next echo.HandlerFunc) echo.HandlerFunc { return next }
+	full := Options{Identify: mw, Gate: mw, Limits: ratelimit.NewStore()}
+	for name, mutate := range map[string]func(*Options){
+		"identify": func(o *Options) { o.Identify = nil },
+		"gate":     func(o *Options) { o.Gate = nil },
+		"limits":   func(o *Options) { o.Limits = nil },
+	} {
+		o := full
+		mutate(&o)
+		module, err := New(nil, Deps{}, o)
+		require.Error(t, err, name)
+		require.Nil(t, module, name)
+	}
+	module, err := New(nil, Deps{}, full)
+	require.NoError(t, err)
+	require.NotNil(t, module)
+}
+
+// R87 M2: a confirmed forget is bounded like any tool call. A bound already
+// spent fails the forget generically and leaves the memory.
+func TestAConfirmedForgetIsBounded(t *testing.T) {
+	g := newRig(t)
+	require.Equal(t, toolTimeout, mustNew(t, g).forgetTimeout, "the runner's per-tool bound")
+	w := newWorld(g, worldOptions{forgetTimeout: time.Nanosecond})
+	memoryID := g.memory(w.user, "I like tea", nil, time.Now())
+	id := w.proposeForget(w.user, memoryID)
+
+	out := w.confirm(id)
+
+	require.Equal(t, StatusFailed, out.resolution.Status)
+	require.Equal(t, "That didn't work, and nothing was changed.", out.resolution.Message)
+	require.True(t, w.memoryExists(memoryID))
+	require.Equal(t, "failed", w.status(id))
+}
+
+func mustNew(t *testing.T, g rig) *Module {
+	t.Helper()
+	mw := func(next echo.HandlerFunc) echo.HandlerFunc { return next }
+	m, err := New(g.pool, g.deps, Options{Identify: mw, Gate: mw, Limits: ratelimit.NewStore()})
+	require.NoError(t, err)
+	return m
 }

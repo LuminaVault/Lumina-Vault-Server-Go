@@ -53,3 +53,9 @@ WITH inserted AS (
 )
 UPDATE conversations SET updated_at = NOW()
 WHERE id = (SELECT conversation_id FROM inserted);
+
+-- name: SpaceName :one
+-- The active space's name, only for a space in this vault: the id is client
+-- input (Swift: ConversationController.activeSpaceName).
+SELECT name FROM spaces
+WHERE tenant_id = @vault_id AND id = @id;
