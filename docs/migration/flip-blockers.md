@@ -189,6 +189,19 @@ Fixes that later remove the held routes and gaps (Go only unless stated; no modu
   doesn't move the archive date, because Swift has to outlive wave 5 regardless. Owner's call.
 - **Swift change.** None. **Unlocks.** 1 module.
 
+### me-gateways, integrations: in-process sessions (6D, 6E)
+
+- **In-memory state: real, by design.** The gateway-apply SSE subscribers, WhatsApp pairing sessions,
+  Photon setup sessions, xAI and Nous OAuth sessions and the parked `hermes auth` processes live in the
+  serving process. Start and complete (or stream) must reach the same server, so each module flips as
+  one, with no `heldPaths`. Apply jobs themselves persist in `hermes_gateway_apply_jobs`.
+- **Containers.** Go ports the container lifecycle in full (D-6de-waivers). Production has no docker in
+  the pod, so both servers fail at the first docker call. `ContainerReaperService` stays in Swift until
+  the wave 6 jobs move.
+- **Photon sidecar.** Ported client; production sets no `PHOTON_SIDECAR_URL`, so inbound answers 503 in
+  both. `docker/photon-sidecar` is retired with the Swift archive.
+- **Swift change.** None. **Unlocks.** 2 modules.
+
 ### admin: Isis reads `/internal/metrics` from the Swift Service (B5)
 
 - **Real today?** Yes. Isis calls `http://api-production.horus.svc.cluster.local:8080/internal/metrics` directly

@@ -36,6 +36,9 @@ type Config struct {
 	LogLevel        string `env:"LOG_LEVEL" envDefault:"info"`
 
 	RedisURL string `env:"REDIS_URL"`
+	// RateLimitStorageKind is rateLimit.storageKind: "redis" or anything else for
+	// memory. Go implements memory only (P10).
+	RateLimitStorageKind string `env:"RATE_LIMIT_STORAGE_KIND"`
 
 	// Wave 2 apple/devices/reminders.
 	APNSBundleID                    string `env:"APNS_BUNDLE_ID"`
@@ -61,6 +64,21 @@ type Config struct {
 	GoogleCalendarClientSecret string  `env:"OAUTH_GOOGLE_CALENDAR_CLIENT_SECRET"`
 	GoogleCalendarRedirectURI  string  `env:"OAUTH_GOOGLE_CALENDAR_REDIRECT_URI"`
 	MeetingBriefMaxDistance    float64 `env:"MEETING_BRIEF_MAX_DISTANCE" envDefault:"0.4"`
+	// J2 job switches, raw: read as Swift's reader.bool(default: true).
+	LearnedDigestEnabled string `env:"LEARNED_DIGEST_ENABLED" envDefault:"true"`
+	MeetingBriefEnabled  string `env:"MEETING_BRIEF_ENABLED" envDefault:"true"`
+	// EmbeddingReembedService (App+build.swift), raw; read in cmd/App/jobs_j2.go.
+	EmbeddingReembedEnabled        string `env:"EMBEDDING_REEMBED_ENABLED" envDefault:"false"`
+	EmbeddingHealEnabled           string `env:"EMBEDDING_HEAL_ENABLED" envDefault:"true"`
+	EmbeddingReembedBatchSize      string `env:"EMBEDDING_REEMBED_BATCH_SIZE" envDefault:"50"`
+	EmbeddingReembedPauseMS        string `env:"EMBEDDING_REEMBED_PAUSE_MILLISECONDS" envDefault:"2000"`
+	EmbeddingHealIntervalMinutes   string `env:"EMBEDDING_HEAL_INTERVAL_MINUTES" envDefault:"10"`
+	EmbeddingHealMaxBackoffMinutes string `env:"EMBEDDING_HEAL_MAX_BACKOFF_MINUTES" envDefault:"60"`
+	// KnowledgeExtractionWorker: Swift compares the lowercased string with "true".
+	KnowledgeGraphWorkerEnabled          string `env:"KNOWLEDGE_GRAPH_WORKER_ENABLED" envDefault:"true"`
+	KnowledgeGraphModelExtractionEnabled string `env:"KNOWLEDGE_GRAPH_MODEL_EXTRACTION_ENABLED" envDefault:"false"`
+	// SynthesisWorker: off unless the lowercased string is "true".
+	SynthesisWorkerEnabled string `env:"SYNTHESIS_WORKER_ENABLED" envDefault:"false"`
 	// Shared feed aggregator for the news ticker (news module). Raw strings:
 	// the module splits FEEDS_DEFAULT_FEEDS exactly as Swift does.
 	FeedsBaseURL      string `env:"FEEDS_BASE_URL"`
@@ -114,7 +132,10 @@ type Config struct {
 	// with Swift's flag() rules, so "0" and "off" are off too.
 	CommunityEnabled        string `env:"COMMUNITY_ENABLED"`
 	CommunityPostingEnabled string `env:"COMMUNITY_POSTING_ENABLED" envDefault:"true"`
-	AdminToken              string `env:"ADMIN_TOKEN"`
+	// DailyPostWorker: community.dailyPost.enabled and .hourUtc.
+	CommunityDailyPostEnabled string `env:"COMMUNITY_DAILY_POST_ENABLED" envDefault:"false"`
+	CommunityDailyPostHourUTC string `env:"COMMUNITY_DAILY_POST_HOUR_UTC" envDefault:"12"`
+	AdminToken                string `env:"ADMIN_TOKEN"`
 
 	// Wave 7B admin. /internal/metrics is 404 without METRICS_SECRET; usage_events
 	// retention is off at 0 days.
@@ -194,6 +215,26 @@ type Config struct {
 	// CerberusStudioEnabled is raw: workflows.Enabled reads it as Swift's reader.bool
 	// does. Off unmounts /v1/workflows, /v1/workflow-templates and /v1/workflow-hooks.
 	CerberusStudioEnabled string `env:"CERBERUS_STUDIO_ENABLED" envDefault:"true"`
+
+	// Hermes tenant containers (wave 6D/6E). DockerBinaryPath is forked for every
+	// container operation; in a pod with no docker each call fails as in Swift.
+	DockerBinaryPath              string `env:"DOCKER_BINARY_PATH" envDefault:"/usr/bin/docker"`
+	HermesPerTenantNetwork        string `env:"HERMES_PER_TENANT_NETWORK" envDefault:"luminavault-hermes-net"`
+	HermesPerTenantImage          string `env:"HERMES_PER_TENANT_IMAGE" envDefault:"luminavault-hermes:local"`
+	HermesPerTenantDataRootBase   string `env:"HERMES_PER_TENANT_DATA_ROOT_BASE" envDefault:"/app/data/hermes-tenants"`
+	HermesPerTenantPortRangeStart int    `env:"HERMES_PER_TENANT_PORT_RANGE_START" envDefault:"9000"`
+	HermesPerTenantPortRangeEnd   int    `env:"HERMES_PER_TENANT_PORT_RANGE_END" envDefault:"9500"`
+	HermesPerTenantIdleTTLSeconds int    `env:"HERMES_PER_TENANT_IDLE_TTL_SECONDS" envDefault:"1800"`
+	HermesPerTenantMemoryLimit    string `env:"HERMES_PER_TENANT_MEMORY_LIMIT" envDefault:"512m"`
+	HermesPerTenantCPULimit       string `env:"HERMES_PER_TENANT_CPU_LIMIT" envDefault:"1.0"`
+	// HermesAudioProxyBaseURL includes /v1; empty seeds no voice into containers.
+	HermesAudioProxyBaseURL string `env:"HERMES_AUDIO_PROXY_BASE_URL"`
+	// MnemosyneEnabled is raw: on when it lowercases to "true", as Swift reads it.
+	MnemosyneEnabled string `env:"MNEMOSYNE_ENABLED" envDefault:"true"`
+	// PhotonSidecarURL and PhotonSidecarToken reach the central iMessage sidecar.
+	// The token also gates POST /v1/gateways/photon/inbound; empty disables it.
+	PhotonSidecarURL   string `env:"PHOTON_SIDECAR_URL" envDefault:"http://photon-sidecar:8789"`
+	PhotonSidecarToken string `env:"PHOTON_SIDECAR_TOKEN"`
 
 	// JinaAPIKey is Jina's reader, tier-2 of link enrichment. Unset still calls it,
 	// without the header, as in Swift.
