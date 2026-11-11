@@ -372,6 +372,11 @@ func (m *Module) preview(c *echo.Context) error {
 }
 
 func (m *Module) pathID(c *echo.Context) (uuid.UUID, error) {
+	// Hummingbird's trie prefers the constant "preview" segment over :id, and
+	// that node only has GET, so PATCH/DELETE .../preview is an empty 404.
+	if c.Param("id") == "preview" {
+		return uuid.Nil, echo.ErrNotFound
+	}
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil || len(c.Param("id")) != 36 {
 		return uuid.Nil, wire.NewError(http.StatusBadRequest, "invalid_id")
