@@ -11,7 +11,8 @@ INSERT INTO users (id, email, password_hash, is_verified, username, tier, create
   ('5c100000-0000-4000-8000-0000000000a7', 'sk-gus@parity.test', 'x', true, 'sk_gus', 'trial', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
   ('5c100000-0000-4000-8000-0000000000b8', 'sk-hal@parity.test', 'x', true, 'sk_hal', 'trial', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
   ('5c100000-0000-4000-8000-0000000000c9', 'sk-ivy@parity.test', 'x', true, 'sk_ivy', 'trial', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
-  ('5c100000-0000-4000-8000-0000000000da', 'sk-jon@parity.test', 'x', true, 'sk_jon', 'trial', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+  ('5c100000-0000-4000-8000-0000000000da', 'sk-jon@parity.test', 'x', true, 'sk_jon', 'trial', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
+  ('5c100000-0000-4000-8000-0000000000eb', 'sk-kim@parity.test', 'x', true, 'sk_kim', 'trial', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
 
 -- sk_ann: state rows for built-ins, one with every optional set and invalid enum values
 -- elsewhere, plus a mirrored Hermes skill.

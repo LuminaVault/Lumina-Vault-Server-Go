@@ -1,0 +1,9 @@
+# Hummingbird takes /v1/skills/slash and /v1/skills/outputs before /v1/skills/:name.
+module: skills
+steps:
+  - {name: patch slash, as: sk_kim, request: {method: PATCH, path: /v1/skills/slash, json: {enabled: false}}}
+  - {name: runs of slash, as: sk_kim, request: {method: GET, path: /v1/skills/slash/runs}}
+  - {name: run slash, as: sk_kim, request: {method: POST, path: /v1/skills/slash/run}}
+  - {name: patch outputs, as: sk_kim, request: {method: PATCH, path: /v1/skills/outputs, json: {enabled: false}}}
+  - {name: runs of outputs, as: sk_kim, request: {method: GET, path: /v1/skills/outputs/runs}}
+  - {name: get slash, as: sk_kim, request: {method: GET, path: /v1/skills/slash}}
