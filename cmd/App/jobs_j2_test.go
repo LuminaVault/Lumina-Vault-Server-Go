@@ -25,9 +25,9 @@ func TestJ2JobsFollowSwiftStartConditions(t *testing.T) {
 	all := config.Config{
 		LVEnvironment: "production", LearnedDigestEnabled: "true", MeetingBriefEnabled: "true",
 		EmbeddingReembedEnabled: "false", EmbeddingHealEnabled: "true",
-		KnowledgeGraphWorkerEnabled: "TRUE",
+		KnowledgeGraphWorkerEnabled: "TRUE", SynthesisWorkerEnabled: "true",
 	}
-	want := []string{"EmbeddingReembedService", "KnowledgeExtractionWorker", "LearnedDigestScheduler", "MeetingBriefScheduler"}
+	want := []string{"EmbeddingReembedService", "KnowledgeExtractionWorker", "LearnedDigestScheduler", "MeetingBriefScheduler", "SynthesisWorker"}
 	require.Equal(t, want, j2Names(all, embedding.KindOpenRouter))
 
 	all.LVGoJobs = want
@@ -37,6 +37,7 @@ func TestJ2JobsFollowSwiftStartConditions(t *testing.T) {
 	off := all
 	off.LearnedDigestEnabled, off.MeetingBriefEnabled, off.EmbeddingHealEnabled = "false", "0", "no"
 	off.KnowledgeGraphWorkerEnabled = "1" // Swift compares the string with "true", so "1" is off
+	off.SynthesisWorkerEnabled = ""       // off by default
 	require.Empty(t, j2Names(off, embedding.KindOpenRouter))
 	garbage := all
 	garbage.LearnedDigestEnabled = "maybe" // reader.bool falls back to the default
@@ -49,7 +50,8 @@ func TestJ2JobsFollowSwiftStartConditions(t *testing.T) {
 	reembed.EmbeddingReembedEnabled = "true"
 	require.Contains(t, j2Names(reembed, embedding.KindDeterministic), "EmbeddingReembedService")
 
+	// SynthesisWorker is the one J2 job Swift starts under LV_ENVIRONMENT=test.
 	test := all
 	test.LVEnvironment = "test"
-	require.Empty(t, j2Names(test, embedding.KindOpenRouter))
+	require.Equal(t, []string{"SynthesisWorker"}, j2Names(test, embedding.KindOpenRouter))
 }

@@ -9,6 +9,7 @@ import (
 	"lumina/internal/jobs"
 	"lumina/internal/llm"
 	"lumina/internal/modules/calendar"
+	"lumina/internal/modules/dashboard"
 	"lumina/internal/modules/knowledge"
 	"lumina/internal/modules/me"
 	"strconv"
@@ -91,6 +92,12 @@ func j2Jobs(pool *pgxpool.Pool, cfg config.Config, embeddings embedding.Service,
 		out = append(out, worker.Job())
 	} else {
 		slog.Info("knowledge graph worker disabled (set KNOWLEDGE_GRAPH_WORKER_ENABLED=true to enable)")
+	}
+	// Swift checks only this flag (no LV_ENVIRONMENT test guard).
+	if strings.ToLower(cfg.SynthesisWorkerEnabled) == "true" {
+		out = append(out, dashboard.NewSynthesisWorker(pool, transport, cfg.HermesDefaultModel, slog.Default().With("label", "lv.synthesis")).Job())
+	} else {
+		slog.Info("synthesis worker disabled (set SYNTHESIS_WORKER_ENABLED=true to enable)")
 	}
 	return out
 }
