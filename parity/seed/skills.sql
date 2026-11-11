@@ -47,6 +47,10 @@ INSERT INTO hermes_mirrored_jobs (id, tenant_id, hermes_job_id, name, schedule, 
   ('5c10e000-0000-4000-8000-000000000001', '5c100000-0000-4000-8000-0000000000d4', 'hj-1', 'Weekly digest', '0 9 * * 1', 'p', false, '{}', '2026-01-01T00:00:00Z'),
   ('5c10e000-0000-4000-8000-000000000002', '5c100000-0000-4000-8000-0000000000d4', 'hj-2', '', '0 9 * * 1', 'p', false, '{}', '2026-01-01T00:00:00Z');
 
+INSERT INTO vaults (id, personal_owner_user_id, name, created_at, updated_at)
+SELECT id, id, 'Personal', '2025-06-01T00:00:00Z', '2025-06-01T00:00:00Z'
+FROM users WHERE username LIKE 'sk\_%';
+
 INSERT INTO vault_files (id, tenant_id, space_id, path, content_type, size_bytes, sha256, created_at, updated_at) VALUES
   ('5c10f000-0000-4000-8000-000000000001', '5c100000-0000-4000-8000-0000000000d4', NULL, 'hermes/weekly-digest.md', 'text/markdown', 1, 'h', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
 
