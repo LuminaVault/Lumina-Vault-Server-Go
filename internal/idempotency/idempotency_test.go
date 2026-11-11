@@ -100,6 +100,9 @@ func (v *env) post(path string, user uuid.UUID, key, body string) *httptest.Resp
 	return rec
 }
 
+// TestIdempotency ports IdempotencyMiddlewareTests
+// (Tests/AppTests/Middleware/IdempotencyMiddlewareTests.swift): all 5 cases, each
+// marked with its Swift name below, every assertion kept. The rest are Go's own.
 func TestIdempotency(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.Postgres(t)

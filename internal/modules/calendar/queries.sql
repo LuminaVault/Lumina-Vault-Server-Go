@@ -232,3 +232,7 @@ WHERE c.tenant_id = sqlc.arg(tenant_id)
   AND m.review_state <> 'rejected'
 ORDER BY f.rrf DESC, f.distance ASC NULLS LAST
 LIMIT sqlc.arg(lim)::int;
+
+-- name: ConnectedAccountTenants :many
+-- CalendarSyncWorker.tick: every connected row, of any provider, in no order.
+SELECT tenant_id FROM calendar_accounts WHERE status = 'connected';

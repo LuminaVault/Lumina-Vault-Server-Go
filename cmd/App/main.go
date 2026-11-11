@@ -268,6 +268,7 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		// One disk guard for wave 4's writers.
 		disk := diskguard.New(paths.Root, cfg.StorageMinFreeBytes, cfg.StorageMinFreeRatio, diskguard.Options{})
 		memories := memorystore.New(pool, nil)
+		registered = append(registered, j1Jobs(pool, cfg, disk)...)
 		agent, stopAgent := newAgent(ctx, pool, cfg, box, paths, identify, limits, embeddings, sink, meModule, disk)
 		defer stopAgent()
 		links, enrichment := linkCaptureService(pool, cfg, paths, embeddings, memories, disk, sink)
