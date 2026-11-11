@@ -1694,3 +1694,28 @@ Beyond the pilot gate (D-wave2-early):
 
 - CI run 43007663996 on head 2337ec9: 0 differences. The error text and latency are ignored: the error
   is Go's text, not Foundation's `String(describing:)`.
+
+## soul (wave 8)
+
+### G0 entry: met 2026-11-11
+
+- Routes: 4. `GET`, `PUT` and `DELETE /v1/soul`, `POST /v1/soul/compose`
+  (`Auth/SoulController.swift`). `/v1/soul` is split out of `auth` by hand in `modules.yaml`.
+  `gen-modules.py` needs the `Soul` entries in `WAVES`, `SPLITS` and `SWIFT_DIRS` (PR #58) to keep it.
+- Prefixes: disjoint (`internal/manifest`).
+- Coupling: writes `raw/SOUL.md` in the vault and `profiles/<username>/SOUL.md` under the Hermes
+  data root. A write enqueues `soul_configured` on the achievements sink. BYO Hermes tenants get a
+  409 on writes, through the shared `hermesresolve` resolver. No LLM: compose is
+  `SOULComposer.render`, which is deterministic.
+- Jobs: `SOULCoreMigrationJob` stays in Swift.
+- Swift tests: `SOULComposer` 18, `SoulControllerCompose` 4, `SOULService` 11, `SOULCore` 10 and
+  `SOULInit` 3, all ported or already covered (46).
+
+### G1 parity: met 2026-11-11
+
+- CI run 43014570988 on head 18788ca: Swift vs Go give **238 scenarios, 0 differences** (whole
+  suite), and every switch state shows 0 differences
+  (https://github.com/LuminaVault/Lumina-Vault-Server-Go/actions/runs/43014570988).
+  `parity/scenarios/soul` has 6 files, one of them a smoke.
+- Not proven by parity: the Hermes profile copy, the 413 and the 503 (Go tests only). Composed
+  documents embed `created_at`, so they're compared on the volume with timestamps normalized.

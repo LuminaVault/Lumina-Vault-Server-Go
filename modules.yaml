@@ -377,6 +377,6 @@ modules:
   soul:
     wave: 8
     swiftDir: Sources/App/Auth
-    status: swift
+    status: parity
     prefixes: [/v1/soul]
     jobs: []
