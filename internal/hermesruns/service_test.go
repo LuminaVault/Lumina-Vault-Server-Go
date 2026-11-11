@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"lumina/internal/apns"
 	"lumina/internal/dbtest"
 	"lumina/internal/hermesresolve"
 	"lumina/internal/hermesruns"
@@ -13,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -23,8 +25,8 @@ import (
 
 // Ported from AppTests/Hermes/Runs/HermesRunsServiceTests.swift (17 tests),
 // HermesRunConversationPersistenceTests.swift (5), HermesRunsListFilterTests.swift
-// (4) and HermesRunPersistenceTests.swift (the 6 row tests; the 2 migration
-// tests are waived, see test-waivers.md).
+// (4), HermesRunPersistenceTests.swift (8, the 2 migration cases against the goose
+// baseline) and HermesRunPushNotifierTests.swift's prefs-table case.
 
 func slogDiscard() *slog.Logger { return slog.New(slog.DiscardHandler) }
 
@@ -645,4 +647,80 @@ func TestHermesRuns(t *testing.T) {
 	t.Run("AnUnknownStatusStringReadsAsLostRatherThanAsAnActiveRun", func(t *testing.T) { caseAnUnknownStatusStringReadsAsLostRatherThanAsAnActiveRun(t, p) })
 	t.Run("TheSameSeqCannotBePersistedTwiceForOneRun", func(t *testing.T) { caseTheSameSeqCannotBePersistedTwiceForOneRun(t, p) })
 	t.Run("DeletingARunCascadesToItsEvents", func(t *testing.T) { caseDeletingARunCascadesToItsEvents(t, p) })
+	t.Run("M117AndM118CreateTheTablesIndexesAndCategoryColumns", func(t *testing.T) { caseM117AndM118CreateTheTablesIndexesAndCategoryColumns(t, p) })
+	t.Run("M119DefaultsBothNewPushCategoriesToEnabled", func(t *testing.T) { caseM119DefaultsBothNewPushCategoriesToEnabled(t, p) })
+	t.Run("EachNewCategoryIsIndependentlyMutableThroughThePrefsTable", func(t *testing.T) { caseEachNewCategoryIsIndependentlyMutableThroughThePrefsTable(t, p) })
+}
+
+// MARK: - Migrations (HermesRunPersistenceTests): Go's schema is the goose baseline,
+// so these check the baseline carries what M117–M119 created.
+
+func strings1(t *testing.T, p *pgxpool.Pool, sql string) []string {
+	t.Helper()
+	rows, err := p.Query(context.Background(), sql)
+	require.NoError(t, err)
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var s string
+		require.NoError(t, rows.Scan(&s))
+		out = append(out, s)
+	}
+	return out
+}
+
+func caseM117AndM118CreateTheTablesIndexesAndCategoryColumns(t *testing.T, p *pgxpool.Pool) {
+	runIndexes := strings1(t, p, `SELECT indexname FROM pg_indexes WHERE tablename = 'hermes_runs'`)
+	require.Contains(t, runIndexes, "idx_hermes_runs_tenant_started_at")
+	require.Contains(t, runIndexes, "idx_hermes_runs_active")
+	require.Contains(t, runIndexes, "uq_hermes_runs_tenant_hermes_run_id")
+	require.Contains(t, strings1(t, p, `SELECT indexname FROM pg_indexes WHERE tablename = 'hermes_run_events'`), "uq_hermes_run_events_run_seq")
+	require.Equal(t, []string{"jsonb"}, strings1(t, p, `SELECT data_type FROM information_schema.columns
+		WHERE table_name = 'hermes_run_events' AND column_name = 'payload'`))
+	require.ElementsMatch(t, []string{"approval_enabled", "run_completed_enabled"}, strings1(t, p, `SELECT column_name FROM information_schema.columns
+		WHERE table_name = 'apns_category_prefs' AND column_name IN ('approval_enabled', 'run_completed_enabled')`))
+}
+
+func caseM119DefaultsBothNewPushCategoriesToEnabled(t *testing.T, p *pgxpool.Pool) {
+	tenant := newUser(t, p)
+	_, err := p.Exec(context.Background(), `INSERT INTO apns_category_prefs (tenant_id) VALUES ($1)`, tenant)
+	require.NoError(t, err)
+	var approval, completed bool
+	require.NoError(t, p.QueryRow(context.Background(), `SELECT approval_enabled, run_completed_enabled FROM apns_category_prefs
+		WHERE tenant_id = $1`, tenant).Scan(&approval, &completed))
+	require.True(t, approval)
+	require.True(t, completed)
+}
+
+// MARK: - Push notifier through apns.Service (HermesRunPushNotifierTests)
+
+type recordingSender struct {
+	mu    sync.Mutex
+	sends []apns.Delivery
+}
+
+func (s *recordingSender) Send(_ context.Context, d apns.Delivery) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.sends = append(s.sends, d)
+	return nil
+}
+
+func caseEachNewCategoryIsIndependentlyMutableThroughThePrefsTable(t *testing.T, p *pgxpool.Pool) {
+	ctx := context.Background()
+	tenant := newUser(t, p)
+	_, err := p.Exec(ctx, `INSERT INTO device_tokens (id, tenant_id, token, platform, bundle_id, created_at, updated_at)
+		VALUES ($1, $2, $3, 'ios', 'com.lumina.test', now(), now())`, uuid.New(), tenant, uuid.NewString())
+	require.NoError(t, err)
+	_, err = p.Exec(ctx, `INSERT INTO apns_category_prefs (tenant_id, approval_enabled, run_completed_enabled) VALUES ($1, false, true)`, tenant)
+	require.NoError(t, err)
+	sender := &recordingSender{}
+	notifier := hermesruns.APNSNotifier{Push: apns.NewWithSender(p, "com.lumina.test", sender)}
+	summary := "done"
+	notifier.ApprovalRequested(ctx, tenant, hermesruns.DTO{HermesRunID: "run_push", Status: hermesruns.WaitingForApproval, Prompt: "p"})
+	notifier.RunFinished(ctx, tenant, hermesruns.DTO{HermesRunID: "run_push", Status: hermesruns.Completed, Prompt: "p", Summary: &summary})
+	sender.mu.Lock()
+	defer sender.mu.Unlock()
+	require.Len(t, sender.sends, 1)
+	require.Equal(t, apns.CategoryRunCompleted, sender.sends[0].Message.Category)
 }

@@ -1844,11 +1844,9 @@ served by Go but flip only with chat, in one infra commit (B12, decisions.md D-6
 - Job: `HermesRunsService` (boot re-attach for runs younger than 300 s), registered and off unless `LV_GO_JOBS`
   names it.
 - Pushes: `apns.CategoryApproval` and `apns.CategoryRunCompleted`, through `apns.Service`.
-- Swift tests: 75 of 78 ported.
+- Swift tests: all 78 ported.
   - `HermesRunEvent` 15, `HermesRunsClient` 14, `HermesRunsService` 17, `HermesRunConversationPersistence` 5,
     `HermesRunsListFilter` 4, `HermesRunsController` 11.
-  - `HermesRunPersistence`: 6 of 8. The 2 M117–M119 migration checks are covered by the baseline schema and
-    `schema-parity`.
-  - `HermesRunPushNotifier`: 3 of 4. The prefs-table case is covered by `internal/apns` category gating
-    (`apns_test.go`).
+  - `HermesRunPersistence` 8: the M117–M119 cases check the goose baseline.
+  - `HermesRunPushNotifier` 4: the prefs-table case goes through `apns.NewWithSender` with a recording sender.
   - Go adds a stream-idle client test and a tool-name test.

@@ -13,7 +13,7 @@ import (
 )
 
 // Ported from AppTests/Hermes/Runs/HermesRunPushNotifierTests.swift (3 of 4; the
-// prefs-table test is waived: apns_test.go covers category gating).
+// prefs-table case, which needs the database, is in service_test.go).
 
 type recordingPusher struct {
 	mu    sync.Mutex
