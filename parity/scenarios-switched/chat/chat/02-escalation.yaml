@@ -1,0 +1,28 @@
+# Escalated turns. Swift starts the run itself; Go asks swift2-switched over the runs
+# bridge. The run finishes asynchronously, so nothing after the frames is compared.
+module: chat
+steps:
+  - name: create a conversation
+    as: chat_gus
+    request: {method: POST, path: /v1/conversations, json: {title: Agent}}
+    capture: {conversation: $.id}
+  - name: an action with the capability is an agent run
+    as: chat_gus
+    stream: true
+    frames: 3
+    framesTimeout: 15s
+    request:
+      method: POST
+      path: /v1/conversations/{{conversation}}/messages/stream
+      headers: {x-lv-client-caps: chat.hermes_run}
+      json: {content: deploy the stub}
+  - name: force escalates a question
+    as: chat_gus
+    stream: true
+    frames: 3
+    framesTimeout: 15s
+    request:
+      method: POST
+      path: /v1/conversations/{{conversation}}/messages/stream
+      headers: {x-lv-client-caps: chat.hermes_run}
+      json: {content: "what is in my vault?", agentMode: force}

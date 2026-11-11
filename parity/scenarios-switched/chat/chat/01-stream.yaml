@@ -1,0 +1,59 @@
+# The classic stream through the stub as the gateway, compared on its joined text,
+# then what it persisted. chat_gus is pro, so the fake OpenRouter key sends the turn
+# to HERMES_GATEWAY_URL (FreeLanePolicy, rule 3).
+module: chat
+steps:
+  - name: create a conversation
+    as: chat_gus
+    request: {method: POST, path: /v1/conversations, json: {title: Stub}}
+    capture: {conversation: $.id}
+  - name: a classic turn
+    as: chat_gus
+    ignore: ["$.payload.latencyMs"]
+    stream: true
+    frames: 10
+    framesTimeout: 20s
+    coalesce: {type: token, field: payload}
+    request:
+      method: POST
+      path: /v1/conversations/{{conversation}}/messages/stream
+      json: {content: tell me about the stub}
+  - name: the turn persisted
+    as: chat_gus
+    request: {method: GET, path: "/v1/conversations/{{conversation}}"}
+    snapshot: [conversation_messages]
+  - name: a second turn sees the first in its history
+    as: chat_gus
+    ignore: ["$.payload.latencyMs"]
+    stream: true
+    frames: 10
+    framesTimeout: 20s
+    coalesce: {type: token, field: payload}
+    request:
+      method: POST
+      path: /v1/conversations/{{conversation}}/messages/stream
+      json: {content: and again, attachments: [{kind: text, name: notes.txt, text: attached words}]}
+  - {name: traces, as: chat_gus, ignore: ["$.traces[*].latencyMs"], request: {method: GET, path: "/v1/conversations/{{conversation}}/traces"}}
+  - name: an action without the capability stays classic
+    as: chat_gus
+    ignore: ["$.payload.latencyMs"]
+    stream: true
+    frames: 10
+    framesTimeout: 20s
+    coalesce: {type: token, field: payload}
+    request:
+      method: POST
+      path: /v1/conversations/{{conversation}}/messages/stream
+      json: {content: deploy the stub}
+  - name: agent mode off stays classic with the capability
+    as: chat_gus
+    ignore: ["$.payload.latencyMs"]
+    stream: true
+    frames: 10
+    framesTimeout: 20s
+    coalesce: {type: token, field: payload}
+    request:
+      method: POST
+      path: /v1/conversations/{{conversation}}/messages/stream
+      headers: {x-lv-client-caps: chat.hermes_run}
+      json: {content: deploy the stub, agentMode: "off"}

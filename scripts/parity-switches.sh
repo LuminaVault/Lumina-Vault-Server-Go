@@ -31,6 +31,8 @@
 #                   the model-calling routes' success paths (group 4F)
 #   agents          HERMES_GATEWAY_URL on the LLM stub, and BYO Hermes (private ranges over
 #                   HTTP allowed) on its gateway routes: agent rooms' turns (group 5D)
+#   chat            HERMES_GATEWAY_URL on the LLM stub, a fake OpenRouter key, and Go's runs
+#                   bridge on swift2-switched: chat streams and escalations (group 5C)
 #
 # A state for other LLM success paths, once Go serves them (wave 5), is one more
 # run_state with the stub up and SWITCH_HERMES_GATEWAY_URL=http://llmstub:8080,
@@ -44,11 +46,15 @@ cd "$(dirname "$0")/.."
 export PARITY_SWIFT_IMAGE
 COMPOSE=(docker compose -f docker-compose.parity.yml -p lvparity --profile servers --profile switched)
 
+# RUN_STATE_ALSO names more services to recreate with the pair, after the databases
+# (state "chat": swift2-switched, the Go server's runs bridge, on parity_go_switched).
 run_state() {
   local state=$1
   shift
   local db
-  "${COMPOSE[@]}" stop swift-switched go-switched >/dev/null 2>&1 || true
+  local also=${RUN_STATE_ALSO:-}
+  # shellcheck disable=SC2086
+  "${COMPOSE[@]}" stop swift-switched go-switched $also >/dev/null 2>&1 || true
   for db in parity_swift_switched parity_go_switched; do
     "${COMPOSE[@]}" exec -T pg psql -v ON_ERROR_STOP=1 -q -U lv -d postgres -c "DROP DATABASE IF EXISTS $db WITH (FORCE)"
     "${COMPOSE[@]}" exec -T pg psql -v ON_ERROR_STOP=1 -q -U lv -d postgres -c "CREATE DATABASE $db TEMPLATE parity_template"
@@ -56,14 +62,17 @@ run_state() {
       "${COMPOSE[@]}" exec -T pg psql -v ON_ERROR_STOP=1 -q -U lv -d "$db" < "parity/seed-switched/$state.sql"
     fi
   done
-  env "$@" "${COMPOSE[@]}" up -d --force-recreate swift-switched go-switched
-  local port
-  for port in 18083 18084; do
+  # shellcheck disable=SC2086
+  env "$@" "${COMPOSE[@]}" up -d --force-recreate swift-switched go-switched $also
+  local port ports="18083 18084"
+  case " $also " in *" swift2-switched "*) ports="$ports 18086" ;; esac
+  for port in $ports; do
     for _ in $(seq 1 60); do
       curl -fsS "http://localhost:$port/health" >/dev/null 2>&1 && break
       sleep 1
     done
-    curl -fsS "http://localhost:$port/health" >/dev/null || { echo "server on :$port did not become healthy"; "${COMPOSE[@]}" logs --tail 40 swift-switched go-switched; exit 1; }
+    # shellcheck disable=SC2086
+    curl -fsS "http://localhost:$port/health" >/dev/null || { echo "server on :$port did not become healthy"; "${COMPOSE[@]}" logs --tail 40 swift-switched go-switched $also; exit 1; }
   done
   echo "==> state $state"
   # A difference fails the script at the end, so one run reports every state.
@@ -176,6 +185,28 @@ agents_state() {
   done
 }
 
+# Chat (wave 5C): the classic stream and /v1/llm/chat through the stub as the gateway,
+# and escalated turns. Swift starts their run itself; Go asks swift2-switched over the
+# runs bridge (owner decision 1, option A), so swift2 shares Go's database. The stub's
+# counters have to show both servers really streamed and started runs.
+chat_state() {
+  local before after route calls
+  before=$(curl -fsS http://localhost:18085/stub/stats)
+  RUN_STATE_ALSO=swift2-switched run_state chat SWITCH_HERMES_GATEWAY_URL=http://llmstub:8080 \
+    SWITCH_OPENROUTER_API_KEY=parity-openrouter-not-a-real-key \
+    SWITCH_CHAT_BRIDGE_URL=http://swift2-switched:8080 SWITCH_SWIFT2_DB=parity_go_switched
+  after=$(curl -fsS http://localhost:18085/stub/stats)
+  for route in /v1/chat/completions /v1/runs; do
+    calls=$(( $(stub_count "$after" "$route") - $(stub_count "$before" "$route") ))
+    echo "stub answered $calls on $route in state chat"
+    if [ "$calls" -lt 2 ]; then
+      echo "the servers never reached the stub on $route"
+      failed=1
+    fi
+  done
+  "${COMPOSE[@]}" stop swift2-switched >/dev/null 2>&1 || true
+}
+
 # stub_count STATS ROUTE prints ROUTE's counter in a /stub/stats body, 0 when absent.
 stub_count() {
   local n
@@ -208,6 +239,7 @@ for _ in $(seq 1 60); do
 done
 run_state llm SWITCH_HERMES_GATEWAY_URL=http://llmstub:8080 SWITCH_CAPTURE_AUTO_FILE_ENABLED=true
 agents_state
+chat_state
 llm_selftest
 "${COMPOSE[@]}" stop swift-switched go-switched >/dev/null 2>&1 || true
 exit "$failed"

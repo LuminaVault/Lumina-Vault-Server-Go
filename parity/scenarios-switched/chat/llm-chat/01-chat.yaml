@@ -1,0 +1,22 @@
+# POST /v1/llm/chat through the stub as the gateway.
+module: llm-chat
+steps:
+  - name: a completion
+    as: chat_ivy
+    request:
+      method: POST
+      path: /v1/llm/chat
+      headers: {X-Skip-URL-Enrichment: "true"}
+      json: {messages: [{role: system, content: be brief}, {role: user, content: hello stub}]}
+  - name: with a link the enricher cannot reach
+    as: chat_ivy
+    request:
+      method: POST
+      path: /v1/llm/chat
+      json: {messages: [{role: user, content: "read https://example.com/article."}], session_id: s1}
+  - name: with a model and a temperature
+    as: chat_ivy
+    request:
+      method: POST
+      path: /v1/llm/chat
+      json: {messages: [{role: user, content: hi}], model: openai/gpt-4o-mini, temperature: 0.2, stream: false}
