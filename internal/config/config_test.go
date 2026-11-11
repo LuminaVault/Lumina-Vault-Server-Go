@@ -46,6 +46,8 @@ func TestConfigEnvNamesComeFromSwiftKeys(t *testing.T) {
 		// Go-only until wave 6C: the Swift API escalated chat turns start their run on
 		// (owner decision 1, option A; internal/modules/chat/runs.go).
 		"CHAT_HERMES_RUNS_BRIDGE_URL": true,
+		// Go-only: ships Quick Assistant dark; Swift has no switch (internal/modules/quickassistant).
+		"QUICK_ASSISTANT_ENABLED": true,
 		// TranscribeProviderRegistry.loadConfig builds these with key = "openai".
 		"TRANSCRIBE_RATECARD_OPENAI_MTOK_PER_SECOND":              true,
 		"TRANSCRIBE_RATECARD_OPENAI_IMPUTED_USD_PER_AUDIO_MINUTE": true,

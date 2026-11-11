@@ -210,6 +210,9 @@ type Config struct {
 	AutoSaveLinksEnabled            string  `env:"AUTO_SAVE_LINKS_ENABLED" envDefault:"true"`
 	ChatRetrievalMaxDistance        float64 `env:"CHAT_RETRIEVAL_MAX_DISTANCE" envDefault:"0.6"`
 	ChatHermesRunsBridgeURL         string  `env:"CHAT_HERMES_RUNS_BRIDGE_URL"`
+	// QuickAssistantEnabled is Go only: Swift has no switch, so this is how the
+	// Go port ships Quick Assistant dark. Read with strings.EqualFold(v, "true").
+	QuickAssistantEnabled string `env:"QUICK_ASSISTANT_ENABLED" envDefault:"false"`
 
 	// Product analytics (posthog package). Off unless both are set, as in Swift.
 	PostHogProjectToken string `env:"POSTHOG_PROJECT_TOKEN"`
