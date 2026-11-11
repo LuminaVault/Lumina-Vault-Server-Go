@@ -1,0 +1,8 @@
+# LV_SECRET_MASTER_KEY empty: Swift builds HermesRunsService inside the SecretBox
+# branch, so /v1/hermes/runs isn't mounted and every path is a plain 404.
+module: hermes
+steps:
+  - {name: list, as: hr_dee, request: {method: GET, path: /v1/hermes/runs}}
+  - {name: start, as: hr_dee, request: {method: POST, path: /v1/hermes/runs, json: {prompt: hi}}}
+  - {name: get, as: hr_dee, request: {method: GET, path: /v1/hermes/runs/E6C00000-0000-4000-8000-0000000001A1}}
+  - {name: no token, request: {method: GET, path: /v1/hermes/runs}}

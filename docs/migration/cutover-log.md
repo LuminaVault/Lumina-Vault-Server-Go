@@ -2004,3 +2004,26 @@ Beyond the pilot gate (D-wave2-early):
 - `parity/scenarios/integrations/00-oauth.yaml` with `parity/seed/gateways.sql`.
 - Flip: one group. OAuth sessions and parked CLI processes are in-memory, so start and complete must
   reach the same server.
+## hermes-runs (wave 6, 6C)
+
+The `hermes` module stays `swift`: 6A and 6B (`/v1/hermes` mirror and webhooks) are not ported. 6C's routes are
+served by Go but flip only with chat, in one infra commit (B12, decisions.md D-6c-runs).
+
+### G0 entry: met 2026-11-11
+
+- Routes: 6, `Hermes/Runs/HermesRunsController.swift:34-39`. `POST`/`GET /v1/hermes/runs`, `GET /{id}`,
+  `GET /{id}/events` (SSE, event name `hermes.run.event`, replay then live), `POST /{id}/approval`,
+  `POST /{id}/stop`. They are mounted only with `LV_SECRET_MASTER_KEY`, as in Swift (state `no-master-key`).
+- Middleware, in Swift's order: jwt, byo, hermesProfile, `conversationByUser`, `Entitlement .chat`.
+- Coupling: reads and writes `hermes_runs` and `hermes_run_events`, and inserts assistant turns into
+  `conversation_messages` (idempotent on `hermes_run_id`). Events are published on an in-process bus, and the feed
+  re-reads every 5 s, so a run watched by another process still streams.
+- Job: `HermesRunsService` (boot re-attach for runs younger than 300 s), registered and off unless `LV_GO_JOBS`
+  names it.
+- Pushes: `apns.CategoryApproval` and `apns.CategoryRunCompleted`, through `apns.Service`.
+- Swift tests: all 78 ported.
+  - `HermesRunEvent` 15, `HermesRunsClient` 14, `HermesRunsService` 17, `HermesRunConversationPersistence` 5,
+    `HermesRunsListFilter` 4, `HermesRunsController` 11.
+  - `HermesRunPersistence` 8: the M117–M119 cases check the goose baseline.
+  - `HermesRunPushNotifier` 4: the prefs-table case goes through `apns.NewWithSender` with a recording sender.
+  - Go adds a stream-idle client test and a tool-name test.

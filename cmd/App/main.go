@@ -327,6 +327,10 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		if m := agent.pluginsModule(); m != nil { // nil without LV_SECRET_MASTER_KEY, as in Swift
 			deps.Modules = append(deps.Modules, m)
 		}
+		if m := agent.hermesRunsModule(); m != nil {
+			deps.Modules = append(deps.Modules, m)
+		}
+		registered = append(registered, agent.hermesRunsJob()...)
 	}
 	// Deferred after the sink and the pool, so jobs stop first and can still use both.
 	stopJobs, err := startJobs(ctx, cfg, registered)
