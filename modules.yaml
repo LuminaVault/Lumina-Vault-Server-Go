@@ -352,7 +352,7 @@ modules:
   billing:
     wave: 7
     swiftDir: Sources/App/Billing
-    status: swift
+    status: parity
     prefixes: [/v1/billing]
     jobs: []
   system:
