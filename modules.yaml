@@ -328,7 +328,7 @@ modules:
   plugins:
     wave: 6
     swiftDir: Sources/App/Plugins
-    status: swift
+    status: parity
     prefixes: [/v1/plugins]
     jobs: []
   settings:
@@ -358,7 +358,7 @@ modules:
   system:
     wave: 7
     swiftDir: Sources/App/System
-    status: swift
+    status: parity
     prefixes: [/v1/system]
     jobs: []
   app:

@@ -1,0 +1,52 @@
+# /v1/system/hermes behind a bearer then X-Admin-Token. Neither server has docker
+# (decision O1): version falls back to the channel tag, an update fails at
+# preflight, a manual rollback fails at restore, and reprovision is a 500. The
+# failure text is Swift's Process/stderr wording, environment detail, so
+# errorMessage and step details of started jobs are ignored. Seeded jobs are
+# compared whole, through the stream too.
+module: system
+ignore: ["$.status.startedAt", "$.status.updatedAt", "$.status.steps[*].startedAt", "$.status.steps[*].finishedAt"]
+steps:
+  - {name: no bearer, request: {method: GET, path: /v1/system/hermes/version}}
+  - {name: no admin token, as: sy_amy, request: {method: GET, path: /v1/system/hermes/version}}
+  - {name: wrong admin token, as: sy_amy, request: {method: GET, path: /v1/system/hermes/version, headers: {X-Admin-Token: wrong}}}
+  - {name: version, as: sy_amy, request: {method: GET, path: /v1/system/hermes/version, headers: {X-Admin-Token: parity-admin-token}}}
+  - {name: current is the newest seeded job, as: sy_amy, request: {method: GET, path: /v1/system/hermes/update/current, headers: {X-Admin-Token: parity-admin-token}}}
+  - {name: seeded job, as: sy_amy, request: {method: GET, path: /v1/system/hermes/update/5A57A000-0000-4000-8000-000000000002, headers: {X-Admin-Token: parity-admin-token}}}
+  - {name: undecodable steps are none, as: sy_amy, request: {method: GET, path: /v1/system/hermes/update/5a57a000-0000-4000-8000-000000000003, headers: {X-Admin-Token: parity-admin-token}}}
+  - {name: bad job id, as: sy_amy, request: {method: GET, path: /v1/system/hermes/update/nope, headers: {X-Admin-Token: parity-admin-token}}}
+  - {name: unknown job, as: sy_amy, request: {method: GET, path: /v1/system/hermes/update/5A57A000-0000-4000-8000-0000000000FF, headers: {X-Admin-Token: parity-admin-token}}}
+  - {name: unknown job stream, as: sy_amy, request: {method: GET, path: /v1/system/hermes/update/5A57A000-0000-4000-8000-0000000000FF/stream, headers: {X-Admin-Token: parity-admin-token}}}
+  - name: finished job stream is its steps then done
+    as: sy_amy
+    request: {method: GET, path: /v1/system/hermes/update/5A57A000-0000-4000-8000-000000000002/stream, headers: {X-Admin-Token: parity-admin-token}}
+    stream: true
+    frames: 10
+  - {name: rollback of a job with no previous version, as: sy_amy, request: {method: POST, path: /v1/system/hermes/update/5A57A000-0000-4000-8000-000000000003/rollback, headers: {X-Admin-Token: parity-admin-token}}}
+  - {name: rollback of an unknown job, as: sy_amy, request: {method: POST, path: /v1/system/hermes/update/5A57A000-0000-4000-8000-0000000000FF/rollback, headers: {X-Admin-Token: parity-admin-token}}}
+  - {name: reprovision without docker, as: sy_amy, request: {method: POST, path: /v1/system/hermes/reprovision, headers: {X-Admin-Token: parity-admin-token}}}
+  - name: start an update with a target tag
+    as: sy_amy
+    request: {method: POST, path: /v1/system/hermes/update, headers: {X-Admin-Token: parity-admin-token}, json: {targetTag: " v9 "}}
+    capture: {job: $.jobID}
+    waitEmpty: parity_sy_running
+  - name: the update failed at preflight
+    as: sy_amy
+    request: {method: GET, path: "/v1/system/hermes/update/{{job}}", headers: {X-Admin-Token: parity-admin-token}}
+    ignore: ["$.status.errorMessage", "$.status.steps[*].detail"]
+    snapshot: [parity_sy_jobs]
+  - name: a malformed body is the channel tag
+    as: sy_amy
+    request: {method: POST, path: /v1/system/hermes/update, headers: {X-Admin-Token: parity-admin-token}, raw: "{nope"}
+    waitEmpty: parity_sy_running
+  - name: manual rollback of the seeded failure
+    as: sy_amy
+    request: {method: POST, path: /v1/system/hermes/update/5A57A000-0000-4000-8000-000000000002/rollback, headers: {X-Admin-Token: parity-admin-token}}
+    capture: {rb: $.jobID}
+    waitEmpty: parity_sy_running
+  - name: the rollback failed at restore
+    as: sy_amy
+    request: {method: GET, path: "/v1/system/hermes/update/{{rb}}", headers: {X-Admin-Token: parity-admin-token}}
+    ignore: ["$.status.steps[*].detail"]
+    snapshot: [parity_sy_jobs]
+  - {name: version keeps the seeded lastUpdatedAt, as: sy_amy, request: {method: GET, path: /v1/system/hermes/version, headers: {X-Admin-Token: parity-admin-token}}}

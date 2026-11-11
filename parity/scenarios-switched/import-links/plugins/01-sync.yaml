@@ -1,0 +1,20 @@
+# rss sync stages the feed's links through the import pipeline, against the feeds stub.
+module: plugins
+steps:
+  - name: install rss
+    as: pl_dee
+    request: {method: POST, path: /v1/plugins/installs, json: {pluginSlug: rss, config: {feed_url: "http://feeds:8080/plugins/feed.xml"}}}
+    capture: {rss: $.id}
+  - {name: sync, as: pl_dee, request: {method: POST, path: "/v1/plugins/installs/{{rss}}/sync"}, snapshot: [parity_pl_installs, parity_pl_import_sessions, parity_pl_import_items]}
+  - {name: enriched, as: pl_dee, request: {method: GET, path: /health}, waitEmpty: parity_pl_import_pending}
+  - {name: sync again skips seen links, as: pl_dee, request: {method: POST, path: "/v1/plugins/installs/{{rss}}/sync"}, snapshot: [parity_pl_import_items]}
+  - {name: enriched again, as: pl_dee, request: {method: GET, path: /health}, waitEmpty: parity_pl_import_pending}
+  - {name: a refused feed host, as: pl_dee, request: {method: PATCH, path: "/v1/plugins/installs/{{rss}}", json: {config: {feed_url: "http://localhost/feed"}}}}
+  - {name: sync refused, as: pl_dee, request: {method: POST, path: "/v1/plugins/installs/{{rss}}/sync"}}
+  - {name: a broken feed, as: pl_dee, request: {method: PATCH, path: "/v1/plugins/installs/{{rss}}", json: {config: {feed_url: "http://feeds:8080/plugins/broken.xml"}}}}
+  - {name: sync upstream failure, as: pl_dee, request: {method: POST, path: "/v1/plugins/installs/{{rss}}/sync"}}
+  - name: news ticker
+    as: pl_dee
+    request: {method: POST, path: /v1/plugins/installs, json: {pluginSlug: news-ticker, config: {}}}
+    capture: {nt: $.id}
+  - {name: news ticker sync stages nothing, as: pl_dee, request: {method: POST, path: "/v1/plugins/installs/{{nt}}/sync"}, snapshot: [parity_pl_installs, parity_pl_import_sessions]}
