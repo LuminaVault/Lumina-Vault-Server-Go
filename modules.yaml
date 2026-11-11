@@ -286,7 +286,7 @@ modules:
   skills:
     wave: 5
     swiftDir: Sources/App/Skills
-    status: swift
+    status: parity
     prefixes: [/v1/jobs, /v1/skills]
     jobs: []
   tts:
@@ -334,7 +334,7 @@ modules:
   settings:
     wave: 6
     swiftDir: Sources/App/Settings
-    status: swift
+    status: parity
     prefixes: [/v1/settings]
     jobs: []
   skills-cron:
@@ -352,13 +352,13 @@ modules:
   billing:
     wave: 7
     swiftDir: Sources/App/Billing
-    status: swift
+    status: parity
     prefixes: [/v1/billing]
     jobs: []
   system:
     wave: 7
     swiftDir: Sources/App/System
-    status: swift
+    status: parity
     prefixes: [/v1/system]
     jobs: []
   app:

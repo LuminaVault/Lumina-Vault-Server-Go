@@ -1,0 +1,59 @@
+# POST /v1/billing/revenuecat-webhook (RevenueCatWebhookController). The secret is
+# parity-rc-secret. Answers are bare statuses; the effect is compared in the users
+# and billing_event_logs views after every step.
+module: billing
+steps:
+  - {name: no credentials, request: {method: POST, path: /v1/billing/revenuecat-webhook, json: {event: {id: bl-evt-x, type: RENEWAL, app_user_id: rc_bo}}}, snapshot: [parity_bl_events]}
+  - {name: wrong bearer, request: {method: POST, path: /v1/billing/revenuecat-webhook, headers: {Authorization: Bearer wrong}, json: {event: {id: bl-evt-x, type: RENEWAL, app_user_id: rc_bo}}}}
+  - {name: wrong signature, request: {method: POST, path: /v1/billing/revenuecat-webhook, headers: {X-RevenueCat-Signature: deadbeef}, json: {event: {id: bl-evt-x, type: RENEWAL, app_user_id: rc_bo}}}}
+  - name: signed initial purchase upgrades amy by id
+    request:
+      method: POST
+      path: /v1/billing/revenuecat-webhook
+      headers: {Content-Type: application/json, X-RevenueCat-Signature: c028637985552974b8491e97cdd63106f08ef768151d5fe13a8e60aab867fbe7}
+      raw: '{"event":{"id":"bl-evt-amy-1","type":"INITIAL_PURCHASE","app_user_id":"b1110000-0000-4000-8000-0000000000a1","product_id":"pro_monthly_14_99","expiration_at_ms":1900000000000}}'
+    snapshot: [parity_bl_users, parity_bl_events]
+  - name: a replayed event id changes nothing
+    request: {method: POST, path: /v1/billing/revenuecat-webhook, headers: {Authorization: Bearer parity-rc-secret}, json: {event: {id: bl-evt-amy-1, type: EXPIRATION, app_user_id: B1110000-0000-4000-8000-0000000000A1}}}
+    snapshot: [parity_bl_users, parity_bl_events]
+  - {name: bare secret without Bearer, request: {method: POST, path: /v1/billing/revenuecat-webhook, headers: {Authorization: parity-rc-secret}, json: {event: {id: bl-evt-eve-1, type: SUBSCRIBER_ALIAS, app_user_id: B1110000-0000-4000-8000-0000000000E5}}}, snapshot: [parity_bl_users, parity_bl_events]}
+  - {name: invalid JSON, request: {method: POST, path: /v1/billing/revenuecat-webhook, headers: {Authorization: Bearer parity-rc-secret, Content-Type: application/json}, raw: '{nope'}}
+  - {name: missing app_user_id, request: {method: POST, path: /v1/billing/revenuecat-webhook, headers: {Authorization: Bearer parity-rc-secret}, json: {event: {id: bl-evt-y, type: RENEWAL}}}}
+  - {name: fractional expiry, request: {method: POST, path: /v1/billing/revenuecat-webhook, headers: {Authorization: Bearer parity-rc-secret}, json: {event: {id: bl-evt-y, type: RENEWAL, app_user_id: rc_bo, product_id: pro_monthly_14_99, expiration_at_ms: 1.5}}}, snapshot: [parity_bl_events]}
+  - {name: over 1 MiB, request: {method: POST, path: /v1/billing/revenuecat-webhook, headers: {Authorization: Bearer parity-rc-secret}, fill: {text: " ", size: 1048577}}}
+  - name: an unknown product is a 500 with no log row
+    request: {method: POST, path: /v1/billing/revenuecat-webhook, headers: {Authorization: Bearer parity-rc-secret}, json: {event: {id: bl-evt-bo-0, type: INITIAL_PURCHASE, app_user_id: rc_bo, product_id: promo_monthly}}}
+    snapshot: [parity_bl_users, parity_bl_events]
+  - name: an unknown user is a 200 with an anonymous log row
+    request: {method: POST, path: /v1/billing/revenuecat-webhook, headers: {Authorization: Bearer parity-rc-secret}, json: {event: {id: bl-evt-anon, type: INITIAL_PURCHASE, app_user_id: "$RCAnonymousID:parity", product_id: pro_monthly_14_99}}}
+    snapshot: [parity_bl_events]
+  - name: product change to ultimate by revenuecat id
+    request: {method: POST, path: /v1/billing/revenuecat-webhook, headers: {Authorization: Bearer parity-rc-secret}, json: {event: {id: bl-evt-bo-1, type: PRODUCT_CHANGE, app_user_id: rc_bo, product_id: ultimate_yearly_299_99, expiration_at_ms: 1950000000000}}}
+    snapshot: [parity_bl_users, parity_bl_events]
+  - name: a cancellation with time left keeps the tier
+    request: {method: POST, path: /v1/billing/revenuecat-webhook, headers: {Authorization: Bearer parity-rc-secret}, json: {event: {id: bl-evt-bo-2, type: CANCELLATION, app_user_id: rc_bo, expiration_at_ms: 1950000000000, is_refund: false}}}
+    snapshot: [parity_bl_users]
+  - name: a refund lapses at once
+    request: {method: POST, path: /v1/billing/revenuecat-webhook, headers: {Authorization: Bearer parity-rc-secret}, json: {event: {id: bl-evt-bo-3, type: CANCELLATION, app_user_id: rc_bo, expiration_at_ms: 1950000000000, is_refund: true}}}
+    snapshot: [parity_bl_users]
+  - name: an uncancellation restores the tier
+    request: {method: POST, path: /v1/billing/revenuecat-webhook, headers: {Authorization: Bearer parity-rc-secret}, json: {event: {id: bl-evt-bo-4, type: UNCANCELLATION, app_user_id: rc_bo, product_id: pro_yearly_149_99}}}
+    snapshot: [parity_bl_users]
+  - name: a cancellation without an expiry is already past
+    request: {method: POST, path: /v1/billing/revenuecat-webhook, headers: {Authorization: Bearer parity-rc-secret}, json: {event: {id: bl-evt-bo-5, type: CANCELLATION, app_user_id: rc_bo}}}
+    snapshot: [parity_bl_users]
+  - name: a renewal restores a lapsed subscriber
+    request: {method: POST, path: /v1/billing/revenuecat-webhook, headers: {Authorization: Bearer parity-rc-secret}, json: {event: {id: bl-evt-bo-6, type: RENEWAL, app_user_id: rc_bo, product_id: ultimate_monthly_29_99, expiration_at_ms: 2000000000000}}}
+    snapshot: [parity_bl_users]
+  - name: a billing issue holds the tier for the retry window
+    request: {method: POST, path: /v1/billing/revenuecat-webhook, headers: {Authorization: Bearer parity-rc-secret}, json: {event: {id: bl-evt-cy-1, type: BILLING_ISSUE, app_user_id: rc_cy}}}
+    snapshot: [parity_bl_users]
+  - name: a billing issue never pulls a later expiry back
+    request: {method: POST, path: /v1/billing/revenuecat-webhook, headers: {Authorization: Bearer parity-rc-secret}, json: {event: {id: bl-evt-bo-7, type: BILLING_ISSUE, app_user_id: rc_bo}}}
+    snapshot: [parity_bl_users]
+  - name: expiration lapses
+    request: {method: POST, path: /v1/billing/revenuecat-webhook, headers: {Authorization: Bearer parity-rc-secret}, json: {event: {id: bl-evt-dee-1, type: EXPIRATION, app_user_id: rc_dee}}}
+    snapshot: [parity_bl_users]
+  - name: an unknown event type only stamps the revenuecat id
+    request: {method: POST, path: /v1/billing/revenuecat-webhook, headers: {Authorization: Bearer parity-rc-secret}, json: {event: {id: bl-evt-hal-1, type: TEST, app_user_id: B1110000-0000-4000-8000-0000000000A8}}}
+    snapshot: [parity_bl_users, parity_bl_events]
