@@ -1,0 +1,20 @@
+# Tier gates: a custom profile and a scoped binding need Pro or better; the
+# catalog marks what each tier may use. lr_over is free with an Ultimate override.
+module: llm-router
+steps:
+  - {name: free catalog, as: lr_free, request: {method: GET, path: /v1/router/catalog}}
+  - {name: free list, as: lr_free, request: {method: GET, path: /v1/router}, capture: {freeDefault: $.defaultProfileID}}
+  - {name: free cannot create, as: lr_free, request: {method: POST, path: /v1/router, json: {name: X, mode: managed, objective: {quality: 100, cost: 0, latency: 0}, budget: {}, defaultAction: {kind: sequential, routes: [{provider: openai, model: m}], retryPolicy: fast}}}}
+  - {name: the tier check comes before the body, as: lr_free, request: {method: POST, path: /v1/router, raw: "{"}}
+  - {name: free may update its default profile, as: lr_free, request: {method: PUT, path: "/v1/router/{{freeDefault}}", json: {name: Mine, mode: managed, objective: {quality: 0, cost: 50, latency: 50}, budget: {softLimitUsdMicros: 100}, defaultAction: {kind: sequential, routes: [{provider: openRouter, model: m}], retryPolicy: fast}}}}
+  - {name: free cannot delete, as: lr_free, request: {method: DELETE, path: "/v1/router/{{freeDefault}}"}}
+  - {name: free cannot bind a space, as: lr_free, request: {method: PUT, path: /v1/router/bindings/space/1a7e2000-0000-4000-8000-000000000001, json: {profileID: "{{freeDefault}}"}}}
+  - name: free may bind its own user scope
+    as: lr_free
+    request: {method: PUT, path: /v1/router/bindings/user/anything, json: {profileID: "{{freeDefault}}"}}
+    snapshot: [parity_lr_bindings]
+  - {name: pro catalog, as: lr_pro, request: {method: GET, path: /v1/router/catalog}}
+  - {name: ultimate catalog, as: lr_ult, request: {method: GET, path: /v1/router/catalog}}
+  - {name: an ensemble is refused for ultimate too while parallel is off, as: lr_ult, request: {method: POST, path: /v1/router, json: {name: E, mode: byok, objective: {quality: 100, cost: 0, latency: 0}, budget: {}, defaultAction: {kind: ensemble, routes: [{provider: openai, model: a}], retryPolicy: fast}}}}
+  - {name: override catalog, as: lr_over, request: {method: GET, path: /v1/router/catalog}}
+  - {name: the override may create, as: lr_over, request: {method: POST, path: /v1/router, json: {name: Over, mode: managed, objective: {quality: 100, cost: 0, latency: 0}, budget: {}, defaultAction: {kind: sequential, routes: [{provider: openai, model: m}], retryPolicy: fast}}}}

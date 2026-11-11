@@ -1,0 +1,9 @@
+# GET /v1/router/dashboard: this month's routed calls (dash has two seeded at the
+# template's seed time and one from 2020) and the default profile's budget.
+module: llm-router
+steps:
+  - {name: dashboard before any profile, as: lr_dash, request: {method: GET, path: /v1/router/dashboard}}
+  - {name: the default profile, as: lr_dash, request: {method: GET, path: /v1/router}, capture: {default: $.defaultProfileID}}
+  - {name: set a budget on it, as: lr_dash, request: {method: PUT, path: "/v1/router/{{default}}", json: {name: Default, mode: managed, objective: {quality: 40, cost: 40, latency: 20}, budget: {softLimitUsdMicros: 500000, hardLimitUsdMicros: 2000000}, defaultAction: {kind: sequential, routes: [{provider: openRouter, model: m}], retryPolicy: fast}}}}
+  - {name: dashboard carries the budget, as: lr_dash, request: {method: GET, path: /v1/router/dashboard}}
+  - {name: a user with no calls, as: lr_none, request: {method: GET, path: /v1/router/dashboard}}

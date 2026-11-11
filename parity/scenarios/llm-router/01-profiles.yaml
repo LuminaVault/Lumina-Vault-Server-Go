@@ -1,0 +1,57 @@
+# GET, POST, PUT and DELETE /v1/router as a Pro user. The first read creates the
+# default profile. A write carries expectedRevision; a stale one is a 409.
+module: llm-router
+steps:
+  - name: the first read makes the default profile
+    as: lr_pro
+    request: {method: GET, path: /v1/router}
+    capture: {default: $.defaultProfileID}
+  - name: create a byok profile with every field
+    as: lr_pro
+    request:
+      method: POST
+      path: /v1/router
+      json:
+        name: Work
+        mode: byok
+        objective: {quality: 50, cost: 30, latency: 20}
+        budget: {softLimitUsdMicros: 1000, hardLimitUsdMicros: 5000}
+        allowedProviders: [openai, anthropic]
+        blockedProviders: [xai]
+        defaultAction: {kind: sequential, routes: [{provider: openai, model: gpt-4o, inputPerMillionUsdMicros: 2500000}, {provider: anthropic, model: claude-sonnet-4-6}], retryPolicy: resilient}
+        rules:
+          - id: 1a7e9000-0000-4000-8000-0000000000c1
+            name: Code
+            enabled: true
+            priority: 10
+            taskTypes: [coding]
+            surfaces: [chat, job]
+            action: {kind: sequential, routes: [{provider: anthropic, model: claude-sonnet-4-6}], retryPolicy: fast}
+        routingPolicy: maxQuality
+    capture: {work: $.id}
+    snapshot: [parity_lr_profiles]
+  - name: create with the defaults the decoder fills in
+    as: lr_pro
+    request: {method: POST, path: /v1/router, json: {name: Lean, mode: managed, objective: {quality: 0, cost: 100, latency: 0}, budget: {}, defaultAction: {kind: sequential, routes: [{provider: openRouter, model: openai/gpt-4o-mini}], retryPolicy: fast}}}
+    capture: {lean: $.id}
+  - {name: list shows all three, as: lr_pro, request: {method: GET, path: /v1/router}}
+  - name: update with the current revision
+    as: lr_pro
+    request: {method: PUT, path: "/v1/router/{{work}}", json: {name: Work 2, mode: byok, objective: {quality: 34, cost: 33, latency: 33}, budget: {}, defaultAction: {kind: sequential, routes: [{provider: openai, model: gpt-4.1}], retryPolicy: fast}, expectedRevision: 1}}
+    snapshot: [parity_lr_profiles]
+  - {name: a stale revision conflicts, as: lr_pro, request: {method: PUT, path: "/v1/router/{{work}}", json: {name: Work 3, mode: byok, objective: {quality: 34, cost: 33, latency: 33}, budget: {}, defaultAction: {kind: sequential, routes: [{provider: openai, model: gpt-4.1}], retryPolicy: fast}, expectedRevision: 1}}}
+  - {name: no revision overwrites, as: lr_pro, request: {method: PUT, path: "/v1/router/{{work}}", json: {name: Work 4, mode: byok, objective: {quality: 34, cost: 33, latency: 33}, budget: {}, defaultAction: {kind: sequential, routes: [{provider: openai, model: gpt-4.1}], retryPolicy: fast}}}}
+  - {name: update an unknown profile, as: lr_pro, request: {method: PUT, path: /v1/router/1a7e9000-0000-4000-8000-0000000000ff, json: {name: X, mode: managed, objective: {quality: 100, cost: 0, latency: 0}, budget: {}, defaultAction: {kind: sequential, routes: [{provider: openai, model: m}], retryPolicy: fast}}}}
+  - {name: update a bad id, as: lr_pro, request: {method: PUT, path: /v1/router/nope, json: {}}}
+  - {name: update the default profile, as: lr_pro, request: {method: PUT, path: "/v1/router/{{default}}", json: {name: Mine, mode: managed, objective: {quality: 100, cost: 0, latency: 0}, budget: {hardLimitUsdMicros: 9000}, defaultAction: {kind: sequential, routes: [{provider: openRouter, model: m}], retryPolicy: fast}}}}
+  - {name: delete the default profile, as: lr_pro, request: {method: DELETE, path: "/v1/router/{{default}}"}}
+  - name: delete a profile
+    as: lr_pro
+    request: {method: DELETE, path: "/v1/router/{{lean}}"}
+    snapshot: [parity_lr_profiles]
+  - {name: delete it again, as: lr_pro, request: {method: DELETE, path: "/v1/router/{{lean}}"}}
+  - {name: delete a bad id, as: lr_pro, request: {method: DELETE, path: /v1/router/nope}}
+  - {name: another tenant cannot update it, as: lr_val, request: {method: PUT, path: "/v1/router/{{work}}", json: {name: X, mode: managed, objective: {quality: 100, cost: 0, latency: 0}, budget: {}, defaultAction: {kind: sequential, routes: [{provider: openai, model: m}], retryPolicy: fast}}}}
+  - {name: another tenant cannot delete it, as: lr_val, request: {method: DELETE, path: "/v1/router/{{work}}"}}
+  - {name: another tenant's list, as: lr_val, request: {method: GET, path: /v1/router}}
+  - {name: the owner's list is unchanged, as: lr_pro, request: {method: GET, path: /v1/router}}

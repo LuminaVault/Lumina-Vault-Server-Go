@@ -1,0 +1,10 @@
+# GET /v1/me/connections: one summary per api, hermes, calendar, grok, nous,
+# provider, gateway and plugin. eve has a row of every kind: a calendar grant that
+# needs re-auth, an xai link, gateways in every status, credentials with a failure
+# newer than the last success, an unknown credential kind and an unknown provider.
+module: me-providers
+steps:
+  - {name: every kind of connection, as: mp_eve, request: {method: GET, path: /v1/me/connections}}
+  - {name: a grant without the calendar scope is not a calendar, as: mp_fay, request: {method: GET, path: /v1/me/connections}}
+  - {name: a non-google account with the scope is not a calendar, as: mp_hal, request: {method: GET, path: /v1/me/connections}}
+  - {name: summaries ignore query strings, as: mp_hal, request: {method: GET, path: "/v1/me/connections?limit=1"}}

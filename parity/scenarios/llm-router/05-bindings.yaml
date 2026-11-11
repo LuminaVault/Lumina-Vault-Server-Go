@@ -1,0 +1,48 @@
+# GET, PUT and DELETE /v1/router/bindings/{scope}/{scopeID}. A space or workflow
+# must be the caller's; a job is a skill name in skills_state. The user scope
+# always binds the caller, whatever id the path holds.
+module: llm-router
+steps:
+  - {name: list makes the default and its user binding, as: lr_bind, request: {method: GET, path: /v1/router}, capture: {default: $.defaultProfileID}}
+  - name: a profile to bind
+    as: lr_bind
+    request: {method: POST, path: /v1/router, json: {name: Scoped, mode: byok, objective: {quality: 100, cost: 0, latency: 0}, budget: {}, defaultAction: {kind: sequential, routes: [{provider: openai, model: gpt-4o}], retryPolicy: fast}}}
+    capture: {scoped: $.id}
+  - {name: another tenant's default profile, as: lr_pro, request: {method: GET, path: /v1/router}, capture: {foreign: $.defaultProfileID}}
+  - {name: bindings before, as: lr_bind, request: {method: GET, path: /v1/router/bindings}}
+  - name: bind a space
+    as: lr_bind
+    request: {method: PUT, path: /v1/router/bindings/space/1a7e2000-0000-4000-8000-000000000001, json: {profileID: "{{scoped}}"}}
+    snapshot: [parity_lr_bindings]
+  - {name: bind the space again replaces it, as: lr_bind, request: {method: PUT, path: /v1/router/bindings/space/1a7e2000-0000-4000-8000-000000000001, json: {profileID: "{{default}}"}}}
+  - {name: an uppercase space id is another scope id, as: lr_bind, request: {method: PUT, path: /v1/router/bindings/space/1A7E2000-0000-4000-8000-000000000001, json: {profileID: "{{scoped}}"}}}
+  - {name: bind a workflow, as: lr_bind, request: {method: PUT, path: /v1/router/bindings/workflow/1A7E3000-0000-4000-8000-000000000001, json: {profileID: "{{scoped}}"}}}
+  - {name: bind a job, as: lr_bind, request: {method: PUT, path: /v1/router/bindings/job/morning-brief, json: {profileID: "{{scoped}}"}}}
+  - name: bind the user scope with any id
+    as: lr_bind
+    request: {method: PUT, path: /v1/router/bindings/user/someone-else, json: {profileID: "{{scoped}}"}}
+    snapshot: [parity_lr_bindings]
+  - {name: another tenant's space, as: lr_bind, request: {method: PUT, path: /v1/router/bindings/space/1a7e2000-0000-4000-8000-000000000002, json: {profileID: "{{scoped}}"}}}
+  - {name: another tenant's workflow, as: lr_bind, request: {method: PUT, path: /v1/router/bindings/workflow/1a7e3000-0000-4000-8000-000000000002, json: {profileID: "{{scoped}}"}}}
+  - {name: a space id that is no uuid, as: lr_bind, request: {method: PUT, path: /v1/router/bindings/space/nope, json: {profileID: "{{scoped}}"}}}
+  - {name: an unknown job, as: lr_bind, request: {method: PUT, path: /v1/router/bindings/job/nightly, json: {profileID: "{{scoped}}"}}}
+  - {name: an unknown scope, as: lr_bind, request: {method: PUT, path: /v1/router/bindings/team/x, json: {profileID: "{{scoped}}"}}}
+  - {name: an unknown profile, as: lr_bind, request: {method: PUT, path: /v1/router/bindings/job/morning-brief, json: {profileID: 1a7e9000-0000-4000-8000-0000000000ff}}}
+  - {name: another tenant's profile, as: lr_bind, request: {method: PUT, path: /v1/router/bindings/job/morning-brief, json: {profileID: "{{foreign}}"}}}
+  - {name: a missing profile id, as: lr_bind, request: {method: PUT, path: /v1/router/bindings/job/morning-brief, json: {}}}
+  - {name: a profile id that is no uuid, as: lr_bind, request: {method: PUT, path: /v1/router/bindings/job/morning-brief, json: {profileID: nope}}}
+  - {name: malformed json, as: lr_bind, request: {method: PUT, path: /v1/router/bindings/job/morning-brief, raw: "{"}}
+  - {name: ownership is checked before the body, as: lr_bind, request: {method: PUT, path: /v1/router/bindings/job/nightly, raw: "{"}}
+  - {name: bindings after, as: lr_bind, request: {method: GET, path: /v1/router/bindings}}
+  - name: unbind the job
+    as: lr_bind
+    request: {method: DELETE, path: /v1/router/bindings/job/morning-brief}
+    snapshot: [parity_lr_bindings]
+  - {name: unbind it again, as: lr_bind, request: {method: DELETE, path: /v1/router/bindings/job/morning-brief}}
+  - {name: unbind an unknown scope, as: lr_bind, request: {method: DELETE, path: /v1/router/bindings/team/x}}
+  - {name: unbinding the user scope fails, as: lr_bind, request: {method: DELETE, path: /v1/router/bindings/user/x}}
+  - {name: deleting a bound profile, as: lr_bind, request: {method: DELETE, path: "/v1/router/{{scoped}}"}}
+  - name: what is left
+    as: lr_bind
+    request: {method: GET, path: /v1/router/bindings}
+    snapshot: [parity_lr_bindings, parity_lr_profiles]
