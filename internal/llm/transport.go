@@ -666,11 +666,24 @@ func extractUsage(metadata Metadata) (tokensIn, tokensOut int) {
 	return tokensIn, tokensOut
 }
 
-var upstreamErrorCounter, _ = otel.Meter("lumina/llm").Int64Counter("luminavault.llm.chat.upstream_error")
+// upstreamErrorMetric is UpstreamErrorTelemetry's counter label.
+const upstreamErrorMetric = "luminavault.llm.chat.upstream_error"
+
+var upstreamErrorCounter = newUpstreamErrorCounter(otel.GetMeterProvider())
+
+// newUpstreamErrorCounter is the seam Swift's factory: parameter gives the tests.
+func newUpstreamErrorCounter(provider metric.MeterProvider) metric.Int64Counter {
+	counter, _ := provider.Meter("lumina/llm").Int64Counter(upstreamErrorMetric)
+	return counter
+}
 
 // recordUpstreamError is UpstreamErrorTelemetry.record.
 func recordUpstreamError(ctx context.Context, reasonCode, provider string) {
-	upstreamErrorCounter.Add(ctx, 1, metric.WithAttributes(
+	recordUpstreamErrorOn(ctx, upstreamErrorCounter, reasonCode, provider)
+}
+
+func recordUpstreamErrorOn(ctx context.Context, counter metric.Int64Counter, reasonCode, provider string) {
+	counter.Add(ctx, 1, metric.WithAttributes(
 		attribute.String("code", reasonCode),
 		attribute.String("provider", provider),
 	))

@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -205,3 +206,31 @@ func NewStack(cfg StackConfig) *Stack {
 
 // DefaultAnthropicBaseURL is https://api.anthropic.com.
 func DefaultAnthropicBaseURL() *url.URL { return mustParseURL("https://api.anthropic.com") }
+
+// GatewayConfig is the central Hermes gateway the managed stream falls back to:
+// hermes.gatewayUrl, hermes.apiKey, hermes.defaultModel and
+// hermes.streamIdleTimeout (HERMES_STREAM_IDLE_TIMEOUT, 60 s when zero).
+type GatewayConfig struct {
+	BaseURL      *url.URL
+	APIKey       string
+	DefaultModel string
+	IdleTimeout  time.Duration
+}
+
+// StreamService is App+build's conversationStreamService: the routed stream
+// (parallel, BYOK, free lane, managed Auto) over this stack, falling back to the
+// gateway. Build it once and share it: /v1/query/stream and chat both use it.
+func (s *Stack) StreamService(gw GatewayConfig) *RoutedStreamService {
+	return &RoutedStreamService{
+		Fallback: &GatewayStreamService{
+			BaseURL: gw.BaseURL, DefaultModel: gw.DefaultModel, APIKey: gw.APIKey, IdleTimeout: gw.IdleTimeout,
+		},
+		Transport: s.Transport, Preferences: s.Preferences, Router: s.Router, Telemetry: s.Telemetry,
+	}
+}
+
+// ChatService is App+build's llmService: RoutedHermesLLMService over this stack's
+// transport, for POST /v1/llm/chat.
+func (s *Stack) ChatService(defaultModel string) *RoutedService {
+	return &RoutedService{Transport: s.Transport, DefaultModel: defaultModel, Preferences: s.Preferences}
+}

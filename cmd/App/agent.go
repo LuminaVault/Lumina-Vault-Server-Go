@@ -134,13 +134,10 @@ func (a *agent) modules(links *capture.Service, enrichment *capture.EnrichmentSe
 	if parsed, err := url.Parse(a.cfg.HermesGatewayURL); err == nil {
 		gateway = parsed
 	}
-	stream := &llm.RoutedStreamService{
-		Fallback: &llm.GatewayStreamService{
-			BaseURL: gateway, DefaultModel: a.cfg.HermesDefaultModel, APIKey: a.cfg.HermesAPIKey,
-			IdleTimeout: time.Duration(a.cfg.HermesStreamIdleTimeout) * time.Second,
-		},
-		Transport: transport, Preferences: a.stack.Preferences, Router: a.stack.Router, Telemetry: a.stack.Telemetry,
-	}
+	stream := a.stack.StreamService(llm.GatewayConfig{
+		BaseURL: gateway, DefaultModel: a.cfg.HermesDefaultModel, APIKey: a.cfg.HermesAPIKey,
+		IdleTimeout: time.Duration(a.cfg.HermesStreamIdleTimeout) * time.Second,
+	})
 	agentRoutes := memoryagent.New(a.pool, memoryagent.Options{
 		Identify: a.identify, Hermes: byo, SearchGate: a.gate(entitlement.MemoryQuery), QueryGate: a.gate(entitlement.MemoryQuery),
 		MemoGate: a.gate(entitlement.MemoGenerator), Limits: a.limits, MaxStreams: a.cfg.MaxConcurrentStreamsPerUser,

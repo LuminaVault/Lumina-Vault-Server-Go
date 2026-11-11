@@ -1,5 +1,7 @@
 package llm
 
+import "encoding/json"
+
 // AssistantMessage is OpenAICompletionReader.assistantMessage: the first
 // choice's message, or false if the body is not a well-formed completion.
 func AssistantMessage(data []byte) (map[string]any, bool) {
@@ -53,6 +55,28 @@ func ToolCallNamesFrom(data []byte) []string {
 type AgentToolCalls struct {
 	Names []string `json:"names"`
 	Count int      `json:"count"`
+}
+
+// UnmarshalJSON is AgentToolCalls.init(from:). Rows written before count
+// existed carry only names, so a missing count is the number of names, and
+// missing names are an empty list.
+func (c *AgentToolCalls) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Names []string `json:"names"`
+		Count *int     `json:"count"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if raw.Names == nil {
+		raw.Names = []string{}
+	}
+	c.Names = raw.Names
+	c.Count = len(raw.Names)
+	if raw.Count != nil {
+		c.Count = *raw.Count
+	}
+	return nil
 }
 
 // ToolRecord is AgentTurnTraceRecorder.toolRecord. Nil only when nothing is

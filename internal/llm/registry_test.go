@@ -58,6 +58,7 @@ func TestProviderRegistry(t *testing.T) {
 	})
 	t.Run("a blank canonical key does not shadow an alias", func(t *testing.T) {
 		r := registry(map[string]string{"LLM_PROVIDER_OPEN_ROUTER_API_KEY": "   ", "OPENROUTER_FALLBACK_API_KEY": "fallback-key"})
+		assert.True(t, r.IsEnabled(OpenRouter))
 		c, ok := r.Config(OpenRouter)
 		require.True(t, ok)
 		assert.Equal(t, "fallback-key", c.APIKey)

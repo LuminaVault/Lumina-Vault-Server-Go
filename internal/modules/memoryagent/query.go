@@ -20,10 +20,12 @@ import (
 // StreamEvent is QueryStreamEvent on the wire: "type" discriminates, and an errorDetail
 // carries code and cta beside the string payload.
 type StreamEvent struct {
-	Type    string   `json:"type"`
-	Payload any      `json:"payload,omitempty"`
-	Code    string   `json:"code,omitempty"`
-	CTA     []string `json:"cta,omitempty"`
+	Type    string `json:"type"`
+	Payload any    `json:"payload,omitempty"`
+	Code    string `json:"code,omitempty"`
+	// CTA is omitzero: an errorDetail always carries "cta" ([] when it has no
+	// actions, from llm.StreamErrorFor), and a plain error (nil) never does.
+	CTA []string `json:"cta,omitzero"`
 }
 
 // fallbackDTO is ProviderFallbackNoticeDTO.
