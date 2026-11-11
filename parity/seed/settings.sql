@@ -9,6 +9,7 @@ CREATE VIEW parity_st_hermes AS
   SELECT tenant_id, base_url, name,
          auth_header_ciphertext IS NOT NULL AS has_auth,
          verified_at IS NOT NULL AS verified,
-         capabilities, capabilities_checked_at IS NOT NULL AS checked
+         -- Swift encodes a Dictionary-backed struct in random key order: compare as jsonb.
+         capabilities::jsonb AS capabilities, capabilities_checked_at IS NOT NULL AS checked
     FROM user_hermes_config
    WHERE tenant_id IN ('5e770000-0000-4000-8000-0000000000a1', '5e770000-0000-4000-8000-0000000000b2');

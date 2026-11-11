@@ -28,6 +28,7 @@ import (
 	"lumina/internal/modules/account"
 	"lumina/internal/modules/achievements"
 	"lumina/internal/modules/apple"
+	"lumina/internal/modules/billing"
 	"lumina/internal/modules/brain"
 	"lumina/internal/modules/calendar"
 	"lumina/internal/modules/capture"
@@ -52,6 +53,7 @@ import (
 	"lumina/internal/modules/selfimprovement"
 	"lumina/internal/modules/sessions"
 	"lumina/internal/modules/spaces"
+	"lumina/internal/modules/system"
 	"lumina/internal/modules/teams"
 	"lumina/internal/modules/todos"
 	"lumina/internal/modules/tts"
@@ -72,6 +74,7 @@ import (
 	"lumina/internal/usagemeter"
 	"lumina/internal/vaultfiles"
 	"lumina/internal/vaultpaths"
+	"lumina/internal/workers"
 	"lumina/internal/ws"
 	"net"
 	"net/url"
@@ -271,7 +274,17 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		// Wave 5: Swift builds grokController in the SecretBox branch, so no key, no routes.
 		if box != nil {
 			deps.Modules = append(deps.Modules, grok.New(hermescontainers.New(pool, box), entitlement.PremiumGuardMiddleware(pool), nil))
+			deps.Modules = append(deps.Modules, system.New(pool, system.Options{
+				Identify: identify, AdminToken: cfg.AdminToken, PerTenant: true,
+				ContainerName: cfg.HermesCentralContainerName, RegistryImage: cfg.HermesCentralRegistryImage,
+				ChannelTag: cfg.HermesCentralChannelTag, TempName: cfg.HermesCentralTempName,
+				Network: cfg.HermesCentralNetwork, VolumePath: cfg.HermesCentralVolumePath,
+				Port: cfg.HermesCentralPort, TempPort: cfg.HermesCentralTempPort, APIKey: cfg.HermesAPIKey,
+			}))
 		}
+		deps.Modules = append(deps.Modules, billing.New(pool, billing.Options{
+			WebhookSecret: cfg.RevenueCatWebhookSecret, AdminToken: cfg.AdminToken, EnforcementEnabled: entitlement.EnforcementEnabled(cfg.BillingEnforcementEnabled),
+		}))
 		if m := marketplace.New(pool, cfg.LVSecretMasterKey, pluginOptions, identify, limits, paths); m != nil { // nil without LV_SECRET_MASTER_KEY, as in Swift
 			deps.Modules = append(deps.Modules, m)
 		}
@@ -279,6 +292,10 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		disk := diskguard.New(paths.Root, cfg.StorageMinFreeBytes, cfg.StorageMinFreeRatio, diskguard.Options{})
 		memories := memorystore.New(pool, nil)
 		registered = append(registered, j1Jobs(pool, cfg, disk)...)
+		// LapseArchiverService (7A): dry run unless LV_LAPSE_DRY_RUN=false; off unless LV_GO_JOBS names it.
+		registered = append(registered, (&workers.LapseArchiver{
+			Pool: pool, Paths: paths, ColdStorageRoot: cfg.ColdStoragePath(), DryRun: cfg.LapseDryRun,
+		}).Job())
 		agent, stopAgent := newAgent(ctx, pool, cfg, box, paths, identify, limits, embeddings, sink, meModule, disk)
 		agent.sockets = sockets
 		defer stopAgent()

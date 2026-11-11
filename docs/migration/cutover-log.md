@@ -1827,6 +1827,41 @@ Beyond the pilot gate (D-wave2-early):
   (jobs, cap, blocks, tool loop, slash `/patterns`, daily-brief) on the LLM stub.
 - Flip: only with the ws bundle (device tools resolve through `/v1/ws`).
 
+## billing (wave 7)
+
+### G0 entry: met 2026-11-11
+
+- Routes: `POST /v1/billing/revenuecat-webhook`, plus three routes App+build.swift mounts beside
+  billing and that live under other modules' prefixes: `GET /v1/auth/me/billing` and
+  `GET /v1/auth/me/usage` (app, `/v1/auth/me`), and `PUT /v1/admin/users/:userID/tier-override`
+  (admin, `/v1/admin/users`; 7B leaves it to 7A). They flip with their prefixes' modules; the
+  ingress for `admin` and `app` must not move them before billing is at `production`, or must name them.
+- Webhook ported exactly (wave-6-8-plan.md "Billing"): empty secret 500, 1 MiB cap (413), bearer
+  (plain "Bearer " replace) then hex HMAC-SHA256 of the raw body, 401, decode 400, the
+  `billing_event_logs` check, the effect and the log row **not** in one transaction (a lost race
+  on the unique index is a 500), unknown user 200 with an anonymous row, unknown product 500 with
+  no row. `RevenueCatClient` has no callers and is not ported.
+- `LapseArchiverService` is `workers.LapseArchiver`, registered off (LV_GO_JOBS) and in dry run by
+  default (`LV_LAPSE_DRY_RUN=true`): it logs each would-be lapse, archive and hard delete and writes
+  nothing. Runs at 02:00 UTC, before Swift's 03:00.
+- `TierOverrideAllowlist` is `billing.ParseTierOverrides`; nothing reads it until token minting
+  moves (8A), which must apply it on every issued session as Swift's `issueTokens` does.
+- `checkBudget` still has no callers; no live budget check was added.
+- Config: `REVENUECAT_WEBHOOK_SECRET`, `BILLING_TIER_OVERRIDE_EMAILS`, `BILLING_COLD_STORAGE_PATH`
+  (default `<VAULT_ROOT_PATH>/cold-storage`), `LV_LAPSE_DRY_RUN`.
+- Swift tests: `RevenueCatWebhook` 11, `SubscriptionCatalog` 6, `TierOverrideAllowlist` 5,
+  `LapseArchiver` 7, `UsageMetrics` 2 ported. Audit: `EntitlementChecker` 27, `Enforcement` 11,
+  `BYOEntitlementPolicy` 7 ported against `internal/entitlement` (`BYOExemption` extracted, same
+  rule); `BYOEntitlementMiddleware`, `StorageQuotaService`, `CostLedgerService`,
+  `UsageMeterBudget` were already cited. `UsageEventsRetention` is 7B's.
+
+### G1 parity: met 2026-11-11
+
+- `parity/scenarios/billing` 01-03 with `parity/seed/billing.sql`, plus
+  `scenarios-switched/unconfigured/billing` (empty secret and admin token) and
+  `scenarios-switched/billing-on/billing`. A billing-issue hold (now + 16 days) is compared as
+  "hold"; usage's period, `generatedAt` and day stamps are the clock and ignored.
+
 ## settings (wave 6)
 
 ### G0 entry: met 2026-11-11
@@ -1849,6 +1884,31 @@ Beyond the pilot gate (D-wave2-early):
   `parity/scenarios-switched/agents/settings/01-hermes.yaml` (save, verify, probe, cache, replace,
   unreachable, delete on the LLM stub), with `parity/seed/settings.sql` and its `parity_st_hermes`
   view. `agents_state` now also requires stub calls on `/v1/models` and `/v1/capabilities`.
+
+## system (wave 7)
+
+### G0 entry: met 2026-11-11
+
+- Routes: 7 under `/v1/system/hermes`, behind the JWT then `X-Admin-Token` (empty token 404 "admin
+  disabled", mismatch 401 "admin token invalid"), mounted only with the secret box, as in Swift:
+  `version`, `update`, `update/current`, `update/:jobID`, `update/:jobID/stream` (SSE),
+  `update/:jobID/rollback`, `reprovision`.
+- The whole engine is ported: CentralHermesManager (blue-green temp container, cutover, restore,
+  loopback health probe), the step engine, auto and manual rollback, tenant reprovision. Docker is
+  an interface. Production has no docker binary (O1), so `NoDocker` fails every call as Swift's
+  spawn does: an update fails at `preflight`, a manual rollback fails at restore, `reprovision`
+  is a 500, and `version` falls back to the channel tag. Tenant reprovision runs through a
+  no-docker container manager until 6D's `hermescontainers` lifecycle is wired in.
+- Config: `HERMES_CENTRAL_{CONTAINER_NAME,TEMP_CONTAINER_NAME,REGISTRY_IMAGE,CHANNEL_TAG,
+  VOLUME_PATH,PORT,TEMP_PORT}`, `HERMES_PER_TENANT_NETWORK`, `HERMES_API_KEY` (Swift's defaults).
+- Swift tests: `HermesUpdateServiceTests` 3, all ported against a stub Docker and probe (owner
+  rejected waivers 2026-11-11).
+
+### G1 parity: met 2026-11-11
+
+- `parity/scenarios/system/01-hermes-update.yaml` with `parity/seed/system.sql`. Seeded jobs are
+  compared whole, including the stream. Ignored for jobs the scenario starts: clock times,
+  `errorMessage` and step `detail` (Swift's Process or docker stderr text).
 
 ## hermes mirror (wave 6, 6B + P2)
 
