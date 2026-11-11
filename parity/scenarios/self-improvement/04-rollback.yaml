@@ -1,0 +1,111 @@
+# Rollback writes the skill files and curator state from the run's snapshot. The bodies are real
+# SKILL.md files, which 06-resources then finds through the catalog.
+module: self-improvement
+steps:
+  - name: "no token"
+    request: {method: POST, path: "/v1/me/improvement/runs/5e1f1000-0000-4000-8000-00000000001d/rollback"}
+  - name: "bad token"
+    request: {method: POST, path: "/v1/me/improvement/runs/5e1f1000-0000-4000-8000-00000000001d/rollback", headers: {Authorization: Bearer not-a-token}}
+  - name: "no token and a bad id answers 400 first"
+    request: {method: POST, path: "/v1/me/improvement/runs/nope/rollback"}
+  - name: "bad id"
+    as: si_skill
+    request: {method: POST, path: "/v1/me/improvement/runs/nope/rollback"}
+  - name: "bare hex id"
+    as: si_skill
+    request: {method: POST, path: "/v1/me/improvement/runs/5e1f100000004000800000000000001d/rollback"}
+  - name: "unknown run is the same 409"
+    as: si_skill
+    request: {method: POST, path: "/v1/me/improvement/runs/5e1f9999-0000-4000-8000-000000000000/rollback"}
+  - name: "another tenant's run is the same 409"
+    as: si_skill
+    request: {method: POST, path: "/v1/me/improvement/runs/5e1f1000-0000-4000-8000-00000000000f/rollback"}
+    snapshot: [self_improvement_runs, skills_state]
+    files: [si_foe]
+  - name: "wrong method"
+    as: si_skill
+    request: {method: GET, path: "/v1/me/improvement/runs/5e1f1000-0000-4000-8000-00000000001d/rollback"}
+  - name: "snapshot: not JSON"
+    as: si_skill
+    request: {method: POST, path: "/v1/me/improvement/runs/5e1f1000-0000-4000-8000-000000000014/rollback"}
+    snapshot: [self_improvement_runs]
+  - name: "snapshot: empty array"
+    as: si_skill
+    request: {method: POST, path: "/v1/me/improvement/runs/5e1f1000-0000-4000-8000-000000000015/rollback"}
+    snapshot: [self_improvement_runs]
+  - name: "snapshot: no snapshot"
+    as: si_skill
+    request: {method: POST, path: "/v1/me/improvement/runs/5e1f1000-0000-4000-8000-000000000016/rollback"}
+    snapshot: [self_improvement_runs]
+  - name: "snapshot: missing fields"
+    as: si_skill
+    request: {method: POST, path: "/v1/me/improvement/runs/5e1f1000-0000-4000-8000-000000000017/rollback"}
+    snapshot: [self_improvement_runs]
+  - name: "snapshot: null markdown"
+    as: si_skill
+    request: {method: POST, path: "/v1/me/improvement/runs/5e1f1000-0000-4000-8000-000000000018/rollback"}
+    snapshot: [self_improvement_runs]
+  - name: "snapshot: an object"
+    as: si_skill
+    request: {method: POST, path: "/v1/me/improvement/runs/5e1f1000-0000-4000-8000-000000000019/rollback"}
+    snapshot: [self_improvement_runs]
+  - name: "snapshot: afterSHA a number"
+    as: si_skill
+    request: {method: POST, path: "/v1/me/improvement/runs/5e1f1000-0000-4000-8000-00000000001a/rollback"}
+    snapshot: [self_improvement_runs]
+  - name: "snapshot: wrong key case"
+    as: si_skill
+    request: {method: POST, path: "/v1/me/improvement/runs/5e1f1000-0000-4000-8000-00000000001b/rollback"}
+    snapshot: [self_improvement_runs]
+  - name: "snapshot: a null entry"
+    as: si_skill
+    request: {method: POST, path: "/v1/me/improvement/runs/5e1f1000-0000-4000-8000-00000000001c/rollback"}
+    snapshot: [self_improvement_runs]
+  - name: "restores two skills, inserts their state, leaves the rest"
+    as: si_skill
+    request: {method: POST, path: "/v1/me/improvement/runs/5e1f1000-0000-4000-8000-00000000001d/rollback"}
+    snapshot: [self_improvement_runs, skills_state]
+    files: [si_skill]
+  - name: "a matching afterSHA overwrites, and the update hits every row of the tenant"
+    as: si_skill
+    request: {method: POST, path: "/v1/me/improvement/runs/5e1f1000-0000-4000-8000-00000000001e/rollback"}
+    snapshot: [self_improvement_runs, skills_state]
+    files: [si_skill]
+  - name: "a run already rolled back can run again only if its hash still holds"
+    as: si_skill
+    request: {method: POST, path: "/v1/me/improvement/runs/5e1f1000-0000-4000-8000-00000000001e/rollback"}
+    snapshot: [self_improvement_runs, skills_state]
+    files: [si_skill]
+  - name: "one changed file stops the whole run before any write"
+    as: si_skill
+    request: {method: POST, path: "/v1/me/improvement/runs/5e1f1000-0000-4000-8000-00000000001f/rollback"}
+    snapshot: [self_improvement_runs, skills_state]
+    files: [si_skill]
+  - name: "a name can reach into .archive"
+    as: si_skill
+    request: {method: POST, path: "/v1/me/improvement/runs/5e1f1000-0000-4000-8000-000000000020/rollback"}
+    snapshot: [self_improvement_runs, skills_state]
+    files: [si_skill]
+  - name: "archivedPath is removed"
+    as: si_skill
+    request: {method: POST, path: "/v1/me/improvement/runs/5e1f1000-0000-4000-8000-000000000021/rollback"}
+    snapshot: [self_improvement_runs, skills_state]
+    files: [si_skill]
+  - name: "a missing archivedPath is ignored"
+    as: si_skill
+    request: {method: POST, path: "/v1/me/improvement/runs/5e1f1000-0000-4000-8000-000000000022/rollback"}
+    snapshot: [self_improvement_runs, skills_state]
+    files: [si_skill]
+  - name: "a failure partway keeps what came first and leaves the status"
+    as: si_skill
+    request: {method: POST, path: "/v1/me/improvement/runs/5e1f1000-0000-4000-8000-000000000023/rollback"}
+    snapshot: [self_improvement_runs, skills_state]
+    files: [si_skill]
+  - name: "a name with .. is not checked or cleaned"
+    as: si_skill
+    request: {method: POST, path: "/v1/me/improvement/runs/5e1f1000-0000-4000-8000-000000000024/rollback"}
+    snapshot: [self_improvement_runs, skills_state]
+    files: [si_skill]
+  - name: "the resources it left"
+    as: si_skill
+    request: {method: GET, path: "/v1/me/improvement/resources"}

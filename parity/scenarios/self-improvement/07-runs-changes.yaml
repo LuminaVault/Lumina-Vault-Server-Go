@@ -1,0 +1,124 @@
+# Reading runs and changes, and reject, which writes no file.
+module: self-improvement
+steps:
+  - name: "runs with no token"
+    request: {method: GET, path: "/v1/me/improvement/runs"}
+  - name: "runs with a bad token"
+    request: {method: GET, path: "/v1/me/improvement/runs", headers: {Authorization: Bearer not-a-token}}
+  - name: "runs with no token and a bad limit"
+    request: {method: GET, path: "/v1/me/improvement/runs?limit=abc"}
+  - name: "no runs"
+    as: si_fresh
+    request: {method: GET, path: "/v1/me/improvement/runs"}
+  - name: "every run, newest first, with unknown values falling back"
+    as: si_runs
+    request: {method: GET, path: "/v1/me/improvement/runs"}
+  - name: "limit=0"
+    as: si_runs
+    request: {method: GET, path: "/v1/me/improvement/runs?limit=0"}
+  - name: "limit=-5"
+    as: si_runs
+    request: {method: GET, path: "/v1/me/improvement/runs?limit=-5"}
+  - name: "limit=1"
+    as: si_runs
+    request: {method: GET, path: "/v1/me/improvement/runs?limit=1"}
+  - name: "limit=2"
+    as: si_runs
+    request: {method: GET, path: "/v1/me/improvement/runs?limit=2"}
+  - name: "limit=100"
+    as: si_runs
+    request: {method: GET, path: "/v1/me/improvement/runs?limit=100"}
+  - name: "limit=101"
+    as: si_runs
+    request: {method: GET, path: "/v1/me/improvement/runs?limit=101"}
+  - name: "limit=abc"
+    as: si_runs
+    request: {method: GET, path: "/v1/me/improvement/runs?limit=abc"}
+  - name: "limit=1.5"
+    as: si_runs
+    request: {method: GET, path: "/v1/me/improvement/runs?limit=1.5"}
+  - name: "limit=%2B2"
+    as: si_runs
+    request: {method: GET, path: "/v1/me/improvement/runs?limit=%2B2"}
+  - name: "limit="
+    as: si_runs
+    request: {method: GET, path: "/v1/me/improvement/runs?limit="}
+  - name: "limit=99999999999999999999"
+    as: si_runs
+    request: {method: GET, path: "/v1/me/improvement/runs?limit=99999999999999999999"}
+  - name: "run with no token"
+    request: {method: GET, path: "/v1/me/improvement/runs/5e1f1000-0000-4000-8000-00000000000a"}
+  - name: "run with no token and a bad id answers 400 first"
+    request: {method: GET, path: "/v1/me/improvement/runs/nope"}
+  - name: "run with every field"
+    as: si_runs
+    request: {method: GET, path: "/v1/me/improvement/runs/5e1f1000-0000-4000-8000-00000000000a"}
+  - name: "run with an uppercase id"
+    as: si_runs
+    request: {method: GET, path: "/v1/me/improvement/runs/5E1F1000-0000-4000-8000-00000000000B"}
+  - name: "run with unknown values"
+    as: si_runs
+    request: {method: GET, path: "/v1/me/improvement/runs/5e1f1000-0000-4000-8000-00000000000d"}
+  - name: "bad id"
+    as: si_runs
+    request: {method: GET, path: "/v1/me/improvement/runs/nope"}
+  - name: "braces"
+    as: si_runs
+    request: {method: GET, path: "/v1/me/improvement/runs/%7B5e1f1000-0000-4000-8000-00000000000a%7D"}
+  - name: "bare hex"
+    as: si_runs
+    request: {method: GET, path: "/v1/me/improvement/runs/5e1f100000004000800000000000000a"}
+  - name: "unknown"
+    as: si_runs
+    request: {method: GET, path: "/v1/me/improvement/runs/5e1f9999-0000-4000-8000-000000000000"}
+  - name: "another tenant's run"
+    as: si_runs
+    request: {method: GET, path: "/v1/me/improvement/runs/5e1f1000-0000-4000-8000-00000000000f"}
+  - name: "wrong method on a run"
+    as: si_runs
+    request: {method: POST, path: "/v1/me/improvement/runs/5e1f1000-0000-4000-8000-00000000000a"}
+  - name: "wrong method on runs"
+    as: si_runs
+    request: {method: POST, path: "/v1/me/improvement/runs"}
+  - name: "changes with no token"
+    request: {method: GET, path: "/v1/me/improvement/changes"}
+  - name: "changes with a bad token"
+    request: {method: GET, path: "/v1/me/improvement/changes", headers: {Authorization: Bearer not-a-token}}
+  - name: "no changes"
+    as: si_fresh
+    request: {method: GET, path: "/v1/me/improvement/changes"}
+  - name: "every change, newest first, with unknown values falling back"
+    as: si_chg
+    request: {method: GET, path: "/v1/me/improvement/changes"}
+  - name: "another tenant's are not listed"
+    as: si_foe
+    request: {method: GET, path: "/v1/me/improvement/changes"}
+  - name: "wrong method on changes"
+    as: si_chg
+    request: {method: POST, path: "/v1/me/improvement/changes"}
+  - name: "wrong method on approve"
+    as: si_chg
+    request: {method: GET, path: "/v1/me/improvement/changes/5e1f2000-0000-4000-8000-000000000001/approve"}
+  - name: "reject"
+    as: si_chg
+    request: {method: POST, path: "/v1/me/improvement/changes/5e1f2000-0000-4000-8000-000000000001/reject"}
+    snapshot: [self_improvement_changes]
+  - name: "reject again conflicts"
+    as: si_chg
+    request: {method: POST, path: "/v1/me/improvement/changes/5e1f2000-0000-4000-8000-000000000001/reject"}
+  - name: "approve after reject conflicts"
+    as: si_chg
+    request: {method: POST, path: "/v1/me/improvement/changes/5e1f2000-0000-4000-8000-000000000001/approve"}
+  - name: "reject an applied change conflicts"
+    as: si_chg
+    request: {method: POST, path: "/v1/me/improvement/changes/5e1f2000-0000-4000-8000-000000000003/reject"}
+  - name: "reject a state this version does not know conflicts"
+    as: si_chg
+    request: {method: POST, path: "/v1/me/improvement/changes/5e1f2000-0000-4000-8000-000000000004/reject"}
+  - name: "reject the other pending one"
+    as: si_chg
+    request: {method: POST, path: "/v1/me/improvement/changes/5e1f2000-0000-4000-8000-000000000002/reject"}
+    snapshot: [self_improvement_changes]
+  - name: "the list after"
+    as: si_chg
+    request: {method: GET, path: "/v1/me/improvement/changes"}
