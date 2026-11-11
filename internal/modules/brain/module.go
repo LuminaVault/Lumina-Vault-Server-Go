@@ -52,23 +52,47 @@ type params struct {
 	vaults []uuid.UUID
 	links  map[string]bool
 	limit  int32
+	// focus is a node id; empty means no focus. depth is 1..3 and only used with focus.
+	focus string
+	depth int
 }
 
 const (
 	defaultLimit = 400
 	maxLimit     = 2000
+	// focusLimit is the item window of a focused view when `limit` is absent: the local graph
+	// of a note must not depend on whether the note is among the newest 400.
+	focusLimit = maxLimit
+	maxFocus   = 300
+	maxDepth   = 3
 
 	// similar edges: top 3 neighbours per memory at cosine similarity 0.78 or higher.
 	minSimilarity  = 0.78
 	similarPerNode = 3
 )
 
-var errInvalidVaults = wire.NewError(http.StatusBadRequest, "invalid vaults")
+var (
+	errInvalidVaults = wire.NewError(http.StatusBadRequest, "invalid vaults")
+	errInvalidFocus  = wire.NewError(http.StatusBadRequest, "invalid focus")
+	errNodeNotFound  = wire.NewError(http.StatusNotFound, "node not found")
+)
 
 // parseParams reads the query string. X-Vault-ID is deliberately not read: this
 // route spans vaults and takes its scope only from `vaults`.
 func parseParams(c *echo.Context) (params, error) {
-	p := params{links: parseLinks(c.QueryParam("links")), limit: parseLimit(c.QueryParam("limit"))}
+	p := params{links: parseLinks(c.QueryParam("links")), limit: parseLimit(c.QueryParam("limit")), depth: 1}
+	if _, ok := c.QueryParams()["focus"]; ok {
+		p.focus = c.QueryParam("focus")
+		if p.focus == "" || len(p.focus) > maxFocus {
+			return params{}, errInvalidFocus
+		}
+		if _, ok := c.QueryParams()["limit"]; !ok {
+			p.limit = focusLimit
+		}
+	}
+	if n, err := strconv.Atoi(c.QueryParam("depth")); err == nil {
+		p.depth = min(max(n, 1), maxDepth)
+	}
 	if raw := c.QueryParam("vaults"); raw != "" {
 		seen := map[uuid.UUID]bool{}
 		for _, part := range strings.Split(raw, ",") {
@@ -175,13 +199,39 @@ func (m *Module) graph(c *echo.Context) error {
 	for _, s := range scopes {
 		vaults = append(vaults, BrainGraphVault{Id: wire.UUID{UUID: s.ID}, Name: s.Name, Personal: s.Personal})
 	}
-	return wire.JSON(c, http.StatusOK, BrainGraphResponse{
+	if p.focus != "" {
+		var found bool
+		if nodes, edges, found = neighbourhood(nodes, edges, p.focus, p.depth); !found {
+			return errNodeNotFound
+		}
+	}
+	resp := BrainGraphResponse{
 		GeneratedAt: wire.Time{Time: m.now()},
 		Truncated:   truncated,
 		Vaults:      vaults,
 		Nodes:       nodes,
 		Edges:       edges,
-	})
+	}
+	// Vault access was resolved above, so a 304 is only ever sent to a caller who may read the graph.
+	tag := etag(resp)
+	h := c.Response().Header()
+	h.Set("ETag", tag)
+	h.Set(echo.HeaderCacheControl, "private, no-cache")
+	if tag != "" && matchesETag(c.Request().Header.Get("If-None-Match"), tag) {
+		return c.NoContent(http.StatusNotModified)
+	}
+	return wire.JSON(c, http.StatusOK, resp)
+}
+
+// matchesETag reports whether an If-None-Match value names tag. It accepts a comma-separated
+// list and the W/ weak prefix; `*` is not supported.
+func matchesETag(header, tag string) bool {
+	for _, part := range strings.Split(header, ",") {
+		if strings.TrimPrefix(strings.TrimSpace(part), "W/") == tag {
+			return true
+		}
+	}
+	return false
 }
 
 // hubs runs the hub queries for the requested kinds. Each is bound to the admitted vaults and

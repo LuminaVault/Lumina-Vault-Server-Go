@@ -1,6 +1,9 @@
 package brain
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"lumina/internal/modules/brain/db"
 	"lumina/internal/wire"
 	"path"
@@ -366,4 +369,70 @@ func assemble(items []item, hubs []hub, rels []relation) ([]BrainGraphNode, []Br
 		return nodes[i].Id < nodes[j].Id
 	})
 	return nodes, edges
+}
+
+// neighbourhood keeps the nodes within depth hops of focus, treating edges as undirected, and
+// the edges between kept nodes. weight is recomputed for the kept subgraph. The hub minimum is
+// not re-applied: a local graph still shows the hub its focus belongs to. The bool is false
+// when focus is not a node. Input order (kind, id) and (kind, from, to) is preserved.
+func neighbourhood(nodes []BrainGraphNode, edges []BrainGraphEdge, focus string, depth int) ([]BrainGraphNode, []BrainGraphEdge, bool) {
+	exists := false
+	for _, n := range nodes {
+		if n.Id == focus {
+			exists = true
+			break
+		}
+	}
+	if !exists {
+		return nil, nil, false
+	}
+	adj := map[string][]string{}
+	for _, e := range edges {
+		adj[e.From] = append(adj[e.From], e.To)
+		adj[e.To] = append(adj[e.To], e.From)
+	}
+	kept := map[string]bool{focus: true}
+	frontier := []string{focus}
+	for range depth {
+		var next []string
+		for _, id := range frontier {
+			for _, nb := range adj[id] {
+				if !kept[nb] {
+					kept[nb] = true
+					next = append(next, nb)
+				}
+			}
+		}
+		frontier = next
+	}
+	outEdges := make([]BrainGraphEdge, 0)
+	weight := map[string]int{}
+	for _, e := range edges {
+		if kept[e.From] && kept[e.To] {
+			outEdges = append(outEdges, e)
+			weight[e.From]++
+			weight[e.To]++
+		}
+	}
+	outNodes := make([]BrainGraphNode, 0, len(kept))
+	for _, n := range nodes {
+		if kept[n.Id] {
+			n.Weight = weight[n.Id]
+			outNodes = append(outNodes, n)
+		}
+	}
+	return outNodes, outEdges, true
+}
+
+// etag is a strong validator: the quoted hex SHA-256 of the response JSON with generatedAt
+// zeroed, so the tag changes only when the graph does. A response that cannot be marshalled
+// has no tag; the handler's own marshal then fails the request.
+func etag(resp BrainGraphResponse) string {
+	resp.GeneratedAt = wire.Time{}
+	b, err := json.Marshal(resp)
+	if err != nil {
+		return ""
+	}
+	sum := sha256.Sum256(b)
+	return `"` + hex.EncodeToString(sum[:]) + `"`
 }

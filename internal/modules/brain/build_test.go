@@ -3,12 +3,15 @@ package brain
 import (
 	"lumina/internal/modules/brain/db"
 	"lumina/internal/wire"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
+	"github.com/labstack/echo/v5"
 	"github.com/stretchr/testify/require"
 )
 
@@ -169,4 +172,100 @@ func TestEntityHubsPickBestLabelAndSortRefs(t *testing.T) {
 		{VaultID: wire.UUID{UUID: v2}, Id: wire.UUID{UUID: n2}},
 	}, hubs[0].Refs)
 	require.Len(t, rels, 4)
+}
+
+var idD = uuid.MustParse("00000000-0000-4000-8000-00000000000d")
+
+// chain is A-B-C-D, with the middle edge written backwards to show edges are undirected.
+func chain() ([]BrainGraphNode, []BrainGraphEdge) {
+	nodes, edges := assemble([]item{note(idA), note(idB), note(idC), note(idD)}, nil, []relation{
+		{From: idA.String(), To: idB.String(), Kind: "link"},
+		{From: idC.String(), To: idB.String(), Kind: "link"},
+		{From: idC.String(), To: idD.String(), Kind: "link"},
+	})
+	return nodes, edges
+}
+
+func idsOf(nodes []BrainGraphNode) (out []string) {
+	for _, n := range nodes {
+		out = append(out, n.Id)
+	}
+	return out
+}
+
+func TestNeighbourhood(t *testing.T) {
+	nodes, edges := chain()
+	a, b, c, d := idA.String(), idB.String(), idC.String(), idD.String()
+
+	got, es, ok := neighbourhood(nodes, edges, a, 1)
+	require.True(t, ok)
+	require.Equal(t, []string{a, b}, idsOf(got))
+	require.Len(t, es, 1)
+	require.Equal(t, []int{1, 1}, []int{got[0].Weight, got[1].Weight})
+
+	got, es, _ = neighbourhood(nodes, edges, a, 2)
+	require.Equal(t, []string{a, b, c}, idsOf(got))
+	require.Len(t, es, 2)
+	require.Equal(t, []int{1, 2, 1}, []int{got[0].Weight, got[1].Weight, got[2].Weight})
+
+	got, _, _ = neighbourhood(nodes, edges, c, 1)
+	require.Equal(t, []string{b, c, d}, idsOf(got), "walks edges against their direction")
+
+	got, es, ok = neighbourhood(nodes, edges, "nope", 1)
+	require.False(t, ok)
+	require.Empty(t, got)
+	require.Empty(t, es)
+}
+
+func TestNeighbourhoodKeepsSingleMemberHubAndNonNilEdges(t *testing.T) {
+	nodes, edges := assemble([]item{note(idA), note(idB)}, []hub{{ID: "tag:x", Kind: "tag", Label: "x"}}, []relation{
+		{From: idA.String(), To: "tag:x", Kind: "tag"},
+		{From: idB.String(), To: "tag:x", Kind: "tag"},
+	})
+	got, es, ok := neighbourhood(nodes, edges, idA.String(), 1)
+	require.True(t, ok)
+	require.Contains(t, idsOf(got), "tag:x")
+	require.Len(t, es, 1)
+	// Depth 1 from an isolated-after-focus node still yields an empty, non-nil edge slice.
+	_, es, _ = neighbourhood([]BrainGraphNode{{Id: "z", Kind: "note"}}, nil, "z", 1)
+	require.NotNil(t, es)
+}
+
+func TestETagIgnoresGeneratedAt(t *testing.T) {
+	nodes, edges := chain()
+	resp := BrainGraphResponse{GeneratedAt: wire.Time{Time: time.Unix(100, 0)}, Nodes: nodes, Edges: edges, Vaults: []BrainGraphVault{}}
+	later := resp
+	later.GeneratedAt = wire.Time{Time: time.Unix(999, 0)}
+	require.Equal(t, etag(resp), etag(later))
+	require.Regexp(t, `^"[0-9a-f]{64}"$`, etag(resp))
+
+	more := resp
+	more.Nodes = append(append([]BrainGraphNode{}, nodes...), BrainGraphNode{Id: "extra", Kind: "note"})
+	require.NotEqual(t, etag(resp), etag(more))
+}
+
+func TestFocusIgnoresDefaultLimit(t *testing.T) {
+	parse := func(query string) params {
+		req := httptest.NewRequest(http.MethodGet, "/v1/brain/graph"+query, nil)
+		c := echo.New().NewContext(req, httptest.NewRecorder())
+		p, err := parseParams(c)
+		require.NoError(t, err)
+		return p
+	}
+	require.EqualValues(t, 400, parse("").limit)
+	require.EqualValues(t, 2000, parse("?focus=x").limit)
+	require.EqualValues(t, 50, parse("?focus=x&limit=50").limit)
+	require.EqualValues(t, 2000, parse("?focus=x&limit=99999").limit)
+	require.Equal(t, "x", parse("?focus=x").focus)
+	require.Empty(t, parse("").focus)
+	require.Equal(t, 1, parse("?focus=x").depth)
+	require.Equal(t, 3, parse("?focus=x&depth=9").depth)
+	require.Equal(t, 1, parse("?focus=x&depth=0").depth)
+	require.Equal(t, 1, parse("?focus=x&depth=abc").depth)
+
+	for _, q := range []string{"?focus=", "?focus=" + strings.Repeat("x", 301)} {
+		req := httptest.NewRequest(http.MethodGet, "/v1/brain/graph"+q, nil)
+		_, err := parseParams(echo.New().NewContext(req, httptest.NewRecorder()))
+		require.Equal(t, errInvalidFocus, err)
+	}
 }
