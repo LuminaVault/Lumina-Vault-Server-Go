@@ -1,0 +1,34 @@
+# JSON-RPC envelope, identity and the static methods. `result.content` is ignored wherever a
+# tool result appears: Swift renders it from a dictionary whose key order varies per process.
+module: mcp
+steps:
+  - {name: no token, request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: ping}}}
+  - {name: bad token, request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: ping}, headers: {Authorization: Bearer not.a.jwt}}}
+  - {name: unknown agent key, request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: ping}, headers: {Authorization: Bearer lv_nonsense}}}
+  - {name: revoked agent key, request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: ping}, headers: {Authorization: Bearer lv_parity_ben_revoked_key_000000000000000}}}
+  - {name: any origin is forbidden, as: mcp_ann, request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: ping}, headers: {Origin: "https://evil.test"}}}
+  - {name: origin before auth, request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: ping}, headers: {Origin: "https://evil.test"}}}
+  - {name: get is not a route, as: mcp_ann, request: {method: GET, path: /v1/mcp}}
+  - {name: ping, as: mcp_ann, request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: ping}}}
+  - {name: string id, as: mcp_ann, request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: abc, method: ping}}}
+  - {name: float id round-trips as a double, as: mcp_ann, request: {method: POST, path: /v1/mcp, raw: '{"jsonrpc":"2.0","id":1e2,"method":"ping"}'}}
+  - {name: object id, as: mcp_ann, request: {method: POST, path: /v1/mcp, raw: '{"jsonrpc":"2.0","id":{"a":[1,true]},"method":"ping"}'}}
+  - {name: initialize, as: mcp_ann, request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: initialize, params: {protocolVersion: "2025-06-18"}}}}
+  - {name: tools list, as: mcp_ann, request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 2, method: tools/list}}}
+  - {name: agent key lists tools, request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 2, method: tools/list}, headers: {Authorization: Bearer lv_parity_ben_read_only_key_0000000000000}}}
+  - {name: notification initialized, as: mcp_ann, request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", method: notifications/initialized}}}
+  - {name: notification with null id, as: mcp_ann, request: {method: POST, path: /v1/mcp, raw: '{"jsonrpc":"2.0","id":null,"method":"ping"}'}}
+  - {name: unknown notification, as: mcp_ann, request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", method: nope}}}
+  - {name: unknown method, as: mcp_ann, request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 3, method: nope}}}
+  - {name: not json, as: mcp_ann, request: {method: POST, path: /v1/mcp, raw: 'not json'}}
+  - {name: empty body, as: mcp_ann, request: {method: POST, path: /v1/mcp, raw: ''}}
+  - {name: array body, as: mcp_ann, request: {method: POST, path: /v1/mcp, raw: '[]'}}
+  - {name: missing method, as: mcp_ann, request: {method: POST, path: /v1/mcp, raw: '{"jsonrpc":"2.0","id":1}'}}
+  - {name: method not a string, as: mcp_ann, request: {method: POST, path: /v1/mcp, raw: '{"jsonrpc":"2.0","id":1,"method":7}'}}
+  - {name: jsonrpc not a string, as: mcp_ann, request: {method: POST, path: /v1/mcp, raw: '{"jsonrpc":2,"id":1,"method":"ping"}'}}
+  - {name: no jsonrpc field, as: mcp_ann, request: {method: POST, path: /v1/mcp, raw: '{"id":1,"method":"ping"}'}}
+  - {name: call without params, as: mcp_ann, request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 4, method: tools/call}}}
+  - {name: call without name, as: mcp_ann, request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 4, method: tools/call, params: {}}}}
+  - {name: call unknown tool, as: mcp_ann, request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 4, method: tools/call, params: {name: drop_tables}}}}
+  - {name: call with unknown argument, as: mcp_ann, request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 4, method: tools/call, params: {name: status, arguments: {zeta: 1, alpha: 2}}}}}
+  - {name: call notification gets no body, as: mcp_ann, request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", method: tools/call, params: {name: drop_tables}}}}

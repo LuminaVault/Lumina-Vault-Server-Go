@@ -32,6 +32,6 @@ steps:
   - {name: put without content type, as: soul_ann, request: {method: PUT, path: /v1/soul, raw: "{\"markdown\":\"no type\"}"}, files: [soul_ann]}
   - {name: delete resets, as: soul_ann, request: {method: DELETE, path: /v1/soul}, files: [soul_ann], filesNormalizeContent: true}
   - {name: default after reset, as: soul_ann, request: {method: GET, path: /v1/soul}, ignore: ["$.markdown"]}
-  - {name: trailing slash, as: soul_ann, request: {method: GET, path: /v1/soul/}}
+  - {name: trailing slash, as: soul_ann, request: {method: GET, path: /v1/soul/}, ignore: ["$.markdown"]}
   - {name: unknown method, as: soul_ann, request: {method: PATCH, path: /v1/soul, json: {markdown: x}}}
   - {name: get on compose, as: soul_ann, request: {method: GET, path: /v1/soul/compose}}

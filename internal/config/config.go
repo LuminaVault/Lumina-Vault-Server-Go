@@ -100,6 +100,11 @@ type Config struct {
 	EmailFromAddress  string `env:"EMAIL_FROM_ADDRESS"`
 	EmailReplyTo      string `env:"EMAIL_REPLY_TO"`
 	TeamInviteBaseURL string `env:"TEAM_INVITE_BASE_URL" envDefault:"http://localhost:5173"`
+	// MCPPublicBaseURL is mcp.publicBaseUrl, the base of the /v1/mcp URL in agent
+	// connection setup snippets. Empty falls back to IngestionPublicBaseURL, then
+	// to https://api.luminavault.com (App+build).
+	MCPPublicBaseURL       string `env:"MCP_PUBLIC_BASE_URL"`
+	IngestionPublicBaseURL string `env:"INGESTION_PUBLIC_BASE_URL"`
 	// RecapThemesEnabled is recap.themesEnabled: the model-written card of
 	// /v1/me/recap/period (me module). Off reports it as disabled.
 	RecapThemesEnabled bool `env:"RECAP_THEMES_ENABLED" envDefault:"true"`
