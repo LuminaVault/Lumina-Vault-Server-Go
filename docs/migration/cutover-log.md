@@ -1801,3 +1801,24 @@ Beyond the pilot gate (D-wave2-early):
 - Memories saved over MCP are forgotten within the scenario, so their randomly keyed chunks never reach
   later modules' `memory_chunks` snapshots.
 - Flip: only with the ws bundle.
+
+## jobs J2 (part 1): LearnedDigestScheduler, MeetingBriefScheduler
+
+### Ported 2026-11-11
+
+- `me.LearnedDigestScheduler` and `calendar.MeetingBriefScheduler`, registered in
+  `cmd/App/jobs_j2.go` under Swift's start conditions (`LEARNED_DIGEST_ENABLED`,
+  `MEETING_BRIEF_ENABLED`, both default true, and not `LV_ENVIRONMENT=test`). Off unless
+  `LV_GO_JOBS` names them.
+- Move: **Any** (plan's "Every boot job"). Both claim before sending, with
+  `ON CONFLICT DO NOTHING` on `learned_digest_log (tenant_id, week_start)` and
+  `meeting_briefs (tenant_id, event_id)`, so Swift and Go running together still send one push.
+  Gate metric: `lv_job_last_success_timestamp_seconds{job="LearnedDigestScheduler"|"MeetingBriefScheduler"}`.
+  Swift flag state when Go takes them: unchanged (both on is safe); turn Swift's off at D1.
+- Swift tests: `LearnedDigestSchedulerTests` 8 of 9 ported. `M145 turns off untouched
+  placeholder jobs only` tests a Swift data migration with no Go counterpart (Go's baseline
+  is the post-migration schema). `MeetingBriefTests`: the 8 scheduler tests and the push
+  copy are in `briefscheduler_test.go`; matching, why, floor, attendee sync and the route
+  were already in `logic_test.go` and `module_test.go`.
+- Left for J2 part 2: `DailyPostWorker` and the moderation sweep, `PeriodRecapThemesWorker`,
+  `KnowledgeExtractionWorker`, `SynthesisWorker`, `EmbeddingReembedService`.

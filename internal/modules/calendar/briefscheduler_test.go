@@ -191,8 +191,10 @@ func TestBriefNobodyWhoHasNotOptedInIsBriefed(t *testing.T) {
 func TestBriefThePushNamesAttendeesFromTheNotesQuietlyAndKeepsWhatItCounted(t *testing.T) {
 	f := newBriefFixture(t)
 	u := f.tenant(t, true, true)
-	id := f.event(t, u, briefEv{title: "Q4 plan", in: 30 * time.Minute,
-		attendees: `{"list":[{"email":"ana@x.test","displayName":"Ana Silva"},{"email":"rui@x.test","displayName":"Rui Costa"}]}`})
+	id := f.event(t, u, briefEv{
+		title: "Q4 plan", in: 30 * time.Minute,
+		attendees: `{"list":[{"email":"ana@x.test","displayName":"Ana Silva"},{"email":"rui@x.test","displayName":"Rui Costa"}]}`,
+	})
 	sent, err := f.sched.Tick(context.Background(), briefNow)
 	require.NoError(t, err)
 	require.Equal(t, 1, sent)
