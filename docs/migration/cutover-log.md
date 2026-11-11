@@ -1866,3 +1866,62 @@ Beyond the pilot gate (D-wave2-early):
 - Swift tests ported: the payload, parse and generator tests in `PeriodRecapLogicTests`, and
   `the worker writes the themes the next view shows, and a failed write falls back` in
   `PeriodRecapControllerTests` (`themes_test.go`).
+
+## jobs J2 (part 3): EmbeddingReembedService, KnowledgeExtractionWorker, SynthesisWorker, DailyPostWorker
+
+### Ported 2026-11-11
+
+- All four are registered in `cmd/App/jobs_j2.go` under Swift's start conditions, and none
+  runs unless `LV_GO_JOBS` names it.
+  - `EmbeddingReembedService` (`internal/embedding/reembed.go`):
+    - Swift starts it when either part is on and `LV_ENVIRONMENT` is not `test`. The two
+      parts are the re-embed (`EMBEDDING_REEMBED_ENABLED`, default false) and the heal pass.
+    - The heal pass is `EMBEDDING_HEAL_ENABLED`, default true, but only when the active
+      provider is not deterministic.
+    - Production runs deterministic, so Go does not register it there, and Swift does not run
+      it either.
+    - The first run does the re-embed to completion with Swift's pauses and backoff. After
+      that, each run is one heal pass, every `EMBEDDING_HEAL_INTERVAL_MINUTES`.
+    - The heal backoff skips runs until its delay is up, so waits round up to a whole interval.
+    - A pass the provider refused fails the run, so last-success means the heal is keeping up.
+  - `KnowledgeExtractionWorker` (`internal/modules/knowledge/extraction.go`):
+    - Started by `KNOWLEDGE_GRAPH_WORKER_ENABLED`, compared as the string `true`, default
+      true, and not under `LV_ENVIRONMENT=test`.
+    - Model adjudication only runs with `KNOWLEDGE_GRAPH_MODEL_EXTRACTION_ENABLED=true`,
+      through the agent's routed transport.
+    - The job ticks every 2 s and drains up to 50 extractions per run.
+  - `SynthesisWorker` (`internal/modules/dashboard/synthesis.go`): started only by
+    `SYNTHESIS_WORKER_ENABLED=true`. Like Swift, it has no test-environment guard. It runs
+    hourly.
+  - `DailyPostWorker` (`internal/modules/community/daily.go`):
+    - Exists when `COMMUNITY_ENABLED=true` and runs outside `LV_ENVIRONMENT=test`. It ticks
+      every 15 min.
+    - Each tick runs the moderation sweep (`RecheckPending`) and the Daily Post
+      (`COMMUNITY_DAILY_POST_ENABLED`, `COMMUNITY_DAILY_POST_HOUR_UTC`).
+    - Headlines come from the curated feeds (`FEEDS_BASE_URL`) with a 15 min cache.
+- Community moderation is now `LLMModerator`: the pre-filter, then one model call (8 s)
+  through the routed transport.
+  - This closes the wave-4 gap: Go no longer holds every post pending. An allowed post is
+    visible at once, as in Swift.
+  - `/v1/admin/community/daily/run` now runs the real `publishDaily`.
+- Moves:
+  - **Flag**: EmbeddingReembedService, SynthesisWorker and KnowledgeExtractionWorker.
+    - Turn Swift's flag off in the same infra commit that names the job in `LV_GO_JOBS`.
+    - Extraction claims with `FOR UPDATE SKIP LOCKED`, so an overlap is safe, but it wastes
+      work.
+  - **Any**: DailyPostWorker.
+    - The day row is the claim, so only one server publishes.
+    - The sweep updates `WHERE status = 'pending'`, so an overlap costs at most one extra
+      moderation call.
+  - Gate metric: `lv_job_last_success_timestamp_seconds{job=...}`.
+- Model calls keep Swift's payloads. Two of them, extraction (0.1) and synthesis (0.5),
+  carry a temperature, and the Anthropic adapter drops it for Haiku 5.5. The community
+  payloads send only model, messages and stream.
+- Swift tests ported:
+  - `EmbeddingReembedServiceTests`: all 7.
+  - `EmbeddingDegradationTests`: the 3 heal tests (`reembed_test.go`).
+  - `KnowledgeExtractionWorkerTests`: all 9, plus a Postgres tick test.
+  - `InsightTests`: all 15 (`synthesis_test.go`).
+  - `DailyPostWorkerTests`: all 5, plus a sweep test.
+  - `CommunityUnitTests`: the 16 that were not yet ported (`daily_test.go`).
+  - `CommunityControllerTests`: already ported in `module_test.go`, and now cited there.

@@ -128,7 +128,10 @@ type Config struct {
 	// with Swift's flag() rules, so "0" and "off" are off too.
 	CommunityEnabled        string `env:"COMMUNITY_ENABLED"`
 	CommunityPostingEnabled string `env:"COMMUNITY_POSTING_ENABLED" envDefault:"true"`
-	AdminToken              string `env:"ADMIN_TOKEN"`
+	// DailyPostWorker: community.dailyPost.enabled and .hourUtc.
+	CommunityDailyPostEnabled string `env:"COMMUNITY_DAILY_POST_ENABLED" envDefault:"false"`
+	CommunityDailyPostHourUTC string `env:"COMMUNITY_DAILY_POST_HOUR_UTC" envDefault:"12"`
+	AdminToken                string `env:"ADMIN_TOKEN"`
 
 	// WASM plugin runner and artifact store (marketplace module).
 	PluginRunnerURL          string `env:"PLUGIN_RUNNER_URL" envDefault:"http://plugin-runner:8090"`

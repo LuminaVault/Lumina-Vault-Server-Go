@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"lumina/internal/apns"
@@ -9,9 +10,11 @@ import (
 	"lumina/internal/jobs"
 	"lumina/internal/llm"
 	"lumina/internal/modules/calendar"
+	"lumina/internal/modules/community"
 	"lumina/internal/modules/dashboard"
 	"lumina/internal/modules/knowledge"
 	"lumina/internal/modules/me"
+	"lumina/internal/modules/news"
 	"strconv"
 	"strings"
 	"time"
@@ -100,4 +103,48 @@ func j2Jobs(pool *pgxpool.Pool, cfg config.Config, embeddings embedding.Service,
 		slog.Info("synthesis worker disabled (set SYNTHESIS_WORKER_ENABLED=true to enable)")
 	}
 	return out
+}
+
+// communityConfig is CommunityConfig(reader:).
+func communityConfig(cfg config.Config) community.Config {
+	return community.Config{
+		Enabled: community.ParseFlag(cfg.CommunityEnabled), PostingEnabled: community.ParseFlag(cfg.CommunityPostingEnabled),
+		AdminToken:       cfg.AdminToken,
+		DailyPostEnabled: community.ParseFlag(cfg.CommunityDailyPostEnabled),
+		DailyPostHourUTC: community.ParseHour(cfg.CommunityDailyPostHourUTC),
+	}
+}
+
+// communityDailyJobs wires the LLM moderator into the board and builds
+// DailyPostWorker (App+build.swift: the worker exists when the board is on, and
+// runs outside LV_ENVIRONMENT=test). The admin trigger uses the same worker.
+func communityDailyJobs(cfg config.Config, board *community.Module, transport llm.ChatTransport) []jobs.Job {
+	var headlines community.HeadlineSource
+	if cfg.FeedsBaseURL != "" {
+		headlines = newsHeadlines{news.NewService(cfg.FeedsBaseURL, news.CuratedFeeds(cfg.FeedsDefaultFeeds), nil, nil).WithCacheTTL(15 * time.Minute)}
+	}
+	worker := board.UseModel(transport, cfg.HermesDefaultModel, headlines)
+	if !community.ParseFlag(cfg.CommunityEnabled) || cfg.LVEnvironment == "test" {
+		return nil
+	}
+	return []jobs.Job{worker.Job()}
+}
+
+// newsHeadlines is NewsTickerService's DailyPostHeadlineSource conformance.
+type newsHeadlines struct{ svc *news.Service }
+
+func (h newsHeadlines) Headlines(ctx context.Context, limit int) ([]community.Headline, error) {
+	resp, err := h.svc.CuratedHeadlines(ctx, limit)
+	if err != nil {
+		return nil, err
+	}
+	var out []community.Headline
+	for _, item := range resp.Items {
+		if item.Url == nil || item.Title == "" {
+			continue
+		}
+		source := item.Source
+		out = append(out, community.Headline{Title: item.Title, Source: &source, URL: *item.Url})
+	}
+	return out, nil
 }

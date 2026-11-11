@@ -266,10 +266,8 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		if m := news.New(pool, cfg, identify, limits); m != nil { // nil without LV_SECRET_MASTER_KEY, as in Swift
 			deps.Modules = append(deps.Modules, m)
 		}
-		deps.Modules = append(deps.Modules, community.New(pool, community.Config{
-			Enabled: community.ParseFlag(cfg.CommunityEnabled), PostingEnabled: community.ParseFlag(cfg.CommunityPostingEnabled),
-			AdminToken: cfg.AdminToken,
-		}, identify, limits, nil))
+		communityModule := community.New(pool, communityConfig(cfg), identify, limits, nil)
+		deps.Modules = append(deps.Modules, communityModule)
 		// Wave 5: Swift builds grokController in the SecretBox branch, so no key, no routes.
 		if box != nil {
 			deps.Modules = append(deps.Modules, grok.New(hermescontainers.New(pool, box), entitlement.PremiumGuardMiddleware(pool), nil))
@@ -284,6 +282,7 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		agent, stopAgent := newAgent(ctx, pool, cfg, box, paths, identify, limits, embeddings, sink, meModule, disk)
 		agent.sockets = sockets
 		registered = append(registered, j2Jobs(pool, cfg, embeddings, embeddingKind, agent.stack.Transport)...)
+		registered = append(registered, communityDailyJobs(cfg, communityModule, agent.stack.Transport)...)
 		if themes != nil {
 			themes.Transport = agent.stack.Transport
 			registered = append(registered, themes.Job())

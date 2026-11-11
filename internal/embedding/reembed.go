@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"lumina/internal/jobs"
 	"strings"
 	"sync"
 	"time"
@@ -12,8 +13,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-
-	"lumina/internal/jobs"
 )
 
 // ReembedTarget is EmbeddingReembedService.Target: one table whose text
