@@ -192,6 +192,14 @@ func networkKindOf(err error) networkKind {
 			return netUnreachable
 		}
 	}
+	// FoundationNetworking turns any failed connect into cannotConnectToHost and
+	// any failed send or receive into networkConnectionLost, whatever the errno
+	// (ENETDOWN, EHOSTDOWN, ECONNABORTED...). TLS alerts arrive as an OpError
+	// with Op "remote error" and stay generic, as secureConnectionFailed does.
+	var op *net.OpError
+	if errors.As(err, &op) && (op.Op == "dial" || op.Op == "read" || op.Op == "write") {
+		return netUnreachable
+	}
 	return netOther
 }
 
@@ -416,7 +424,13 @@ func StreamErrorMessage(err error) string { return StreamErrorFor(err).Message }
 func StreamErrorFor(err error) StreamErrorEvent {
 	var known UserFacingError
 	if errors.As(err, &known) {
-		return StreamErrorEvent{Message: known.UserMessage(), Code: known.ReasonCode(), CTA: known.RecoveryActions()}
+		// StreamErrorDTO's cta is a non-optional array: an errorDetail with no
+		// actions still carries "cta": [], never a missing key.
+		cta := known.RecoveryActions()
+		if cta == nil {
+			cta = []string{}
+		}
+		return StreamErrorEvent{Message: known.UserMessage(), Code: known.ReasonCode(), CTA: cta}
 	}
 	return StreamErrorEvent{Message: StreamErrorGeneric}
 }

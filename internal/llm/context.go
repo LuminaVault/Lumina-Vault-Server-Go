@@ -85,6 +85,13 @@ type RoutingEvent struct {
 	TaskType     string
 	Strategy     string
 	ActiveRoutes []WireRoute
+	// DisplayLabel is set only by ScrubCerberusEvent ("Auto · <task>").
+	DisplayLabel *string
+	// PromptTokens and ContextWindowTokens feed the client's context gauge. Only
+	// the routed stream service's managed Auto branch sets them; nil means "could
+	// not tell", and the client then shows no gauge.
+	PromptTokens        *int
+	ContextWindowTokens *int
 }
 
 // UsageEvent is RouterUsageDTO.

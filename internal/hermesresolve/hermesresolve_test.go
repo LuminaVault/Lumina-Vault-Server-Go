@@ -33,6 +33,7 @@ func stubResolver(answers map[string][]string) ssrfguard.Resolver {
 	return func(_ context.Context, host string) ([]string, error) { return answers[host], nil }
 }
 
+// TestResolver ports HermesEndpointResolverTests (4 cases, each named below).
 func TestResolver(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.Postgres(t)

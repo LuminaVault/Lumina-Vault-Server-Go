@@ -219,17 +219,19 @@ func TestBYOKFailClosed(t *testing.T) {
 		}
 		return &OpenAICompatibleAdapter{ProviderKind: kind, APIKey: platformKey, BaseURL: stub.url(t), Credentials: source}
 	}
-	for _, kind := range []ProviderKind{OpenRouter, XAI, Anthropic} {
+	// Swift's parameterised case runs openRouter, openai, xai, nous, custom and nvidia.
+	for _, kind := range []ProviderKind{OpenRouter, OpenAI, XAI, Nous, Custom, Nvidia, Anthropic} {
 		t.Run(string(kind)+" byok with no resolvable credential spends nothing", func(t *testing.T) {
 			for name, tc := range map[string]struct {
 				source CredentialSource
 				user   *User
 			}{
-				"no store":      {nil, user},
-				"no tenant":     {stubCredentials{creds: &ResolvedCredential{APIKey: &byoKey}}, nil},
-				"no row":        {stubCredentials{}, user},
-				"lookup failed": {stubCredentials{err: errors.New("db")}, user},
-				"empty key":     {stubCredentials{creds: &ResolvedCredential{APIKey: strPtr("")}}, user},
+				"no store":            {nil, user},
+				"no store, no tenant": {nil, nil},
+				"no tenant":           {stubCredentials{creds: &ResolvedCredential{APIKey: &byoKey}}, nil},
+				"no row":              {stubCredentials{}, user},
+				"lookup failed":       {stubCredentials{err: errors.New("db")}, user},
+				"empty key":           {stubCredentials{creds: &ResolvedCredential{APIKey: strPtr("")}}, user},
 			} {
 				stub := newWireStub(t, 200, completionOK)
 				_, err := build(t, kind, stub, tc.source).ChatCompletions(modeCtx(ModeBYOK, tc.user), []byte(chatPayload), "a", "")
