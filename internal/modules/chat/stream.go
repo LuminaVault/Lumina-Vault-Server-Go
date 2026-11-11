@@ -353,7 +353,7 @@ func (m *Module) streamReply(c *echo.Context) error {
 			quickassistant.ActionsUnavailable+"\n"+quickassistant.Clock(m.now(), scheduleLoc), t.req.Messages, false)
 		t.req.Temperature = nil
 		t.qa = m.newQuickTurn(base, *quick, quickInputs{
-			prior: prior, hits: hits, schedule: schedule, pref: pref, turnLoc: turnLoc, scheduleLoc: scheduleLoc,
+			prior: prior, hits: hits, schedule: schedule, pref: pref, turnLoc: turnLoc,
 		}, t)
 	}
 	stream := sse.Produce(base, func(ctx context.Context, yield func(StreamEvent) bool) error {

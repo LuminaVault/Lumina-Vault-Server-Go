@@ -1236,6 +1236,29 @@ func TestAnInvalidOrMissingDeviceZoneFallsBackToTheAccountZone(t *testing.T) {
 	}
 }
 
+// With no zone from the device or the account, the prompt asks for an
+// explicit offset, the shape the zoneless runner takes, so the first call
+// lands instead of being refused.
+func TestNoKnownZoneAsksForAnOffsetAndTheFirstCallLands(t *testing.T) {
+	q := zoneQA(t)
+	user, conversation := q.seed("pro")
+	q.setAccountZone(user, "")
+	adapter := newAdapter(llm.Anthropic,
+		call("app_reminder_create", `{"title":"Call mum","fireAt":"2030-01-01T09:00:00+00:00"}`),
+		say("Set."))
+	q.module.opts.QuickAssistant.Service.Transport = &llm.Transport{
+		Registry: llm.NewRegistry(nil, adapter), Router: &fixedRouter{decision: decision(haikuRoute)}, RouterTelemetry: q.telemetry,
+	}
+	fs := q.send(user, conversation, body(qaBody{}))
+
+	require.Len(t, chips(fs), 1)
+	assert.True(t, q.reminderFireAt(user).Equal(time.Date(2030, 1, 1, 9, 0, 0, 0, time.UTC)))
+	system, _ := parts(t, adapter.completionPayloads()[0])
+	assert.Contains(t, system, "with an explicit UTC offset, like YYYY-MM-DDTHH:MM:SS+00:00.")
+	assert.NotContains(t, system, "no offset")
+	assert.Contains(t, system, "(UTC, UTC+00:00)")
+}
+
 func TestTheClassicFallbackOnAQuickAssistantTurnUsesTheDevicesZone(t *testing.T) {
 	q := newQA(t, qaPool(t), qaOptions{router: &fixedRouter{decision: decision(gatewayRoute)}})
 	user, conversation := q.seed("pro")

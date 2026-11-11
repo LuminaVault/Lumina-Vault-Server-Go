@@ -20,12 +20,11 @@ type quickTurn struct {
 
 // quickInputs is what streamReply already worked out for the classic prompt.
 type quickInputs struct {
-	prior       []llm.ChatMessage
-	hits        []memorystore.SearchResult
-	schedule    *string
-	pref        *llm.Preference
-	turnLoc     *time.Location // nil when neither the device nor the account names a zone
-	scheduleLoc *time.Location // turnLoc, or UTC
+	prior    []llm.ChatMessage
+	hits     []memorystore.SearchResult
+	schedule *string
+	pref     *llm.Preference
+	turnLoc  *time.Location // nil when neither the device nor the account names a zone
 }
 
 // newQuickTurn assembles the loop's prompt and runner, as ConversationController
@@ -33,7 +32,9 @@ type quickInputs struct {
 func (m *Module) newQuickTurn(ctx context.Context, c quickassistant.Context, in quickInputs, t turn) *quickTurn {
 	qa := m.opts.QuickAssistant
 	spaceName := quickassistant.ActiveSpaceName(ctx, m.pool, t.vault, c)
-	system := quickassistant.System(c, spaceName, m.now(), in.scheduleLoc)
+	// With no zone known, turnLoc is nil: System then shows a UTC clock and asks
+	// for an explicit offset, the shape the runner takes.
+	system := quickassistant.System(c, spaceName, m.now(), in.turnLoc)
 	// As classic does: a BYOK user's pinned model, with no fallbacks. A pinned
 	// model that rejects tools fails round 1 and lands on classic. A provider
 	// with no Shared id, or a preference that could not be read, leaves the

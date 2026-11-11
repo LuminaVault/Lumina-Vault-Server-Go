@@ -477,10 +477,13 @@ func TestACancelledRequestStillFinishesTheRun(t *testing.T) {
 		id := w.proposeCalendar("Dentist")
 
 		res, err := w.module.confirmAction(ctx, id, w.user)
+		// Read before the cleanup cancel, so it shows the started hook cancelled
+		// the request while the phone was answering.
+		cancelledMidCall := ctx.Err()
 		cancel()
 
 		require.NoError(t, err)
-		require.Error(t, ctx.Err())
+		require.ErrorIs(t, cancelledMidCall, context.Canceled, "the request was never cancelled mid-call")
 		require.NotEqual(t, StatusAlreadyResolved, res.Status)
 
 		require.Len(t, w.phone.sent(), 1)

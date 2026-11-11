@@ -281,8 +281,47 @@ func TestANilLocationIsUTC(t *testing.T) {
 	if got, want := Clock(justAfterMidnightUTC, nil), Clock(justAfterMidnightUTC, time.UTC); got != want {
 		t.Errorf("Clock(nil) = %q, want %q", got, want)
 	}
+	// System(nil) is System(UTC) but for how it asks for a tool time: with no
+	// zone known it asks for an explicit offset (see the next test).
 	got := System(Context{CurrentTab: "home"}, nil, justAfterMidnightUTC, nil)
+	got = strings.Replace(got, toolTimeFormat("UTC", false), toolTimeFormat("UTC", true), 1)
 	if want := System(Context{CurrentTab: "home"}, nil, justAfterMidnightUTC, time.UTC); got != want {
-		t.Errorf("System(nil) differs from System(UTC)")
+		t.Errorf("System(nil) differs from System(UTC) beyond the tool-time line")
+	}
+}
+
+// With no zone known, the runner refuses an offset-less time (ruling 50), so
+// the prompt must not ask for one: it asks for an explicit UTC offset, and the
+// shape it shows is one a zoneless runner takes. Swift tells the model "no
+// offset" here and wastes a round on the refusal.
+func TestAnUnknownZoneAsksForAnExplicitOffsetTheRunnerTakes(t *testing.T) {
+	prompt := System(Context{CurrentTab: "home"}, nil, promptDate, nil)
+	want := "Times the user says are in UTC. When a tool takes a date and time, write it in ISO 8601 with an explicit UTC offset, like YYYY-MM-DDTHH:MM:SS+00:00. Times in tool results are exact instants: tell them to the user in UTC.\n"
+	if !strings.Contains(prompt, want) {
+		t.Errorf("prompt lacks %q:\n%s", want, prompt)
+	}
+	if strings.Contains(prompt, "no offset") {
+		t.Error("prompt asks for an offset-less time the runner refuses")
+	}
+	if !strings.Contains(prompt, "(UTC, UTC+00:00).") {
+		t.Errorf("clock is not UTC:\n%s", prompt)
+	}
+
+	zoneless := &Runner{}
+	if _, ok := zoneless.parseDate("2030-01-01T09:00:00"); ok {
+		t.Error("a zoneless runner took an offset-less time")
+	}
+	at, ok := zoneless.parseDate("2030-01-01T09:00:00+00:00")
+	if !ok || !at.Equal(time.Date(2030, 1, 1, 9, 0, 0, 0, time.UTC)) {
+		t.Errorf("a zoneless runner refused the prompt's shape: %v %v", at, ok)
+	}
+}
+
+// A known zone, UTC included, keeps Swift's text: the runner reads an
+// offset-less time in it.
+func TestAKnownUTCZoneKeepsTheOffsetLessText(t *testing.T) {
+	prompt := System(Context{CurrentTab: "home"}, nil, promptDate, time.UTC)
+	if !strings.Contains(prompt, "write it in ISO 8601 with no offset, like YYYY-MM-DDTHH:MM:SS, and it is read in UTC.") {
+		t.Errorf("prompt lost Swift's text for a known zone:\n%s", prompt)
 	}
 }
