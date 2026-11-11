@@ -1,0 +1,26 @@
+# Route order. /:id shares its level with the constant segments apply, whatsapp
+# and photon. In Hummingbird's trie a constant wins over :id, so "apply" with a
+# method it does not serve is an empty 404, not unsupported_gateway; whatsapp and
+# photon are catalog ids as well as path prefixes.
+module: me-gateways
+steps:
+  - {name: GET apply, as: gw_ben, request: {method: GET, path: /v1/me/hermes-gateways/apply}}
+  - {name: PUT apply, as: gw_ben, request: {method: PUT, path: /v1/me/hermes-gateways/apply, json: {config: {}}}}
+  - {name: DELETE apply, as: gw_ben, request: {method: DELETE, path: /v1/me/hermes-gateways/apply}}
+  - {name: POST apply test, as: gw_ben, request: {method: POST, path: /v1/me/hermes-gateways/apply/test}}
+  - {name: GET apply current, as: gw_ben, request: {method: GET, path: /v1/me/hermes-gateways/apply/current}}
+  - {name: GET apply not a uuid, as: gw_ben, request: {method: GET, path: /v1/me/hermes-gateways/apply/not-a-uuid}}
+  - {name: GET apply unknown job, as: gw_ben, request: {method: GET, path: /v1/me/hermes-gateways/apply/6A7E1000-0000-4000-8000-0000000000FF}}
+  - {name: GET apply lowercase unknown job, as: gw_ben, request: {method: GET, path: /v1/me/hermes-gateways/apply/6a7e1000-0000-4000-8000-0000000000ff}}
+  - {name: stream unknown job, as: gw_ben, request: {method: GET, path: /v1/me/hermes-gateways/apply/6A7E1000-0000-4000-8000-0000000000FF/stream}}
+  - {name: stream not a uuid, as: gw_ben, request: {method: GET, path: /v1/me/hermes-gateways/apply/nope/stream}}
+  - {name: another tenant's job, as: gw_ben, request: {method: GET, path: /v1/me/hermes-gateways/apply/6A7E1000-0000-4000-8000-000000000001}}
+  - {name: GET whatsapp, as: gw_ben, request: {method: GET, path: /v1/me/hermes-gateways/whatsapp}}
+  - {name: PUT whatsapp, as: gw_ben, request: {method: PUT, path: /v1/me/hermes-gateways/whatsapp, json: {config: {}}}}
+  - {name: POST whatsapp test, as: gw_ben, request: {method: POST, path: /v1/me/hermes-gateways/whatsapp/test}}
+  - {name: GET photon, as: gw_ben, request: {method: GET, path: /v1/me/hermes-gateways/photon}}
+  - {name: POST photon test, as: gw_ben, request: {method: POST, path: /v1/me/hermes-gateways/photon/test}}
+  - {name: GET whatsapp session, as: gw_ben, request: {method: GET, path: /v1/me/hermes-gateways/whatsapp/session}}
+  - {name: GET whatsapp pair, as: gw_ben, request: {method: GET, path: /v1/me/hermes-gateways/whatsapp/pair}}
+  - {name: GET photon setup, as: gw_ben, request: {method: GET, path: /v1/me/hermes-gateways/photon/setup}}
+  - {name: unknown subpath, as: gw_ben, request: {method: GET, path: /v1/me/hermes-gateways/telegram/nope}}

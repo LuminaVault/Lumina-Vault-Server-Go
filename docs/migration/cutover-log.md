@@ -1949,3 +1949,58 @@ Beyond the pilot gate (D-wave2-early):
 - `parity/scenarios/app/01-shell.yaml`.
 - Left: `/health/deep`, which shares `HermesGatewayProbe` with the 7B reconciler (lands after 7B),
   and the `/v1/auth/me*` handlers, which are 8A. `app` stays at `swift` until both are in.
+
+## me-gateways (wave 6, 6D)
+
+### G0 entry: met 2026-11-11
+
+- Routes: 16. `/v1/me/hermes-gateways` list, get, put, delete, test, apply (start, current, status,
+  stream), WhatsApp pair, pair stream and unlink, Photon setup, phone and setup stream (JWT,
+  `settingsByUser`, byoHermes resolver), and `POST /v1/gateways/photon/inbound` (sidecar token only).
+- O1, P4: `internal/hermescontainers.Lifecycle` is HermesContainerManager, ported in full behind the
+  `Docker` interface: ensureRunning (port allocation, sealed API key, `docker run` args with resource
+  limits, row rollback, "already in use" restart), config.yaml/.env seeding with SHA-256 drift and the
+  audio-proxy credential (`auth.AudioTokens`), evictIdle, reprovisionAll, seedGatewayConfig and
+  applyGatewayConfig. The default `ProcessDocker` forks docker as Swift does, so in a pod with no docker
+  every container call fails at spawn and answers Swift's empty 500. `ContainerReaperService` is not in
+  this PR.
+- Photon sidecar: `megateways.HTTPSidecarClient` (activate, deactivate, send, health) and the inbound
+  delivery service are ported. Provisioning activates the sidecar when `PHOTON_SIDECAR_URL` and
+  `PHOTON_SIDECAR_TOKEN` are both set; without them inbound answers 503, and with no token the route is
+  the disabled 404. `docker/photon-sidecar` is retired with the Swift archive (decisions.md D-6de-waivers).
+- Route order: "apply", "whatsapp" and "photon" are constant segments that win over a terminal `:id`
+  (empty 404); `/:id/test` backtracks. `parity/scenarios/me-gateways/02-shadowing.yaml`.
+- Config: `DOCKER_BINARY_PATH`, `HERMES_PER_TENANT_*`, `HERMES_AUDIO_PROXY_BASE_URL`, `MNEMOSYNE_ENABLED`,
+  `PHOTON_SIDECAR_URL`, `PHOTON_SIDECAR_TOKEN`.
+- Swift tests: `HermesGatewaysControllerTests` 6 (DB), `WhatsAppPairParserTests` 8,
+  `SidecarTokenMiddlewareTests` 5, `HermesContainerManagerTests` 7 (DB, stub docker),
+  `HermesTenantConfigSeedTests` 6, `HermesAudioProxySeedTests` 10. New Go tests cover the sidecar client,
+  delivery and the Photon provisioning flow against httptest stubs.
+
+### G1 parity: pending CI
+
+- `parity/scenarios/me-gateways` 00-04 with `parity/seed/gateways.sql`. Photon setup start is compared
+  with Photon's hosts pointed at 127.0.0.1 (compose `x-no-external`): both servers fail the device-code
+  request. A new apply's job is compared on its acknowledgement only.
+- Flip: one group. The apply SSE, WhatsApp pairing and Photon setup sessions are in-memory.
+
+## integrations (wave 6, 6E)
+
+### G0 entry: met 2026-11-11
+
+- Routes: 8. `/v1/integrations/xai` and `/v1/integrations/nous`: status, start, complete, revoke (JWT
+  only, no rate limit).
+- The live CLI backends (`hermes auth add xai-oauth`, `hermes auth add nous`, `portal status`, the
+  loopback `curl` forward) are ported over `hermescontainers.Docker`. Without docker, start is the
+  empty 500 of a failed spawn, and revoke's CLI call fails and is ignored, as in Swift.
+- `complete` has no identity check, as in Swift: it decodes the body first and completes by session.
+- Kept Swift weakness: xAI revoke demotes the tenant to `trial` and deletes any `xai` credential row,
+  not only the OAuth marker.
+- Swift tests: `XaiOAuthServiceTests` 5, `NousOAuthServiceTests` 5, `XaiOAuthControllerTests` 4 (DB),
+  `LiveXaiOAuthBackendTests` 8.
+
+### G1 parity: pending CI
+
+- `parity/scenarios/integrations/00-oauth.yaml` with `parity/seed/gateways.sql`.
+- Flip: one group. OAuth sessions and parked CLI processes are in-memory, so start and complete must
+  reach the same server.
