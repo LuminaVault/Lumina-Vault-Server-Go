@@ -49,11 +49,21 @@ type Runner struct {
 	proactive  *apns.ProactiveDelivery
 	device     *devicetools.Tools
 	google     *calendar.Google
+	brief      BriefComposer
 	http       *http.Client
 	guard      capGuard
 	log        *slog.Logger
 	now        func() time.Time
 }
+
+// BriefComposer is the me module's ComposeBrief: today's brief as cards, the
+// number of cards it holds.
+type BriefComposer interface {
+	ComposeBrief(ctx context.Context, tenant uuid.UUID, skillMarkdown string, now time.Time) (int, error)
+}
+
+// briefSkillName is BriefComposer.skillName.
+const briefSkillName = "daily-brief"
 
 // RunnerOptions are the runner's dependencies. Nil ones behave as Swift's do
 // when absent: no meter skips the budget, no proactive delivery fails a
@@ -69,6 +79,7 @@ type RunnerOptions struct {
 	Proactive    *apns.ProactiveDelivery
 	Device       *devicetools.Tools
 	Google       *calendar.Google
+	Brief        BriefComposer
 	HTTP         *http.Client
 	Log          *slog.Logger
 }
@@ -84,7 +95,7 @@ func NewRunner(pool *pgxpool.Pool, opt RunnerOptions) *Runner {
 	return &Runner{
 		pool: pool, transport: opt.Transport, model: opt.DefaultModel, paths: opt.Paths, memories: opt.Memories,
 		embeddings: opt.Embeddings, push: opt.APNS, meter: opt.Meter, proactive: opt.Proactive, device: opt.Device,
-		google: opt.Google, http: opt.HTTP, guard: capGuard{pool: pool, now: time.Now}, log: opt.Log, now: time.Now,
+		google: opt.Google, brief: opt.Brief, http: opt.HTTP, guard: capGuard{pool: pool, now: time.Now}, log: opt.Log, now: time.Now,
 	}
 }
 
@@ -395,10 +406,19 @@ func parseAgentOutput(content string) (string, *[]luminaBlock) {
 var errChatNotWired = wire.NewError(http.StatusInternalServerError, "chat_message output is not wired on this server")
 
 // dispatchOutputs is SkillRunner.dispatchOutputs for a manual run (no event
-// payload, so memory_emit has no source file and vault_rewrite fails). Without a
-// BriefComposer (5E part 2b) the daily brief lands in chat whole, as Swift does
-// with none.
+// payload, so memory_emit has no source file and vault_rewrite fails).
 func (r *Runner) dispatchOutputs(ctx context.Context, mf skills.Manifest, tenant uuid.UUID, username, content string) error {
+	// Wave 4: the daily brief becomes cards first; its chat message is then a
+	// one-line pointer to them. A failed compose falls back to the full text.
+	briefCards := -1
+	if mf.Name == briefSkillName && r.brief != nil {
+		n, err := r.brief.ComposeBrief(ctx, tenant, content, r.now())
+		if err != nil {
+			r.log.WarnContext(ctx, fmt.Sprintf("skills.runner brief compose failed tenant=%s: %v", ids.Upper(tenant), err))
+		} else {
+			briefCards = n
+		}
+	}
 	for _, out := range mf.Outputs {
 		switch out.Kind {
 		case skills.OutputMemo:
@@ -420,6 +440,15 @@ func (r *Runner) dispatchOutputs(ctx context.Context, mf skills.Manifest, tenant
 		case skills.OutputChatMessage:
 			if r.proactive == nil {
 				return errChatNotWired
+			}
+			if briefCards >= 0 {
+				if briefCards == 0 {
+					continue
+				}
+				if _, err := r.proactive.DeliverBrief(ctx, tenant, briefCards, mf.Name, r.now()); err != nil {
+					return err
+				}
+				continue
 			}
 			if swiftstr.TrimWhitespacesAndNewlines(content) == "" {
 				continue

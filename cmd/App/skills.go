@@ -41,13 +41,17 @@ func (a *agent) skillsModule(broker *devicerpc.Broker) httpserver.Module {
 			RedirectURI: cfg.GoogleCalendarRedirectURI, WebReturnOrigins: cfg.CORSAllowedOrigins,
 		})
 	}
-	runner := skillsroute.NewRunner(a.pool, skillsroute.RunnerOptions{
+	runnerOpts := skillsroute.RunnerOptions{
 		Transport: a.stack.Transport, DefaultModel: cfg.HermesDefaultModel, Paths: a.paths,
 		Memories: a.memories, Embeddings: a.embeddings, APNS: push, Meter: usagemeter.New(a.pool),
 		Proactive: apns.NewProactiveDelivery(a.pool, push),
 		Device:    devicetools.New(a.pool, broker, devicerpc.NewQueue(a.pool, push)),
 		Google:    google,
-	})
+	}
+	if a.today != nil { // a nil *me.Module must not become a non-nil interface
+		runnerOpts.Brief = a.today
+	}
+	runner := skillsroute.NewRunner(a.pool, runnerOpts)
 	opts := skillsroute.Options{
 		Identify: a.identify, Limits: a.limits, Catalog: a.skillCatalog(), Paths: a.paths,
 		// Swift builds HermesMirrorService only with a secret box and an endpoint resolver.
