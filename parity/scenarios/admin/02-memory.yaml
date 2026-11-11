@@ -1,0 +1,20 @@
+# /v1/admin/memory per user (parity/seed/admin.sql). recompute scores ad_mem's four
+# rows; prune recomputes, then archives the old quiet one only, and leaves ad_two's.
+module: admin
+steps:
+  - {name: recompute invalid userID, request: {method: POST, path: /v1/admin/memory/recompute/not-a-uuid, headers: {X-Admin-Token: parity-admin-token}}}
+  - {name: recompute bare hex userID, request: {method: POST, path: /v1/admin/memory/recompute/AD00000000004000800000000000A1, headers: {X-Admin-Token: parity-admin-token}}}
+  - {name: recompute unknown user, request: {method: POST, path: /v1/admin/memory/recompute/0DD00000-0000-4000-8000-000000000001, headers: {X-Admin-Token: parity-admin-token}}}
+  - {name: recompute lowercase userID, request: {method: POST, path: /v1/admin/memory/recompute/ad000000-0000-4000-8000-0000000000a1, headers: {X-Admin-Token: parity-admin-token}}, snapshot: [parity_admin_memories]}
+  - {name: prune invalid userID, request: {method: POST, path: /v1/admin/memory/prune/nope, headers: {X-Admin-Token: parity-admin-token}}}
+  - {name: prune unknown user, request: {method: POST, path: /v1/admin/memory/prune/0DD00000-0000-4000-8000-000000000001, headers: {X-Admin-Token: parity-admin-token}}}
+  - name: prune ad_mem
+    request: {method: POST, path: /v1/admin/memory/prune/AD000000-0000-4000-8000-0000000000A1, headers: {X-Admin-Token: parity-admin-token}}
+    snapshot: [parity_admin_memories, parity_admin_memories_archive]
+  - name: prune again is a no-op
+    request: {method: POST, path: /v1/admin/memory/prune/AD000000-0000-4000-8000-0000000000A1, headers: {X-Admin-Token: parity-admin-token}}
+    snapshot: [parity_admin_memories_archive]
+  - {name: backfill invalid userID, request: {method: POST, path: /v1/admin/memory/chunks/backfill/x, headers: {X-Admin-Token: parity-admin-token}}}
+  - {name: backfill a user with no memories, request: {method: POST, path: /v1/admin/memory/chunks/backfill/AD000000-0000-4000-8000-0000000000C3, headers: {X-Admin-Token: parity-admin-token}}}
+  - {name: backfill batchSize not an Int, request: {method: POST, path: "/v1/admin/memory/chunks/backfill/AD000000-0000-4000-8000-0000000000C3?batchSize=abc", headers: {X-Admin-Token: parity-admin-token}}}
+  - {name: backfill batchSize clamped, request: {method: POST, path: "/v1/admin/memory/chunks/backfill/0DD00000-0000-4000-8000-000000000001?batchSize=-5", headers: {X-Admin-Token: parity-admin-token}}}

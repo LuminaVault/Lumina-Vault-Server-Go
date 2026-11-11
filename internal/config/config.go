@@ -137,6 +137,12 @@ type Config struct {
 	CommunityDailyPostHourUTC string `env:"COMMUNITY_DAILY_POST_HOUR_UTC" envDefault:"12"`
 	AdminToken                string `env:"ADMIN_TOKEN"`
 
+	// Wave 7B admin. /internal/metrics is 404 without METRICS_SECRET; usage_events
+	// retention is off at 0 days.
+	MetricsSecret                 string `env:"METRICS_SECRET"`
+	UsageEventsRetentionDays      int    `env:"USAGE_EVENTS_RETENTION_DAYS" envDefault:"0"`
+	UsageEventsRetentionBatchSize int    `env:"USAGE_EVENTS_RETENTION_BATCH_SIZE" envDefault:"5000"`
+
 	// hermes.central.* (system module, /v1/system/hermes).
 	HermesCentralContainerName string `env:"HERMES_CENTRAL_CONTAINER_NAME" envDefault:"luminavault-hermes"`
 	HermesCentralRegistryImage string `env:"HERMES_CENTRAL_REGISTRY_IMAGE" envDefault:"ghcr.io/luminavault/luminavault-hermes"`
