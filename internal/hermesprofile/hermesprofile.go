@@ -167,24 +167,24 @@ func (s *Service) EnsureDefaultPersona(ctx context.Context, tenant uuid.UUID) (s
 // provisioning, then whatever row there is, or nil. A failed attempt is logged and
 // isn't an error; only a failed read is.
 func (s *Service) EnsureSoftAndFind(ctx context.Context, tenant uuid.UUID) (*Profile, error) {
-	existing, err := s.find(ctx, tenant)
+	existing, err := s.Find(ctx, tenant)
 	if err != nil {
 		return nil, err
 	}
 	if existing != nil && existing.Status == statusReady {
 		return existing, nil
 	}
-	if err := s.ensure(ctx, tenant); err != nil {
+	if err := s.Ensure(ctx, tenant); err != nil {
 		slog.WarnContext(ctx, "hermes profile provisioning degraded", "tenantID", ids.Upper(tenant), "error", err)
 	}
-	return s.find(ctx, tenant)
+	return s.Find(ctx, tenant)
 }
 
-// ensure is HermesProfileService.ensure: reserve the row before calling the gateway,
+// Ensure is HermesProfileService.ensure(for:): reserve the row before calling the gateway,
 // so a hang or a crash leaves something inspectable for the reconciler, then flip it
 // to ready, or to error with last_error.
-func (s *Service) ensure(ctx context.Context, tenant uuid.UUID) error {
-	row, err := s.find(ctx, tenant)
+func (s *Service) Ensure(ctx context.Context, tenant uuid.UUID) error {
+	row, err := s.Find(ctx, tenant)
 	if err != nil {
 		return err
 	}
@@ -237,7 +237,8 @@ func (s *Service) provision(ctx context.Context, tenant uuid.UUID) (string, erro
 	return s.gateway.ProvisionProfile(ctx, tenant, username)
 }
 
-func (s *Service) find(ctx context.Context, tenant uuid.UUID) (*Profile, error) {
+// Find is HermesProfileService.find(for:): the tenant's row, or nil.
+func (s *Service) Find(ctx context.Context, tenant uuid.UUID) (*Profile, error) {
 	var p Profile
 	err := s.pool.QueryRow(ctx, `SELECT id, hermes_profile_id, status, last_error FROM hermes_profiles WHERE tenant_id = $1 LIMIT 1`, tenant).
 		Scan(&p.ID, &p.HermesProfileID, &p.Status, &p.LastError)

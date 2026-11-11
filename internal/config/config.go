@@ -36,6 +36,9 @@ type Config struct {
 	LogLevel        string `env:"LOG_LEVEL" envDefault:"info"`
 
 	RedisURL string `env:"REDIS_URL"`
+	// RateLimitStorageKind is rateLimit.storageKind: "redis" or anything else for
+	// memory. Go implements memory only (P10).
+	RateLimitStorageKind string `env:"RATE_LIMIT_STORAGE_KIND"`
 
 	// Wave 2 apple/devices/reminders.
 	APNSBundleID                    string `env:"APNS_BUNDLE_ID"`
@@ -61,6 +64,21 @@ type Config struct {
 	GoogleCalendarClientSecret string  `env:"OAUTH_GOOGLE_CALENDAR_CLIENT_SECRET"`
 	GoogleCalendarRedirectURI  string  `env:"OAUTH_GOOGLE_CALENDAR_REDIRECT_URI"`
 	MeetingBriefMaxDistance    float64 `env:"MEETING_BRIEF_MAX_DISTANCE" envDefault:"0.4"`
+	// J2 job switches, raw: read as Swift's reader.bool(default: true).
+	LearnedDigestEnabled string `env:"LEARNED_DIGEST_ENABLED" envDefault:"true"`
+	MeetingBriefEnabled  string `env:"MEETING_BRIEF_ENABLED" envDefault:"true"`
+	// EmbeddingReembedService (App+build.swift), raw; read in cmd/App/jobs_j2.go.
+	EmbeddingReembedEnabled        string `env:"EMBEDDING_REEMBED_ENABLED" envDefault:"false"`
+	EmbeddingHealEnabled           string `env:"EMBEDDING_HEAL_ENABLED" envDefault:"true"`
+	EmbeddingReembedBatchSize      string `env:"EMBEDDING_REEMBED_BATCH_SIZE" envDefault:"50"`
+	EmbeddingReembedPauseMS        string `env:"EMBEDDING_REEMBED_PAUSE_MILLISECONDS" envDefault:"2000"`
+	EmbeddingHealIntervalMinutes   string `env:"EMBEDDING_HEAL_INTERVAL_MINUTES" envDefault:"10"`
+	EmbeddingHealMaxBackoffMinutes string `env:"EMBEDDING_HEAL_MAX_BACKOFF_MINUTES" envDefault:"60"`
+	// KnowledgeExtractionWorker: Swift compares the lowercased string with "true".
+	KnowledgeGraphWorkerEnabled          string `env:"KNOWLEDGE_GRAPH_WORKER_ENABLED" envDefault:"true"`
+	KnowledgeGraphModelExtractionEnabled string `env:"KNOWLEDGE_GRAPH_MODEL_EXTRACTION_ENABLED" envDefault:"false"`
+	// SynthesisWorker: off unless the lowercased string is "true".
+	SynthesisWorkerEnabled string `env:"SYNTHESIS_WORKER_ENABLED" envDefault:"false"`
 	// Shared feed aggregator for the news ticker (news module). Raw strings:
 	// the module splits FEEDS_DEFAULT_FEEDS exactly as Swift does.
 	FeedsBaseURL      string `env:"FEEDS_BASE_URL"`
@@ -114,7 +132,16 @@ type Config struct {
 	// with Swift's flag() rules, so "0" and "off" are off too.
 	CommunityEnabled        string `env:"COMMUNITY_ENABLED"`
 	CommunityPostingEnabled string `env:"COMMUNITY_POSTING_ENABLED" envDefault:"true"`
-	AdminToken              string `env:"ADMIN_TOKEN"`
+	// DailyPostWorker: community.dailyPost.enabled and .hourUtc.
+	CommunityDailyPostEnabled string `env:"COMMUNITY_DAILY_POST_ENABLED" envDefault:"false"`
+	CommunityDailyPostHourUTC string `env:"COMMUNITY_DAILY_POST_HOUR_UTC" envDefault:"12"`
+	AdminToken                string `env:"ADMIN_TOKEN"`
+
+	// Wave 7B admin. /internal/metrics is 404 without METRICS_SECRET; usage_events
+	// retention is off at 0 days.
+	MetricsSecret                 string `env:"METRICS_SECRET"`
+	UsageEventsRetentionDays      int    `env:"USAGE_EVENTS_RETENTION_DAYS" envDefault:"0"`
+	UsageEventsRetentionBatchSize int    `env:"USAGE_EVENTS_RETENTION_BATCH_SIZE" envDefault:"5000"`
 
 	// hermes.central.* (system module, /v1/system/hermes).
 	HermesCentralContainerName string `env:"HERMES_CENTRAL_CONTAINER_NAME" envDefault:"luminavault-hermes"`

@@ -912,14 +912,14 @@ func testPeriodMonth(t *testing.T, v env) {
 	require.Equal(t, "private, no-cache", r.header.Get("Cache-Control"))
 	require.Equal(t, "My March 2026 on LuminaVault: 11 memories, 2 questions asked, a 3-day streak.", body.ShareText)
 
-	// A second view does not claim again. Go has no worker (see the package
-	// doc), so the row stays in flight.
+	// A second view does not claim again. This env has no worker, so the row
+	// stays in flight.
 	again := decode[me.PeriodRecapResponse](t, v.get(u, path))
 	require.Equal(t, me.RecapThemesStatus("pending"), again.Themes.Status)
 	require.Equal(t, 1, themesAttempts(t, v, u, "2026-03"))
 }
 
-// The worker stays in Swift, so the rows it writes are seeded directly.
+// The rows the worker writes are seeded directly here; themes_test.go runs it.
 func testPeriodThemesRows(t *testing.T, v env) {
 	u := v.user("UTC")
 	seedMarch(t, v, u)

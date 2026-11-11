@@ -6,7 +6,7 @@
 #
 #   community-off   COMMUNITY_ENABLED=false
 #   posting-off     COMMUNITY_POSTING_ENABLED=false, and today's daily post published
-#   unconfigured    ADMIN_TOKEN and REVENUECAT_WEBHOOK_SECRET empty, plugin signing key too short, no runner token
+#   unconfigured    ADMIN_TOKEN, METRICS_SECRET and REVENUECAT_WEBHOOK_SECRET empty, plugin signing key too short, no runner token
 #                   (a short key with a runner token refuses to boot, in both servers)
 #   runner-off      no runner token
 #   catalog-unseeded  no "luminavault" publisher: the first read tries to seed the catalog
@@ -218,7 +218,7 @@ stub_count() {
 failed=0
 run_state community-off SWITCH_COMMUNITY_ENABLED=false
 run_state posting-off SWITCH_COMMUNITY_POSTING_ENABLED=false
-run_state unconfigured SWITCH_ADMIN_TOKEN= SWITCH_REVENUECAT_WEBHOOK_SECRET= SWITCH_SIGNING_KEY=too-short SWITCH_RUNNER_TOKEN=
+run_state unconfigured SWITCH_ADMIN_TOKEN= SWITCH_METRICS_SECRET= SWITCH_REVENUECAT_WEBHOOK_SECRET= SWITCH_SIGNING_KEY=too-short SWITCH_RUNNER_TOKEN=
 run_state runner-off SWITCH_RUNNER_TOKEN=
 run_state catalog-unseeded SWITCH_NONE=
 run_state import-links SWITCH_NONE=
