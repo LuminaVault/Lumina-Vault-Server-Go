@@ -1,0 +1,12 @@
+# Staging smoke with a fresh user: no seed ids, no second user, no provider.
+module: soul
+smoke: true
+steps:
+  - {name: default, as: soul_smoke, request: {method: GET, path: /v1/soul}, ignore: ["$.markdown"]}
+  - {name: dry run, as: soul_smoke, request: {method: POST, path: /v1/soul/compose, json: {agent_name: Smoke, tone: dry, dry_run: true}}, ignore: ["$.markdown"]}
+  - {name: put, as: soul_smoke, request: {method: PUT, path: /v1/soul, json: {markdown: "# Smoke\n"}}}
+  - {name: read back, as: soul_smoke, request: {method: GET, path: /v1/soul}}
+  - {name: compose, as: soul_smoke, request: {method: POST, path: /v1/soul/compose, json: {agent_name: Smoke}}, ignore: ["$.markdown"]}
+  - {name: bad tone, as: soul_smoke, request: {method: POST, path: /v1/soul/compose, json: {tone: loud}}}
+  - {name: reset, as: soul_smoke, request: {method: DELETE, path: /v1/soul}}
+  - {name: no token, request: {method: GET, path: /v1/soul}}
