@@ -1938,6 +1938,18 @@ Beyond the pilot gate (D-wave2-early):
   import pipeline against the feeds stub's `/plugins/feed.xml`).
 - Not compared: Readwise and Raindrop syncs, which call the public APIs; their parsing is unit-tested.
 
+## app (wave 8, 8E)
+
+### Progress 2026-11-11
+
+- `GET /`, `/health` and `/.well-known/apple-app-site-association` were already served by
+  `internal/httpserver`. Added the legacy kb-compile aliases (`App+build.swift:2537`): `POST
+  /v1/kb-compile` and `GET /v1/kb-compile/pending` are 308s to memory-compile, no auth.
+  `LegacyCompileAliasTests` 2 ported; `AppTests` and `ClientCapabilitiesTests` were already cited.
+- `parity/scenarios/app/01-shell.yaml`.
+- Left: `/health/deep`, which shares `HermesGatewayProbe` with the 7B reconciler (lands after 7B),
+  and the `/v1/auth/me*` handlers, which are 8A. `app` stays at `swift` until both are in.
+
 ## hermes mirror (wave 6, 6B + P2)
 
 ### G0 entry: met 2026-11-11
