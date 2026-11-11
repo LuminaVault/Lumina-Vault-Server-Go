@@ -238,6 +238,9 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		deps.Modules = append(deps.Modules, memoryModule(pool, cfg, box, identify, limits, paths, embeddings, sink, meModule))
 		deps.Modules = append(deps.Modules, selfImprovementModule(pool, cfg, box, identify, paths))
 		deps.Modules = append(deps.Modules, soulModule(pool, cfg, box, identify, limits, paths, sink))
+		if m := settingsModule(pool, cfg, box, identify, limits); m != nil { // 6A: needs the secret box, as in Swift
+			deps.Modules = append(deps.Modules, m)
+		}
 		// Wave 4: knowledge, vision and the compile probe. /v1/vision spends a platform
 		// key, so it has its own gate. Both groups read billing.enforcementEnabled.
 		enforcement := entitlement.EnforcementEnabled(cfg.BillingEnforcementEnabled)

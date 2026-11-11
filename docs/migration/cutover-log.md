@@ -1861,3 +1861,26 @@ Beyond the pilot gate (D-wave2-early):
   `scenarios-switched/unconfigured/billing` (empty secret and admin token) and
   `scenarios-switched/billing-on/billing`. A billing-issue hold (now + 16 days) is compared as
   "hold"; usage's period, `generatedAt` and day stamps are the clock and ignored.
+
+## settings (wave 6)
+
+### G0 entry: met 2026-11-11
+
+- Routes: 5. `GET`/`PUT`/`DELETE /v1/settings/hermes`, `POST /v1/settings/hermes/test`, and
+  `GET /v1/me/hermes/capabilities` (listed under `hermes` in `modules.yaml`; it ships here because
+  PUT refreshes it). All behind JWT and `settingsByUser`, mounted only with `LV_SECRET_MASTER_KEY`.
+- `internal/hermescaps` ports HermesRemoteCapabilitiesService: managed default, 1 h cache in
+  `user_hermes_config.capabilities`, `/health` + `/v1/capabilities` + `/api/jobs` probe, and the
+  dashboard probe (`/api/status`, `/api/fs/default-cwd`, `/api/skills`, 429 retry x3). The full
+  dashboard client (P2) comes with 6B.
+- Not ported: the post-save nudge (Swift fires it detached; it writes nothing the client reads).
+- Swift tests: `HermesCapabilitiesParseTests` 5 as unit tests; `HermesConfigControllerTests` 8 as
+  DB tests, plus tenant isolation, invalid URL, unreachable verify and the capabilities probe.
+  `UserHermesConfigTests` 2 only assert the Fluent schema name.
+
+### G1 parity: met 2026-11-11
+
+- `parity/scenarios/settings/01-hermes.yaml` (refusals, no config, managed capabilities) and
+  `parity/scenarios-switched/agents/settings/01-hermes.yaml` (save, verify, probe, cache, replace,
+  unreachable, delete on the LLM stub), with `parity/seed/settings.sql` and its `parity_st_hermes`
+  view. `agents_state` now also requires stub calls on `/v1/models` and `/v1/capabilities`.
