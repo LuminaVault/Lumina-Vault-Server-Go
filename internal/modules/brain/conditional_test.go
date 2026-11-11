@@ -77,13 +77,22 @@ func TestETagRoundTrip(t *testing.T) {
 	require.NotEqual(t, tag, rec.Header().Get("ETag"))
 }
 
-// A matching tag never bypasses the access check.
+// A matching tag never bypasses the access check: a tag alice was given while she could read the
+// team vault is worth nothing once her membership is gone.
 func TestNotModifiedStillChecksVaultAccess(t *testing.T) {
 	v := setup(t)
-	bobVault := "?vaults=" + bob.String() // bob's personal vault id is his user id
-	rec := v.do(alice, http.MethodGet, "/v1/brain/graph"+bobVault, "", "If-None-Match", `"anything"`)
-	require.Equal(t, http.StatusForbidden, rec.Code)
+	path := "/v1/brain/graph?vaults=" + teamVault.String()
+	first := v.do(alice, http.MethodGet, path, "")
+	require.Equal(t, http.StatusOK, first.Code, first.Body.String())
+	tag := first.Header().Get("ETag")
+	require.NotEmpty(t, tag)
+	require.Equal(t, http.StatusNotModified, v.do(alice, http.MethodGet, path, "", "If-None-Match", tag).Code)
+
+	exec(t, v, `DELETE FROM vault_memberships WHERE vault_id = $1 AND user_id = $2`, teamVault, alice)
+	rec := v.do(alice, http.MethodGet, path, "", "If-None-Match", tag)
+	require.Equal(t, http.StatusForbidden, rec.Code, rec.Body.String())
 	require.Empty(t, rec.Header().Get("ETag"))
+	require.NotContains(t, rec.Body.String(), "nodes")
 }
 
 func TestGraphIsCompressed(t *testing.T) {

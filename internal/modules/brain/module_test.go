@@ -799,3 +799,40 @@ func TestSimilarTimeoutDropsOnlySimilarEdges(t *testing.T) {
 	brain.SetSimilarTimeout(v.mod, time.Nanosecond)
 	require.Equal(t, map[string]int{"source": 1}, kinds(getSimilar(t, v, "?links=similar,source")))
 }
+
+// A live vault in an archived team passes the candidate query, which filters only
+// vaults.archived_at, and is refused by vaultaccess. By default it is dropped silently.
+func TestDefaultScopeDropsVaultOfArchivedTeam(t *testing.T) {
+	v := setup(t)
+	const goneTeam, orphan = "7ea40000-0000-4000-8000-000000000002", "7ea40000-0000-4000-8000-0000000000a3"
+	exec(t, v, `INSERT INTO teams (id, name, owner_user_id, billing_sponsor_user_id, archived_at, created_at, updated_at)
+		VALUES ($1, 'Gone Team', $2, $2, '2026-02-01T00:00:00Z', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')`, goneTeam, bob)
+	exec(t, v, `INSERT INTO vaults (id, team_id, name, archived_at, created_at, updated_at)
+		VALUES ($1, $2, 'Orphan Vault', NULL, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')`, orphan, goneTeam)
+	exec(t, v, `INSERT INTO vault_memberships (id, vault_id, user_id, role, can_use_ai, created_by_user_id, created_at, updated_at)
+		VALUES (gen_random_uuid(), $1, $2, 'viewer', false, $3, now(), now())`, orphan, alice, bob)
+	exec(t, v, `INSERT INTO memories (id, tenant_id, content, created_at, updated_at) VALUES (gen_random_uuid(), $1, 'orphan memory', now(), now())`, orphan)
+	exec(t, v, `INSERT INTO vault_files (id, tenant_id, path, content_type, size_bytes, sha256, created_at, updated_at)
+		VALUES (gen_random_uuid(), $1, 'Orphan Note.md', 'text/markdown', 1, 'x', now(), now())`, orphan)
+
+	// The candidate query does return it, so the drop below is vaultaccess's doing.
+	cands, err := db.New(v.pool).CandidateVaults(context.Background(), alice)
+	require.NoError(t, err)
+	var candIDs []string
+	for _, c := range cands {
+		candIDs = append(candIDs, c.ID.String())
+	}
+	require.Contains(t, candIDs, orphan)
+
+	rec := v.do(alice, http.MethodGet, "/v1/brain/graph", "")
+	require.Equal(t, []vaultOut{
+		{ID: alice.String(), Name: "alice's Vault", Personal: true},
+		{ID: teamVault.String(), Name: "Team Vault", Personal: false},
+	}, vaultsOf(t, rec))
+	body := strings.ToLower(rec.Body.String())
+	for _, s := range []string{orphan, "orphan memory", "orphan note", "orphan vault"} {
+		require.NotContains(t, body, s)
+	}
+	// Named explicitly, the same vault is refused instead.
+	require.Equal(t, http.StatusNotFound, v.do(alice, http.MethodGet, "/v1/brain/graph?vaults="+orphan, "").Code)
+}
