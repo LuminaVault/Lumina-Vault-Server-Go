@@ -7,6 +7,7 @@ package db
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -38,6 +39,151 @@ func (q *Queries) CandidateVaults(ctx context.Context, userID uuid.UUID) ([]Cand
 	for rows.Next() {
 		var i CandidateVaultsRow
 		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const items = `-- name: Items :many
+
+SELECT id, vault_id, space_id, kind, body, created_at, graph_x, graph_y, graph_z
+FROM (
+  SELECT vf.id, vf.tenant_id AS vault_id, vf.space_id, 'note'::text AS kind, vf.path AS body,
+         vf.created_at, vf.updated_at,
+         NULL::double precision AS graph_x, NULL::double precision AS graph_y, NULL::double precision AS graph_z
+  FROM vault_files vf
+  WHERE vf.tenant_id = ANY($1::uuid[])
+  UNION ALL
+  SELECT m.id, m.tenant_id, m.space_id, 'memory'::text, left(m.content, 400),
+         m.created_at, m.updated_at, m.graph_x, m.graph_y, m.graph_z
+  FROM memories m
+  WHERE m.tenant_id = ANY($1::uuid[])
+) items
+ORDER BY coalesce(updated_at, created_at) DESC NULLS LAST, id
+LIMIT $2::int
+`
+
+type ItemsParams struct {
+	VaultIds []uuid.UUID
+	RowLimit int32
+}
+
+type ItemsRow struct {
+	ID        uuid.UUID
+	VaultID   uuid.UUID
+	SpaceID   *uuid.UUID
+	Kind      string
+	Body      string
+	CreatedAt *time.Time
+	GraphX    *float64
+	GraphY    *float64
+	GraphZ    *float64
+}
+
+// Item nodes. Every query below is restricted to vault ids that scopes() already
+// admitted through vaultaccess; none reads outside them.
+func (q *Queries) Items(ctx context.Context, arg ItemsParams) ([]ItemsRow, error) {
+	rows, err := q.db.Query(ctx, items, arg.VaultIds, arg.RowLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ItemsRow
+	for rows.Next() {
+		var i ItemsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.VaultID,
+			&i.SpaceID,
+			&i.Kind,
+			&i.Body,
+			&i.CreatedAt,
+			&i.GraphX,
+			&i.GraphY,
+			&i.GraphZ,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const memorySources = `-- name: MemorySources :many
+SELECT m.id AS memory_id, m.source_vault_file_id AS note_id
+FROM memories m
+WHERE m.tenant_id = ANY($1::uuid[])
+  AND m.id = ANY($2::uuid[])
+  AND m.source_vault_file_id IS NOT NULL
+`
+
+type MemorySourcesParams struct {
+	VaultIds  []uuid.UUID
+	MemoryIds []uuid.UUID
+}
+
+type MemorySourcesRow struct {
+	MemoryID uuid.UUID
+	NoteID   *uuid.UUID
+}
+
+func (q *Queries) MemorySources(ctx context.Context, arg MemorySourcesParams) ([]MemorySourcesRow, error) {
+	rows, err := q.db.Query(ctx, memorySources, arg.VaultIds, arg.MemoryIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []MemorySourcesRow
+	for rows.Next() {
+		var i MemorySourcesRow
+		if err := rows.Scan(&i.MemoryID, &i.NoteID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const noteLinks = `-- name: NoteLinks :many
+SELECT l.source_vault_file_id AS from_id, l.target_vault_file_id AS to_id
+FROM vault_links l
+WHERE l.resolved
+  AND l.tenant_id = ANY($1::uuid[])
+  AND l.source_vault_file_id = ANY($2::uuid[])
+  AND l.target_vault_file_id = ANY($2::uuid[])
+`
+
+type NoteLinksParams struct {
+	VaultIds []uuid.UUID
+	NoteIds  []uuid.UUID
+}
+
+type NoteLinksRow struct {
+	FromID uuid.UUID
+	ToID   *uuid.UUID
+}
+
+func (q *Queries) NoteLinks(ctx context.Context, arg NoteLinksParams) ([]NoteLinksRow, error) {
+	rows, err := q.db.Query(ctx, noteLinks, arg.VaultIds, arg.NoteIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []NoteLinksRow
+	for rows.Next() {
+		var i NoteLinksRow
+		if err := rows.Scan(&i.FromID, &i.ToID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

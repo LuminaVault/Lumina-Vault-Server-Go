@@ -14,6 +14,7 @@ import (
 	"lumina/internal/vaultaccess"
 	"lumina/internal/wire"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -48,14 +49,21 @@ func (m *Module) Register(r httpserver.Router, _ echo.MiddlewareFunc) {
 // params is the parsed query string.
 type params struct {
 	vaults []uuid.UUID
+	links  map[string]bool
+	limit  int32
 }
+
+const (
+	defaultLimit = 400
+	maxLimit     = 2000
+)
 
 var errInvalidVaults = wire.NewError(http.StatusBadRequest, "invalid vaults")
 
 // parseParams reads the query string. X-Vault-ID is deliberately not read: this
 // route spans vaults and takes its scope only from `vaults`.
 func parseParams(c *echo.Context) (params, error) {
-	var p params
+	p := params{links: parseLinks(c.QueryParam("links")), limit: parseLimit(c.QueryParam("limit"))}
 	if raw := c.QueryParam("vaults"); raw != "" {
 		seen := map[uuid.UUID]bool{}
 		for _, part := range strings.Split(raw, ",") {
@@ -72,6 +80,15 @@ func parseParams(c *echo.Context) (params, error) {
 	return p, nil
 }
 
+// parseLimit never fails: absent or unparsable is the default 400, and any number is clamped to 1..2000.
+func parseLimit(raw string) int32 {
+	n, err := strconv.Atoi(raw)
+	if err != nil {
+		return defaultLimit
+	}
+	return int32(min(max(n, 1), maxLimit)) //nolint:gosec // clamped to 1..2000
+}
+
 func (m *Module) graph(c *echo.Context) error {
 	p, err := parseParams(c)
 	if err != nil {
@@ -85,15 +102,63 @@ func (m *Module) graph(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
+	ctx := c.Request().Context()
+	vaultIDs := make([]uuid.UUID, 0, len(scopes))
+	for _, s := range scopes {
+		vaultIDs = append(vaultIDs, s.ID)
+	}
+	// One extra row tells us whether the limit cut something off.
+	rows, err := m.q.Items(ctx, db.ItemsParams{VaultIds: vaultIDs, RowLimit: p.limit + 1})
+	if err != nil {
+		return err
+	}
+	truncated := len(rows) > int(p.limit)
+	if truncated {
+		rows = rows[:p.limit]
+	}
+	items := make([]item, 0, len(rows))
+	var noteIDs, memoryIDs []uuid.UUID
+	for _, r := range rows {
+		items = append(items, itemFromRow(r))
+		if r.Kind == "memory" {
+			memoryIDs = append(memoryIDs, r.ID)
+		} else {
+			noteIDs = append(noteIDs, r.ID)
+		}
+	}
+	var rels []relation
+	if p.links["link"] && len(noteIDs) > 0 {
+		links, err := m.q.NoteLinks(ctx, db.NoteLinksParams{VaultIds: vaultIDs, NoteIds: noteIDs})
+		if err != nil {
+			return err
+		}
+		for _, l := range links {
+			if l.ToID != nil {
+				rels = append(rels, relation{From: l.FromID.String(), To: l.ToID.String(), Kind: "link"})
+			}
+		}
+	}
+	if p.links["source"] && len(memoryIDs) > 0 {
+		srcs, err := m.q.MemorySources(ctx, db.MemorySourcesParams{VaultIds: vaultIDs, MemoryIds: memoryIDs})
+		if err != nil {
+			return err
+		}
+		for _, s := range srcs {
+			if s.NoteID != nil {
+				rels = append(rels, relation{From: s.MemoryID.String(), To: s.NoteID.String(), Kind: "source"})
+			}
+		}
+	}
+	nodes, edges := assemble(items, nil, rels)
 	vaults := make([]BrainGraphVault, 0, len(scopes))
 	for _, s := range scopes {
 		vaults = append(vaults, BrainGraphVault{Id: wire.UUID{UUID: s.ID}, Name: s.Name, Personal: s.Personal})
 	}
 	return wire.JSON(c, http.StatusOK, BrainGraphResponse{
 		GeneratedAt: wire.Time{Time: m.now()},
-		Truncated:   false,
+		Truncated:   truncated,
 		Vaults:      vaults,
-		Nodes:       []BrainGraphNode{},
-		Edges:       []BrainGraphEdge{},
+		Nodes:       nodes,
+		Edges:       edges,
 	})
 }

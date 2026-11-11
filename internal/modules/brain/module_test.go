@@ -108,9 +108,24 @@ func TestGraphRequiresAuth(t *testing.T) {
 	require.Equal(t, http.StatusUnauthorized, v.do(uuid.Nil, http.MethodGet, "/v1/brain/graph", "").Code)
 }
 
+// emptyVault removes everything the seed put in a user's personal vault, so the
+// empty-graph cases still describe a user with no notes and no memories.
+func emptyVault(t *testing.T, v env, user uuid.UUID) {
+	t.Helper()
+	for _, q := range []string{
+		`DELETE FROM vault_links WHERE tenant_id = $1`,
+		`DELETE FROM memories WHERE tenant_id = $1`,
+		`DELETE FROM vault_files WHERE tenant_id = $1`,
+	} {
+		_, err := v.pool.Exec(context.Background(), q, user)
+		require.NoError(t, err)
+	}
+}
+
 func TestGraphEmptyMatchesSpec(t *testing.T) {
 	v := setup(t)
-	rec := v.do(alice, http.MethodGet, "/v1/brain/graph", "")
+	emptyVault(t, v, bob)
+	rec := v.do(bob, http.MethodGet, "/v1/brain/graph", "")
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	validate(t, http.MethodGet, "/v1/brain/graph", rec)
 	var out struct {
@@ -195,10 +210,133 @@ func TestVaultsParamMalformed(t *testing.T) {
 
 func TestNewUserHasEmptyGraph(t *testing.T) {
 	v := setup(t)
+	emptyVault(t, v, bob)
 	rec := v.do(bob, http.MethodGet, "/v1/brain/graph", "")
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	validate(t, http.MethodGet, "/v1/brain/graph", rec)
 	require.Equal(t, []vaultOut{{ID: bob.String(), Name: "bob's Vault", Personal: true}}, vaultsOf(t, rec))
 	require.Contains(t, rec.Body.String(), `"nodes":[]`)
 	require.Contains(t, rec.Body.String(), `"edges":[]`)
+}
+
+const (
+	n1 = "00000000-0000-4000-8000-0000000001a1"
+	n2 = "00000000-0000-4000-8000-0000000001a2"
+	n3 = "00000000-0000-4000-8000-0000000001a3"
+	m1 = "00000000-0000-4000-8000-0000000002a1"
+	m2 = "00000000-0000-4000-8000-0000000002a2"
+	bn = "00000000-0000-4000-8000-0000000001b1"
+	bm = "00000000-0000-4000-8000-0000000002b1"
+)
+
+type graphOut struct {
+	Truncated bool `json:"truncated"`
+	Nodes     []struct {
+		ID      string                     `json:"id"`
+		Kind    string                     `json:"kind"`
+		Label   string                     `json:"label"`
+		VaultID string                     `json:"vaultID"`
+		Weight  int                        `json:"weight"`
+		Pos     *struct{ X, Y, Z float64 } `json:"pos"`
+	} `json:"nodes"`
+	Edges []struct {
+		From string `json:"from"`
+		To   string `json:"to"`
+		Kind string `json:"kind"`
+	} `json:"edges"`
+}
+
+func getGraph(t *testing.T, v env, query string) graphOut {
+	t.Helper()
+	rec := v.do(alice, http.MethodGet, "/v1/brain/graph"+query, "")
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	validate(t, http.MethodGet, "/v1/brain/graph"+query, rec)
+	var out graphOut
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &out))
+	for i := range out.Nodes {
+		out.Nodes[i].VaultID = strings.ToLower(out.Nodes[i].VaultID)
+	}
+	return out
+}
+
+func (g graphOut) itemNodes() int {
+	n := 0
+	for _, x := range g.Nodes {
+		if x.Kind == "note" || x.Kind == "memory" {
+			n++
+		}
+	}
+	return n
+}
+
+func TestItemsSpanVaults(t *testing.T) {
+	v := setup(t)
+	g := getGraph(t, v, "")
+	got := map[string][2]string{}
+	for _, n := range g.Nodes {
+		got[n.ID] = [2]string{n.Kind, n.VaultID}
+	}
+	require.Equal(t, [2]string{"note", alice.String()}, got[n1])
+	require.Equal(t, [2]string{"note", alice.String()}, got[n2])
+	require.Equal(t, [2]string{"note", teamVault.String()}, got[n3])
+	require.Equal(t, [2]string{"memory", alice.String()}, got[m1])
+	require.Equal(t, [2]string{"memory", teamVault.String()}, got[m2])
+	require.NotContains(t, got, bn)
+	require.NotContains(t, got, bm)
+	for _, n := range g.Nodes {
+		require.NotEqual(t, bob.String(), n.VaultID)
+		switch n.ID {
+		case n1:
+			require.Equal(t, "First Note", n.Label)
+		case m1:
+			require.Equal(t, "Alice memory", n.Label)
+			require.NotNil(t, n.Pos)
+		case m2:
+			require.Nil(t, n.Pos)
+		}
+	}
+	require.False(t, g.Truncated)
+}
+
+func TestLinkAndSourceEdges(t *testing.T) {
+	v := setup(t)
+	g := getGraph(t, v, "")
+	type e struct{ From, To, Kind string }
+	var got []e
+	for _, x := range g.Edges {
+		got = append(got, e{x.From, x.To, x.Kind})
+	}
+	require.Equal(t, []e{{n1, n2, "link"}, {m1, n1, "source"}}, got)
+	for _, n := range g.Nodes {
+		if n.ID == n1 {
+			require.Equal(t, 2, n.Weight)
+		}
+	}
+}
+
+func TestLimitTruncates(t *testing.T) {
+	v := setup(t)
+	g := getGraph(t, v, "?limit=1")
+	require.Equal(t, 1, g.itemNodes())
+	require.True(t, g.Truncated)
+	require.Empty(t, g.Edges, "an edge to a node outside the window must be dropped")
+
+	all := getGraph(t, v, "?limit=2000")
+	require.False(t, all.Truncated)
+	require.Equal(t, 8, all.itemNodes())
+
+	require.Equal(t, 1, getGraph(t, v, "?limit=0").itemNodes())
+	require.Equal(t, 8, getGraph(t, v, "?limit=99999").itemNodes())
+	require.Equal(t, 8, getGraph(t, v, "?limit=abc").itemNodes())
+	require.Equal(t, 1, getGraph(t, v, "?limit=-5").itemNodes())
+}
+
+func TestLinksParamFilters(t *testing.T) {
+	v := setup(t)
+	g := getGraph(t, v, "?links=source")
+	require.Len(t, g.Edges, 1)
+	require.Equal(t, "source", g.Edges[0].Kind)
+	g = getGraph(t, v, "?links=link")
+	require.Len(t, g.Edges, 1)
+	require.Equal(t, "link", g.Edges[0].Kind)
 }
