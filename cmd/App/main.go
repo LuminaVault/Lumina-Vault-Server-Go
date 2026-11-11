@@ -299,6 +299,7 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		// /v1/ws (5J) flips with kb-compile, the device result route, mcp and skills.
 		deps.Modules = append(deps.Modules, wsroute.New(pool, sockets, identify))
 		deps.Modules = append(deps.Modules, agent.agentsModule())
+		deps.Modules = append(deps.Modules, agent.mcpModule(deviceRPC))
 		deps.Modules = append(deps.Modules, agent.routerModules()...)
 		deps.Modules = append(deps.Modules, agent.chatModules(links, enrichment, analytics)...)
 	}
