@@ -1,0 +1,356 @@
+[
+  {
+    "name": "search",
+    "title": "Search the vault",
+    "description": "Hybrid search over the vault: semantic similarity fused with exact keyword matching, so both paraphrase and literal tokens (hostnames, error codes, IDs) are found. Every hit carries the source path, heading trail and line range it came from — cite those.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "What to look for. Plain language or exact terms."
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Maximum hits (1-50).",
+          "minimum": 1,
+          "maximum": 50,
+          "default": 10
+        },
+        "space": {
+          "type": "string",
+          "description": "Optional Space slug to search within. Omit to search everything."
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "additionalProperties": false
+    },
+    "writes": false,
+    "personal": false
+  },
+  {
+    "name": "browse",
+    "title": "List documents",
+    "description": "List indexed documents. Use when you need the shape of the vault rather than a text query.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "pathPrefix": {
+          "type": "string",
+          "description": "Only documents whose path starts with this."
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Maximum documents (1-500).",
+          "minimum": 1,
+          "maximum": 500,
+          "default": 50
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "writes": false,
+    "personal": false
+  },
+  {
+    "name": "read",
+    "title": "Read a document",
+    "description": "Read one document's text by vault-relative path. Bounded: the reply reports whether it was truncated.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Vault-relative path, as returned by search or browse."
+        },
+        "maxChars": {
+          "type": "integer",
+          "description": "Characters to return (1-100000).",
+          "minimum": 1,
+          "maximum": 100000,
+          "default": 20000
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "additionalProperties": false
+    },
+    "writes": false,
+    "personal": false
+  },
+  {
+    "name": "recent",
+    "title": "Recently changed documents",
+    "description": "Documents modified most recently, newest first.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "limit": {
+          "type": "integer",
+          "description": "Maximum documents (1-100).",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 10
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "writes": false,
+    "personal": false
+  },
+  {
+    "name": "memory_context",
+    "title": "Start with context",
+    "description": "Call once at the start of a session. Returns the user's SOUL.md (how they want you to work; read-only — never try to edit it) and their most recent decisions and preferences, optionally for one Space. Use `search` for anything more specific.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "space": {
+          "type": "string",
+          "description": "Optional Space slug to narrow the decisions and preferences to."
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "writes": false,
+    "personal": false
+  },
+  {
+    "name": "memory_save",
+    "title": "Save a memory",
+    "description": "Save one durable statement worth remembering in later sessions: a preference, a decision, or a fact about the user or their work. One statement per call, in plain words, e.g. \"Prefers Python for scripts.\" Search first; if a memory already says this, update it instead. An exact repeat returns the existing memory. Never save secrets, credentials, or anything the user asked you not to keep.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "content": {
+          "type": "string",
+          "description": "The statement, at most 4000 characters."
+        },
+        "space": {
+          "type": "string",
+          "description": "Optional Space slug to file it under; omit or `inbox` for unfiled."
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "preference",
+            "decision",
+            "fact",
+            "note"
+          ],
+          "description": "preference (how the user likes things), decision (something settled), fact (about the user or their work), or note."
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 10,
+          "description": "Optional short labels."
+        }
+      },
+      "required": [
+        "content"
+      ],
+      "additionalProperties": false
+    },
+    "writes": true,
+    "personal": false
+  },
+  {
+    "name": "memory_forget",
+    "title": "Forget a memory",
+    "description": "Delete a memory that is no longer true or that the user asked you to forget. Confirm with the user first. This removes it from search; it does not edit any vault document it came from.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "memoryID": {
+          "type": "string",
+          "description": "The memory to delete."
+        }
+      },
+      "required": [
+        "memoryID"
+      ],
+      "additionalProperties": false
+    },
+    "writes": true,
+    "personal": false
+  },
+  {
+    "name": "health_query",
+    "title": "Health trends",
+    "description": "Daily totals and averages of the user's synced Apple Health data (steps, heart rate, HRV, sleep, active energy, …). Pass `metric` for one HealthKit type, or omit it for all. Fails when the user has not allowed Health access.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "metric": {
+          "type": "string",
+          "description": "HealthKit type identifier, e.g. HKQuantityTypeIdentifierStepCount."
+        },
+        "days": {
+          "type": "integer",
+          "description": "Days back to cover (1-365).",
+          "minimum": 1,
+          "maximum": 365,
+          "default": 30
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "writes": false,
+    "personal": true
+  },
+  {
+    "name": "calendar_query",
+    "title": "Upcoming events",
+    "description": "Upcoming events from the user's Apple and Google calendars, soonest first. Fails when the user has not allowed Calendar access.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "days": {
+          "type": "integer",
+          "description": "Days ahead to cover (1-90).",
+          "minimum": 1,
+          "maximum": 90,
+          "default": 7
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "writes": false,
+    "personal": true
+  },
+  {
+    "name": "reminders_list",
+    "title": "Open reminders",
+    "description": "The user's open Apple Reminders, overdue and upcoming, soonest due first (at most 100). Fails when the user has not allowed Reminders access.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "writes": false,
+    "personal": true
+  },
+  {
+    "name": "calendar_create",
+    "title": "Create an event",
+    "description": "Propose an event in the user's Apple Calendar, on their iPhone. The user confirms it on a card before anything is added. Needs the app reachable and the user's permission to make changes.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "Event title."
+        },
+        "start": {
+          "type": "string",
+          "description": "Start, ISO 8601. With no offset it is read in the user's time zone."
+        },
+        "end": {
+          "type": "string",
+          "description": "End, ISO 8601. With no offset it is read in the user's time zone. Defaults to one hour after start."
+        },
+        "location": {
+          "type": "string",
+          "description": "Optional location."
+        }
+      },
+      "required": [
+        "title",
+        "start"
+      ],
+      "additionalProperties": false
+    },
+    "writes": true,
+    "personal": true
+  },
+  {
+    "name": "app_reminder_create",
+    "title": "Create a LuminaVault reminder",
+    "description": "Create a reminder in LuminaVault that notifies the user at a given time.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "Short reminder title."
+        },
+        "body": {
+          "type": "string",
+          "description": "Optional longer text."
+        },
+        "fireAt": {
+          "type": "string",
+          "description": "When to fire, ISO 8601. With no offset it is read in the user's time zone."
+        }
+      },
+      "required": [
+        "title",
+        "fireAt"
+      ],
+      "additionalProperties": false
+    },
+    "writes": true,
+    "personal": false
+  },
+  {
+    "name": "app_reminders_list",
+    "title": "List LuminaVault reminders",
+    "description": "The user's upcoming LuminaVault reminders, soonest first.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "writes": false,
+    "personal": false
+  },
+  {
+    "name": "open_screen",
+    "title": "Open a screen in the app",
+    "description": "Take the user to a screen in the app. The app performs the navigation.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "screen": {
+          "type": "string",
+          "description": "Which screen to open.",
+          "enum": [
+            "home",
+            "spaces",
+            "ai",
+            "brain",
+            "insights",
+            "settings",
+            "dataAccess",
+            "brief",
+            "learned",
+            "memory"
+          ]
+        },
+        "memoryID": {
+          "type": "string",
+          "description": "Optional memory UUID to open on that screen."
+        }
+      },
+      "required": [
+        "screen"
+      ],
+      "additionalProperties": false
+    },
+    "writes": false,
+    "personal": false
+  }
+]
