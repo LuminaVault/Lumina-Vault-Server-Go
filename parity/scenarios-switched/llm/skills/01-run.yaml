@@ -1,0 +1,39 @@
+# Skill runs against the LLM stub: a job's spec carries the stub directive into the
+# agent's prompt. Run ids and times are random or the clock.
+module: skills
+steps:
+  - name: author a job
+    as: sk_jon
+    request: {method: POST, path: /v1/jobs, json: {title: Plain job, cron: "0 8 * * *", spec: "Say it [[stub:reply:Done **today**]]"}}
+  - name: run it
+    as: sk_jon
+    request: {method: POST, path: /v1/skills/plain-job/run, json: {input: hello, arguments: {b: "2", a: "1"}}}
+    ignore: ["$.id", "$.startedAt", "$.endedAt"]
+    snapshot: [parity_sk_runs, parity_sk_state]
+  - name: the daily cap (trial 1) is a 500
+    as: sk_jon
+    request: {method: POST, path: /v1/skills/plain-job/run}
+    snapshot: [parity_sk_state]
+  - name: author a blocks job
+    as: sk_jon
+    request: {method: POST, path: /v1/jobs, json: {title: Blocks job, cron: "0 9 * * 1", spec: "[[stub:reply:{\"markdown\":\"Short\",\"blocks\":[{\"type\":\"statCard\",\"label\":\"Steps\",\"value\":\"9k\",\"trend\":\"up\"},{\"type\":\"divider\"}]}]]"}}
+  - name: blocks run
+    as: sk_jon
+    request: {method: POST, path: /v1/skills/blocks-job/run}
+    ignore: ["$.id", "$.startedAt", "$.endedAt"]
+    snapshot: [parity_sk_runs]
+  - name: blocks in history
+    as: sk_jon
+    request: {method: GET, path: /v1/skills/blocks-job/runs}
+    ignore: ["$.runs[*].id", "$.runs[*].startedAt", "$.runs[*].endedAt", "$.sparkline"]
+  - name: author a looping job
+    as: sk_jon
+    request: {method: POST, path: /v1/jobs, json: {title: Loop job, cron: "0 7 * * *", spec: "[[stub:tool:vault_read:{\"path\":\"notes/missing.md\"}]]"}}
+  - name: a tool loop does not converge
+    as: sk_jon
+    request: {method: POST, path: /v1/skills/loop-job/run}
+    snapshot: [parity_sk_runs, parity_sk_state]
+  - name: slash runs a skill
+    as: sk_jon
+    request: {method: POST, path: /v1/skills/slash, json: {command: "/patterns sleep"}}
+    ignore: ["$.id", "$.startedAt", "$.endedAt"]

@@ -51,7 +51,11 @@ type Options struct {
 	// The /v1/jobs entitlement: EntitlementMiddleware(requires: .chat) with BYO keys.
 	EnforcementEnabled bool
 	HasCredential      entitlement.HasUsableCredential
-	Log                *slog.Logger
+	// Runner runs skills for POST /v1/skills/:name/run and /v1/skills/slash.
+	Runner *Runner
+	// Compile backs /kb-compile on /v1/skills/slash.
+	Compile Compiler
+	Log     *slog.Logger
 }
 
 // Module is the route group.
@@ -80,6 +84,8 @@ func (m *Module) Register(r httpserver.Router, _ echo.MiddlewareFunc) {
 	r.GET("/v1/skills", m.list, skillsChain...)
 	r.PATCH("/v1/skills/:name", m.patch, skillsChain...)
 	r.GET("/v1/skills/:name/runs", m.runs, skillsChain...)
+	r.POST("/v1/skills/slash", m.slash, skillsChain...)
+	r.POST("/v1/skills/:name/run", m.runSkill, skillsChain...)
 
 	r.GET("/v1/skills/outputs", m.outputs, m.opt.Identify,
 		ratelimit.Middleware(m.opt.Limits, ratelimit.SkillOutputsByUser, ratelimit.UserOrIPKey))

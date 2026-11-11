@@ -9,7 +9,9 @@ INSERT INTO users (id, email, password_hash, is_verified, username, tier, create
   ('5c100000-0000-4000-8000-0000000000e5', 'sk-eve@parity.test', 'x', true, 'sk_eve', 'trial', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
   ('5c100000-0000-4000-8000-0000000000f6', 'sk-fay@parity.test', 'x', true, 'sk_fay', 'lapsed', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
   ('5c100000-0000-4000-8000-0000000000a7', 'sk-gus@parity.test', 'x', true, 'sk_gus', 'trial', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
-  ('5c100000-0000-4000-8000-0000000000b8', 'sk-hal@parity.test', 'x', true, 'sk_hal', 'trial', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+  ('5c100000-0000-4000-8000-0000000000b8', 'sk-hal@parity.test', 'x', true, 'sk_hal', 'trial', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
+  ('5c100000-0000-4000-8000-0000000000c9', 'sk-ivy@parity.test', 'x', true, 'sk_ivy', 'trial', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
+  ('5c100000-0000-4000-8000-0000000000da', 'sk-jon@parity.test', 'x', true, 'sk_jon', 'trial', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
 
 -- sk_ann: state rows for built-ins, one with every optional set and invalid enum values
 -- elsewhere, plus a mirrored Hermes skill.
@@ -68,3 +70,15 @@ INSERT INTO hermes_job_runs (id, tenant_id, hermes_job_id, hermes_run_key, statu
 -- sk_gus: a conversation a job can link back to.
 INSERT INTO conversations (id, tenant_id, title, created_at, updated_at) VALUES
   ('5c10c100-0000-4000-8000-000000000001', '5c100000-0000-4000-8000-0000000000a7', 'Gus chats', '2026-02-01T00:00:00Z', '2026-02-01T00:00:00Z');
+
+-- Runs (parity/scenarios/skills/08-run, scenarios-switched/llm/skills). Run ids and
+-- times are random or the clock; error text is Swift's String(describing:), so the
+-- views keep whether there was one.
+CREATE VIEW parity_sk_runs AS
+SELECT tenant_id, source, name, status, error IS NOT NULL AS failed, model_used, mtok_in, mtok_out, markdown, blocks
+FROM skill_run_log WHERE tenant_id IN (SELECT id FROM users WHERE username IN ('sk_ivy', 'sk_jon'));
+
+CREATE VIEW parity_sk_state AS
+SELECT tenant_id, source, name, enabled, last_status, last_error IS NOT NULL AS failed, daily_run_count,
+       last_run_at IS NOT NULL AS ran, origin_kind
+FROM skills_state WHERE tenant_id IN (SELECT id FROM users WHERE username IN ('sk_ivy', 'sk_jon'));

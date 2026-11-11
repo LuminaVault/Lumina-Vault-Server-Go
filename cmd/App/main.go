@@ -301,7 +301,7 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		deps.Modules = append(deps.Modules, agent.agentsModule())
 		deps.Modules = append(deps.Modules, agent.routerModules()...)
 		deps.Modules = append(deps.Modules, agent.chatModules(links, enrichment, analytics)...)
-		deps.Modules = append(deps.Modules, agent.skillsModule())
+		deps.Modules = append(deps.Modules, agent.skillsModule(deviceRPC))
 	}
 	// Deferred after the sink and the pool, so jobs stop first and can still use both.
 	stopJobs, err := startJobs(ctx, cfg, registered)
