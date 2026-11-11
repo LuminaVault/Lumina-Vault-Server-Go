@@ -181,7 +181,7 @@ func (s *Service) Capabilities(ctx context.Context, tenant uuid.UUID, force bool
 	if isUserOverride {
 		probed = s.probeRemote(ctx, res)
 	}
-	probed.Dashboard = dashboard
+	probed = Attach(dashboard, probed)
 	if row.exists {
 		if encoded, err := wire.MarshalFoundation(probed); err == nil {
 			_, _ = s.pool.Exec(ctx, `UPDATE user_hermes_config SET capabilities = $2, capabilities_checked_at = $3, updated_at = NOW()
@@ -189,6 +189,13 @@ func (s *Service) Capabilities(ctx context.Context, tenant uuid.UUID, force bool
 		}
 	}
 	return Response{Capabilities: probed, CheckedAt: &wire.Time{Time: now}}
+}
+
+// Attach is HermesRemoteCapabilitiesService.attach(dashboard:to:): every
+// gateway field kept, the dashboard probe added.
+func Attach(dashboard *Dashboard, to Capabilities) Capabilities {
+	to.Dashboard = dashboard
+	return to
 }
 
 // decodeCapabilities is JSONDecoder's decode of HermesCapabilities: required

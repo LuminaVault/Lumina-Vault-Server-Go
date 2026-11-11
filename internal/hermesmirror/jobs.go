@@ -301,6 +301,58 @@ func (s *Service) CollectJobRuns(ctx context.Context, tenant uuid.UUID, jobID st
 	return s.collect(ctx, tenant, *job, transport)
 }
 
+// jobsPerTick is collectLimits.jobsPerTick.
+const jobsPerTick = 50
+
+// CollectSummary is HermesCollectSummary.
+type CollectSummary struct {
+	Jobs         int
+	Inserted     int
+	FilesWritten int
+	Failed       int
+	// Unavailable is the stable code of the tenant-wide error that stopped
+	// the pass; not counted in Failed.
+	Unavailable *string
+}
+
+// CollectAllJobRuns is collectAllJobRuns(tenantID:), the refresh worker's
+// pass. The worker itself stays on Swift (O4); the pass is ported so its
+// behaviour is pinned before the job moves.
+func (s *Service) CollectAllJobRuns(ctx context.Context, tenant uuid.UUID) (CollectSummary, error) {
+	if err := s.beginExclusive(tenant); err != nil {
+		return CollectSummary{}, err
+	}
+	defer s.endExclusive(tenant)
+	jobs, err := s.jobRows(ctx, tenant, `ORDER BY hermes_job_id LIMIT $2`, jobsPerTick)
+	if err != nil || len(jobs) == 0 {
+		return CollectSummary{}, err
+	}
+	transport, err := s.Transports.Transport(ctx, tenant)
+	if err != nil {
+		return CollectSummary{}, err
+	}
+	var summary CollectSummary
+	for _, job := range jobs {
+		result, err := s.collect(ctx, tenant, job, transport)
+		var transportErr *hermesdash.Error
+		switch {
+		case err == nil:
+			summary.Jobs++
+			summary.Inserted += result.Inserted
+			summary.FilesWritten += result.FilesWritten
+		case errors.As(err, &transportErr) && transportErr.IsTenantWide():
+			code := transportErr.Code()
+			summary.Unavailable = &code
+			s.log().Debug("hermes mirror collect unavailable", "tenant", tenant.String(), "error", err.Error())
+			return summary, nil
+		default:
+			summary.Failed++
+			s.log().Warn("hermes mirror collect failed", "tenant", tenant.String(), "job", job.HermesJobID, "error", err.Error())
+		}
+	}
+	return summary, nil
+}
+
 func later(lhs *time.Time, rhs time.Time) *time.Time {
 	if lhs == nil || rhs.After(*lhs) {
 		return &rhs

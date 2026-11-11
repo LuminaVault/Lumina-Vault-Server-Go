@@ -18,10 +18,12 @@ import (
 	"lumina/internal/migrations"
 	module "lumina/internal/modules/hermesmirror"
 	"lumina/internal/modules/imports"
+	skillsmod "lumina/internal/modules/skills"
 	"lumina/internal/modules/spaces"
 	"lumina/internal/modules/workflows"
 	"lumina/internal/ratelimit"
 	"lumina/internal/secretbox"
+	"lumina/internal/skills"
 	"lumina/internal/vaultpaths"
 	"lumina/parity/scenario"
 	"net/http"
@@ -92,7 +94,12 @@ func setup(t *testing.T) env {
 		Identify: identify, Limits: ratelimit.NewStore(), Box: box, Service: service,
 		Now: func() time.Time { return now },
 	})
-	e := httpserver.New(config.Config{}, httpserver.Deps{Auth: auth.Middleware(keys, auth.PGUsers(pool)), Modules: []httpserver.Module{m}})
+	// GET /v1/skills merges mirrored skills and /run refuses them (the Swift
+	// controller test drives both through one app).
+	catalog := skillsmod.New(pool, skillsmod.Options{
+		Identify: identify, Limits: ratelimit.NewStore(), Catalog: skills.NewCatalog(paths), Paths: paths, Mirror: true,
+	})
+	e := httpserver.New(config.Config{}, httpserver.Deps{Auth: auth.Middleware(keys, auth.PGUsers(pool)), Modules: []httpserver.Module{m, catalog}})
 	return env{t: t, pool: pool, srv: e, root: hermesRoot, now: now}
 }
 
@@ -204,6 +211,32 @@ func TestMirrorRoutes(t *testing.T) {
 		require.NoError(t, err)
 		assert.Contains(t, string(config), name)
 		assert.Equal(t, http.StatusOK, v.do(user, http.MethodPut, "/v1/hermes/mirror/skills/"+name, `{"enabled":true}`).code)
+
+		// GET /v1/skills appends the mirrored skill as source `hermes`, and /run refuses it.
+		r = v.do(user, http.MethodGet, "/v1/skills", "")
+		require.Equal(t, http.StatusOK, r.code, string(r.body))
+		var list struct {
+			Skills []struct {
+				ID          string `json:"id"`
+				Name        string `json:"name"`
+				Source      string `json:"source"`
+				DailyRunCap int    `json:"dailyRunCap"`
+			} `json:"skills"`
+		}
+		r.decode(t, &list)
+		merged := false
+		for _, s := range list.Skills {
+			if s.ID == "hermes-"+name {
+				merged = true
+				assert.Equal(t, "hermes", s.Source)
+				assert.Equal(t, name, s.Name)
+				assert.Equal(t, 0, s.DailyRunCap)
+			}
+		}
+		assert.True(t, merged, string(r.body))
+		r = v.do(user, http.MethodPost, "/v1/skills/hermes-"+name+"/run", `{}`)
+		assert.Equal(t, http.StatusBadRequest, r.code)
+		assert.Contains(t, string(r.body), "hermes_skill_runs_on_hermes")
 		assert.Equal(t, http.StatusNotFound, v.do(user, http.MethodPut, "/v1/hermes/mirror/skills/not-a-skill", `{"enabled":true}`).code)
 		assert.Equal(t, http.StatusBadRequest, v.do(user, http.MethodPut, "/v1/hermes/mirror/skills/"+name, `{}`).code)
 	})

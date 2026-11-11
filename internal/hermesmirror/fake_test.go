@@ -50,6 +50,7 @@ func (p fixedProvider) Transport(context.Context, uuid.UUID) (hermesdash.Transpo
 }
 
 func (f *fakeTransport) fail(op string, err error) { f.mu.Lock(); f.failures[op] = err; f.mu.Unlock() }
+
 func (f *fakeTransport) setSkills(s ...hermesdash.Skill) { f.mu.Lock(); f.skills = s; f.mu.Unlock() }
 func (f *fakeTransport) setJobs(j ...hermesdash.Job)     { f.mu.Lock(); f.jobs = j; f.mu.Unlock() }
 func (f *fakeTransport) setSessions(s ...hermesdash.Session) {

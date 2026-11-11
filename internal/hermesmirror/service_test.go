@@ -752,6 +752,53 @@ func TestService(t *testing.T) {
 		assert.True(t, result.Truncated)
 	})
 
+	t.Run("collectAllJobRuns isolates a failing job and an unknown job is a 404", func(t *testing.T) {
+		h := newHarness(t, pool, hermesdash.KindRemote, noLimitsPause())
+		h.transport.setJobs(job("j1", "Good", false), job("j2", "Broken", false))
+		_, err := h.service.Sync(ctx, h.tenant, scopes(ScopeJobs))
+		require.NoError(t, err)
+		h.transport.setRuns("j1", run("cron_j1_1", 1_756_800_000, hermesdash.RunOK))
+		h.transport.setRunOutput("j1", "cron_j1_1", "# Fine\n")
+		h.transport.fail("jobRuns:j2", hermesdash.DashboardUnreachable("boom"))
+
+		summary, err := h.service.CollectAllJobRuns(ctx, h.tenant)
+		require.NoError(t, err)
+		assert.Equal(t, 1, summary.Jobs)
+		assert.Equal(t, 1, summary.Failed)
+		assert.Equal(t, 1, summary.Inserted)
+		assert.Equal(t, 1, summary.FilesWritten)
+		var count int
+		require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM hermes_job_runs WHERE tenant_id = $1`, h.tenant).Scan(&count))
+		assert.Equal(t, 1, count)
+
+		_, err = h.service.CollectJobRuns(ctx, h.tenant, "nope")
+		status, msg := wireStatus(t, err)
+		assert.Equal(t, 404, status)
+		assert.Equal(t, "hermes_job_not_found", msg)
+	})
+
+	t.Run("collectAllJobRuns stops at a tenant-wide error instead of failing every job", func(t *testing.T) {
+		h := newHarness(t, pool, hermesdash.KindRemote, noLimitsPause())
+		h.transport.setJobs(job("j1", "A", false), job("j2", "B", false), job("j3", "C", false))
+		_, err := h.service.Sync(ctx, h.tenant, scopes(ScopeJobs))
+		require.NoError(t, err)
+		h.transport.fail("jobRuns:j1", hermesdash.Unsupported("jobRuns"))
+
+		summary, err := h.service.CollectAllJobRuns(ctx, h.tenant)
+		require.NoError(t, err)
+		assert.Equal(t, 0, summary.Failed)
+		assert.Equal(t, 0, summary.Jobs)
+		require.NotNil(t, summary.Unavailable)
+		assert.Equal(t, "hermes_mirror_unsupported", *summary.Unavailable)
+		var runCalls []string
+		for _, c := range h.transport.recorded() {
+			if strings.HasPrefix(c, "jobRuns:") {
+				runCalls = append(runCalls, c)
+			}
+		}
+		assert.Equal(t, []string{"jobRuns:j1"}, runCalls)
+	})
+
 	t.Run("an unknown job is a 404 on collect", func(t *testing.T) {
 		h := newHarness(t, pool, hermesdash.KindRemote, noLimitsPause())
 		_, err := h.service.CollectJobRuns(ctx, h.tenant, "nope")
