@@ -165,7 +165,8 @@ agents_state() {
   before=$(curl -fsS http://localhost:18085/stub/stats)
   run_state agents SWITCH_HERMES_GATEWAY_URL=http://llmstub:8080 SWITCH_BYO_HERMES_ALLOW_PRIVATE=true SWITCH_BYO_HERMES_REQUIRE_HTTPS=false
   after=$(curl -fsS http://localhost:18085/stub/stats)
-  for route in /api/instance /api/sessions/{id}/chat; do
+  # /v1/chat/completions is the central agent (llm.RoutedService through the gateway).
+  for route in /api/instance /api/sessions/{id}/chat /v1/chat/completions; do
     calls=$(( $(stub_count "$after" "$route") - $(stub_count "$before" "$route") ))
     echo "stub answered $calls on $route in state agents"
     if [ "$calls" -lt 2 ]; then
