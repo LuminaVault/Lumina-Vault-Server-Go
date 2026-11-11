@@ -1,0 +1,46 @@
+# GET and PUT /v1/me/preferences/llm. A managed save stores the backend's model,
+# whatever the client sent; a BYOK save refuses the managed label as a model. The
+# response reports what the router will do: the free lane can override BYOK. Each
+# save also rewrites the user-scope router profile (router_profiles).
+module: me-providers
+steps:
+  - {name: no row reads as managed, as: mp_dee, request: {method: GET, path: /v1/me/preferences/llm}}
+  - name: a managed save ignores the client's provider and model
+    as: mp_dee
+    request: {method: PUT, path: /v1/me/preferences/llm, json: {mode: managed, primaryProvider: xai, primaryModel: grok-4, fallbackChain: [{provider: openai, model: gpt-4o}], allowedProviders: [xai]}}
+    snapshot: [parity_mp_preferences, parity_mp_router_profiles, parity_mp_router_bindings]
+  - {name: mode defaults to managed, as: mp_dee, request: {method: PUT, path: /v1/me/preferences/llm, json: {primaryProvider: xai, primaryModel: grok-4, fallbackChain: []}}}
+
+  - {name: byok without a model, as: mp_dee, request: {method: PUT, path: /v1/me/preferences/llm, json: {mode: byok, primaryProvider: openai, primaryModel: "", fallbackChain: []}}}
+  - {name: byok with an empty fallback model, as: mp_dee, request: {method: PUT, path: /v1/me/preferences/llm, json: {mode: byok, primaryProvider: openai, primaryModel: gpt-4o, fallbackChain: [{provider: anthropic, model: x}, {provider: xai, model: ""}]}}}
+  - {name: byok with the placeholder as a fallback, as: mp_dee, request: {method: PUT, path: /v1/me/preferences/llm, json: {mode: byok, primaryProvider: openai, primaryModel: gpt-4o, fallbackChain: [{provider: openRouter, model: auto}]}}}
+  - {name: byok with the brain label as a fallback, as: mp_dee, request: {method: PUT, path: /v1/me/preferences/llm, json: {mode: byok, primaryProvider: openai, primaryModel: gpt-4o, fallbackChain: [{provider: xai, model: "LuminaVault Brain · Auto"}]}}}
+  - {name: byok with the label and nothing saved to keep, as: mp_dee, request: {method: PUT, path: /v1/me/preferences/llm, json: {mode: byok, primaryProvider: openRouter, primaryModel: "LuminaVault Brain · Auto", fallbackChain: []}}}
+  - name: a byok save
+    as: mp_dee
+    request: {method: PUT, path: /v1/me/preferences/llm, json: {mode: byok, primaryProvider: openai, primaryModel: gpt-4o, fallbackChain: [{provider: anthropic, model: claude-sonnet-4-6}], allowedProviders: [openai, anthropic], blockedProviders: [xai], routingPolicy: maxQuality}}
+    snapshot: [parity_mp_preferences, parity_mp_router_profiles]
+  - name: the label on the same provider keeps the saved model
+    as: mp_dee
+    request: {method: PUT, path: /v1/me/preferences/llm, json: {mode: byok, primaryProvider: openai, primaryModel: "LuminaVault Brain · Auto", fallbackChain: []}}
+    snapshot: [parity_mp_preferences]
+  - {name: the label on another provider is refused, as: mp_dee, request: {method: PUT, path: /v1/me/preferences/llm, json: {mode: byok, primaryProvider: anthropic, primaryModel: "LuminaVault Brain · Auto", fallbackChain: []}}}
+  - {name: openRouter auto is the placeholder too, as: mp_dee, request: {method: PUT, path: /v1/me/preferences/llm, json: {mode: byok, primaryProvider: openRouter, primaryModel: auto, fallbackChain: []}}}
+  - {name: read back, as: mp_dee, request: {method: GET, path: /v1/me/preferences/llm}}
+
+  - {name: malformed json, as: mp_dee, request: {method: PUT, path: /v1/me/preferences/llm, raw: "{"}}
+  - {name: array body, as: mp_dee, request: {method: PUT, path: /v1/me/preferences/llm, raw: "[]"}}
+  - {name: missing fallback chain, as: mp_dee, request: {method: PUT, path: /v1/me/preferences/llm, json: {mode: byok, primaryProvider: openai, primaryModel: gpt-4o}}}
+  - {name: missing primary provider, as: mp_dee, request: {method: PUT, path: /v1/me/preferences/llm, json: {primaryModel: gpt-4o, fallbackChain: []}}}
+  - {name: unknown provider, as: mp_dee, request: {method: PUT, path: /v1/me/preferences/llm, json: {primaryProvider: groq, primaryModel: m, fallbackChain: []}}}
+  - {name: unknown mode, as: mp_dee, request: {method: PUT, path: /v1/me/preferences/llm, json: {mode: auto, primaryProvider: openai, primaryModel: m, fallbackChain: []}}}
+  - {name: unknown routing policy, as: mp_dee, request: {method: PUT, path: /v1/me/preferences/llm, json: {primaryProvider: openai, primaryModel: m, fallbackChain: [], routingPolicy: cheapest}}}
+  - {name: fallback step missing its model, as: mp_dee, request: {method: PUT, path: /v1/me/preferences/llm, json: {primaryProvider: openai, primaryModel: m, fallbackChain: [{provider: openai}]}}}
+  - {name: model of the wrong type, as: mp_dee, request: {method: PUT, path: /v1/me/preferences/llm, json: {primaryProvider: openai, primaryModel: 4, fallbackChain: []}}}
+  - {name: null mode reads as managed, as: mp_dee, request: {method: PUT, path: /v1/me/preferences/llm, json: {mode: null, primaryProvider: openai, primaryModel: m, fallbackChain: []}}}
+
+  # Saved BYOK rows: free gus, lapsed jon with an Ultimate override, pro kit whose
+  # primary provider (hermesGateway) has no wire id. None holds a usable key.
+  - {name: free tier byok without a key, as: mp_gus, request: {method: GET, path: /v1/me/preferences/llm}}
+  - {name: ultimate override byok without a key, as: mp_jon, request: {method: GET, path: /v1/me/preferences/llm}}
+  - {name: an unmappable primary reads as managed, as: mp_kit, request: {method: GET, path: /v1/me/preferences/llm}}

@@ -1,0 +1,9 @@
+# Smoke: a user's reads. No seed ids, no provider call, one user.
+module: llm-router
+smoke: true
+steps:
+  - {name: profiles, as: lr_over, request: {method: GET, path: /v1/router}}
+  - {name: catalog, as: lr_over, request: {method: GET, path: /v1/router/catalog}}
+  - {name: bindings, as: lr_over, request: {method: GET, path: /v1/router/bindings}}
+  - {name: dashboard, as: lr_over, request: {method: GET, path: /v1/router/dashboard}}
+  - {name: parallel is off, as: lr_over, request: {method: GET, path: /v1/router/parallel/executions}}

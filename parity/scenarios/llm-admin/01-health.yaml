@@ -1,0 +1,11 @@
+# GET /admin/llm/health behind X-Admin-Token. Every provider host is refused in
+# parity, so each configured adapter reports ok false; the error text and the
+# latency are environment detail, not wire shape.
+module: llm-admin
+steps:
+  - {name: no token, request: {method: GET, path: /admin/llm/health}}
+  - {name: wrong token, request: {method: GET, path: /admin/llm/health, headers: {X-Admin-Token: wrong}}}
+  - {name: a user bearer is not an admin token, as: lr_free, request: {method: GET, path: /admin/llm/health}}
+  - name: every configured provider
+    request: {method: GET, path: /admin/llm/health, headers: {X-Admin-Token: parity-admin-token}}
+    ignore: ["$.providers[*].error", "$.providers[*].latency_ms"]

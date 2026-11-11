@@ -1,0 +1,21 @@
+# GET /v1/me/connections/events and POST /v1/me/connections/test-all. The list
+# drops rows whose kind or severity the wire enums don't know. test-all writes
+# one diagnostic event per summary; fay's run is snapshotted.
+module: me-providers
+steps:
+  - {name: default limit, as: mp_fay, request: {method: GET, path: /v1/me/connections/events}}
+  - {name: limit 1 counts the dropped rows, as: mp_fay, request: {method: GET, path: "/v1/me/connections/events?limit=1"}}
+  - {name: limit 2, as: mp_fay, request: {method: GET, path: "/v1/me/connections/events?limit=2"}}
+  - {name: limit 0 is clamped to 1, as: mp_fay, request: {method: GET, path: "/v1/me/connections/events?limit=0"}}
+  - {name: negative limit is clamped to 1, as: mp_fay, request: {method: GET, path: "/v1/me/connections/events?limit=-5"}}
+  - {name: huge limit is clamped to 100, as: mp_fay, request: {method: GET, path: "/v1/me/connections/events?limit=100000"}}
+  - {name: non-numeric limit uses the default, as: mp_fay, request: {method: GET, path: "/v1/me/connections/events?limit=abc"}}
+  - {name: empty limit uses the default, as: mp_fay, request: {method: GET, path: "/v1/me/connections/events?limit="}}
+  - {name: another tenant sees only its own, as: mp_hal, request: {method: GET, path: /v1/me/connections/events}}
+  - name: test-all reports each summary and records it
+    as: mp_fay
+    request: {method: POST, path: /v1/me/connections/test-all}
+    snapshot: [parity_mp_events]
+  - {name: test-all with a gateway in every status, as: mp_eve, request: {method: POST, path: /v1/me/connections/test-all}}
+  - {name: eve's events, as: mp_eve, request: {method: GET, path: "/v1/me/connections/events?limit=100"}}
+  - {name: test-all ignores a body, as: mp_hal, request: {method: POST, path: /v1/me/connections/test-all, raw: "nope"}}

@@ -1625,3 +1625,72 @@ Beyond the pilot gate (D-wave2-early):
 - Not compared: the key order of a re-encoded multi-key `tool_calls` object, because Swift's
   `JSONSerialization` order is unspecified.
 - G2 needs a staging stub for the success path. Staging has no Hermes.
+
+## me-providers (wave 5)
+
+### G0 entry: met 2026-11-11
+
+- Routes: 14, under `/v1/me/providers`, `/v1/me/preferences/llm` and `/v1/me/connections`. The nine
+  provider routes are mounted only with `LV_SECRET_MASTER_KEY`, as in Swift (state `no-master-key`).
+- Prefixes: disjoint (`internal/manifest`).
+- Coupling: writes `user_provider_credentials`, `user_provider_credential_pool_keys`,
+  `user_llm_preferences`, `router_profiles` (the preferences save rewrites the default profile) and
+  `connection_diagnostic_events`. Every write goes through the agent's one `llm.Stack`, so the
+  router's credential, preference and profile caches see it. Swift keeps its own 600 s caches, so
+  this module flips with 5C. The memory and workflows modules build their own `PreferenceRepository`
+  and keep a stale preference until their cache expires.
+- Paid path: `/test` and `/models` call the user's own provider key. The tool probe after a passing
+  `/test` runs detached, as a Swift `Task`. User base URLs are dialed unchecked, as in Swift (no SSRF
+  guard). Hardening that is an owner decision.
+- Swift tests: `ProviderCatalogTests` 6, `ProviderModelListingTests` 5, `ProviderToolProbeTests` 9,
+  the probe half of `OpenAICompletionReaderTests` and `Settings/LLMPreferencesControllerTests` 11,
+  all ported.
+
+### G1 parity: met 2026-11-11
+
+- CI run 43007663996 on head 2337ec9: self-test and Swift vs Go give **232 scenarios, 0 differences**
+  (whole suite), and every switch state shows 0 differences
+  (https://github.com/LuminaVault/Lumina-Vault-Server-Go/actions/runs/43007663996).
+  `parity/scenarios/me-providers` has 8 files. Switch states: `no-master-key` (provider routes 404)
+  and `llm` (`/test` and `/models` success against the stub).
+- Spec drift: the spec's `HermesGatewayID` has no `photon`, which Swift lists in every summary.
+
+## llm-router (wave 5)
+
+### G0 entry: met 2026-11-11
+
+- Routes: 17, under `/v1/router`.
+- Prefixes: disjoint (`internal/manifest`).
+- Coupling: writes `router_profiles`, `router_bindings`, `router_synthesis_presets` and deletes
+  `router_executions`. It shares the `llm.Stack` caches with `me-providers`.
+- Parallel: every `/parallel` and `/synthesis-presets` route is 403 unless `cerberus.parallelEnabled`
+  is on and the user is Ultimate. It is off in production and parity. `ParallelExecutor` stays a hook
+  (owner decision 7). With parallel on, Go's stream writes `token`, `done` and `error` frames only,
+  and records no execution.
+- Swift tests: `RouterPlaceholderRoutesTests` 7 and `RouterPlaceholderSaveTests` 4, ported.
+  `ParallelExecutorTests` 2 not ported: waiver proposed in PR #55.
+
+### G1 parity: met 2026-11-11
+
+- CI run 43007663996 on head 2337ec9: 0 differences (see me-providers). `parity/scenarios/llm-router`
+  has 9 files.
+- Swift bug kept: `/v1/router/dashboard` is a 500 on every call, because `RouterController` decodes
+  `SUM(bigint)`, which Postgres returns as numeric, into `Int64`. `Options.FixDashboard` serves it.
+  Turning that on is an owner decision.
+- Quirks kept: a BYOK write without `routingPolicy` defaults to `autoSmart` and needs an OpenRouter
+  credential (`AUTO_REQUIRES_OPENROUTER`). A duplicate profile name and unbinding the user scope are
+  bare 500s. A workflow binding loads the Fluent model, so a workflow whose draft doesn't decode is a
+  500 in Swift (Go reads only the row's existence).
+
+## llm-admin (wave 5)
+
+### G0 entry: met 2026-11-11
+
+- Routes: 1, `GET /admin/llm/health`, behind `X-Admin-Token` (empty token: 404, state `unconfigured`).
+- It pings every OpenAI-compatible adapter with the deployment key. It is not in smoke.
+- Swift tests: none.
+
+### G1 parity: met 2026-11-11
+
+- CI run 43007663996 on head 2337ec9: 0 differences. The error text and latency are ignored: the error
+  is Go's text, not Foundation's `String(describing:)`.

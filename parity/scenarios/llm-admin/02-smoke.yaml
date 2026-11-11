@@ -1,0 +1,5 @@
+# Smoke: the admin gate answers without a token. No provider call, no user.
+module: llm-admin
+smoke: true
+steps:
+  - {name: no token, request: {method: GET, path: /admin/llm/health}}

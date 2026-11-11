@@ -1,0 +1,27 @@
+# Every route without a token and with a bad one. Anonymous steps send their own
+# X-Forwarded-For, so their settingsByUser bucket (30/min) is theirs alone.
+# An unknown provider id is checked after identity, so it is a 401 here too.
+module: me-providers
+steps:
+  - {name: catalog no token, request: {method: GET, path: /v1/me/providers/catalog, headers: {X-Forwarded-For: 10.95.0.1}}}
+  - {name: list no token, request: {method: GET, path: /v1/me/providers, headers: {X-Forwarded-For: 10.95.0.1}}}
+  - {name: put no token, request: {method: PUT, path: /v1/me/providers/openai, json: {kind: apiKey, apiKey: sk-x}, headers: {X-Forwarded-For: 10.95.0.1}}}
+  - {name: put unknown provider no token, request: {method: PUT, path: /v1/me/providers/bogus, json: {kind: apiKey}, headers: {X-Forwarded-For: 10.95.0.1}}}
+  - {name: delete no token, request: {method: DELETE, path: /v1/me/providers/openai, headers: {X-Forwarded-For: 10.95.0.1}}}
+  - {name: test no token, request: {method: POST, path: /v1/me/providers/openai/test, headers: {X-Forwarded-For: 10.95.0.1}}}
+  - {name: models no token, request: {method: GET, path: /v1/me/providers/openai/models, headers: {X-Forwarded-For: 10.95.0.1}}}
+  - {name: pool list no token, request: {method: GET, path: /v1/me/providers/openai/pool, headers: {X-Forwarded-For: 10.95.0.1}}}
+  - {name: pool add no token, request: {method: POST, path: /v1/me/providers/openai/pool, json: {apiKey: sk-x}, headers: {X-Forwarded-For: 10.95.0.1}}}
+  - {name: pool delete no token, request: {method: DELETE, path: /v1/me/providers/openai/pool/nope, headers: {X-Forwarded-For: 10.95.0.1}}}
+  - {name: preferences get no token, request: {method: GET, path: /v1/me/preferences/llm, headers: {X-Forwarded-For: 10.95.0.1}}}
+  - {name: preferences put no token, request: {method: PUT, path: /v1/me/preferences/llm, json: {mode: managed}, headers: {X-Forwarded-For: 10.95.0.1}}}
+  - {name: connections no token, request: {method: GET, path: /v1/me/connections, headers: {X-Forwarded-For: 10.95.0.1}}}
+  - {name: test-all no token, request: {method: POST, path: /v1/me/connections/test-all, headers: {X-Forwarded-For: 10.95.0.1}}}
+  - {name: events no token, request: {method: GET, path: /v1/me/connections/events, headers: {X-Forwarded-For: 10.95.0.1}}}
+  - {name: list bad token, request: {method: GET, path: /v1/me/providers, headers: {Authorization: "Bearer not.a.jwt", X-Forwarded-For: 10.95.0.2}}}
+  - {name: preferences bad token, request: {method: GET, path: /v1/me/preferences/llm, headers: {Authorization: "Bearer not.a.jwt", X-Forwarded-For: 10.95.0.2}}}
+  - {name: connections bad token, request: {method: GET, path: /v1/me/connections, headers: {Authorization: "Bearer not.a.jwt", X-Forwarded-For: 10.95.0.2}}}
+  - name: nothing was written
+    as: mp_hal
+    request: {method: GET, path: /v1/me/connections/events}
+    snapshot: [parity_mp_credentials, parity_mp_pool_keys, parity_mp_preferences, parity_mp_events]

@@ -1,0 +1,27 @@
+# The success paths of POST /{provider}/test and GET /{provider}/models, with each
+# credential's base URL on the LLM stub. A passing test stamps verified_at and
+# clears the failure. The tool-support probe that follows is detached, so its
+# verdict fields stay out of the snapshot (parity_mp_credentials_verified).
+module: me-providers
+steps:
+  - {name: an openai key on the stub, as: mp_ann, request: {method: PUT, path: /v1/me/providers/openai, json: {kind: apiKey, apiKey: sk-parity-stub, baseUrl: "http://llmstub:8080"}}}
+  - name: test passes
+    as: mp_ann
+    request: {method: POST, path: /v1/me/providers/openai/test}
+    snapshot: [parity_mp_credentials_verified]
+  - {name: live model list, as: mp_ann, request: {method: GET, path: /v1/me/providers/openai/models}}
+
+  - {name: a custom endpoint on the stub, as: mp_ann, request: {method: PUT, path: /v1/me/providers/custom, json: {kind: hostURL, baseUrl: "http://llmstub:8080"}}}
+  - name: custom test reads the model list
+    as: mp_ann
+    request: {method: POST, path: /v1/me/providers/custom/test}
+    snapshot: [parity_mp_credentials_verified]
+  - {name: custom models, as: mp_ann, request: {method: GET, path: /v1/me/providers/custom/models}}
+
+  - {name: an ollama host on the stub, as: mp_ann, request: {method: PUT, path: /v1/me/providers/ollama, json: {kind: hostURL, baseUrl: "http://llmstub:8080"}}}
+  - {name: ollama test, as: mp_ann, request: {method: POST, path: /v1/me/providers/ollama/test}}
+  - {name: ollama tags, as: mp_ann, request: {method: GET, path: /v1/me/providers/ollama/models}}
+  - name: connections after the tests
+    as: mp_ann
+    request: {method: GET, path: /v1/me/connections}
+    snapshot: [parity_mp_credentials_verified]

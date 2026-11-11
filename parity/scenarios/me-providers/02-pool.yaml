@@ -1,0 +1,43 @@
+# The round-robin key pool: GET, POST and DELETE /v1/me/providers/{provider}/pool.
+# A pool key needs no primary credential row. hal checks another tenant's keys
+# stay out of reach.
+module: me-providers
+steps:
+  - {name: empty pool, as: mp_ben, request: {method: GET, path: /v1/me/providers/openRouter/pool}}
+  - name: add a key with a label
+    as: mp_ben
+    request: {method: POST, path: /v1/me/providers/openRouter/pool, json: {apiKey: sk-or-pool-1, label: First}}
+    capture: {first: $.id}
+    snapshot: [parity_mp_pool_keys]
+  - name: add a key without a label
+    as: mp_ben
+    request: {method: POST, path: /v1/me/providers/openRouter/pool, json: {apiKey: sk-or-pool-2}}
+    capture: {second: $.id}
+  - {name: an empty key, as: mp_ben, request: {method: POST, path: /v1/me/providers/openRouter/pool, json: {apiKey: ""}}}
+  - {name: missing key, as: mp_ben, request: {method: POST, path: /v1/me/providers/openRouter/pool, json: {label: x}}}
+  - {name: null key, as: mp_ben, request: {method: POST, path: /v1/me/providers/openRouter/pool, json: {apiKey: null}}}
+  - {name: key of the wrong type, as: mp_ben, request: {method: POST, path: /v1/me/providers/openRouter/pool, json: {apiKey: [1]}}}
+  - {name: label of the wrong type, as: mp_ben, request: {method: POST, path: /v1/me/providers/openRouter/pool, json: {apiKey: k, label: 7}}}
+  - {name: malformed json, as: mp_ben, request: {method: POST, path: /v1/me/providers/openRouter/pool, raw: "{"}}
+  - {name: array body, as: mp_ben, request: {method: POST, path: /v1/me/providers/openRouter/pool, raw: "[]"}}
+  - {name: unknown provider, as: mp_ben, request: {method: POST, path: /v1/me/providers/groq/pool, json: {apiKey: k}}}
+  - {name: listed oldest first, as: mp_ben, request: {method: GET, path: /v1/me/providers/openRouter/pool}}
+  - {name: another provider's pool is separate, as: mp_ben, request: {method: GET, path: /v1/me/providers/openai/pool}}
+
+  - {name: another tenant sees none of them, as: mp_hal, request: {method: GET, path: /v1/me/providers/openRouter/pool}}
+  - name: another tenant's delete is a silent no-op
+    as: mp_hal
+    request: {method: DELETE, path: "/v1/me/providers/openRouter/pool/{{first}}"}
+    snapshot: [parity_mp_pool_keys]
+
+  - {name: bad key id, as: mp_ben, request: {method: DELETE, path: /v1/me/providers/openRouter/pool/nope}}
+  - {name: unknown provider beats a bad key id, as: mp_ben, request: {method: DELETE, path: /v1/me/providers/nope/pool/nope}}
+  - {name: wrong provider for the key is a no-op, as: mp_ben, request: {method: DELETE, path: "/v1/me/providers/openai/pool/{{first}}"}}
+  - name: delete the first key
+    as: mp_ben
+    request: {method: DELETE, path: "/v1/me/providers/openRouter/pool/{{first}}"}
+    snapshot: [parity_mp_pool_keys]
+  - {name: delete it again, as: mp_ben, request: {method: DELETE, path: "/v1/me/providers/openRouter/pool/{{first}}"}}
+  - {name: lowercase key id parses, as: mp_ben, request: {method: DELETE, path: /v1/me/providers/openRouter/pool/00000000-0000-4000-8000-0000000000ff}}
+  - {name: one key left, as: mp_ben, request: {method: GET, path: /v1/me/providers/openRouter/pool}}
+  - {name: the credential list does not count pool keys, as: mp_ben, request: {method: GET, path: /v1/me/providers}}
