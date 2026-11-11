@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"lumina/internal/chunkindex"
 	"lumina/internal/dbtest"
+	"lumina/internal/devicetools"
 	"lumina/internal/embedding"
 	"lumina/internal/memorystore"
 	"lumina/internal/migrations"
 	"lumina/internal/modules/apple"
+	"lumina/internal/modules/mcp"
 	"lumina/internal/modules/reminders"
 	"lumina/internal/soul"
 	"lumina/internal/swiftstr"
@@ -39,22 +41,31 @@ func newRig(t *testing.T) rig {
 	pool := dbtest.Postgres(t)
 	require.NoError(t, migrations.Up(context.Background(), pool, migrations.SQL()))
 	paths := vaultpaths.Paths{Root: t.TempDir()}
+	return rig{t: t, pool: pool, paths: paths, deps: Deps{
+		Pool:      pool,
+		Access:    vaultaccess.New(pool),
+		MCP:       mcpService(t, pool, paths, embedding.Deterministic{}),
+		Store:     NewStore(pool),
+		Reminders: reminders.NewStore(pool),
+		Consent:   apple.NewConsentReader(pool),
+	}}
+}
+
+// mcpService is the /v1/mcp tool runner the vault tools go through. Its own
+// personal tools have no broker: the runner must never reach them.
+func mcpService(t *testing.T, pool *pgxpool.Pool, paths vaultpaths.Paths, embeddings embedding.Service) *mcp.Service {
 	memories := memorystore.New(pool, nil)
 	chunks := chunkindex.NewChunkRepository(pool)
-	embeddings := embedding.Deterministic{}
-	return rig{t: t, pool: pool, paths: paths, deps: Deps{
-		Pool:       pool,
-		Access:     vaultaccess.New(pool),
-		Memories:   memories,
+	return mcp.NewService(mcp.ServiceDeps{
+		Pool: pool, Paths: paths,
+		Links:      chunkindex.NewLinkRepository(pool),
 		Hybrid:     chunkindex.NewHybrid(memories, chunks),
-		Indexer:    chunkindex.NewIndexer(chunks, embeddings, chunkindex.NewLinkRepository(pool)),
 		Embeddings: embeddings,
+		Indexer:    chunkindex.NewIndexer(chunks, embeddings, chunkindex.NewLinkRepository(pool)),
+		Memories:   memories,
+		Personal:   devicetools.New(pool, nil, nil),
 		Soul:       soul.New(paths, t.TempDir()),
-		Paths:      paths,
-		Store:      NewStore(pool),
-		Reminders:  reminders.NewStore(pool),
-		Consent:    apple.NewConsentReader(pool),
-	}}
+	})
 }
 
 func (g rig) exec(sql string, args ...any) {
@@ -160,20 +171,26 @@ func TestRecentReadsTheSharedVaultNotTheViewersOwn(t *testing.T) {
 	require.NotContains(t, result.ModelContent, "private-diary")
 }
 
-func TestBrowseFiltersByPrefixInPathOrder(t *testing.T) {
+func TestBrowseListsTheTurnVaultInPathOrder(t *testing.T) {
 	g := newRig(t)
-	me := g.user()
+	owner, viewer := g.user(), g.user()
+	vault := g.sharedVault(owner, viewer, "viewer")
 	for _, p := range []string{"notes/b.md", "notes/a.md", "other/c.md"} {
-		g.file(me, p, time.Now())
+		g.file(vault, p, time.Now())
 	}
+	g.file(viewer, "mine/d.md", time.Now())
 
-	result := g.runner(me, me).Run(context.Background(), "browse", map[string]any{"pathPrefix": "notes/"})
+	// pathPrefix is not exercised: mcp's range compares in the database's
+	// collation, as Swift's does, and under en_US.utf8 it matches nothing
+	// (ruling 75, report Task 8R).
+	result := g.runner(viewer, vault).Run(context.Background(), "browse", map[string]any{"limit": 2.0})
 
 	out := decodeObject(t, result.ModelContent)
 	require.EqualValues(t, 2, out["count"])
 	docs := out["documents"].([]any)
 	require.Equal(t, "notes/a.md", docs[0].(map[string]any)["path"])
 	require.Equal(t, "notes/b.md", docs[1].(map[string]any)["path"])
+	require.NotContains(t, result.ModelContent, "mine/d.md")
 }
 
 func TestReadReturnsTheFileAndReportsTruncation(t *testing.T) {
@@ -189,14 +206,14 @@ func TestReadReturnsTheFileAndReportsTruncation(t *testing.T) {
 	require.Equal(t, false, full["truncated"])
 	require.EqualValues(t, 11, full["totalChars"])
 
-	cut := decodeObject(t, r.Run(context.Background(), "read", map[string]any{"path": "./notes/a.md", "maxChars": 2}).ModelContent)
+	cut := decodeObject(t, r.Run(context.Background(), "read", map[string]any{"path": "./notes/a.md", "maxChars": 2.9}).ModelContent)
 	require.Equal(t, "hé", cut["content"])
 	require.Equal(t, true, cut["truncated"])
 
 	missing := decodeObject(t, r.Run(context.Background(), "read", map[string]any{"path": "nope.md"}).ModelContent)
 	require.Equal(t, true, missing["isError"])
 
-	tooMany := r.Run(context.Background(), "read", map[string]any{"path": "notes/a.md", "maxChars": 100001})
+	tooMany := r.Run(context.Background(), "read", map[string]any{"path": "notes/a.md", "maxChars": 100001.0})
 	require.Equal(t, "The tool did not run: maxChars must be between 1 and 100000; got 100001", tooMany.ModelContent)
 }
 
@@ -204,7 +221,7 @@ func TestUnknownArgumentIsRefused(t *testing.T) {
 	g := newRig(t)
 	me := g.user()
 
-	result := g.runner(me, me).Run(context.Background(), "search", map[string]any{"query": "x", "zzz": 1, "bbb": 2})
+	result := g.runner(me, me).Run(context.Background(), "search", map[string]any{"query": "x", "zzz": 1.0, "bbb": 2.0})
 
 	require.Nil(t, result.Action)
 	require.Equal(t, "The tool did not run: it has no argument named 'bbb'.", result.ModelContent)
@@ -215,13 +232,13 @@ func TestSearchWithEmptyQueryIsRefused(t *testing.T) {
 	me := g.user()
 	r := g.runner(me, me)
 
-	for _, args := range []map[string]any{{"query": "   "}, {}, {"query": 3}} {
+	for _, args := range []map[string]any{{"query": "   "}, {}, {"query": 3.0}} {
 		result := r.Run(context.Background(), "search", args)
 		require.Equal(t, "The tool did not run: query is required and must be a non-empty string", result.ModelContent, "%v", args)
 	}
 	long := r.Run(context.Background(), "search", map[string]any{"query": strings.Repeat("q", 1001)})
 	require.Equal(t, "The tool did not run: query must be at most 1000 characters", long.ModelContent)
-	badLimit := r.Run(context.Background(), "search", map[string]any{"query": "q", "limit": 51})
+	badLimit := r.Run(context.Background(), "search", map[string]any{"query": "q", "limit": 51.0})
 	require.Equal(t, "The tool did not run: limit must be between 1 and 50; got 51", badLimit.ModelContent)
 	badSpace := r.Run(context.Background(), "search", map[string]any{"query": "q", "space": "work"})
 	require.Equal(t, "The tool did not run: unknown space 'work'. Known spaces: none, or inbox", badSpace.ModelContent)
@@ -409,7 +426,7 @@ func TestOpenScreenRejectsUnknown(t *testing.T) {
 	me := g.user()
 	r := g.runner(me, me)
 
-	for _, args := range []map[string]any{{"screen": "unknown"}, {"screen": "nowhere"}, {}, {"screen": 3}} {
+	for _, args := range []map[string]any{{"screen": "unknown"}, {"screen": "nowhere"}, {}, {"screen": 3.0}} {
 		result := r.Run(context.Background(), "open_screen", args)
 		require.Nil(t, result.Action, "%v", args)
 		require.Equal(t, "The tool did not run: screen must be one of the listed screens.", result.ModelContent)
@@ -471,7 +488,7 @@ func TestAHungToolIsCutOffByTheRunnersOwnTimeout(t *testing.T) {
 	g := newRig(t)
 	me := g.user()
 	deps := g.deps
-	deps.Embeddings = hangingEmbeddings{}
+	deps.MCP = mcpService(t, g.pool, g.paths, hangingEmbeddings{})
 	r := NewRunner(deps, me, me, "qa-user", nil, nil, nil)
 	r.timeout = 100 * time.Millisecond
 
@@ -493,4 +510,22 @@ func TestShortenedStripsControlAndFormatCharacters(t *testing.T) {
 	require.Equal(t, strings.Repeat("x", 80), Shortened(strings.Repeat("x", 80), 80))
 	// Characters, not bytes or scalars.
 	require.Equal(t, strings.Repeat("é", 80), Shortened(strings.Repeat("é", 80), 80))
+}
+
+func TestAZeroValueRunnerAnswersInsteadOfPanicking(t *testing.T) {
+	var r Runner
+
+	require.Equal(t, toolFailed, r.Run(context.Background(), "search", map[string]any{"query": "x"}).ModelContent)
+	require.Equal(t, toolFailed, r.Run(context.Background(), "memory_save", map[string]any{"content": "x"}).ModelContent)
+	require.Equal(t, toolFailed, r.Run(context.Background(), "app_reminders_list", map[string]any{}).ModelContent)
+	require.Equal(t, toolFailed, r.Run(context.Background(), "health_query", map[string]any{}).ModelContent)
+	require.Equal(t, toolFailed, r.Run(context.Background(), "app_reminder_create",
+		map[string]any{"title": "x", "fireAt": time.Now().Add(time.Hour).UTC().Format(time.RFC3339)}).ModelContent)
+	result, err := r.propose(context.Background(), "memory_forget", uuid.New(), map[string]any{}, "card")
+	require.NoError(t, err)
+	require.Nil(t, result.Action)
+	// The zero timeout is the default, not an instant deadline, and the turn
+	// is counted.
+	require.NotNil(t, r.Run(context.Background(), "open_screen", map[string]any{"screen": "home"}).Action)
+	require.True(t, r.state().PersonalRan())
 }

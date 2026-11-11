@@ -7,17 +7,13 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"lumina/internal/chunkindex"
 	"lumina/internal/devicerpc"
-	"lumina/internal/embedding"
 	"lumina/internal/ids"
-	"lumina/internal/memorystore"
 	"lumina/internal/modules/apple"
+	"lumina/internal/modules/mcp"
 	"lumina/internal/modules/reminders"
-	"lumina/internal/soul"
 	"lumina/internal/swiftstr"
 	"lumina/internal/vaultaccess"
-	"lumina/internal/vaultpaths"
 	"lumina/internal/wire"
 	"math"
 	"net/http"
@@ -59,16 +55,14 @@ const (
 
 // Deps are the services the tools run on, shared by every turn.
 type Deps struct {
-	Pool       *pgxpool.Pool
-	Access     *vaultaccess.Service
-	Memories   *memorystore.Repository
-	Hybrid     *chunkindex.Hybrid
-	Indexer    *chunkindex.Indexer
-	Embeddings embedding.Service
-	Soul       *soul.Service
-	Paths      vaultpaths.Paths
-	Reminders  *reminders.Store
-	Consent    *apple.ConsentReader
+	// Pool is where the personal reads (devicetools) run.
+	Pool   *pgxpool.Pool
+	Access *vaultaccess.Service
+	// MCP runs the vault tools' bodies (Decision 1: one implementation with
+	// /v1/mcp). The runner keeps its own authorisation and caps ahead of it.
+	MCP       *mcp.Service
+	Reminders *reminders.Store
+	Consent   *apple.ConsentReader
 	// Devices reaches the user's phone. Nil until P5 (Decision 3, ruling 61):
 	// calendar_create is not offered, the Apple Reminders mirror is skipped
 	// and a device read answers offline at once.
@@ -155,6 +149,7 @@ type Runner struct {
 	Now            func() time.Time
 	Log            *slog.Logger
 	turn           *TurnState
+	once           sync.Once
 	timeout        time.Duration
 }
 
@@ -184,11 +179,16 @@ func (r *Runner) Run(ctx context.Context, name string, args map[string]any) Tool
 	if unknown := unknownArgument(tool, args); unknown != "" {
 		return modelOnly("The tool did not run: it has no argument named '" + unknown + "'.")
 	}
-	personalRanBefore := r.turn.PersonalRan()
+	turn := r.state()
+	personalRanBefore := turn.PersonalRan()
 	if TouchesPersonalData(name) {
-		r.turn.notePersonal()
+		turn.notePersonal()
 	}
-	ctx, cancel := context.WithTimeout(ctx, r.timeout)
+	timeout := r.timeout
+	if timeout <= 0 {
+		timeout = toolTimeout
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	result, err := r.dispatch(ctx, tool, args, personalRanBefore)
@@ -199,6 +199,9 @@ func (r *Runner) Run(ctx context.Context, name string, args map[string]any) Tool
 	if errors.As(err, &refusal) {
 		return modelOnly("The tool did not run: " + refusal.msg)
 	}
+	if msg, ok := mcp.ToolErrorMessage(err); ok {
+		return modelOnly("The tool did not run: " + msg)
+	}
 	var we *wire.Error
 	if errors.As(err, &we) && we.Status == http.StatusForbidden {
 		return modelOnly(denied)
@@ -207,6 +210,21 @@ func (r *Runner) Run(ctx context.Context, name string, args map[string]any) Tool
 	r.logger().WarnContext(ctx, "quick assistant tool failed",
 		"tool", name, "error_type", fmt.Sprintf("%T", err))
 	return modelOnly(toolFailed)
+}
+
+// errMissingDependency is a Runner built without a service the tool needs. It
+// answers the model like any failure instead of panicking.
+var errMissingDependency = errors.New("quick assistant runner is missing a dependency")
+
+// state is the turn's state, made on first use so a Runner built without
+// NewRunner still counts its turn.
+func (r *Runner) state() *TurnState {
+	r.once.Do(func() {
+		if r.turn == nil {
+			r.turn = &TurnState{}
+		}
+	})
+	return r.turn
 }
 
 func (r *Runner) dispatch(ctx context.Context, tool Tool, args map[string]any, personalRanBefore bool) (ToolResult, error) {
@@ -226,15 +244,28 @@ func (r *Runner) dispatch(ctx context.Context, tool Tool, args map[string]any, p
 	if tool.Personal {
 		return r.personal(ctx, tool.Name, args)
 	}
-	access, err := r.Access.ResolveVault(ctx, r.Actor, r.Vault, vaultaccess.Read)
+	vault, err := r.resolveVault(ctx, vaultaccess.Read)
 	if err != nil {
 		return ToolResult{}, err
 	}
-	out, err := r.vaultTool(ctx, tool.Name, args, access.VaultID)
+	out, err := r.MCP.CallAsSession(ctx, tool.Name, args, vault, r.Actor)
 	if err != nil {
 		return ToolResult{}, err
 	}
 	return jsonResult(out)
+}
+
+// resolveVault is the turn's vault for the actor with perm, checked on every
+// call (Decision 2). It also checks the vault tools' services are wired.
+func (r *Runner) resolveVault(ctx context.Context, perm vaultaccess.Permission) (uuid.UUID, error) {
+	if r.Access == nil || r.MCP == nil {
+		return uuid.Nil, errMissingDependency
+	}
+	access, err := r.Access.ResolveVault(ctx, r.Actor, r.Vault, perm)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	return access.VaultID, nil
 }
 
 // definition is the offered tool with that name. calendar_create is offered
@@ -277,11 +308,10 @@ func unknownArgument(tool Tool, args map[string]any) string {
 // MARK: - memory_save
 
 func (r *Runner) saveMemory(ctx context.Context, args map[string]any, personalRanBefore bool) (ToolResult, error) {
-	access, err := r.Access.ResolveVault(ctx, r.Actor, r.Vault, vaultaccess.Write)
+	vault, err := r.resolveVault(ctx, vaultaccess.Write)
 	if err != nil {
 		return ToolResult{}, err
 	}
-	vault := access.VaultID
 	// A save in a shared vault is retrievable by its co-members, and this turn
 	// has read the caller's private data (ruling 18). The caller's own vault
 	// is theirs alone, so it stays allowed.
@@ -294,15 +324,16 @@ func (r *Runner) saveMemory(ctx context.Context, args map[string]any, personalRa
 	if vault != r.Actor {
 		return modelOnly(sharedVaultUnavailable), nil
 	}
-	if r.turn.Writes() >= maxWritesPerTurn {
+	if r.state().Writes() >= maxWritesPerTurn {
 		// Swift throws Refusal(message: tooManyWrites), so the model reads the
 		// prefix twice; kept verbatim.
 		return ToolResult{}, refuse(tooManyWrites)
 	}
-	out, duplicate, err := r.runMemorySave(ctx, args, vault)
+	out, err := r.MCP.CallAsSession(ctx, "memory_save", args, vault, r.Actor)
 	if err != nil {
 		return ToolResult{}, err
 	}
+	duplicate, _ := out["duplicate"].(bool)
 	content, err := jsonResult(out)
 	if err != nil {
 		return ToolResult{}, err
@@ -311,7 +342,7 @@ func (r *Runner) saveMemory(ctx context.Context, args map[string]any, personalRa
 	if duplicate {
 		return content, nil
 	}
-	r.turn.noteWrite()
+	r.state().noteWrite()
 	text := swiftstr.TrimWhitespacesAndNewlines(stringArg(args, "content"))
 	content.Action = &Action{
 		ID: wire.UUID{UUID: uuid.New()}, Kind: KindDone,
@@ -386,7 +417,10 @@ func (r *Runner) propose(ctx context.Context, tool string, vault uuid.UUID, args
 	if r.ConversationID == nil {
 		return modelOnly(noConversation), nil
 	}
-	if r.turn.Proposals() >= maxConfirmCardsPerTurn {
+	if r.Store == nil {
+		return ToolResult{}, errMissingDependency
+	}
+	if r.state().Proposals() >= maxConfirmCardsPerTurn {
 		return modelOnly(tooManyCards), nil
 	}
 	// Housekeeping only: a sweep that fails must not cost the user the card.
@@ -401,7 +435,7 @@ func (r *Runner) propose(ctx context.Context, tool string, vault uuid.UUID, args
 	}); err != nil {
 		return ToolResult{}, err
 	}
-	r.turn.noteProposal()
+	r.state().noteProposal()
 	return ToolResult{
 		ModelContent: proposalPending,
 		Action: &Action{
@@ -489,18 +523,21 @@ func stringArg(args map[string]any, key string) string {
 // intArg is JSONValue.intValue: a number truncated toward zero, or false when
 // the value is missing or not a number.
 func intArg(args map[string]any, key string) (int, bool) {
-	var f float64
-	switch v := args[key].(type) {
-	case float64:
-		f = v
-	case int:
-		f = float64(v)
-	default:
+	f, ok := args[key].(float64)
+	if !ok || math.IsNaN(f) {
 		return 0, false
 	}
 	// Out of any limit's range either way; clamped so the conversion is defined.
 	f = math.Trunc(math.Max(math.Min(f, 1e15), -1e15))
 	return int(f), true
+}
+
+// intArgPtr is intArg as an optional.
+func intArgPtr(args map[string]any, key string) *int {
+	if n, ok := intArg(args, key); ok {
+		return &n
+	}
+	return nil
 }
 
 func (r *Runner) now() time.Time {

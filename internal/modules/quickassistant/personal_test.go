@@ -278,7 +278,7 @@ func TestInvalidFireAtIsRejected(t *testing.T) {
 	me := g.user()
 	r := g.runner(me, me)
 
-	for _, fireAt := range []any{"soon", "2030-01-01", "2030-01-01T09:00:00", "2001-01-01T09:00:00Z", "2030-01-01T09:00:00+0100", 1893499200, nil} {
+	for _, fireAt := range []any{"soon", "2030-01-01", "2030-01-01T09:00:00", "2001-01-01T09:00:00Z", "2030-01-01T09:00:00+0100", 1893499200.0, nil} {
 		result := r.Run(context.Background(), "app_reminder_create", map[string]any{"title": "Call mum", "fireAt": fireAt})
 		require.Nil(t, result.Action, "%v", fireAt)
 		require.True(t, strings.HasPrefix(result.ModelContent, "The tool did not run"), "%v: %s", fireAt, result.ModelContent)
@@ -320,7 +320,7 @@ func TestTitleAndBodyLimitsHoldAtTheBoundary(t *testing.T) {
 	longBody := r.Run(context.Background(), "app_reminder_create", args(1, 2001))
 	require.Nil(t, longBody.Action)
 	require.Equal(t, "The tool did not run: body must be at most 2000 characters.", longBody.ModelContent)
-	notText := r.Run(context.Background(), "app_reminder_create", map[string]any{"title": "x", "fireAt": inAnHour().UTC().Format(time.RFC3339), "body": 3})
+	notText := r.Run(context.Background(), "app_reminder_create", map[string]any{"title": "x", "fireAt": inAnHour().UTC().Format(time.RFC3339), "body": 3.0})
 	require.Equal(t, "The tool did not run: body must be a string.", notText.ModelContent)
 	require.Empty(t, g.reminders(me))
 
@@ -462,7 +462,7 @@ func TestHealthDaysAreClamped(t *testing.T) {
 	g.allow(me, "health", false)
 	r := g.runner(me, me)
 
-	for days, want := range map[any]string{0: "1", 1000: "365", 7: "7", "x": "30"} {
+	for days, want := range map[any]string{0.0: "1", 1000.0: "365", 7.9: "7", "x": "30"} {
 		out := decodeObject(t, r.Run(context.Background(), "health_query", map[string]any{"days": days}).ModelContent)
 		require.Equal(t, want, out["days"], "%v", days)
 	}
@@ -508,7 +508,7 @@ func TestCalendarCacheMissAsksTheDevice(t *testing.T) {
 	g.allow(me, "calendar", false)
 	phone := &fakePhone{payload: map[string]string{"items": `[{"title":"Dentist"}]`}}
 
-	out := decodeObject(t, g.phoneRunner(me, me, phone, nil).Run(context.Background(), "calendar_query", map[string]any{"days": 3}).ModelContent)
+	out := decodeObject(t, g.phoneRunner(me, me, phone, nil).Run(context.Background(), "calendar_query", map[string]any{"days": 3.0}).ModelContent)
 
 	require.Equal(t, map[string]any{"status": "ok", "items": `[{"title":"Dentist"}]`}, out)
 	sent := phone.sent()
