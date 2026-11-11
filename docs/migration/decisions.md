@@ -680,3 +680,16 @@ the cutover log)
 - 5H: spec follows Swift (`/runs` limit default 50, `curator/runs` body optional).
 - J1: Swift's leak-report flag name is checked against the D-keys rule before it is switched off.
 - Wave 6 prep: Go keeps `service.instance.id = hostname`.
+
+## D-security-after-archive: the security and data fixes wait until Swift is archived
+
+Later on 2026-11-11 the owner deferred items 5–9 above and the `skills_state` fix: "You can do the security-fixes once
+the full port to Go is made, API live on Infra and the Vapor project is archived. For now focus on 5C and then full
+port."
+
+- Until the A gate passes, Go keeps Swift's behaviour for SSRF (including BYOK base URLs), the vaultfiles path
+  weaknesses, snapshot restore paths, storage quota, the memory graph disclosure, share-sheet deletion and
+  `skills_state`. Ports keep pinning these with `TestSwiftWeakness*` style tests.
+- `FixDashboard` stays off for the same reason: it is a deliberate difference, not a port.
+- Order now: 5C chat first, then the rest of the port.
+- The other answers above stand.
