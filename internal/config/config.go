@@ -35,6 +35,9 @@ type Config struct {
 	LogLevel        string `env:"LOG_LEVEL" envDefault:"info"`
 
 	RedisURL string `env:"REDIS_URL"`
+	// RateLimitStorageKind is rateLimit.storageKind: "redis" or anything else for
+	// memory. Go implements memory only (P10).
+	RateLimitStorageKind string `env:"RATE_LIMIT_STORAGE_KIND"`
 
 	// Wave 2 apple/devices/reminders.
 	APNSBundleID                    string `env:"APNS_BUNDLE_ID"`

@@ -693,3 +693,15 @@ port."
 - `FixDashboard` stays off for the same reason: it is a deliberate difference, not a port.
 - Order now: 5C chat first, then the rest of the port.
 - The other answers above stand.
+
+## D-ratelimit-memory: rate-limit storage stays in memory
+
+On 2026-11-11 the owner confirmed that rate-limit storage stays in memory for now (`RATE_LIMIT_STORAGE_KIND` is
+memory; the P10 question in `wave-6-8-plan.md`).
+
+- Go gets no Valkey driver. `internal/ratelimit.Store` is the only storage. `RATE_LIMIT_STORAGE_KIND=redis` is parsed
+  (Swift's `RateLimitStorageKind`, case-insensitive, anything else memory) and logged as an error at boot, not obeyed.
+- Pairing records, which Swift keeps in the rate-limit driver, therefore live in process memory in 8B too, and are
+  lost on restart like the other in-flight challenges.
+- Swift tests that drive a live Valkey are ported against the memory store where Go has an equivalent. The owner
+  rejects waivers in general.

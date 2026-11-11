@@ -1801,3 +1801,25 @@ Beyond the pilot gate (D-wave2-early):
 - Memories saved over MCP are forgotten within the scenario, so their randomly keyed chunks never reach
   later modules' `memory_chunks` snapshots.
 - Flip: only with the ws bundle.
+
+## P9 minting + P10 auth rate limits (wave 8 prep)
+
+### Landed 2026-11-11 (no route flips)
+
+- `internal/auth`: `MintSession`/`MintAccess` (SessionToken: HS256, active kid header, uppercase `sub`/`jti`,
+  fractional `exp`/`iat` as JWTKit writes them, `hpid` only when given, `scp` only for scoped tokens),
+  `HashPassword`/`VerifyPassword` (bcrypt cost 12, first 72 bytes as Swift's C bcrypt; `$2a$`/`$2b$` verify on both
+  sides), refresh tokens (32 random bytes base64url, `sha256Hex` in `refresh_tokens`, 30 days, rotate = revoke then
+  issue, not transactional, no reuse detection).
+- Legacy single-key config now signs and verifies as kid `lv-default` when `JWT_KID` is unset, as `App+build.swift`.
+  Before, Go used an empty kid and would have refused Swift's legacy tokens. Production uses `JWT_HMAC_SECRETS` or
+  sets `JWT_KID`, since flipped routes already accept Swift tokens, so nothing live changes.
+- Cross-server: the parity harness's `scenario.Mint` is now `auth.MintAccess`, so every authenticated step of every
+  scenario checks that a token Go mints passes Swift's `JWTAuthenticator`. Swift to Go was already covered by
+  `TestGoldenTokenVerifies`. The register/refresh/login/reset cross-server scenario waits for 8A routes.
+- `internal/ratelimit`: the 16 auth policies (`registerByIP` … `emailMagicStartByIPDaily`, `webAuthnEnrolByUser`),
+  flat for every tier; `IPKey` already matched `ipKey` (first `X-Forwarded-For` piece). `RATE_LIMIT_STORAGE_KIND`
+  parsed, memory only (decisions.md D-ratelimit-memory).
+- Swift tests: `JWTKeyLoader` 10, `SessionToken` 3, `JWTAuthenticatorE2E` 7, `PasswordHasher` 2,
+  `RateLimitMiddleware` (auth flat, all names unique), `RateLimitStorageFactory` memory cases,
+  `ValkeyPersistDriverIntegration` on the memory store. `SessionTokenScope` was already ported.
