@@ -1,0 +1,23 @@
+# Platform funded: a floor of trial, and no bring-your-own exemption.
+module: tts
+steps:
+  - name: "no token"
+    request: {"method": "POST", "path": "/v1/tts", "json": {"text": ""}, "headers": {"X-Forwarded-For": "10.77.0.22"}}
+  - name: "tts vb_free"
+    as: vb_free
+    request: {"method": "POST", "path": "/v1/tts", "json": {"text": ""}}
+  - name: "tts vb_lapsed"
+    as: vb_lapsed
+    request: {"method": "POST", "path": "/v1/tts", "json": {"text": ""}}
+  - name: "tts vb_arch"
+    as: vb_arch
+    request: {"method": "POST", "path": "/v1/tts", "json": {"text": ""}}
+  - name: "tts vb_trial"
+    as: vb_trial
+    request: {"method": "POST", "path": "/v1/tts", "json": {"text": ""}}
+  - name: "tts vb_pro"
+    as: vb_pro
+    request: {"method": "POST", "path": "/v1/tts", "json": {"text": ""}}
+  - name: "tts vb_over"
+    as: vb_over
+    request: {"method": "POST", "path": "/v1/tts", "json": {"text": ""}}

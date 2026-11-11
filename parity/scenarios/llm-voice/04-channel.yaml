@@ -1,0 +1,35 @@
+# X-Lumina-Channel only reaches the usage row. Absent on /v1/transcribe is app; on /v1/audio, unknown.
+module: llm-voice
+steps:
+  - name: "absent on transcribe"
+    as: vo_chan
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "audio/wav"}}
+  - name: "telegram"
+    as: vo_chan
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "audio/wav", "X-Lumina-Channel": "telegram"}}
+  - name: "case"
+    as: vo_chan
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "audio/wav", "X-Lumina-Channel": "WhatsApp_Cloud"}}
+  - name: "truncates at the first bad character"
+    as: vo_chan
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "audio/wav", "X-Lumina-Channel": "telegram; DROP TABLE usage_events--"}}
+  - name: "empty"
+    as: vo_chan
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "audio/wav", "X-Lumina-Channel": ""}}
+  - name: "nothing usable"
+    as: vo_chan
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "audio/wav", "X-Lumina-Channel": "!!!"}}
+  - name: "capped at 32"
+    as: vo_chan
+    request: {"method": "POST", "path": "/v1/transcribe", "base64": "UklGRiQAAABXQVZF", "headers": {"Content-Type": "audio/wav", "X-Lumina-Channel": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}
+    snapshot: ["parity_voice_usage"]
+  - name: "absent on audio"
+    as: vo_chan2
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.ogg\"\r\nContent-Type: audio/ogg\r\n\r\nOggS\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz"}}
+  - name: "telegram on audio"
+    as: vo_chan2
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.ogg\"\r\nContent-Type: audio/ogg\r\n\r\nOggS\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz", "X-Lumina-Channel": "telegram"}}
+  - name: "an unknown platform on audio"
+    as: vo_chan2
+    request: {"method": "POST", "path": "/v1/audio/transcriptions", "raw": "--zz\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.ogg\"\r\nContent-Type: audio/ogg\r\n\r\nOggS\r\n--zz--\r\n", "headers": {"Content-Type": "multipart/form-data; boundary=zz", "X-Lumina-Channel": "somepluginplatform"}}
+    snapshot: ["parity_voice_usage"]

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -38,6 +39,9 @@ const audioDirectiveWindow = 4096
 //	POST /v1/audio/transcriptions   Whisper. Multipart file and model; {"text"}, or
 //	                                the verbose shape on response_format=verbose_json.
 //	                                A directive in the first bytes of the audio works
+//	POST /v1/audio/speech           OpenAI's speech shape. The audio is a digest of the
+//	                                request, so a different one shows up as other bytes.
+//	                                A directive in the input works
 //	POST /api/chat                  Ollama, NDJSON unless stream is false
 //	GET  /api/tags                  Ollama's model list
 //
@@ -47,6 +51,7 @@ const audioDirectiveWindow = 4096
 // /v1/embeddings isn't here because parity runs the deterministic provider.
 func (s *stub) mountProviders(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/audio/transcriptions", s.transcribe)
+	mux.HandleFunc("POST /v1/audio/speech", s.speech)
 	mux.HandleFunc("POST /api/chat", s.ollamaChat)
 	mux.HandleFunc("GET /api/tags", func(w http.ResponseWriter, _ *http.Request) {
 		s.count("/api/tags")
@@ -56,6 +61,33 @@ func (s *stub) mountProviders(mux *http.ServeMux) {
 
 func openAIError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, map[string]any{"error": map[string]any{"message": message, "type": "invalid_request_error"}})
+}
+
+// speech answers what a server sends for /v1/tts. It ignores Authorization: Swift sends
+// a key and Go, which only talks to a self-hosted service, doesn't.
+func (s *stub) speech(w http.ResponseWriter, r *http.Request) {
+	s.count("/v1/audio/speech")
+	var body struct {
+		Model          string `json:"model"`
+		Input          string `json:"input"`
+		Voice          string `json:"voice"`
+		ResponseFormat string `json:"response_format"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, maxAudioBytes)).Decode(&body); err != nil {
+		openAIError(w, http.StatusBadRequest, "bad JSON")
+		return
+	}
+	if body.Model == "" || body.Input == "" || body.Voice == "" {
+		openAIError(w, http.StatusBadRequest, "model, input and voice are required")
+		return
+	}
+	if a := decide([]message{userMessage(body.Input)}); a.errorCode != 0 {
+		openAIError(w, a.errorCode, "stub error")
+		return
+	}
+	sum := sha256.Sum256([]byte(strings.Join([]string{body.Model, body.Input, body.Voice, body.ResponseFormat}, "\x00")))
+	w.Header().Set("Content-Type", "audio/mpeg")
+	_, _ = w.Write(append([]byte("ID3"), sum[:]...))
 }
 
 // transcribe reads the form as a stream, so it needs no temporary files.
