@@ -1,6 +1,6 @@
 # Parity-only stub feed aggregator (see main.go). Built from the repo root:
 # docker-compose.parity.yml `feeds` service.
-FROM golang:1.27.3 AS build
+FROM golang:1.27.4 AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 COPY parity/stubs/feeds ./parity/stubs/feeds
