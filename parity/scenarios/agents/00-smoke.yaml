@@ -1,0 +1,17 @@
+# G2 smoke: a fresh account has no conversations, no rooms and no BYO Hermes, so
+# nothing here reaches an agent. agents_kim stands for that user: no seed ids, no
+# provider, no second user.
+module: agents
+smoke: true
+steps:
+  - {name: instances no token, request: {method: GET, path: /v1/agents/instances, headers: {X-Forwarded-For: "10.97.0.1"}}}
+  - {name: rooms bad token, request: {method: GET, path: /v1/agents/rooms, headers: {Authorization: "Bearer not.a.jwt", X-Forwarded-For: "10.97.0.2"}}}
+  - {name: instances, as: agents_kim, request: {method: GET, path: /v1/agents/instances}}
+  - {name: sessions, as: agents_kim, request: {method: GET, path: /v1/agents/sessions}}
+  - {name: live sessions, as: agents_kim, request: {method: GET, path: "/v1/agents/sessions?live=true&limit=5"}}
+  - {name: unknown instance, as: agents_kim, request: {method: GET, path: "/v1/agents/sessions?instance=nope"}}
+  - {name: candidates, as: agents_kim, request: {method: GET, path: /v1/agents/room-candidates}}
+  - {name: rooms, as: agents_kim, request: {method: GET, path: /v1/agents/rooms}}
+  - {name: no such room, as: agents_kim, request: {method: GET, path: /v1/agents/rooms/A9E7A000-0000-4000-8000-00000000DEAD}}
+  - {name: no such session, as: agents_kim, request: {method: GET, path: /v1/agents/instances/central/sessions/A9E7C000-0000-4000-8000-00000000DEAD/messages}}
+  - {name: no own hermes, as: agents_kim, request: {method: GET, path: /v1/agents/instances/byo/sessions/s1/messages}}

@@ -1,0 +1,40 @@
+# A room's life: seat the caller's personas, read it, stop it, delete it. Another user
+# can't seat those personas, open, post to, stop or delete the room.
+module: agents
+steps:
+  - {name: candidates, as: agents_cy, request: {method: GET, path: /v1/agents/room-candidates}}
+  - name: create
+    as: agents_cy
+    request:
+      method: POST
+      path: /v1/agents/rooms
+      json:
+        title: "  Trip planning \n"
+        members:
+          - {instanceID: central, profile: default, respondMode: every_human_message}
+          - {instanceID: central, profile: stocks, handle: "  Stox ", displayName: "  Market watcher  "}
+    capture: {room: $.room.id}
+    snapshot: [agent_rooms, agent_room_members]
+  - {name: detail, as: agents_cy, request: {method: GET, path: "/v1/agents/rooms/{{room}}"}}
+  - {name: list, as: agents_cy, request: {method: GET, path: /v1/agents/rooms}}
+  - {name: other user can't seat them, as: agents_ben, request: {method: POST, path: /v1/agents/rooms, json: {title: x, members: [{instanceID: central, profile: stocks}]}}}
+  - {name: other user can't open it, as: agents_ben, request: {method: GET, path: "/v1/agents/rooms/{{room}}"}}
+  - {name: other user can't post, as: agents_ben, request: {method: POST, path: "/v1/agents/rooms/{{room}}/messages", json: {body: hi}}}
+  - {name: other user can't stop it, as: agents_ben, request: {method: POST, path: "/v1/agents/rooms/{{room}}/stop"}}
+  - {name: other user can't delete it, as: agents_ben, request: {method: DELETE, path: "/v1/agents/rooms/{{room}}"}}
+  - {name: other user's list, as: agents_ben, request: {method: GET, path: /v1/agents/rooms}, snapshot: [agent_rooms]}
+  - {name: stop, as: agents_cy, request: {method: POST, path: "/v1/agents/rooms/{{room}}/stop"}, snapshot: [agent_rooms]}
+  - {name: blank post, as: agents_cy, request: {method: POST, path: "/v1/agents/rooms/{{room}}/messages", json: {body: "  \n "}}}
+  - {name: post not json, as: agents_cy, request: {method: POST, path: "/v1/agents/rooms/{{room}}/messages", raw: "body=hi"}}
+  - {name: post without body, as: agents_cy, request: {method: POST, path: "/v1/agents/rooms/{{room}}/messages", json: {text: hi}}}
+  - {name: post body null, as: agents_cy, request: {method: POST, path: "/v1/agents/rooms/{{room}}/messages", json: {body: null}}}
+  - {name: post body number, as: agents_cy, request: {method: POST, path: "/v1/agents/rooms/{{room}}/messages", json: {body: 7}}}
+  - {name: stopped room still answers the post, as: agents_cy, request: {method: POST, path: "/v1/agents/rooms/{{room}}/messages", json: {body: "@stox hello"}}, stream: true, frames: 30, framesTimeout: 20s, snapshot: [agent_room_messages]}
+  - {name: detail after, as: agents_cy, request: {method: GET, path: "/v1/agents/rooms/{{room}}"}}
+  - {name: delete, as: agents_cy, request: {method: DELETE, path: "/v1/agents/rooms/{{room}}"}, snapshot: [agent_rooms, agent_room_members, agent_room_messages]}
+  - {name: gone, as: agents_cy, request: {method: GET, path: "/v1/agents/rooms/{{room}}"}}
+  - {name: delete again, as: agents_cy, request: {method: DELETE, path: "/v1/agents/rooms/{{room}}"}}
+  - {name: not a uuid, as: agents_cy, request: {method: GET, path: /v1/agents/rooms/not-a-room}}
+  - {name: stop not a uuid, as: agents_cy, request: {method: POST, path: /v1/agents/rooms/123/stop}}
+  - {name: stop no token, request: {method: POST, path: "/v1/agents/rooms/{{room}}/stop", headers: {X-Forwarded-For: "10.97.0.5"}}}
+  - {name: create no token, request: {method: POST, path: /v1/agents/rooms, json: {title: x}, headers: {X-Forwarded-For: "10.97.0.6"}}}

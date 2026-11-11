@@ -145,6 +145,10 @@ services:
       <<: *common-env
       POSTGRES_DATABASE: parity_swift_switched
       HERMES_GATEWAY_URL: ${SWITCH_HERMES_GATEWAY_URL:-http://127.0.0.1:9}
+      # State "agents": a BYO Hermes on the stub, a private host over plain HTTP. "true"
+      # is what an unset BYO_HERMES_REQUIRE_HTTPS means with LV_ENVIRONMENT=test.
+      BYO_HERMES_ALLOW_PRIVATE: ${SWITCH_BYO_HERMES_ALLOW_PRIVATE:-false}
+      BYO_HERMES_REQUIRE_HTTPS: ${SWITCH_BYO_HERMES_REQUIRE_HTTPS:-true}
       CAPTURE_AUTO_FILE_ENABLED: ${SWITCH_CAPTURE_AUTO_FILE_ENABLED:-false}
       COMMUNITY_ENABLED: ${SWITCH_COMMUNITY_ENABLED:-true}
       COMMUNITY_POSTING_ENABLED: ${SWITCH_COMMUNITY_POSTING_ENABLED:-true}
@@ -171,6 +175,10 @@ services:
       <<: *common-env
       POSTGRES_DATABASE: parity_go_switched
       HERMES_GATEWAY_URL: ${SWITCH_HERMES_GATEWAY_URL:-http://127.0.0.1:9}
+      # State "agents": a BYO Hermes on the stub, a private host over plain HTTP. "true"
+      # is what an unset BYO_HERMES_REQUIRE_HTTPS means with LV_ENVIRONMENT=test.
+      BYO_HERMES_ALLOW_PRIVATE: ${SWITCH_BYO_HERMES_ALLOW_PRIVATE:-false}
+      BYO_HERMES_REQUIRE_HTTPS: ${SWITCH_BYO_HERMES_REQUIRE_HTTPS:-true}
       CAPTURE_AUTO_FILE_ENABLED: ${SWITCH_CAPTURE_AUTO_FILE_ENABLED:-false}
       COMMUNITY_ENABLED: ${SWITCH_COMMUNITY_ENABLED:-true}
       COMMUNITY_POSTING_ENABLED: ${SWITCH_COMMUNITY_POSTING_ENABLED:-true}
