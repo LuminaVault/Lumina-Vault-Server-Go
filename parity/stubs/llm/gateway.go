@@ -22,6 +22,7 @@ const fixedActive = 1700000100.5
 //	POST /api/sessions                                   201, never 409: no state
 //	POST /api/sessions/{id}/chat                         {message, system_message}
 //	POST /v1/responses                                   grok x-search
+//	GET  /v1/skills                                      installed skills (plugins)
 //
 // Grok's chat and vision calls use POST /v1/chat/completions.
 func (s *stub) mountGateway(mux *http.ServeMux) {
@@ -40,6 +41,16 @@ func (s *stub) mountGateway(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/sessions", s.createSession)
 	mux.HandleFunc("POST /api/sessions/{id}/chat", s.sessionChat)
 	mux.HandleFunc("POST /v1/responses", s.responses)
+	// GET /v1/skills is the installed-skills list /v1/plugins/hermes-skills reads (6F).
+	mux.HandleFunc("GET /v1/skills", func(w http.ResponseWriter, _ *http.Request) {
+		s.count("/v1/skills")
+		writeJSON(w, http.StatusOK, map[string]any{"skills": []any{
+			map[string]any{"name": "gif-search", "description": "Find GIFs\nfrom the hub"},
+			"alpha",
+			map[string]any{"id": "zeta-tool"},
+			map[string]any{"name": "gif-search"},
+		}})
+	})
 }
 
 func (s *stub) listSessions(route, profile string) http.HandlerFunc {

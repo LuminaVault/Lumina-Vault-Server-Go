@@ -1,0 +1,21 @@
+# BYO Hermes on the LLM stub (private ranges over HTTP allowed in this state): save,
+# verify, probe capabilities, replace, delete.
+module: settings
+steps:
+  - name: save with a header and a name
+    as: st_bea
+    request: {method: PUT, path: /v1/settings/hermes, json: {baseUrl: "http://llmstub:8080", authHeader: "Bearer parity-byo", name: "  my box  "}}
+    snapshot: [parity_st_hermes]
+  - {name: read back, as: st_bea, request: {method: GET, path: /v1/settings/hermes}}
+  - {name: verify, as: st_bea, request: {method: POST, path: /v1/settings/hermes/test}, snapshot: [parity_st_hermes]}
+  - {name: verified, as: st_bea, request: {method: GET, path: /v1/settings/hermes}}
+  - {name: capabilities probed, as: st_bea, request: {method: GET, path: "/v1/me/hermes/capabilities?refresh=true"}, snapshot: [parity_st_hermes]}
+  - {name: capabilities cached, as: st_bea, request: {method: GET, path: /v1/me/hermes/capabilities}}
+  - {name: refresh not true, as: st_bea, request: {method: GET, path: "/v1/me/hermes/capabilities?refresh=1"}}
+  - {name: replace clears verified, as: st_bea, request: {method: PUT, path: /v1/settings/hermes, json: {baseUrl: "http://llmstub:8080/nowhere"}}, snapshot: [parity_st_hermes]}
+  - {name: verify a missing path, as: st_bea, request: {method: POST, path: /v1/settings/hermes/test}}
+  - {name: unreachable port, as: st_bea, request: {method: PUT, path: /v1/settings/hermes, json: {baseUrl: "http://llmstub:1"}}}
+  - {name: verify unreachable, as: st_bea, request: {method: POST, path: /v1/settings/hermes/test}}
+  - {name: delete, as: st_bea, request: {method: DELETE, path: /v1/settings/hermes}, snapshot: [parity_st_hermes]}
+  - {name: gone, as: st_bea, request: {method: GET, path: /v1/settings/hermes}}
+  - {name: managed again, as: st_bea, request: {method: GET, path: /v1/me/hermes/capabilities}}

@@ -1,0 +1,17 @@
+# GET /v1/auth/me/billing and /v1/auth/me/usage (App+build.swift, UsageMetricsService).
+# Usage's period and generatedAt are the clock; bl_fox's rows are this month's.
+module: billing
+steps:
+  - {name: billing without a bearer, request: {method: GET, path: /v1/auth/me/billing}}
+  - {name: usage without a bearer, request: {method: GET, path: /v1/auth/me/usage}}
+  - {name: paid with an expiry, as: bl_fox, request: {method: GET, path: /v1/auth/me/billing}, ignore: [$.daysRemaining]}
+  - {name: "the effective tier, not the column", as: bl_gus, request: {method: GET, path: /v1/auth/me/billing}}
+  - {name: free with no expiry, as: bl_hal, request: {method: GET, path: /v1/auth/me/billing}}
+  - name: usage totals and days
+    as: bl_fox
+    request: {method: GET, path: /v1/auth/me/usage}
+    ignore: [$.periodStart, $.periodEnd, $.generatedAt, "$.daily[*].day"]
+  - name: usage with nothing recorded
+    as: bl_hal
+    request: {method: GET, path: /v1/auth/me/usage}
+    ignore: [$.periodStart, $.periodEnd, $.generatedAt]

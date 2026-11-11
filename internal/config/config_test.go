@@ -41,6 +41,9 @@ func TestKeyToEnv(t *testing.T) {
 func TestConfigEnvNamesComeFromSwiftKeys(t *testing.T) {
 	known := map[string]bool{
 		"LV_GO_JOBS": true,
+		// Go-only: the lapse archiver's dry run before it replaces Swift's
+		// (wave-6-8-plan.md "Lapse job"; internal/workers/lapse.go).
+		"LV_LAPSE_DRY_RUN": true,
 		// Go-only: /v1/tts's switch, for a self-hosted service (internal/modules/tts).
 		"TTS_BASE_URL": true,
 		// Go-only until wave 6C: the Swift API escalated chat turns start their run on

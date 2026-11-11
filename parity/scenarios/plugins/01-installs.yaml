@@ -1,0 +1,45 @@
+# /v1/plugins in the default state: catalog, install lifecycle, refusals.
+module: plugins
+steps:
+  - {name: no token, request: {method: GET, path: /v1/plugins/catalog}}
+  - {name: catalog, as: pl_amy, request: {method: GET, path: /v1/plugins/catalog}}
+  - {name: connectors, as: pl_amy, request: {method: GET, path: "/v1/plugins/catalog?category=connector"}}
+  - {name: skills only, as: pl_amy, request: {method: GET, path: "/v1/plugins/catalog?category=skill"}}
+  - {name: unknown category is all, as: pl_amy, request: {method: GET, path: "/v1/plugins/catalog?category=nope"}}
+  - {name: featured, as: pl_amy, request: {method: GET, path: "/v1/plugins/catalog?featured=true"}}
+  - {name: not featured, as: pl_amy, request: {method: GET, path: "/v1/plugins/catalog?featured=0"}}
+  - {name: premium, as: pl_amy, request: {method: GET, path: "/v1/plugins/catalog?premium=1&category=memory"}}
+  - {name: no installs, as: pl_amy, request: {method: GET, path: /v1/plugins/installs}}
+  - {name: managed hermes skills, as: pl_amy, request: {method: GET, path: /v1/plugins/hermes-skills}}
+  - {name: unknown plugin, as: pl_amy, request: {method: POST, path: /v1/plugins/installs, json: {pluginSlug: nope, config: {}}}}
+  - {name: missing field, as: pl_amy, request: {method: POST, path: /v1/plugins/installs, json: {pluginSlug: readwise, config: {access_token: "  "}}}}
+  - {name: unknown field, as: pl_amy, request: {method: POST, path: /v1/plugins/installs, json: {pluginSlug: readwise, config: {access_token: t, extra: x}}}}
+  - {name: missing config, as: pl_amy, request: {method: POST, path: /v1/plugins/installs, json: {pluginSlug: readwise}}}
+  - {name: config not strings, as: pl_amy, request: {method: POST, path: /v1/plugins/installs, json: {pluginSlug: readwise, config: {access_token: 1}}}}
+  - {name: premium needs pro, as: pl_amy, request: {method: POST, path: /v1/plugins/installs, json: {pluginSlug: byok-embeddings, config: {access_token: k}}}}
+  - name: install readwise
+    as: pl_amy
+    request: {method: POST, path: /v1/plugins/installs, json: {pluginSlug: readwise, config: {access_token: parity-token}}}
+    capture: {rw: $.id}
+    snapshot: [parity_pl_installs]
+  - {name: install again replaces config, as: pl_amy, request: {method: POST, path: /v1/plugins/installs, json: {pluginSlug: readwise, config: {access_token: other}}}, snapshot: [parity_pl_installs]}
+  - {name: install news ticker without config, as: pl_amy, request: {method: POST, path: /v1/plugins/installs, json: {pluginSlug: news-ticker, config: {}}}}
+  - name: install reading time
+    as: pl_amy
+    request: {method: POST, path: /v1/plugins/installs, json: {pluginSlug: reading-time, config: {}}}
+    capture: {rt: $.id}
+  - {name: list, as: pl_amy, request: {method: GET, path: /v1/plugins/installs}}
+  - {name: disable, as: pl_amy, request: {method: PATCH, path: "/v1/plugins/installs/{{rw}}", json: {status: disabled}}, snapshot: [parity_pl_installs]}
+  - {name: sync disabled, as: pl_amy, request: {method: POST, path: "/v1/plugins/installs/{{rw}}/sync"}}
+  - {name: bad status, as: pl_amy, request: {method: PATCH, path: "/v1/plugins/installs/{{rw}}", json: {status: paused}}}
+  - {name: patch bad config, as: pl_amy, request: {method: PATCH, path: "/v1/plugins/installs/{{rw}}", json: {config: {nope: x}}}}
+  - {name: patch config and enable, as: pl_amy, request: {method: PATCH, path: "/v1/plugins/installs/{{rw}}", json: {config: {access_token: third}, status: enabled}}, snapshot: [parity_pl_installs]}
+  - {name: empty patch, as: pl_amy, request: {method: PATCH, path: "/v1/plugins/installs/{{rw}}", json: {}}}
+  - {name: reading time is not a connector, as: pl_amy, request: {method: POST, path: "/v1/plugins/installs/{{rt}}/sync"}}
+  - {name: bad id, as: pl_amy, request: {method: PATCH, path: /v1/plugins/installs/not-a-uuid, json: {status: disabled}}}
+  - {name: bad id sync, as: pl_amy, request: {method: POST, path: /v1/plugins/installs/not-a-uuid/sync}}
+  - {name: someone else's install, as: pl_bo, request: {method: DELETE, path: "/v1/plugins/installs/{{rw}}"}}
+  - {name: unknown install, as: pl_amy, request: {method: DELETE, path: /v1/plugins/installs/91a99999-0000-4000-8000-000000000000}}
+  - {name: uninstall, as: pl_amy, request: {method: DELETE, path: "/v1/plugins/installs/{{rw}}"}, snapshot: [parity_pl_installs]}
+  - {name: other method, as: pl_amy, request: {method: PUT, path: /v1/plugins/installs}}
+  - {name: install with no id, as: pl_amy, request: {method: PATCH, path: /v1/plugins/installs, json: {}}}
