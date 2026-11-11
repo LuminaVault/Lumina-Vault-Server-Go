@@ -173,9 +173,7 @@ func (m *Module) graph(c *echo.Context) error {
 			return err
 		}
 		for _, s := range srcs {
-			if s.NoteID != nil {
-				rels = append(rels, relation{From: s.MemoryID.String(), To: s.NoteID.String(), Kind: "source"})
-			}
+			rels = append(rels, relation{From: s.MemoryID.String(), To: s.NoteID.String(), Kind: "source"})
 		}
 	}
 	if p.links["similar"] && len(memoryIDs) > 0 {

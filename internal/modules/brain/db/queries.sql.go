@@ -209,11 +209,11 @@ func (q *Queries) Items(ctx context.Context, arg ItemsParams) ([]ItemsRow, error
 }
 
 const memorySources = `-- name: MemorySources :many
-SELECT m.id AS memory_id, m.source_vault_file_id AS note_id
+SELECT m.id AS memory_id, vf.id AS note_id
 FROM memories m
+JOIN vault_files vf ON vf.id = m.source_vault_file_id AND vf.tenant_id = ANY($1::uuid[])
 WHERE m.tenant_id = ANY($1::uuid[])
   AND m.id = ANY($2::uuid[])
-  AND m.source_vault_file_id IS NOT NULL
 `
 
 type MemorySourcesParams struct {
@@ -223,9 +223,11 @@ type MemorySourcesParams struct {
 
 type MemorySourcesRow struct {
 	MemoryID uuid.UUID
-	NoteID   *uuid.UUID
+	NoteID   uuid.UUID
 }
 
+// The source note is joined so that its vault is checked too: a memory may name a note in a
+// vault the caller cannot read, and that id must not be returned.
 func (q *Queries) MemorySources(ctx context.Context, arg MemorySourcesParams) ([]MemorySourcesRow, error) {
 	rows, err := q.db.Query(ctx, memorySources, arg.VaultIds, arg.MemoryIds)
 	if err != nil {

@@ -750,3 +750,23 @@ func TestNonTextFileIsNotANote(t *testing.T) {
 	require.NotContains(t, body, pdf)
 	require.NotContains(t, body, "invoice")
 }
+
+// A memory can name a source note in a vault the caller cannot read. The query itself must not
+// return that note id: assemble would drop the edge, but the id must never leave the database.
+func TestMemorySourcesQueryIsScoped(t *testing.T) {
+	v := setup(t)
+	exec(t, v, `UPDATE memories SET source_vault_file_id = $1 WHERE id = $2`, bn, m1)
+	rows, err := db.New(v.pool).MemorySources(context.Background(), db.MemorySourcesParams{
+		VaultIds: []uuid.UUID{alice, teamVault}, MemoryIds: []uuid.UUID{uuid.MustParse(m1)},
+	})
+	require.NoError(t, err)
+	require.Empty(t, rows)
+}
+
+func TestMemorySourceInOtherVaultIsNotRead(t *testing.T) {
+	v := setup(t)
+	exec(t, v, `UPDATE memories SET source_vault_file_id = $1 WHERE id = $2`, bn, m1)
+	rec := v.do(alice, http.MethodGet, "/v1/brain/graph", "")
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.NotContains(t, strings.ToLower(rec.Body.String()), strings.ToLower(bn))
+}

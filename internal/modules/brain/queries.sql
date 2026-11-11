@@ -43,12 +43,14 @@ WHERE l.resolved
   AND l.source_vault_file_id = ANY(@note_ids::uuid[])
   AND l.target_vault_file_id = ANY(@note_ids::uuid[]);
 
+-- The source note is joined so that its vault is checked too: a memory may name a note in a
+-- vault the caller cannot read, and that id must not be returned.
 -- name: MemorySources :many
-SELECT m.id AS memory_id, m.source_vault_file_id AS note_id
+SELECT m.id AS memory_id, vf.id AS note_id
 FROM memories m
+JOIN vault_files vf ON vf.id = m.source_vault_file_id AND vf.tenant_id = ANY(@vault_ids::uuid[])
 WHERE m.tenant_id = ANY(@vault_ids::uuid[])
-  AND m.id = ANY(@memory_ids::uuid[])
-  AND m.source_vault_file_id IS NOT NULL;
+  AND m.id = ANY(@memory_ids::uuid[]);
 
 -- Hub attributes. Each query is bound to the admitted vault ids and to the selected item ids.
 
