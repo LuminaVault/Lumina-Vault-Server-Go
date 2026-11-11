@@ -1,0 +1,17 @@
+# GET /v1/ws: Hummingbird's router.ws answers 405 (empty) when shouldUpgrade says
+# .dontUpgrade (no user), 200 (empty) for a plain GET with a user, and switches
+# protocols only for a real WebSocket handshake.
+module: ws
+steps:
+  - {name: no token, request: {method: GET, path: /v1/ws}}
+  - {name: bad token, request: {method: GET, path: /v1/ws, headers: {Authorization: Bearer not.a.jwt}}}
+  - {name: plain get with a user, as: alice, request: {method: GET, path: /v1/ws}}
+  - {name: post is not a route, as: alice, request: {method: POST, path: /v1/ws}}
+  - {name: trailing slash, as: alice, request: {method: GET, path: /v1/ws/}}
+  - {name: sub path, as: alice, request: {method: GET, path: /v1/ws/x}}
+  - name: upgrade without a token is refused
+    ws: {}
+    request: {method: GET, path: /v1/ws}
+  - name: upgrade with a bad token is refused
+    ws: {}
+    request: {method: GET, path: /v1/ws, headers: {Authorization: Bearer not.a.jwt}}

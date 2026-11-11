@@ -1,0 +1,15 @@
+# POST /v1/skills/slash and /v1/skills/:name/run without a reachable LLM. Run ids
+# and times are random or the clock.
+module: skills
+steps:
+  - {name: slash without a slash, as: sk_ivy, request: {method: POST, path: /v1/skills/slash, json: {command: hello}}}
+  - {name: slash without a command, as: sk_ivy, request: {method: POST, path: /v1/skills/slash, json: {}}}
+  - {name: slash help, as: sk_ivy, request: {method: POST, path: /v1/skills/slash, json: {command: /beliefs}}, ignore: ["$.id", "$.startedAt", "$.endedAt"]}
+  - {name: slash kb-compile with nothing pending, as: sk_ivy, request: {method: POST, path: /v1/skills/slash, json: {command: "  /kb-compile now"}}, ignore: ["$.id", "$.startedAt", "$.endedAt"]}
+  - {name: slash unknown skill, as: sk_ivy, request: {method: POST, path: /v1/skills/slash, json: {command: /no-such-skill some input}}}
+  - {name: run a hermes skill, as: sk_ivy, request: {method: POST, path: /v1/skills/hermes-digest/run, json: {}}}
+  - {name: run unknown, as: sk_ivy, request: {method: POST, path: /v1/skills/nope/run}}
+  - name: run with an undecodable body, upstream down
+    as: sk_ivy
+    request: {method: POST, path: /v1/skills/pattern-detector/run, raw: "not json", headers: {Content-Type: application/json}}
+    snapshot: [parity_sk_runs, parity_sk_state]

@@ -26,6 +26,7 @@ import (
 	"lumina/internal/secretbox"
 	"lumina/internal/vaultfiles"
 	"lumina/internal/vaultpaths"
+	"lumina/internal/ws"
 	"net/url"
 	"os"
 	"strings"
@@ -61,6 +62,12 @@ type agent struct {
 	disk       *diskguard.Guard
 	stack      *llm.Stack
 	memories   *memorystore.Repository
+	// sockets is /v1/ws's socket map (5J). kb-compile's progress frames go to it:
+	// the route and the sockets flip together (flip-blockers.md, ws bundle).
+	sockets *ws.Manager
+	// compile is the kb-compile route, set by modules(); /v1/skills/slash's
+	// /kb-compile runs through it.
+	compile *kbcompile.Module
 }
 
 func newAgent(ctx context.Context, pool *pgxpool.Pool, cfg config.Config, box *secretbox.Box, paths vaultpaths.Paths, identify echo.MiddlewareFunc,
@@ -108,6 +115,14 @@ func (a *agent) captureFiling() func(tenant, file uuid.UUID) {
 	}
 }
 
+// progress is WebSocketMemoryCompileProgressPublisher on this process's sockets.
+func (a *agent) progress() memorycompile.Publisher {
+	if a.sockets == nil {
+		return memorycompile.NoopPublisher{}
+	}
+	return memorycompile.BroadcastPublisher{Broadcast: a.sockets.Broadcast}
+}
+
 func (a *agent) gate(c entitlement.Capability) echo.MiddlewareFunc {
 	return entitlement.MiddlewareWithHermes(a.pool, c, entitlement.EnforcementEnabled(a.cfg.BillingEnforcementEnabled),
 		entitlement.PGCredentials(a.pool, a.box), hermesresolve.IsUserOverride)
@@ -151,9 +166,9 @@ func (a *agent) modules(links *capture.Service, enrichment *capture.EnrichmentSe
 		Preferences: a.stack.Preferences, Achievements: a.sink, DefaultModel: a.cfg.HermesDefaultModel,
 	})
 
-	// The progress publisher stays a no-op until /v1/ws moves: the sockets are Swift's.
 	compile := memorycompile.New(a.pool, memorycompile.Options{
-		Paths: a.paths, Transport: transport, Memories: a.memories, Embeddings: a.embeddings,
+		Progress: a.progress(),
+		Paths:    a.paths, Transport: transport, Memories: a.memories, Embeddings: a.embeddings,
 		DefaultModel: a.cfg.HermesDefaultModel,
 	})
 	compileRoute := kbcompile.New(a.pool, kbcompile.Options{
@@ -161,6 +176,8 @@ func (a *agent) modules(links *capture.Service, enrichment *capture.EnrichmentSe
 		Gate: a.gate(entitlement.MemoryCompile), Limits: a.limits, Service: compile,
 		Latches: onboardlatch.New(a.pool), Achievements: a.sink,
 	})
+
+	a.compile = compileRoute
 
 	// Knowledge's gate has no BYO middleware before it, so the override check never fires.
 	reason := knowledge.NewReason(knowledge.New(a.pool, a.identify, a.gate(entitlement.MemoryQuery), a.limits), transport, a.cfg.HermesDefaultModel)

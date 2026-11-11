@@ -1758,3 +1758,46 @@ Beyond the pilot gate (D-wave2-early):
   `chat` has the success path through the stub.
 - Bug found and fixed: a message without `tool_calls` was rejected. Shared's `ChatMessage` makes the field
   optional.
+
+## ws (wave 5)
+
+### G0 entry: met 2026-11-11
+
+- Routes: 1, `GET /v1/ws` (`App+build` `websocketGroup`), split from `app` into pseudo-module `ws`.
+  Middleware: JWTAuthenticator only. The device result route `POST /v1/devices/command/{id}/result` is
+  already on Go in `apple`, on the same `devicerpc.Broker`; it stays in apple's `heldPaths` until the
+  bundle flips.
+- Upgrade decision, from hummingbird-websocket 2.7.0 `router.ws`: no user gives a 405 to a plain GET and
+  a bare 400 to a handshake (NIO's upgrader); a user with a plain GET gives an empty 200.
+- kb-compile's progress publisher now broadcasts on the same sockets (`memorycompile.BroadcastPublisher`).
+- Swift tests: `WebSocketBroadcastGuard` 9 and `DeviceCommandBroker` 2 were ported in P5.
+
+### G1 parity: met 2026-11-11
+
+- `parity/scenarios/ws`: refusals, the plain GET, guard drops and relay, and a smoke file. Fan-out to a
+  second socket and the 1009 close are Go tests.
+- Flip: only with the ws bundle (`ws`, the device result route, `kb-compile`, `mcp`, skills).
+
+## mcp (wave 5)
+
+### G0 entry: met 2026-11-11
+
+- Routes: 6. `POST /v1/mcp` (originGuard, `mcpAnonymousByIP`, lv_ key or JWT, `mcpByUser`) and
+  `/v1/me/agent-connections` list, preview, issue, update and revoke (JWT, `settingsByUser`).
+- JSON-RPC 2.0, protocol `2025-06-18`, server `0.2.0`, 1 MiB body (413), notifications 202, any
+  `Origin` 403. All 17 tools in Swift's order with its annotations and limits.
+- `internal/devicetools` ports PersonalDataTools for the personal tools; 5E reuses it.
+  `chunkindex.Backfiller` ports ChunkBackfillService for `index`.
+- Config: `MCP_PUBLIC_BASE_URL`, falling back to `INGESTION_PUBLIC_BASE_URL`, then
+  `https://api.luminavault.com`.
+- Swift tests: `MCPContract` 16 and `MCPSetup` 10 as unit tests; `AgentConnectionsController` 7 and
+  `MCPMemoryTools` 9 as DB tests.
+
+### G1 parity: met 2026-11-11
+
+- `parity/scenarios/mcp` 01-06 with `parity/seed/mcp.sql`. Ignored: tool `content` text (Swift
+  serializes a dictionary in random key order; `structuredContent` is compared), `memory_context`'s
+  `soul` (the default SOUL embeds the current second), and a new key's token, prefix and setup.
+- Memories saved over MCP are forgotten within the scenario, so their randomly keyed chunks never reach
+  later modules' `memory_chunks` snapshots.
+- Flip: only with the ws bundle.

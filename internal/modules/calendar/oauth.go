@@ -380,3 +380,22 @@ func emailFromIDToken(token string) *string {
 }
 
 func ptr[T any](v T) *T { return &v }
+
+// ErrNotConnected and ErrNeedsReauth are CalendarTokenStore.Error.notConnected
+// and .needsReauth, for callers outside the package (the mail_inbox_recent tool).
+var (
+	ErrNotConnected = errNotConnected
+	ErrNeedsReauth  = errNeedsReauth
+)
+
+// GrantsGmail is GoogleCalendarOAuthClient.grants(grantedScope, gmail.readonly):
+// whether the stored Google grant includes Gmail read access.
+func (g *Google) GrantsGmail(ctx context.Context, tenant uuid.UUID) bool {
+	a, err := g.account(ctx, tenant)
+	return err == nil && a != nil && grants(&a.Scope, scopeGmailReadonly)
+}
+
+// AccessToken is CalendarTokenStore.validAccessToken, refreshing when needed.
+func (g *Google) AccessToken(ctx context.Context, tenant uuid.UUID) (string, error) {
+	return g.tokens.validAccessToken(ctx, tenant)
+}
