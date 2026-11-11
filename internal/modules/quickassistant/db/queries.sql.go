@@ -13,6 +13,32 @@ import (
 	"github.com/google/uuid"
 )
 
+const appendAssistantMessage = `-- name: AppendAssistantMessage :exec
+WITH inserted AS (
+    INSERT INTO conversation_messages
+        (id, conversation_id, role, content, source_memory_ids, parallel_execution_id, local_execution_id, tool_call_count, created_at)
+    VALUES ($1, $2, 'assistant', $3, '{}'::uuid[], NULL, NULL, 0, NOW())
+    RETURNING conversation_id
+)
+UPDATE conversations SET updated_at = NOW()
+WHERE id = (SELECT conversation_id FROM inserted)
+`
+
+type AppendAssistantMessageParams struct {
+	ID             uuid.UUID
+	ConversationID uuid.UUID
+	Content        string
+}
+
+// The line a confirm or cancel leaves in the conversation (Swift:
+// QuickAssistantActionsController.appendMessage). Written straight to the
+// transcript, so it is never indexed (ruling 28); the conversation moves up
+// the inbox, which sorts by updated_at. Columns as chat's insertMessage.
+func (q *Queries) AppendAssistantMessage(ctx context.Context, arg AppendAssistantMessageParams) error {
+	_, err := q.db.Exec(ctx, appendAssistantMessage, arg.ID, arg.ConversationID, arg.Content)
+	return err
+}
+
 const cancelPendingAction = `-- name: CancelPendingAction :one
 UPDATE assistant_pending_actions SET status = 'cancelled', args = '{}'::jsonb, summary = ''
 WHERE id = $1 AND tenant_id = $2 AND status = 'pending'

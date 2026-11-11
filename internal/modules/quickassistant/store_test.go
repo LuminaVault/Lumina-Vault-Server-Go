@@ -113,19 +113,26 @@ func TestConcurrentClaimsRunOnce(t *testing.T) {
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	wins := 0
+	var errs []error
 	for range 8 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			got, err := e.store.Claim(context.Background(), id, tenant)
-			if err == nil && got != nil {
-				mu.Lock()
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				errs = append(errs, err)
+				return
+			}
+			if got != nil {
 				wins++
-				mu.Unlock()
 			}
 		}()
 	}
 	wg.Wait()
+	// A claim that errored would hide a second winner or a lost one.
+	require.Empty(t, errs)
 	require.Equal(t, 1, wins)
 }
 
