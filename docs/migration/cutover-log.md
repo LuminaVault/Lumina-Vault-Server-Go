@@ -1801,3 +1801,384 @@ Beyond the pilot gate (D-wave2-early):
 - Memories saved over MCP are forgotten within the scenario, so their randomly keyed chunks never reach
   later modules' `memory_chunks` snapshots.
 - Flip: only with the ws bundle.
+
+## skills (wave 5)
+
+### G0 entry: met 2026-11-11
+
+- Routes: 8. `GET /v1/skills`, `PATCH /v1/skills/:name`, `GET /v1/skills/:name/runs`,
+  `POST /v1/skills/:name/run`, `POST /v1/skills/slash`, `GET /v1/skills/outputs`, `POST /v1/jobs`,
+  `POST /v1/jobs/detect`.
+- `internal/modules/skills/runner.go` ports SkillRunner: cap guard, meter budget check, CerberusScope
+  routing, 6-iteration agent loop with the 13 tools in Swift's order (`tools.go`), outputs (memory,
+  vault file, push, chat message, job result), `skill_run_log` + `skills_state` persistence, cap
+  refund on failure. daily-brief composes the brief through `me.ComposeBrief` first.
+- `/v1/skills/slash`'s `/kb-compile` reuses `kbcompile.Compile`; device tools go through
+  `internal/devicetools` and this process's broker.
+- Kept from Swift, pinned until the post-archive security pass: `skills_state` PATCH updates every
+  row for the name.
+- Known gaps: `skill_run_log.error` is Swift's `String(describing:)` text; snapshots compare
+  `error IS NOT NULL`. A constant-segment 404 runs auth first in Go (differs only unauthenticated).
+
+### G1 parity: met 2026-11-11
+
+- `parity/scenarios/skills` 01-09 with `parity/seed/skills.sql` (views `parity_sk_runs`,
+  `parity_sk_state`, `parity_sk_briefs`), and `parity/scenarios-switched/llm/skills/01-run.yaml`
+  (jobs, cap, blocks, tool loop, slash `/patterns`, daily-brief) on the LLM stub.
+- Flip: only with the ws bundle (device tools resolve through `/v1/ws`).
+
+## billing (wave 7)
+
+### G0 entry: met 2026-11-11
+
+- Routes: `POST /v1/billing/revenuecat-webhook`, plus three routes App+build.swift mounts beside
+  billing and that live under other modules' prefixes: `GET /v1/auth/me/billing` and
+  `GET /v1/auth/me/usage` (app, `/v1/auth/me`), and `PUT /v1/admin/users/:userID/tier-override`
+  (admin, `/v1/admin/users`; 7B leaves it to 7A). They flip with their prefixes' modules; the
+  ingress for `admin` and `app` must not move them before billing is at `production`, or must name them.
+- Webhook ported exactly (wave-6-8-plan.md "Billing"): empty secret 500, 1 MiB cap (413), bearer
+  (plain "Bearer " replace) then hex HMAC-SHA256 of the raw body, 401, decode 400, the
+  `billing_event_logs` check, the effect and the log row **not** in one transaction (a lost race
+  on the unique index is a 500), unknown user 200 with an anonymous row, unknown product 500 with
+  no row. `RevenueCatClient` has no callers and is not ported.
+- `LapseArchiverService` is `workers.LapseArchiver`, registered off (LV_GO_JOBS) and in dry run by
+  default (`LV_LAPSE_DRY_RUN=true`): it logs each would-be lapse, archive and hard delete and writes
+  nothing. Runs at 02:00 UTC, before Swift's 03:00.
+- `TierOverrideAllowlist` is `billing.ParseTierOverrides`; nothing reads it until token minting
+  moves (8A), which must apply it on every issued session as Swift's `issueTokens` does.
+- `checkBudget` still has no callers; no live budget check was added.
+- Config: `REVENUECAT_WEBHOOK_SECRET`, `BILLING_TIER_OVERRIDE_EMAILS`, `BILLING_COLD_STORAGE_PATH`
+  (default `<VAULT_ROOT_PATH>/cold-storage`), `LV_LAPSE_DRY_RUN`.
+- Swift tests: `RevenueCatWebhook` 11, `SubscriptionCatalog` 6, `TierOverrideAllowlist` 5,
+  `LapseArchiver` 7, `UsageMetrics` 2 ported. Audit: `EntitlementChecker` 27, `Enforcement` 11,
+  `BYOEntitlementPolicy` 7 ported against `internal/entitlement` (`BYOExemption` extracted, same
+  rule); `BYOEntitlementMiddleware`, `StorageQuotaService`, `CostLedgerService`,
+  `UsageMeterBudget` were already cited. `UsageEventsRetention` is 7B's.
+
+### G1 parity: met 2026-11-11
+
+- `parity/scenarios/billing` 01-03 with `parity/seed/billing.sql`, plus
+  `scenarios-switched/unconfigured/billing` (empty secret and admin token) and
+  `scenarios-switched/billing-on/billing`. A billing-issue hold (now + 16 days) is compared as
+  "hold"; usage's period, `generatedAt` and day stamps are the clock and ignored.
+
+## settings (wave 6)
+
+### G0 entry: met 2026-11-11
+
+- Routes: 5. `GET`/`PUT`/`DELETE /v1/settings/hermes`, `POST /v1/settings/hermes/test`, and
+  `GET /v1/me/hermes/capabilities` (listed under `hermes` in `modules.yaml`; it ships here because
+  PUT refreshes it). All behind JWT and `settingsByUser`, mounted only with `LV_SECRET_MASTER_KEY`.
+- `internal/hermescaps` ports HermesRemoteCapabilitiesService: managed default, 1 h cache in
+  `user_hermes_config.capabilities`, `/health` + `/v1/capabilities` + `/api/jobs` probe, and the
+  dashboard probe (`/api/status`, `/api/fs/default-cwd`, `/api/skills`, 429 retry x3). The full
+  dashboard client (P2) comes with 6B.
+- Not ported: the post-save nudge (Swift fires it detached; it writes nothing the client reads).
+- Swift tests: `HermesCapabilitiesParseTests` 5 as unit tests; `HermesConfigControllerTests` 8 as
+  DB tests, plus tenant isolation, invalid URL, unreachable verify and the capabilities probe.
+  `UserHermesConfigTests` 2 only assert the Fluent schema name.
+
+### G1 parity: met 2026-11-11
+
+- `parity/scenarios/settings/01-hermes.yaml` (refusals, no config, managed capabilities) and
+  `parity/scenarios-switched/agents/settings/01-hermes.yaml` (save, verify, probe, cache, replace,
+  unreachable, delete on the LLM stub), with `parity/seed/settings.sql` and its `parity_st_hermes`
+  view. `agents_state` now also requires stub calls on `/v1/models` and `/v1/capabilities`.
+
+## system (wave 7)
+
+### G0 entry: met 2026-11-11
+
+- Routes: 7 under `/v1/system/hermes`, behind the JWT then `X-Admin-Token` (empty token 404 "admin
+  disabled", mismatch 401 "admin token invalid"), mounted only with the secret box, as in Swift:
+  `version`, `update`, `update/current`, `update/:jobID`, `update/:jobID/stream` (SSE),
+  `update/:jobID/rollback`, `reprovision`.
+- The whole engine is ported: CentralHermesManager (blue-green temp container, cutover, restore,
+  loopback health probe), the step engine, auto and manual rollback, tenant reprovision. Docker is
+  an interface. Production has no docker binary (O1), so `NoDocker` fails every call as Swift's
+  spawn does: an update fails at `preflight`, a manual rollback fails at restore, `reprovision`
+  is a 500, and `version` falls back to the channel tag. Tenant reprovision runs through a
+  no-docker container manager until 6D's `hermescontainers` lifecycle is wired in.
+- Config: `HERMES_CENTRAL_{CONTAINER_NAME,TEMP_CONTAINER_NAME,REGISTRY_IMAGE,CHANNEL_TAG,
+  VOLUME_PATH,PORT,TEMP_PORT}`, `HERMES_PER_TENANT_NETWORK`, `HERMES_API_KEY` (Swift's defaults).
+- Swift tests: `HermesUpdateServiceTests` 3, all ported against a stub Docker and probe (owner
+  rejected waivers 2026-11-11).
+
+### G1 parity: met 2026-11-11
+
+- `parity/scenarios/system/01-hermes-update.yaml` with `parity/seed/system.sql`. Seeded jobs are
+  compared whole, including the stream. Ignored for jobs the scenario starts: clock times,
+  `errorMessage` and step `detail` (Swift's Process or docker stderr text).
+
+## plugins (wave 6)
+
+### G0 entry: met 2026-11-11
+
+- Routes: 9. `GET /v1/plugins/catalog`, `GET /v1/plugins/hermes-skills`, `GET`/`POST
+  /v1/plugins/installs`, `PATCH`/`DELETE /v1/plugins/installs/:id`, `POST .../:id/sync`, and the hub
+  routes `POST /v1/plugins/hermes-skills/install`, `DELETE /v1/plugins/hermes-skills/:name`. JWT,
+  `settingsByUser`, BYO resolution; mounted only with `LV_SECRET_MASTER_KEY`, as in Swift.
+- `internal/modules/plugins` ports PluginController, PluginService, PluginCatalog,
+  SkillPluginCatalog, the Readwise, Raindrop, RSS and news-ticker connectors, HermesSkillsClient and
+  HermesHubSkillsController/Service. Syncs stage through `imports.Service.ImportLinks`.
+- Hub install runs `hermes skills install|uninstall` with `docker exec` in Swift. Owner decision O1:
+  the route is ported, and Go's default `DockerExec` fails as Swift does with no docker binary (500).
+  Every path before the exec (ref validation, no container 409, undecryptable key) is compared.
+- Kept from Swift (D-security-after-archive): installing or toggling a skill plugin updates
+  `enabled` on every `skills_state` row of the tenant (SkillsState's Fluent @ID is tenant_id).
+- Swift tests: `PluginLogic` 8, `PluginConnectorsSlice2` 8, `SkillPluginCatalog` 3,
+  `HermesHubSkillsService` 2 and the catalog half of `MemoryProviderPlugin` (2) as unit tests; the
+  other 2 (`TenantAwareEmbeddingService`) belong to embeddings. Route behaviour as DB tests.
+
+### G1 parity: met 2026-11-11
+
+- `parity/scenarios/plugins` 01-03 with `parity/seed/plugins.sql` (`parity_pl_installs`,
+  `parity_pl_skills`), `parity/scenarios-switched/agents/plugins` (a BYO Hermes's `/v1/skills` on the
+  LLM stub) and `parity/scenarios-switched/import-links/plugins` (rss and news-ticker syncs through the
+  import pipeline against the feeds stub's `/plugins/feed.xml`).
+- Not compared: Readwise and Raindrop syncs, which call the public APIs; their parsing is unit-tested.
+
+## app (wave 8, 8E)
+
+### Progress 2026-11-11
+
+- `GET /`, `/health` and `/.well-known/apple-app-site-association` were already served by
+  `internal/httpserver`. Added the legacy kb-compile aliases (`App+build.swift:2537`): `POST
+  /v1/kb-compile` and `GET /v1/kb-compile/pending` are 308s to memory-compile, no auth.
+  `LegacyCompileAliasTests` 2 ported; `AppTests` and `ClientCapabilitiesTests` were already cited.
+- `parity/scenarios/app/01-shell.yaml`.
+- Left: `/health/deep`, which shares `HermesGatewayProbe` with the 7B reconciler (lands after 7B),
+  and the `/v1/auth/me*` handlers, which are 8A. `app` stays at `swift` until both are in.
+
+## me-gateways (wave 6, 6D)
+
+### G0 entry: met 2026-11-11
+
+- Routes: 16. `/v1/me/hermes-gateways` list, get, put, delete, test, apply (start, current, status,
+  stream), WhatsApp pair, pair stream and unlink, Photon setup, phone and setup stream (JWT,
+  `settingsByUser`, byoHermes resolver), and `POST /v1/gateways/photon/inbound` (sidecar token only).
+- O1, P4: `internal/hermescontainers.Lifecycle` is HermesContainerManager, ported in full behind the
+  `Docker` interface: ensureRunning (port allocation, sealed API key, `docker run` args with resource
+  limits, row rollback, "already in use" restart), config.yaml/.env seeding with SHA-256 drift and the
+  audio-proxy credential (`auth.AudioTokens`), evictIdle, reprovisionAll, seedGatewayConfig and
+  applyGatewayConfig. The default `ProcessDocker` forks docker as Swift does, so in a pod with no docker
+  every container call fails at spawn and answers Swift's empty 500. `ContainerReaperService` is not in
+  this PR.
+- Photon sidecar: `megateways.HTTPSidecarClient` (activate, deactivate, send, health) and the inbound
+  delivery service are ported. Provisioning activates the sidecar when `PHOTON_SIDECAR_URL` and
+  `PHOTON_SIDECAR_TOKEN` are both set; without them inbound answers 503, and with no token the route is
+  the disabled 404. `docker/photon-sidecar` is retired with the Swift archive (decisions.md D-6de-waivers).
+- Route order: "apply", "whatsapp" and "photon" are constant segments that win over a terminal `:id`
+  (empty 404); `/:id/test` backtracks. `parity/scenarios/me-gateways/02-shadowing.yaml`.
+- Config: `DOCKER_BINARY_PATH`, `HERMES_PER_TENANT_*`, `HERMES_AUDIO_PROXY_BASE_URL`, `MNEMOSYNE_ENABLED`,
+  `PHOTON_SIDECAR_URL`, `PHOTON_SIDECAR_TOKEN`.
+- Swift tests: `HermesGatewaysControllerTests` 6 (DB), `WhatsAppPairParserTests` 8,
+  `SidecarTokenMiddlewareTests` 5, `HermesContainerManagerTests` 7 (DB, stub docker),
+  `HermesTenantConfigSeedTests` 6, `HermesAudioProxySeedTests` 10. New Go tests cover the sidecar client,
+  delivery and the Photon provisioning flow against httptest stubs.
+
+### G1 parity: pending CI
+
+- `parity/scenarios/me-gateways` 00-04 with `parity/seed/gateways.sql`. Photon setup start is compared
+  with Photon's hosts pointed at 127.0.0.1 (compose `x-no-external`): both servers fail the device-code
+  request. A new apply's job is compared on its acknowledgement only.
+- Flip: one group. The apply SSE, WhatsApp pairing and Photon setup sessions are in-memory.
+
+## integrations (wave 6, 6E)
+
+### G0 entry: met 2026-11-11
+
+- Routes: 8. `/v1/integrations/xai` and `/v1/integrations/nous`: status, start, complete, revoke (JWT
+  only, no rate limit).
+- The live CLI backends (`hermes auth add xai-oauth`, `hermes auth add nous`, `portal status`, the
+  loopback `curl` forward) are ported over `hermescontainers.Docker`. Without docker, start is the
+  empty 500 of a failed spawn, and revoke's CLI call fails and is ignored, as in Swift.
+- `complete` has no identity check, as in Swift: it decodes the body first and completes by session.
+- Kept Swift weakness: xAI revoke demotes the tenant to `trial` and deletes any `xai` credential row,
+  not only the OAuth marker.
+- Swift tests: `XaiOAuthServiceTests` 5, `NousOAuthServiceTests` 5, `XaiOAuthControllerTests` 4 (DB),
+  `LiveXaiOAuthBackendTests` 8.
+
+### G1 parity: pending CI
+
+- `parity/scenarios/integrations/00-oauth.yaml` with `parity/seed/gateways.sql`.
+- Flip: one group. OAuth sessions and parked CLI processes are in-memory, so start and complete must
+  reach the same server.
+## hermes-runs (wave 6, 6C)
+
+The `hermes` module stays `swift`: 6A and 6B (`/v1/hermes` mirror and webhooks) are not ported. 6C's routes are
+served by Go but flip only with chat, in one infra commit (B12, decisions.md D-6c-runs).
+
+### G0 entry: met 2026-11-11
+
+- Routes: 6, `Hermes/Runs/HermesRunsController.swift:34-39`. `POST`/`GET /v1/hermes/runs`, `GET /{id}`,
+  `GET /{id}/events` (SSE, event name `hermes.run.event`, replay then live), `POST /{id}/approval`,
+  `POST /{id}/stop`. They are mounted only with `LV_SECRET_MASTER_KEY`, as in Swift (state `no-master-key`).
+- Middleware, in Swift's order: jwt, byo, hermesProfile, `conversationByUser`, `Entitlement .chat`.
+- Coupling: reads and writes `hermes_runs` and `hermes_run_events`, and inserts assistant turns into
+  `conversation_messages` (idempotent on `hermes_run_id`). Events are published on an in-process bus, and the feed
+  re-reads every 5 s, so a run watched by another process still streams.
+- Job: `HermesRunsService` (boot re-attach for runs younger than 300 s), registered and off unless `LV_GO_JOBS`
+  names it.
+- Pushes: `apns.CategoryApproval` and `apns.CategoryRunCompleted`, through `apns.Service`.
+- Swift tests: all 78 ported.
+  - `HermesRunEvent` 15, `HermesRunsClient` 14, `HermesRunsService` 17, `HermesRunConversationPersistence` 5,
+    `HermesRunsListFilter` 4, `HermesRunsController` 11.
+  - `HermesRunPersistence` 8: the M117–M119 cases check the goose baseline.
+  - `HermesRunPushNotifier` 4: the prefs-table case goes through `apns.NewWithSender` with a recording sender.
+  - Go adds a stream-idle client test and a tool-name test.
+
+## P9 minting + P10 auth rate limits (wave 8 prep)
+
+### Landed 2026-11-11 (no route flips)
+
+- `internal/auth`: `MintSession`/`MintAccess` (SessionToken: HS256, active kid header, uppercase `sub`/`jti`,
+  fractional `exp`/`iat` as JWTKit writes them, `hpid` only when given, `scp` only for scoped tokens),
+  `HashPassword`/`VerifyPassword` (bcrypt cost 12, first 72 bytes as Swift's C bcrypt; `$2a$`/`$2b$` verify on both
+  sides), refresh tokens (32 random bytes base64url, `sha256Hex` in `refresh_tokens`, 30 days, rotate = revoke then
+  issue, not transactional, no reuse detection).
+- Legacy single-key config now signs and verifies as kid `lv-default` when `JWT_KID` is unset, as `App+build.swift`.
+  Before, Go used an empty kid and would have refused Swift's legacy tokens. Production uses `JWT_HMAC_SECRETS` or
+  sets `JWT_KID`, since flipped routes already accept Swift tokens, so nothing live changes.
+- Cross-server: the parity harness's `scenario.Mint` is now `auth.MintAccess`, so every authenticated step of every
+  scenario checks that a token Go mints passes Swift's `JWTAuthenticator`. Swift to Go was already covered by
+  `TestGoldenTokenVerifies`. The register/refresh/login/reset cross-server scenario waits for 8A routes.
+- `internal/ratelimit`: the 16 auth policies (`registerByIP` … `emailMagicStartByIPDaily`, `webAuthnEnrolByUser`),
+  flat for every tier; `IPKey` already matched `ipKey` (first `X-Forwarded-For` piece). `RATE_LIMIT_STORAGE_KIND`
+  parsed, memory only (decisions.md D-ratelimit-memory).
+- Swift tests: `JWTKeyLoader` 10, `SessionToken` 3, `JWTAuthenticatorE2E` 7, `PasswordHasher` 2,
+  `RateLimitMiddleware` (auth flat, all names unique), `RateLimitStorageFactory` memory cases,
+  `ValkeyPersistDriverIntegration` on the memory store. `SessionTokenScope` was already ported.
+- **8A TODO (issueTokens):** P9 ports only the minter and the refresh store. The 8A port of `AuthService.issueTokens`
+  must, on every session issued (register, login, refresh, OAuth, pairing, MFA), apply the
+  `BILLING_TIER_OVERRIDE_EMAILS` allowlist (#78 parses it; `applyTierOverrideAllowlist`: only raises, never
+  overwrites `ultimate`), then `$set is_internal`, put `hpid` only for a `ready` profile, and cover the allowlist with a test.
+
+## jobs J2 (part 1): LearnedDigestScheduler, MeetingBriefScheduler
+
+### Ported 2026-11-11
+
+- `me.LearnedDigestScheduler` and `calendar.MeetingBriefScheduler`, registered in
+  `cmd/App/jobs_j2.go` under Swift's start conditions (`LEARNED_DIGEST_ENABLED`,
+  `MEETING_BRIEF_ENABLED`, both default true, and not `LV_ENVIRONMENT=test`). Off unless
+  `LV_GO_JOBS` names them.
+- Move: **Any** (plan's "Every boot job"). Both claim before sending, with
+  `ON CONFLICT DO NOTHING` on `learned_digest_log (tenant_id, week_start)` and
+  `meeting_briefs (tenant_id, event_id)`, so Swift and Go running together still send one push.
+  Gate metric: `lv_job_last_success_timestamp_seconds{job="LearnedDigestScheduler"|"MeetingBriefScheduler"}`.
+  Swift flag state when Go takes them: unchanged (both on is safe); turn Swift's off at D1.
+- Swift tests: `LearnedDigestSchedulerTests` 8 of 9 ported. `M145 turns off untouched
+  placeholder jobs only` tests a Swift data migration with no Go counterpart (Go's baseline
+  is the post-migration schema). `MeetingBriefTests`: the 8 scheduler tests and the push
+  copy are in `briefscheduler_test.go`; matching, why, floor, attendee sync and the route
+  were already in `logic_test.go` and `module_test.go`.
+- Left for J2 part 2: `DailyPostWorker` and the moderation sweep, `PeriodRecapThemesWorker`,
+  `KnowledgeExtractionWorker`, `SynthesisWorker`, `EmbeddingReembedService`.
+
+## jobs J2 (part 2): PeriodRecapThemesWorker
+
+### Ported 2026-11-11
+
+- `me.ThemesWorker` is PeriodRecapThemesWorker and its generator. It writes the
+  `recap_themes` card with one bounded call (20 s) through the agent's routed transport,
+  following Haiku 5.5 rules: no sampling knobs, user turn last, `max_tokens` 400.
+  `GET /v1/me/recap/period` now schedules a job when it wins the claim. That route is still
+  held on Swift.
+- Job `PeriodRecapThemesWorker` drains the inbox every 2 s. It is built only with
+  `RECAP_THEMES_ENABLED` and runs only while `LV_GO_JOBS` names it. A job that Go claims but
+  doesn't run stays `pending`, and the next view after the 120 s in-flight window claims it
+  again on either server.
+- Move: **Any**, since the claim row is the lock. Name it in `LV_GO_JOBS` in the same commit
+  that flips `/v1/me/recap/period`, because Go's claims only reach Go's own inbox.
+- Swift tests ported: the payload, parse and generator tests in `PeriodRecapLogicTests`, and
+  `the worker writes the themes the next view shows, and a failed write falls back` in
+  `PeriodRecapControllerTests` (`themes_test.go`).
+
+## jobs J2 (part 3): EmbeddingReembedService, KnowledgeExtractionWorker, SynthesisWorker, DailyPostWorker
+
+### Ported 2026-11-11
+
+- All four are registered in `cmd/App/jobs_j2.go` under Swift's start conditions, and none
+  runs unless `LV_GO_JOBS` names it.
+  - `EmbeddingReembedService` (`internal/embedding/reembed.go`):
+    - Swift starts it when either part is on and `LV_ENVIRONMENT` is not `test`. The two
+      parts are the re-embed (`EMBEDDING_REEMBED_ENABLED`, default false) and the heal pass.
+    - The heal pass is `EMBEDDING_HEAL_ENABLED`, default true, but only when the active
+      provider is not deterministic.
+    - Production runs deterministic, so Go does not register it there, and Swift does not run
+      it either.
+    - The first run does the re-embed to completion with Swift's pauses and backoff. After
+      that, each run is one heal pass, every `EMBEDDING_HEAL_INTERVAL_MINUTES`.
+    - The heal backoff skips runs until its delay is up, so waits round up to a whole interval.
+    - A pass the provider refused fails the run, so last-success means the heal is keeping up.
+  - `KnowledgeExtractionWorker` (`internal/modules/knowledge/extraction.go`):
+    - Started by `KNOWLEDGE_GRAPH_WORKER_ENABLED`, compared as the string `true`, default
+      true, and not under `LV_ENVIRONMENT=test`.
+    - Model adjudication only runs with `KNOWLEDGE_GRAPH_MODEL_EXTRACTION_ENABLED=true`,
+      through the agent's routed transport.
+    - The job ticks every 2 s and drains up to 50 extractions per run.
+  - `SynthesisWorker` (`internal/modules/dashboard/synthesis.go`): started only by
+    `SYNTHESIS_WORKER_ENABLED=true`. Like Swift, it has no test-environment guard. It runs
+    hourly.
+  - `DailyPostWorker` (`internal/modules/community/daily.go`):
+    - Exists when `COMMUNITY_ENABLED=true` and runs outside `LV_ENVIRONMENT=test`. It ticks
+      every 15 min.
+    - Each tick runs the moderation sweep (`RecheckPending`) and the Daily Post
+      (`COMMUNITY_DAILY_POST_ENABLED`, `COMMUNITY_DAILY_POST_HOUR_UTC`).
+    - Headlines come from the curated feeds (`FEEDS_BASE_URL`) with a 15 min cache.
+- Community moderation is now `LLMModerator`: the pre-filter, then one model call (8 s)
+  through the routed transport.
+  - This closes the wave-4 gap: Go no longer holds every post pending. An allowed post is
+    visible at once, as in Swift.
+  - `/v1/admin/community/daily/run` now runs the real `publishDaily`.
+- Moves:
+  - **Flag**: EmbeddingReembedService, SynthesisWorker and KnowledgeExtractionWorker.
+    - Turn Swift's flag off in the same infra commit that names the job in `LV_GO_JOBS`.
+    - Extraction claims with `FOR UPDATE SKIP LOCKED`, so an overlap is safe, but it wastes
+      work.
+  - **Any**: DailyPostWorker.
+    - The day row is the claim, so only one server publishes.
+    - The sweep updates `WHERE status = 'pending'`, so an overlap costs at most one extra
+      moderation call.
+  - Gate metric: `lv_job_last_success_timestamp_seconds{job=...}`.
+- Model calls keep Swift's payloads. Two of them, extraction (0.1) and synthesis (0.5),
+  carry a temperature, and the Anthropic adapter drops it for Haiku 5.5. The community
+  payloads send only model, messages and stream.
+- Swift tests ported:
+  - `EmbeddingReembedServiceTests`: all 7.
+  - `EmbeddingDegradationTests`: the 3 heal tests (`reembed_test.go`).
+  - `KnowledgeExtractionWorkerTests`: all 9, plus a Postgres tick test.
+  - `InsightTests`: all 15 (`synthesis_test.go`).
+  - `DailyPostWorkerTests`: all 5, plus a sweep test.
+  - `CommunityUnitTests`: the 16 that were not yet ported (`daily_test.go`).
+  - `CommunityControllerTests`: already ported in `module_test.go`, and now cited there.
+
+## admin (wave 7B)
+
+### G0 entry: met 2026-11-11
+
+- Routes: 12. `GET /internal/metrics` (`METRICS_SECRET` bearer, JSON `{"users":n}`, 404 "metrics disabled" when
+  unset); behind `X-Admin-Token`: hermes-profiles `health`, `reconcile`, `reap-orphans`; health `correlate` and
+  `correlate/:userID`; memory `recompute`, `recompute/:userID`, `prune`, `prune/:userID`, `chunks/backfill/:userID`
+  (always registered: Swift always builds ChunkBackfillService); `usage-events/prune`.
+- P8: `internal/hermesprofile` exports `Ensure` and `Find`, and adds `Reconciler` (reconcile, reap-orphans, health)
+  and `GatewayProbe` (GET `<gateway>/v1/models`, 1 s timeout, 30 s cache per URL, any HTTP response reachable).
+  8E's `/health/deep` reuses `GatewayProbe`. HermesProfileReconcilerService's 04:00 job is not ported (job move rule).
+- Health correlation calls the routed transport, as Swift's routedTransport. Kept Swift weakness:
+  `NO_CORRELATION` is saved as a memory (`TestSwiftWeaknessNoCorrelationIsSaved`).
+- Config: `METRICS_SECRET`, `USAGE_EVENTS_RETENTION_DAYS` (0, off), `USAGE_EVENTS_RETENTION_BATCH_SIZE` (5000,
+  clamped to 1...10000).
+- Swift tests: `MetricsSecretMiddleware` 5, `UsageEventsRetention` 6, `MemoryScoring` 5 and the prompt test of
+  `HealthCorrelationService` as unit tests; `MemoryPruningService` 4, `HealthCorrelationService` 5,
+  `HermesProfileReconciler` 4 and `HermesProfileService` 5 as DB tests. `MemoryKeepGate`: the verdict parser in
+  `internal/keepjudge` (LLMMemoryKeepJudge, ported unwired). Its worker test drives MemoryIndexWorker, a W5 job not
+  in Go yet, so it lands with that worker.
+- Not scheduled (B6, O3): nothing in the cluster calls the sweeps today, and Go adds no job for them.
+
+### G1 parity: met 2026-11-11
+
+- `parity/scenarios/admin` 01-03 with `parity/seed/admin.sql`; `scenarios-switched/unconfigured/admin`.
+- The all-user sweeps (recompute, prune, correlate, reconcile, reap-orphans) are compared refused only: run for real
+  they would rewrite later modules' fixtures, and correlate's failure lines carry transport error text. Unit and DB
+  tests cover them.
+- Flip: B5 (Isis) in the same infra PR, and with or after `billing`, whose module serves `/v1/admin/users` (flip-blockers.md, admin).

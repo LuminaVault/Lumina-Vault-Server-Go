@@ -41,6 +41,9 @@ func TestKeyToEnv(t *testing.T) {
 func TestConfigEnvNamesComeFromSwiftKeys(t *testing.T) {
 	known := map[string]bool{
 		"LV_GO_JOBS": true,
+		// Go-only: the lapse archiver's dry run before it replaces Swift's
+		// (wave-6-8-plan.md "Lapse job"; internal/workers/lapse.go).
+		"LV_LAPSE_DRY_RUN": true,
 		// Go-only: /v1/tts's switch, for a self-hosted service (internal/modules/tts).
 		"TTS_BASE_URL": true,
 		// Go-only until wave 6C: the Swift API escalated chat turns start their run on
@@ -55,6 +58,9 @@ func TestConfigEnvNamesComeFromSwiftKeys(t *testing.T) {
 		// and llm.provider.\(key.lowercased()).apikey with key = "openRouter".
 		"LLM_PROVIDER_OPEN_ROUTER_API_KEY": true,
 		"LLM_PROVIDER_OPENROUTER_APIKEY":   true,
+		// CommunityConfig reads it through flag("community.dailyPost.enabled", false),
+		// which the config-keys grep does not see.
+		"COMMUNITY_DAILY_POST_ENABLED": true,
 	}
 	raw, err := os.ReadFile("../../docs/migration/config-keys.txt")
 	require.NoError(t, err)

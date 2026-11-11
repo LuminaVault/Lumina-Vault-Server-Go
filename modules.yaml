@@ -286,7 +286,7 @@ modules:
   skills:
     wave: 5
     swiftDir: Sources/App/Skills
-    status: swift
+    status: parity
     prefixes: [/v1/jobs, /v1/skills]
     jobs: []
   tts:
@@ -316,25 +316,25 @@ modules:
   integrations:
     wave: 6
     swiftDir: Sources/App/Integrations
-    status: swift
+    status: parity
     prefixes: [/v1/integrations]
     jobs: []
   me-gateways:
     wave: 6
     swiftDir: Sources/App/Me
-    status: swift
+    status: parity
     prefixes: [/v1/gateways, /v1/me/hermes-gateways]
     jobs: []
   plugins:
     wave: 6
     swiftDir: Sources/App/Plugins
-    status: swift
+    status: parity
     prefixes: [/v1/plugins]
     jobs: []
   settings:
     wave: 6
     swiftDir: Sources/App/Settings
-    status: swift
+    status: parity
     prefixes: [/v1/settings]
     jobs: []
   skills-cron:
@@ -346,19 +346,19 @@ modules:
   admin:
     wave: 7
     swiftDir: Sources/App/Admin
-    status: swift
+    status: parity
     prefixes: [/internal, /v1/admin/health, /v1/admin/hermes-profiles, /v1/admin/memory, /v1/admin/usage-events, /v1/admin/users]
     jobs: []
   billing:
     wave: 7
     swiftDir: Sources/App/Billing
-    status: swift
+    status: parity
     prefixes: [/v1/billing]
     jobs: []
   system:
     wave: 7
     swiftDir: Sources/App/System
-    status: swift
+    status: parity
     prefixes: [/v1/system]
     jobs: []
   app:

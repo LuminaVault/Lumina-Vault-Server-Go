@@ -1,0 +1,130 @@
+# /v1/hermes/runs against the stub as Hermes (wave 6C). Swift and Go each run their
+# own watcher; the stub hands each POST its own run id. Every wait is an events
+# stream, which replays from the database and so is the same whichever moment
+# the watcher persisted at. hermesRunID is a stub counter digest, so it differs
+# between servers and is ignored.
+module: hermes
+steps:
+  # A run that finishes on its own: the stream ends once it is drained.
+  - name: start a run in a conversation
+    as: hr_cy
+    ignore: ["$.hermesRunID"]
+    request: {method: POST, path: /v1/hermes/runs, json: {prompt: audit the vault, conversationID: E6C00000-0000-4000-8000-0000000002C1}}
+    capture: {done: $.id}
+  - name: its events to the end
+    as: hr_cy
+    ignore: ["$.payload.run_id"]
+    stream: true
+    frames: 40
+    framesTimeout: 20s
+    request: {method: GET, path: "/v1/hermes/runs/{{done}}/events"}
+  - name: the finished run
+    as: hr_cy
+    ignore: ["$.hermesRunID"]
+    request: {method: GET, path: "/v1/hermes/runs/{{done}}"}
+  # The marker embeds the run's id mid-string, which no placeholder masks; the
+  # snapshot still compares the rows.
+  - name: the answer landed in the conversation
+    as: hr_cy
+    ignore: ["$.messages[0].content"]
+    request: {method: GET, path: /v1/conversations/E6C00000-0000-4000-8000-0000000002C1}
+    snapshot: [conversation_messages]
+
+  # A run held for its approval, approved once.
+  - name: start a run that needs approval
+    as: hr_cy
+    ignore: ["$.hermesRunID"]
+    request: {method: POST, path: /v1/hermes/runs, json: {prompt: "[[stub:approval:rm -rf /tmp/build]] clean up"}}
+    capture: {held: $.id}
+  - name: its events up to the approval request
+    as: hr_cy
+    ignore: ["$.payload.run_id"]
+    stream: true
+    frames: 2
+    framesTimeout: 20s
+    request: {method: GET, path: "/v1/hermes/runs/{{held}}/events"}
+  - name: the run waits with the pending approval
+    as: hr_cy
+    ignore: ["$.hermesRunID"]
+    request: {method: GET, path: "/v1/hermes/runs/{{held}}"}
+  - name: approve once
+    as: hr_cy
+    ignore: ["$.hermesRunID"]
+    request: {method: POST, path: "/v1/hermes/runs/{{held}}/approval", json: {choice: once}}
+  - name: approving again is a conflict
+    as: hr_cy
+    request: {method: POST, path: "/v1/hermes/runs/{{held}}/approval", json: {choice: once}}
+  - name: the approved run's events to the end
+    as: hr_cy
+    ignore: ["$.payload.run_id"]
+    stream: true
+    frames: 40
+    framesTimeout: 20s
+    request: {method: GET, path: "/v1/hermes/runs/{{held}}/events?after=2"}
+  - name: the approved run finished
+    as: hr_cy
+    ignore: ["$.hermesRunID"]
+    request: {method: GET, path: "/v1/hermes/runs/{{held}}"}
+
+  # Denied: the stub fails the run.
+  - name: start a run to deny
+    as: hr_cy
+    ignore: ["$.hermesRunID"]
+    request: {method: POST, path: /v1/hermes/runs, json: {prompt: "[[stub:approval:curl evil.example]] fetch it"}}
+    capture: {denied: $.id}
+  - name: the run to deny reaches its approval
+    as: hr_cy
+    ignore: ["$.payload.run_id"]
+    stream: true
+    frames: 2
+    framesTimeout: 20s
+    request: {method: GET, path: "/v1/hermes/runs/{{denied}}/events"}
+  - name: deny
+    as: hr_cy
+    ignore: ["$.hermesRunID"]
+    request: {method: POST, path: "/v1/hermes/runs/{{denied}}/approval", json: {choice: deny}}
+  - name: the denied run's events to the end
+    as: hr_cy
+    ignore: ["$.payload.run_id"]
+    stream: true
+    frames: 40
+    framesTimeout: 20s
+    request: {method: GET, path: "/v1/hermes/runs/{{denied}}/events?after=2"}
+  - name: the denied run failed
+    as: hr_cy
+    ignore: ["$.hermesRunID"]
+    request: {method: GET, path: "/v1/hermes/runs/{{denied}}"}
+
+  # Stopped while it waits. The stop answer races the watcher, so only the
+  # stream and the run afterwards are compared in full.
+  - name: start a run to stop
+    as: hr_cy
+    ignore: ["$.hermesRunID"]
+    request: {method: POST, path: /v1/hermes/runs, json: {prompt: "[[stub:approval:sleep 600]] wait"}}
+    capture: {stopped: $.id}
+  - name: the run to stop reaches its approval
+    as: hr_cy
+    ignore: ["$.payload.run_id"]
+    stream: true
+    frames: 2
+    framesTimeout: 20s
+    request: {method: GET, path: "/v1/hermes/runs/{{stopped}}/events"}
+  - name: stop
+    as: hr_cy
+    ignore: ["$.hermesRunID", "$.status", "$.lastEvent", "$.lastSeq", "$.pendingApproval", "$.finishedAt"]
+    request: {method: POST, path: "/v1/hermes/runs/{{stopped}}/stop"}
+  - name: the stopped run's events to the end
+    as: hr_cy
+    ignore: ["$.payload.run_id"]
+    stream: true
+    frames: 40
+    framesTimeout: 20s
+    request: {method: GET, path: "/v1/hermes/runs/{{stopped}}/events?after=2"}
+  - name: the stopped run
+    as: hr_cy
+    ignore: ["$.hermesRunID"]
+    request: {method: GET, path: "/v1/hermes/runs/{{stopped}}"}
+  - name: every run, newest first
+    as: hr_cy
+    ignore: ["$.runs[*].hermesRunID"]
+    request: {method: GET, path: /v1/hermes/runs}

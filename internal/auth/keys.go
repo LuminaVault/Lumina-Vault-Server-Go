@@ -1,6 +1,7 @@
-// Package auth verifies the session JWTs the Swift server mints. Go does not
-// mint session tokens until wave 8 (roadmap); until then it only has to accept
-// exactly what Swift accepts and reject exactly what Swift rejects.
+// Package auth verifies session JWTs and, since P9, mints them, hashes
+// passwords and keeps refresh tokens the way Swift's AuthService does. A token
+// either server mints must pass the other's verifier, because both share
+// JWT_HMAC_SECRETS and refresh_tokens through the cutover.
 package auth
 
 import (
@@ -10,6 +11,9 @@ import (
 )
 
 const minSecretLength = 32
+
+// legacyKid is the signing kid of the single-key configuration when JWT_KID is unset.
+const legacyKid = "lv-default"
 
 // Key is one HS256 verification key. Kid may be empty for the legacy
 // single-key configuration.
@@ -36,7 +40,12 @@ func LoadKeys(cfg config.Config) (Keyset, error) {
 		if cfg.JWTHMACSecret == "" {
 			return Keyset{}, fmt.Errorf("auth: neither JWT_HMAC_SECRETS nor JWT_HMAC_SECRET is set")
 		}
-		entries = []Key{{Kid: strings.TrimSpace(cfg.JWTKID), Secret: []byte(cfg.JWTHMACSecret)}}
+		// App+build.swift: reader.string(forKey: "jwt.kid", default: "lv-default").
+		kid := strings.TrimSpace(cfg.JWTKID)
+		if kid == "" {
+			kid = legacyKid
+		}
+		entries = []Key{{Kid: kid, Secret: []byte(cfg.JWTHMACSecret)}}
 	}
 	return Keyset{keys: entries}, nil
 }

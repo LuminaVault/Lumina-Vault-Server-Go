@@ -61,6 +61,9 @@ WAVES = {
     # to flipping /v1/ws at the end of wave 5, ahead of the rest of App.
     "LLMRouter": 5, "LLMVoice": 5, "LLMChat": 5, "LLMAdmin": 5, "WS": 5,
     "SkillsCron": 6,
+    # SOUL.md read/write/compose: no Auth machinery, ported early with the default
+    # SOUL (owner decision 2026-11-11), so it flips on its own.
+    "Soul": 8,
 }
 
 # Some Swift dirs hold controllers that belong to a later wave
@@ -82,6 +85,7 @@ SPLITS = {
     "Sources/App/LLM/LLMController.swift": "LLMChat",
     "Sources/App/LLM/Routing/LLMHealthController.swift": "LLMAdmin",
     "Sources/App/Skills/CronBridgeController.swift": "SkillsCron",
+    "Sources/App/Auth/SoulController.swift": "Soul",
 }
 # Routes whose controller also holds routes of the parent module, or that are
 # registered in App+build.swift.
@@ -149,6 +153,7 @@ SWIFT_DIRS = {
     "LLMChat": "Sources/App/LLM",
     "LLMAdmin": "Sources/App/LLM/Routing",
     "SkillsCron": "Sources/App/Skills",
+    "Soul": "Sources/App/Auth",
     "WS": "Sources/App/App+build.swift",
 }
 
