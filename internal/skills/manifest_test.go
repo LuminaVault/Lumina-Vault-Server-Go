@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
+	"lumina/internal/bundled"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,7 +25,7 @@ var builtinSkillNames = []string{
 
 func loadBuiltin(t *testing.T, name string) string {
 	t.Helper()
-	data, err := builtinFiles.ReadFile("builtin/" + name + "/SKILL.md")
+	data, err := fs.ReadFile(bundled.Skills(), name+"/SKILL.md")
 	require.NoError(t, err)
 	return string(data)
 }
@@ -58,7 +60,7 @@ func TestManifestBuiltins(t *testing.T) {
 		}
 	})
 	t.Run("every bundled top level skill parses with a name matching its directory", func(t *testing.T) {
-		entries, err := builtinFiles.ReadDir("builtin")
+		entries, err := fs.ReadDir(bundled.Skills(), ".")
 		require.NoError(t, err)
 		parsed := 0
 		for _, e := range entries {
@@ -242,7 +244,7 @@ func TestManifestMatchesSwiftOracle(t *testing.T) {
 			if tc.Contents != nil {
 				contents = *tc.Contents
 			} else {
-				data, err := os.ReadFile(filepath.Join("builtin", strings.TrimPrefix(tc.ID, "real/")))
+				data, err := os.ReadFile(filepath.Join("..", "bundled", "skills", strings.TrimPrefix(tc.ID, "real/")))
 				require.NoError(t, err)
 				contents = string(data)
 			}

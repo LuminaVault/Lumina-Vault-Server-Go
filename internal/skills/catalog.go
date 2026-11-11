@@ -2,10 +2,10 @@ package skills
 
 import (
 	"bytes"
-	"embed"
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"lumina/internal/bundled"
 	"lumina/internal/swiftstr"
 	"lumina/internal/vaultpaths"
 	"os"
@@ -17,15 +17,6 @@ import (
 
 	"github.com/google/uuid"
 )
-
-// builtinFiles holds Resources/Skills/<name>/SKILL.md. The whole tree (518 files,
-// 4.7 MB) is checked in under builtin/ so it survives the Swift repo's archive, but
-// only these 20 files (111 KB) are embedded: Bundle.module's "Skills" resource has
-// no other reader in Swift. Being compiled in, they need no line in the Dockerfile.
-// scripts/check-skills-sync.sh compares the tree with the pinned Swift image.
-//
-//go:embed builtin/*/SKILL.md
-var builtinFiles embed.FS
 
 // skillFileName is the one file a skill directory must hold.
 const skillFileName = "SKILL.md"
@@ -43,13 +34,10 @@ type Catalog struct {
 	builtins []Manifest
 }
 
-// NewCatalog serves the embedded built-ins and each tenant's vault skills.
+// NewCatalog serves the embedded built-ins (bundled.Skills, Resources/Skills) and each
+// tenant's vault skills.
 func NewCatalog(paths vaultpaths.Paths) *Catalog {
-	sub, err := fs.Sub(builtinFiles, "builtin")
-	if err != nil {
-		panic(err) // the directive above guarantees the directory
-	}
-	return &Catalog{paths: paths, builtin: sub}
+	return &Catalog{paths: paths, builtin: bundled.Skills()}
 }
 
 // NewVaultCatalog serves vault skills only, Swift's scanBuiltin: false.
