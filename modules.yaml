@@ -298,7 +298,7 @@ modules:
   ws:
     wave: 5
     swiftDir: Sources/App/App+build.swift
-    status: swift
+    status: parity
     prefixes: [/v1/ws]
     jobs: []
   workflows:

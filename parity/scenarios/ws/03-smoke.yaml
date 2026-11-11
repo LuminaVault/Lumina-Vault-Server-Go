@@ -1,0 +1,10 @@
+# Staging smoke: a fresh user's socket echoes a valid message.
+module: ws
+smoke: true
+steps:
+  - {name: plain get, as: alice, request: {method: GET, path: /v1/ws}}
+  - name: echo
+    as: alice
+    ws: {send: ['{"type":"smoke"}']}
+    request: {method: GET, path: /v1/ws}
+    frames: 1
