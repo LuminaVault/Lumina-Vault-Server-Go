@@ -18,6 +18,7 @@ import (
 	"lumina/internal/httpserver"
 	"lumina/internal/ratelimit"
 	"lumina/internal/swiftstr"
+	"lumina/internal/telemetry"
 	"lumina/internal/usagemeter"
 	"lumina/internal/wire"
 	"net/http"
@@ -120,7 +121,10 @@ func (m *Module) synthesize(c *echo.Context) error {
 		}
 	}
 	ctx := context.WithoutCancel(c.Request().Context())
-	audio, err := m.upstream.synthesize(ctx, body.Text, mapVoice(voice), m.model)
+	audio, err := telemetry.Observe(ctx, telemetry.Global.Route("tts"), "tts.synthesize",
+		func(ctx context.Context) ([]byte, error) {
+			return m.upstream.synthesize(ctx, body.Text, mapVoice(voice), m.model)
+		})
 	if err != nil {
 		m.log.ErrorContext(ctx, "tts upstream failed", "error", err)
 		var rejected *rejectedError

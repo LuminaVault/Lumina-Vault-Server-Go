@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"lumina/internal/memorystore"
+	"lumina/internal/telemetry"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -182,7 +183,17 @@ const (
 // raise on user input. Read-only: no hit count bump. A nil queryEmbedding runs the
 // lexical arm alone. Chunks with a NULL embedding are never in the dense arm but are
 // in the lexical one.
+//
+// Every call is observed as memory.hybridSearch under luminavault.memory.*: Swift's
+// only MemoryChunkRepository is built with RouteTelemetry(labelPrefix: "memory").
 func (r *ChunkRepository) HybridSearch(ctx context.Context, tenant uuid.UUID, query string, queryEmbedding []float32, limit int, spaceID *uuid.UUID) ([]memorystore.SearchResult, error) {
+	return telemetry.Observe(ctx, telemetry.Global.Route("memory"), "memory.hybridSearch",
+		func(ctx context.Context) ([]memorystore.SearchResult, error) {
+			return r.hybridSearch(ctx, tenant, query, queryEmbedding, limit, spaceID)
+		})
+}
+
+func (r *ChunkRepository) hybridSearch(ctx context.Context, tenant uuid.UUID, query string, queryEmbedding []float32, limit int, spaceID *uuid.UUID) ([]memorystore.SearchResult, error) {
 	limit = max(1, limit)
 	sql, args := hybridLexicalSQL, []any{query, tenant, spaceID, limit * armDepthMultiplier, limit}
 	if queryEmbedding != nil {

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"lumina/internal/swiftstr"
+	"lumina/internal/telemetry"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -126,11 +127,15 @@ func (s *GatewayStreamService) ChatStream(ctx context.Context, sessionKey, sessi
 				watchdog.Reset(idle)
 				return processGatewayRecord(record, emit)
 			})
+		// luminavault.llm.chat.stream.failure counts a non-2xx and every thrown error,
+		// .success a stream that ran to its end. A consumer that stops early counts
+		// neither: Swift's yield into a terminated continuation is dropped.
 		for chunk, err := range inner {
 			if err != nil {
 				if cause := context.Cause(ctx); errors.Is(cause, errStreamIdle) {
 					err = cause
 				}
+				telemetry.Global.LLM.StreamFailure.Add(ctx, 1)
 				yield(Chunk{}, err)
 				return
 			}
@@ -142,8 +147,11 @@ func (s *GatewayStreamService) ChatStream(ctx context.Context, sessionKey, sessi
 		// does for a cancelled Task. The watchdog's cancel is not the client's:
 		// Swift throws HermesStreamIdleTimeout there, so the caller sees an error.
 		if cause := context.Cause(ctx); errors.Is(cause, errStreamIdle) {
+			telemetry.Global.LLM.StreamFailure.Add(ctx, 1)
 			yield(Chunk{}, cause)
+			return
 		}
+		telemetry.Global.LLM.StreamSuccess.Add(ctx, 1)
 	}
 }
 
@@ -292,10 +300,17 @@ func makeOpenAIPayload(model string, req ChatRequest) ([]byte, error) {
 // ChatStream dispatches one turn.
 func (s *RoutedStreamService) ChatStream(ctx context.Context, sessionKey, sessionID string, req ChatRequest) Stream {
 	return func(yield func(Chunk, error) bool) {
+		// fail is Swift's outer catch: luminavault.llm.chat.stream.byok.failure counts
+		// every error the routed stream throws, whichever branch it took, not only
+		// BYOK's. Kept as Swift has it.
+		fail := func(err error) {
+			telemetry.Global.LLM.StreamBYOKFailure.Add(ctx, 1)
+			yield(Chunk{}, err)
+		}
 		forward := func(stream Stream) (done bool) {
 			for chunk, err := range stream {
 				if err != nil {
-					yield(Chunk{}, err)
+					fail(err)
 					return true
 				}
 				if !yield(chunk, nil) {
@@ -311,16 +326,17 @@ func (s *RoutedStreamService) ChatStream(ctx context.Context, sessionKey, sessio
 			}
 			payload, err := makeOpenAIPayload(model, req)
 			if err != nil {
-				yield(Chunk{}, err)
+				fail(err)
 				return
 			}
 			forward(s.Transport.ChatStream(ctx, payload, sessionKey, sessionID))
 			return
 		}
 		if provider, model, ok := s.byokSelection(ctx, sessionKey); ok {
+			telemetry.Global.LLM.StreamBYOK.Add(ctx, 1)
 			payload, err := makeOpenAIPayload(model, req)
 			if err != nil {
-				yield(Chunk{}, err)
+				fail(err)
 				return
 			}
 			// Pin the BYOK primary so Cerberus cannot advertise a gateway route
@@ -334,22 +350,22 @@ func (s *RoutedStreamService) ChatStream(ctx context.Context, sessionKey, sessio
 		}
 		plan, err := s.managedPlan(ctx, req)
 		if err != nil {
-			yield(Chunk{}, err)
+			fail(err)
 			return
 		}
 		if plan.freeLane != nil {
 			if err := plan.freeLane.Cerberus.PreflightError(); err != nil {
-				yield(Chunk{}, err)
+				fail(err)
 				return
 			}
 			routed, ok := s.Transport.(DecidedStreamTransport)
 			if !ok || routed == nil {
-				yield(Chunk{}, ErrFreeLaneUnroutable())
+				fail(ErrFreeLaneUnroutable())
 				return
 			}
 			payload, err := makeOpenAIPayload(plan.freeLane.Primary.ModelID, req)
 			if err != nil {
-				yield(Chunk{}, err)
+				fail(err)
 				return
 			}
 			forward(routed.ChatStreamDecided(ctx, payload, sessionKey, sessionID, *plan.freeLane))
@@ -364,7 +380,7 @@ func (s *RoutedStreamService) ChatStream(ctx context.Context, sessionKey, sessio
 		for chunk, err := range s.Fallback.ChatStream(ctx, sessionKey, sessionID, request) {
 			if err != nil {
 				s.release(ctx, plan.route)
-				yield(Chunk{}, err)
+				fail(err)
 				return
 			}
 			outputCharacters += swiftstr.Count(chunk.Delta)

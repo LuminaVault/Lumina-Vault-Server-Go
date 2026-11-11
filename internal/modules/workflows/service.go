@@ -11,6 +11,7 @@ import (
 	"lumina/internal/modules/workflows/db"
 	"lumina/internal/sse"
 	"lumina/internal/swiftstr"
+	"lumina/internal/telemetry"
 	"lumina/internal/wire"
 	"net/http"
 	"strings"
@@ -444,6 +445,7 @@ func (m *Module) enqueue(ctx context.Context, tenant, workflowID uuid.UUID, trig
 	if existing, ok, err := m.existingRun(ctx, tenant, workflowID, dedupeKey); err != nil {
 		return out, err
 	} else if ok {
+		telemetry.Global.Workflow.Deduplicated.Add(ctx, 1)
 		return m.runDTO(ctx, existing, workflow)
 	}
 	policy, err := m.ensureCanEnqueue(ctx, tenant, tier)
@@ -451,6 +453,7 @@ func (m *Module) enqueue(ctx context.Context, tenant, workflowID uuid.UUID, trig
 		if existing, ok, err := m.existingRun(ctx, tenant, workflowID, dedupeKey); err != nil {
 			return out, err
 		} else if ok {
+			telemetry.Global.Workflow.Deduplicated.Add(ctx, 1)
 			return m.runDTO(ctx, existing, workflow)
 		}
 		return out, errActiveRunLimit
@@ -477,12 +480,14 @@ func (m *Module) enqueue(ctx context.Context, tenant, workflowID uuid.UUID, trig
 			if existing, ok, lookup := m.existingRun(ctx, tenant, workflowID, dedupeKey); lookup != nil {
 				return out, lookup
 			} else if ok {
+				telemetry.Global.Workflow.Deduplicated.Add(ctx, 1)
 				return m.runDTO(ctx, existing, workflow)
 			}
 		}
 		return out, err
 	}
 	m.appendEvent(ctx, tenant, run.ID, RunQueued, nil, nil)
+	telemetry.Global.Workflow.Queued.Add(ctx, 1)
 	return m.runDTO(ctx, run, workflow)
 }
 
@@ -583,6 +588,7 @@ func (m *Module) cancelRun(ctx context.Context, tenant, id uuid.UUID) error {
 	if err := m.q.CancelRun(ctx, db.CancelRunParams{ID: id, Now: &now}); err != nil {
 		return err
 	}
+	telemetry.Global.Workflow.Cancelled.Add(ctx, 1)
 	m.appendEvent(ctx, tenant, id, RunCancelled, nil, nil)
 	return m.q.CancelActiveNodeRuns(ctx, db.CancelActiveNodeRunsParams{RunID: id, Now: &now})
 }
@@ -979,6 +985,7 @@ func (m *Module) appendEvent(ctx context.Context, tenant, run uuid.UUID, kind Wo
 	if err := m.q.InsertEvent(ctx, db.InsertEventParams{
 		TenantID: tenant, RunID: run, Kind: string(kind), NodeID: node, Message: message, Data: []byte("{}"),
 	}); err != nil {
+		telemetry.Global.Workflow.EventWriteFailures.Add(ctx, 1)
 		slog.ErrorContext(ctx, "workflow event append failed", "run_id", ids.Upper(run), "kind", string(kind), "error", err)
 	}
 }

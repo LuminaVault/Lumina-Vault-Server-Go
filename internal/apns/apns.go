@@ -18,6 +18,7 @@ import (
 	"lumina/internal/ids"
 	"lumina/internal/modules/devices"
 	"lumina/internal/swiftstr"
+	"lumina/internal/telemetry"
 	"net/http"
 	"strings"
 	"time"
@@ -233,6 +234,9 @@ func (s *Service) Notify(ctx context.Context, tenant uuid.UUID, m Message) error
 		if err == nil {
 			now := s.now()
 			_, err = s.pool.Exec(ctx, `UPDATE device_tokens SET last_seen_at = $1, updated_at = $1 WHERE id = $2`, now, row.id)
+		}
+		if err != nil && m.Category == CategoryIngestion {
+			telemetry.Global.Ingestion.APNSFailures.Add(ctx, 1)
 		}
 		switch {
 		case err == nil:
