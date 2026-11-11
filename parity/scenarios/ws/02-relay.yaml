@@ -1,0 +1,22 @@
+# Messages on an open socket: WebSocketBroadcastGuard drops empty, non-JSON and
+# type-less text, and relays the rest to every socket of the tenant, the sender's
+# own included. Rejections send nothing, so they show as a shorter frame list.
+module: ws
+steps:
+  - name: a valid message comes back
+    as: alice
+    ws: {send: ['{"type":"hello","n":1}']}
+    request: {method: GET, path: /v1/ws}
+    frames: 1
+  - name: rejected messages are dropped, the valid one after them comes back
+    as: alice
+    ws: {send: ['not json', '[]', '{"n":1}', '{"type":7}', 'null', '{"type":"after"}']}
+    request: {method: GET, path: /v1/ws}
+    frames: 2
+    framesTimeout: 3s
+  - name: nothing valid means nothing back
+    as: bob
+    ws: {send: ['{}', '"type"']}
+    request: {method: GET, path: /v1/ws}
+    frames: 1
+    framesTimeout: 2s

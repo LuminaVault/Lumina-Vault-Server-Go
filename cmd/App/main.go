@@ -59,6 +59,7 @@ import (
 	"lumina/internal/modules/vision"
 	"lumina/internal/modules/voice"
 	"lumina/internal/modules/workflows"
+	wsroute "lumina/internal/modules/ws"
 	"lumina/internal/onboardlatch"
 	"lumina/internal/posthog"
 	"lumina/internal/ratelimit"
@@ -276,6 +277,7 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		memories := memorystore.New(pool, nil)
 		registered = append(registered, j1Jobs(pool, cfg, disk)...)
 		agent, stopAgent := newAgent(ctx, pool, cfg, box, paths, identify, limits, embeddings, sink, meModule, disk)
+		agent.sockets = sockets
 		defer stopAgent()
 		links, enrichment := linkCaptureService(pool, cfg, paths, embeddings, memories, disk, sink)
 		deps.Modules = append(deps.Modules,
@@ -294,6 +296,8 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 			deps.Modules = append(deps.Modules, workflowsModule(pool, cfg, box, identify, limits))
 		}
 		deps.Modules = append(deps.Modules, agent.modules(links, enrichment)...)
+		// /v1/ws (5J) flips with kb-compile, the device result route, mcp and skills.
+		deps.Modules = append(deps.Modules, wsroute.New(pool, sockets, identify))
 		deps.Modules = append(deps.Modules, agent.agentsModule())
 		deps.Modules = append(deps.Modules, agent.mcpModule(deviceRPC))
 		deps.Modules = append(deps.Modules, agent.routerModules()...)
