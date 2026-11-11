@@ -476,6 +476,10 @@ bl_fox: B1110000-0000-4000-8000-0000000000F6
 bl_gus: B1110000-0000-4000-8000-0000000000A7
 bl_hal: B1110000-0000-4000-8000-0000000000A8
 
+# settings (parity/seed/settings.sql)
+st_amy: 5E770000-0000-4000-8000-0000000000A1
+st_bea: 5E770000-0000-4000-8000-0000000000B2
+
 # hermes runs (parity/seed/hermes-runs.sql, wave 6C): one user per scenario file so conversationByUser never fills.
 hr_ann: E6C00000-0000-4000-8000-0000000000A1
 hr_ben: E6C00000-0000-4000-8000-0000000000B2

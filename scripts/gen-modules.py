@@ -61,7 +61,9 @@ WAVES = {
     # to flipping /v1/ws at the end of wave 5, ahead of the rest of App.
     "LLMRouter": 5, "LLMVoice": 5, "LLMChat": 5, "LLMAdmin": 5, "WS": 5,
     "SkillsCron": 6,
-    "Soul": 8,  # 8D: /v1/soul splits out of auth (18788ca)
+    # SOUL.md read/write/compose: no Auth machinery, ported early with the default
+    # SOUL (owner decision 2026-11-11), so it flips on its own.
+    "Soul": 8,
 }
 
 # Some Swift dirs hold controllers that belong to a later wave
@@ -140,7 +142,6 @@ HELD = {
 # /v1/calendar/oauth/callback, which only finds OAuth sessions from its own process.
 COUPLED = {"Calendar": {"Mail"}}
 SWIFT_DIRS = {
-    "Soul": "Sources/App/Auth",
     "App": "Sources/App/App+build.swift",
     "MeGateways": "Sources/App/Me",
     "MeProviders": "Sources/App/Me",
@@ -152,6 +153,7 @@ SWIFT_DIRS = {
     "LLMChat": "Sources/App/LLM",
     "LLMAdmin": "Sources/App/LLM/Routing",
     "SkillsCron": "Sources/App/Skills",
+    "Soul": "Sources/App/Auth",
     "WS": "Sources/App/App+build.swift",
 }
 
