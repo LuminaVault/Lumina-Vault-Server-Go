@@ -1,0 +1,179 @@
+# Status and settings. Swift decodes the body before requireIdentity(), and checks the range after.
+module: self-improvement
+steps:
+  - name: "status with no token"
+    request: {method: GET, path: "/v1/me/improvement"}
+  - name: "status with a bad token"
+    request: {method: GET, path: "/v1/me/improvement", headers: {Authorization: Bearer not-a-token}}
+  - name: "wrong method"
+    as: si_fresh
+    request: {method: DELETE, path: "/v1/me/improvement"}
+  - name: "first status creates the default row"
+    as: si_fresh
+    request: {method: GET, path: "/v1/me/improvement"}
+    snapshot: [self_improvement_settings]
+  - name: "second status reuses it"
+    as: si_fresh
+    request: {method: GET, path: "/v1/me/improvement"}
+    snapshot: [self_improvement_settings]
+  - name: "every setting and date, an unknown model mode, pending changes"
+    as: si_stat
+    request: {method: GET, path: "/v1/me/improvement"}
+  - name: "put with no token and a good body"
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":{\"enabled\":true,\"curatorEnabled\":true,\"intervalHours\":168,\"minimumIdleHours\":2,\"consolidate\":true,\"pruneBuiltins\":false,\"backupKeep\":5,\"soulReviewEnabled\":true,\"reviewComplexSessions\":true,\"soulReviewWindowDays\":14,\"soulReviewCooldownHours\":24,\"modelMode\":\"economy\"}}"}
+  - name: "put with no token and a malformed body answers the decode error first"
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{"}
+  - name: "put with no token and settings out of range is still 401"
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":{\"enabled\":true,\"curatorEnabled\":true,\"intervalHours\":1,\"minimumIdleHours\":2,\"consolidate\":true,\"pruneBuiltins\":false,\"backupKeep\":5,\"soulReviewEnabled\":true,\"reviewComplexSessions\":true,\"soulReviewWindowDays\":14,\"soulReviewCooldownHours\":24,\"modelMode\":\"economy\"}}"}
+  - name: "put with a bad token"
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":{\"enabled\":true,\"curatorEnabled\":true,\"intervalHours\":168,\"minimumIdleHours\":2,\"consolidate\":true,\"pruneBuiltins\":false,\"backupKeep\":5,\"soulReviewEnabled\":true,\"reviewComplexSessions\":true,\"soulReviewWindowDays\":14,\"soulReviewCooldownHours\":24,\"modelMode\":\"economy\"}}", headers: {Authorization: Bearer not-a-token}}
+  - name: "put replaces every setting and reschedules"
+    as: si_fresh
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":{\"enabled\":true,\"curatorEnabled\":false,\"intervalHours\":24,\"minimumIdleHours\":0,\"consolidate\":false,\"pruneBuiltins\":false,\"backupKeep\":1,\"soulReviewEnabled\":false,\"reviewComplexSessions\":false,\"soulReviewWindowDays\":7,\"soulReviewCooldownHours\":1,\"modelMode\":\"main\"}}"}
+    snapshot: [self_improvement_settings]
+  - name: "put the upper limits"
+    as: si_fresh
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":{\"enabled\":true,\"curatorEnabled\":true,\"intervalHours\":720,\"minimumIdleHours\":72,\"consolidate\":true,\"pruneBuiltins\":false,\"backupKeep\":20,\"soulReviewEnabled\":true,\"reviewComplexSessions\":true,\"soulReviewWindowDays\":14,\"soulReviewCooldownHours\":168,\"modelMode\":\"economy\"}}"}
+  - name: "put numbers written as floats"
+    as: si_fresh
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":{\"enabled\":true,\"curatorEnabled\":true,\"intervalHours\":48.0,\"minimumIdleHours\":1e0,\"consolidate\":true,\"pruneBuiltins\":false,\"backupKeep\":5,\"soulReviewEnabled\":true,\"reviewComplexSessions\":true,\"soulReviewWindowDays\":14,\"soulReviewCooldownHours\":24,\"modelMode\":\"economy\"}}"}
+  - name: "put creates the row for a new user"
+    as: si_enq
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":{\"enabled\":true,\"curatorEnabled\":true,\"intervalHours\":168,\"minimumIdleHours\":2,\"consolidate\":true,\"pruneBuiltins\":false,\"backupKeep\":5,\"soulReviewEnabled\":true,\"reviewComplexSessions\":true,\"soulReviewWindowDays\":14,\"soulReviewCooldownHours\":24,\"modelMode\":\"economy\"}}"}
+    snapshot: [self_improvement_settings]
+  - name: "put refuses: interval low"
+    as: si_fresh
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":{\"enabled\":true,\"curatorEnabled\":true,\"intervalHours\":23,\"minimumIdleHours\":2,\"consolidate\":true,\"pruneBuiltins\":false,\"backupKeep\":5,\"soulReviewEnabled\":true,\"reviewComplexSessions\":true,\"soulReviewWindowDays\":14,\"soulReviewCooldownHours\":24,\"modelMode\":\"economy\"}}"}
+  - name: "put refuses: interval high"
+    as: si_fresh
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":{\"enabled\":true,\"curatorEnabled\":true,\"intervalHours\":721,\"minimumIdleHours\":2,\"consolidate\":true,\"pruneBuiltins\":false,\"backupKeep\":5,\"soulReviewEnabled\":true,\"reviewComplexSessions\":true,\"soulReviewWindowDays\":14,\"soulReviewCooldownHours\":24,\"modelMode\":\"economy\"}}"}
+  - name: "put refuses: idle low"
+    as: si_fresh
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":{\"enabled\":true,\"curatorEnabled\":true,\"intervalHours\":168,\"minimumIdleHours\":-1,\"consolidate\":true,\"pruneBuiltins\":false,\"backupKeep\":5,\"soulReviewEnabled\":true,\"reviewComplexSessions\":true,\"soulReviewWindowDays\":14,\"soulReviewCooldownHours\":24,\"modelMode\":\"economy\"}}"}
+  - name: "put refuses: idle high"
+    as: si_fresh
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":{\"enabled\":true,\"curatorEnabled\":true,\"intervalHours\":168,\"minimumIdleHours\":73,\"consolidate\":true,\"pruneBuiltins\":false,\"backupKeep\":5,\"soulReviewEnabled\":true,\"reviewComplexSessions\":true,\"soulReviewWindowDays\":14,\"soulReviewCooldownHours\":24,\"modelMode\":\"economy\"}}"}
+  - name: "put refuses: keep low"
+    as: si_fresh
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":{\"enabled\":true,\"curatorEnabled\":true,\"intervalHours\":168,\"minimumIdleHours\":2,\"consolidate\":true,\"pruneBuiltins\":false,\"backupKeep\":0,\"soulReviewEnabled\":true,\"reviewComplexSessions\":true,\"soulReviewWindowDays\":14,\"soulReviewCooldownHours\":24,\"modelMode\":\"economy\"}}"}
+  - name: "put refuses: keep high"
+    as: si_fresh
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":{\"enabled\":true,\"curatorEnabled\":true,\"intervalHours\":168,\"minimumIdleHours\":2,\"consolidate\":true,\"pruneBuiltins\":false,\"backupKeep\":21,\"soulReviewEnabled\":true,\"reviewComplexSessions\":true,\"soulReviewWindowDays\":14,\"soulReviewCooldownHours\":24,\"modelMode\":\"economy\"}}"}
+  - name: "put refuses: window low"
+    as: si_fresh
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":{\"enabled\":true,\"curatorEnabled\":true,\"intervalHours\":168,\"minimumIdleHours\":2,\"consolidate\":true,\"pruneBuiltins\":false,\"backupKeep\":5,\"soulReviewEnabled\":true,\"reviewComplexSessions\":true,\"soulReviewWindowDays\":6,\"soulReviewCooldownHours\":24,\"modelMode\":\"economy\"}}"}
+  - name: "put refuses: window high"
+    as: si_fresh
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":{\"enabled\":true,\"curatorEnabled\":true,\"intervalHours\":168,\"minimumIdleHours\":2,\"consolidate\":true,\"pruneBuiltins\":false,\"backupKeep\":5,\"soulReviewEnabled\":true,\"reviewComplexSessions\":true,\"soulReviewWindowDays\":15,\"soulReviewCooldownHours\":24,\"modelMode\":\"economy\"}}"}
+  - name: "put refuses: cooldown low"
+    as: si_fresh
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":{\"enabled\":true,\"curatorEnabled\":true,\"intervalHours\":168,\"minimumIdleHours\":2,\"consolidate\":true,\"pruneBuiltins\":false,\"backupKeep\":5,\"soulReviewEnabled\":true,\"reviewComplexSessions\":true,\"soulReviewWindowDays\":14,\"soulReviewCooldownHours\":0,\"modelMode\":\"economy\"}}"}
+  - name: "put refuses: cooldown high"
+    as: si_fresh
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":{\"enabled\":true,\"curatorEnabled\":true,\"intervalHours\":168,\"minimumIdleHours\":2,\"consolidate\":true,\"pruneBuiltins\":false,\"backupKeep\":5,\"soulReviewEnabled\":true,\"reviewComplexSessions\":true,\"soulReviewWindowDays\":14,\"soulReviewCooldownHours\":169,\"modelMode\":\"economy\"}}"}
+  - name: "put refuses: prune builtins"
+    as: si_fresh
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":{\"enabled\":true,\"curatorEnabled\":true,\"intervalHours\":168,\"minimumIdleHours\":2,\"consolidate\":true,\"pruneBuiltins\":true,\"backupKeep\":5,\"soulReviewEnabled\":true,\"reviewComplexSessions\":true,\"soulReviewWindowDays\":14,\"soulReviewCooldownHours\":24,\"modelMode\":\"economy\"}}"}
+  - name: "put body: empty body"
+    as: si_fresh
+    request: {method: PUT, path: "/v1/me/improvement", raw: ""}
+  - name: "put body: malformed"
+    as: si_fresh
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{"}
+  - name: "put body: array"
+    as: si_fresh
+    request: {method: PUT, path: "/v1/me/improvement", raw: "[]"}
+  - name: "put body: null"
+    as: si_fresh
+    request: {method: PUT, path: "/v1/me/improvement", raw: "null"}
+  - name: "put body: string"
+    as: si_fresh
+    request: {method: PUT, path: "/v1/me/improvement", raw: "\"x\""}
+  - name: "put body: empty object"
+    as: si_fresh
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{}"}
+  - name: "put body: settings null"
+    as: si_fresh
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":null}"}
+  - name: "put body: settings a string"
+    as: si_fresh
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":\"x\"}"}
+  - name: "put body: settings an array"
+    as: si_fresh
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":[]}"}
+  - name: "put body: settings empty"
+    as: si_fresh
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":{}}"}
+  - name: "put body: trailing garbage"
+    as: si_fresh
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":{\"enabled\":true,\"curatorEnabled\":true,\"intervalHours\":168,\"minimumIdleHours\":2,\"consolidate\":true,\"pruneBuiltins\":false,\"backupKeep\":5,\"soulReviewEnabled\":true,\"reviewComplexSessions\":true,\"soulReviewWindowDays\":14,\"soulReviewCooldownHours\":24,\"modelMode\":\"economy\"}}x"}
+  - name: "put missing enabled"
+    as: si_fresh
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":{\"curatorEnabled\":true,\"intervalHours\":168,\"minimumIdleHours\":2,\"consolidate\":true,\"pruneBuiltins\":false,\"backupKeep\":5,\"soulReviewEnabled\":true,\"reviewComplexSessions\":true,\"soulReviewWindowDays\":14,\"soulReviewCooldownHours\":24,\"modelMode\":\"economy\"}}"}
+  - name: "put missing curatorEnabled"
+    as: si_fresh
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":{\"enabled\":true,\"intervalHours\":168,\"minimumIdleHours\":2,\"consolidate\":true,\"pruneBuiltins\":false,\"backupKeep\":5,\"soulReviewEnabled\":true,\"reviewComplexSessions\":true,\"soulReviewWindowDays\":14,\"soulReviewCooldownHours\":24,\"modelMode\":\"economy\"}}"}
+  - name: "put missing intervalHours"
+    as: si_fresh
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":{\"enabled\":true,\"curatorEnabled\":true,\"minimumIdleHours\":2,\"consolidate\":true,\"pruneBuiltins\":false,\"backupKeep\":5,\"soulReviewEnabled\":true,\"reviewComplexSessions\":true,\"soulReviewWindowDays\":14,\"soulReviewCooldownHours\":24,\"modelMode\":\"economy\"}}"}
+  - name: "put missing minimumIdleHours"
+    as: si_fresh
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":{\"enabled\":true,\"curatorEnabled\":true,\"intervalHours\":168,\"consolidate\":true,\"pruneBuiltins\":false,\"backupKeep\":5,\"soulReviewEnabled\":true,\"reviewComplexSessions\":true,\"soulReviewWindowDays\":14,\"soulReviewCooldownHours\":24,\"modelMode\":\"economy\"}}"}
+  - name: "put missing consolidate"
+    as: si_fresh
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":{\"enabled\":true,\"curatorEnabled\":true,\"intervalHours\":168,\"minimumIdleHours\":2,\"pruneBuiltins\":false,\"backupKeep\":5,\"soulReviewEnabled\":true,\"reviewComplexSessions\":true,\"soulReviewWindowDays\":14,\"soulReviewCooldownHours\":24,\"modelMode\":\"economy\"}}"}
+  - name: "put missing pruneBuiltins"
+    as: si_fresh
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":{\"enabled\":true,\"curatorEnabled\":true,\"intervalHours\":168,\"minimumIdleHours\":2,\"consolidate\":true,\"backupKeep\":5,\"soulReviewEnabled\":true,\"reviewComplexSessions\":true,\"soulReviewWindowDays\":14,\"soulReviewCooldownHours\":24,\"modelMode\":\"economy\"}}"}
+  - name: "put missing backupKeep"
+    as: si_fresh
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":{\"enabled\":true,\"curatorEnabled\":true,\"intervalHours\":168,\"minimumIdleHours\":2,\"consolidate\":true,\"pruneBuiltins\":false,\"soulReviewEnabled\":true,\"reviewComplexSessions\":true,\"soulReviewWindowDays\":14,\"soulReviewCooldownHours\":24,\"modelMode\":\"economy\"}}"}
+  - name: "put missing soulReviewEnabled"
+    as: si_fresh
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":{\"enabled\":true,\"curatorEnabled\":true,\"intervalHours\":168,\"minimumIdleHours\":2,\"consolidate\":true,\"pruneBuiltins\":false,\"backupKeep\":5,\"reviewComplexSessions\":true,\"soulReviewWindowDays\":14,\"soulReviewCooldownHours\":24,\"modelMode\":\"economy\"}}"}
+  - name: "put missing reviewComplexSessions"
+    as: si_fresh
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":{\"enabled\":true,\"curatorEnabled\":true,\"intervalHours\":168,\"minimumIdleHours\":2,\"consolidate\":true,\"pruneBuiltins\":false,\"backupKeep\":5,\"soulReviewEnabled\":true,\"soulReviewWindowDays\":14,\"soulReviewCooldownHours\":24,\"modelMode\":\"economy\"}}"}
+  - name: "put missing soulReviewWindowDays"
+    as: si_fresh
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":{\"enabled\":true,\"curatorEnabled\":true,\"intervalHours\":168,\"minimumIdleHours\":2,\"consolidate\":true,\"pruneBuiltins\":false,\"backupKeep\":5,\"soulReviewEnabled\":true,\"reviewComplexSessions\":true,\"soulReviewCooldownHours\":24,\"modelMode\":\"economy\"}}"}
+  - name: "put missing soulReviewCooldownHours"
+    as: si_fresh
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":{\"enabled\":true,\"curatorEnabled\":true,\"intervalHours\":168,\"minimumIdleHours\":2,\"consolidate\":true,\"pruneBuiltins\":false,\"backupKeep\":5,\"soulReviewEnabled\":true,\"reviewComplexSessions\":true,\"soulReviewWindowDays\":14,\"modelMode\":\"economy\"}}"}
+  - name: "put missing modelMode"
+    as: si_fresh
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":{\"enabled\":true,\"curatorEnabled\":true,\"intervalHours\":168,\"minimumIdleHours\":2,\"consolidate\":true,\"pruneBuiltins\":false,\"backupKeep\":5,\"soulReviewEnabled\":true,\"reviewComplexSessions\":true,\"soulReviewWindowDays\":14,\"soulReviewCooldownHours\":24}}"}
+  - name: "put field: enabled null"
+    as: si_fresh
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":{\"enabled\":null,\"curatorEnabled\":true,\"intervalHours\":168,\"minimumIdleHours\":2,\"consolidate\":true,\"pruneBuiltins\":false,\"backupKeep\":5,\"soulReviewEnabled\":true,\"reviewComplexSessions\":true,\"soulReviewWindowDays\":14,\"soulReviewCooldownHours\":24,\"modelMode\":\"economy\"}}"}
+  - name: "put field: enabled a string"
+    as: si_fresh
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":{\"enabled\":\"x\",\"curatorEnabled\":true,\"intervalHours\":168,\"minimumIdleHours\":2,\"consolidate\":true,\"pruneBuiltins\":false,\"backupKeep\":5,\"soulReviewEnabled\":true,\"reviewComplexSessions\":true,\"soulReviewWindowDays\":14,\"soulReviewCooldownHours\":24,\"modelMode\":\"economy\"}}"}
+  - name: "put field: enabled a number"
+    as: si_fresh
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":{\"enabled\":1,\"curatorEnabled\":true,\"intervalHours\":168,\"minimumIdleHours\":2,\"consolidate\":true,\"pruneBuiltins\":false,\"backupKeep\":5,\"soulReviewEnabled\":true,\"reviewComplexSessions\":true,\"soulReviewWindowDays\":14,\"soulReviewCooldownHours\":24,\"modelMode\":\"economy\"}}"}
+  - name: "put field: intervalHours null"
+    as: si_fresh
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":{\"enabled\":true,\"curatorEnabled\":true,\"intervalHours\":null,\"minimumIdleHours\":2,\"consolidate\":true,\"pruneBuiltins\":false,\"backupKeep\":5,\"soulReviewEnabled\":true,\"reviewComplexSessions\":true,\"soulReviewWindowDays\":14,\"soulReviewCooldownHours\":24,\"modelMode\":\"economy\"}}"}
+  - name: "put field: intervalHours a string"
+    as: si_fresh
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":{\"enabled\":true,\"curatorEnabled\":true,\"intervalHours\":\"24\",\"minimumIdleHours\":2,\"consolidate\":true,\"pruneBuiltins\":false,\"backupKeep\":5,\"soulReviewEnabled\":true,\"reviewComplexSessions\":true,\"soulReviewWindowDays\":14,\"soulReviewCooldownHours\":24,\"modelMode\":\"economy\"}}"}
+  - name: "put field: intervalHours fractional"
+    as: si_fresh
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":{\"enabled\":true,\"curatorEnabled\":true,\"intervalHours\":24.5,\"minimumIdleHours\":2,\"consolidate\":true,\"pruneBuiltins\":false,\"backupKeep\":5,\"soulReviewEnabled\":true,\"reviewComplexSessions\":true,\"soulReviewWindowDays\":14,\"soulReviewCooldownHours\":24,\"modelMode\":\"economy\"}}"}
+  - name: "put field: intervalHours huge"
+    as: si_fresh
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":{\"enabled\":true,\"curatorEnabled\":true,\"intervalHours\":99999999999999999999,\"minimumIdleHours\":2,\"consolidate\":true,\"pruneBuiltins\":false,\"backupKeep\":5,\"soulReviewEnabled\":true,\"reviewComplexSessions\":true,\"soulReviewWindowDays\":14,\"soulReviewCooldownHours\":24,\"modelMode\":\"economy\"}}"}
+  - name: "put field: modelMode null"
+    as: si_fresh
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":{\"enabled\":true,\"curatorEnabled\":true,\"intervalHours\":168,\"minimumIdleHours\":2,\"consolidate\":true,\"pruneBuiltins\":false,\"backupKeep\":5,\"soulReviewEnabled\":true,\"reviewComplexSessions\":true,\"soulReviewWindowDays\":14,\"soulReviewCooldownHours\":24,\"modelMode\":null}}"}
+  - name: "put field: modelMode a number"
+    as: si_fresh
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":{\"enabled\":true,\"curatorEnabled\":true,\"intervalHours\":168,\"minimumIdleHours\":2,\"consolidate\":true,\"pruneBuiltins\":false,\"backupKeep\":5,\"soulReviewEnabled\":true,\"reviewComplexSessions\":true,\"soulReviewWindowDays\":14,\"soulReviewCooldownHours\":24,\"modelMode\":1}}"}
+  - name: "put field: modelMode unknown"
+    as: si_fresh
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":{\"enabled\":true,\"curatorEnabled\":true,\"intervalHours\":168,\"minimumIdleHours\":2,\"consolidate\":true,\"pruneBuiltins\":false,\"backupKeep\":5,\"soulReviewEnabled\":true,\"reviewComplexSessions\":true,\"soulReviewWindowDays\":14,\"soulReviewCooldownHours\":24,\"modelMode\":\"premium\"}}"}
+  - name: "status is unchanged by the refusals"
+    as: si_fresh
+    request: {method: GET, path: "/v1/me/improvement"}
+    snapshot: [self_improvement_settings]

@@ -1,0 +1,24 @@
+# A linked BYO Hermes on the LLM stub's gateway routes (parity/stubs/llm/gateway.go).
+module: agents
+steps:
+  - {name: instances, as: agents_fay, request: {method: GET, path: /v1/agents/instances}}
+  - {name: sessions from every profile, as: agents_fay, request: {method: GET, path: /v1/agents/sessions}}
+  - {name: "one profile, one source", as: agents_fay, request: {method: GET, path: "/v1/agents/sessions?profile=default&source=a%20b%2Bc&limit=3"}}
+  - {name: byo only, as: agents_fay, request: {method: GET, path: "/v1/agents/sessions?instance=byo&live=1"}}
+  - {name: log, as: agents_fay, request: {method: GET, path: /v1/agents/instances/byo/sessions/stub-session-1/messages}}
+  - {name: log in a profile, as: agents_fay, request: {method: GET, path: "/v1/agents/instances/byo/sessions/stub-session-1/messages?profile=default"}}
+  - {name: escaped id stays escaped, as: agents_fay, request: {method: GET, path: "/v1/agents/instances/byo/sessions/a%2Fb%3F/messages?profile=x%20y"}}
+  - {name: unknown session, as: agents_fay, request: {method: GET, path: /v1/agents/instances/byo/sessions/stub-missing/messages}}
+  - {name: dot-dot id, as: agents_fay, request: {method: GET, path: "/v1/agents/instances/byo/sessions/x/messages?profile=.."}}
+  - {name: slash in profile, as: agents_fay, request: {method: GET, path: "/v1/agents/instances/byo/sessions/x/messages?profile=a%2Fb"}}
+  - {name: control character in profile, as: agents_fay, request: {method: GET, path: "/v1/agents/instances/byo/sessions/x/messages?profile=a%0Ab"}}
+  - {name: candidates, as: agents_fay, request: {method: GET, path: /v1/agents/room-candidates}}
+  - name: a room with the own hermes
+    as: agents_fay
+    request: {method: POST, path: /v1/agents/rooms, json: {title: Mine, members: [{instanceID: byo, respondMode: every_human_message}]}}
+    capture: {room: $.room.id}
+  - {name: two seats for one hermes, as: agents_fay, request: {method: POST, path: /v1/agents/rooms, json: {title: Twice, members: [{instanceID: byo, handle: a}, {instanceID: byo, handle: b}]}}}
+  - {name: the hermes answers, as: agents_fay, request: {method: POST, path: "/v1/agents/rooms/{{room}}/messages", json: {body: "hi [[stub:reply:hello from hermes]]"}}, stream: true, frames: 30, framesTimeout: 20s, snapshot: [agent_room_messages]}
+  - {name: the prompt it got, as: agents_fay, request: {method: POST, path: "/v1/agents/rooms/{{room}}/messages", json: {body: "again [[stub:digest:all]]"}}, stream: true, frames: 30, framesTimeout: 20s}
+  - {name: the hermes fails, as: agents_fay, request: {method: POST, path: "/v1/agents/rooms/{{room}}/messages", json: {body: "[[stub:error:503]]"}}, stream: true, frames: 30, framesTimeout: 20s}
+  - {name: the thread, as: agents_fay, request: {method: GET, path: "/v1/agents/rooms/{{room}}"}, snapshot: [agent_rooms]}

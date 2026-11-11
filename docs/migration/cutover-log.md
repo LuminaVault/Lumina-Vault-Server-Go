@@ -1563,3 +1563,134 @@ Beyond the pilot gate (D-wave2-early):
   - The rate limit itself, because a scenario would depend on the clock.
   - A webhook payload whose nested object has two or more keys: Swift's key order is random.
 
+## self-improvement (wave 5)
+
+### G0 entry: met 2026-11-05
+
+- Routes: 12, under `/v1/me/improvement`.
+- Prefixes: disjoint (`internal/manifest`).
+- Coupling: the routes write `self_improvement_settings`, `self_improvement_runs`,
+  `self_improvement_changes`, `skills_state`, and on the volume `SOUL.md` (approve) and skill files
+  (rollback). Reject writes no file. Rollback never writes SOUL. Approve also copies SOUL into the Hermes
+  profile, which only Go tests cover: `files` steps see `tenants/<ID>` only.
+- Jobs: none move. `SelfImprovementScheduler` stays in Swift and claims the rows `curator/runs` and
+  `soul/reviews` queue. A Go test mimics the claim SQL. Parity doesn't prove the pickup, so check it at G2.
+- Swift tests: 12 of 13 ported: 6 `SelfImprovementPolicyTests` and 6 of 7 `SelfImprovementServiceTests`.
+  Not ported, because it tests the scheduler: "tick dry-run skips pinned skill and applies zero mutations".
+- Paths: `skillFile` and `restore`'s `os.MkdirAll` and `os.RemoveAll` skip `SanitizePath`, as Swift does.
+  Their names and paths come from `snapshot_json`. Parity shows `../outside-skills` writing outside
+  `skills/` on both servers. Hardening them is an owner decision.
+
+### G1 parity: met 2026-11-05
+
+- CI run 42071476680 on head 4301416: self-test (Swift vs Swift) and Swift vs Go give
+  **164 scenarios, 0 differences** (whole suite). `parity/scenarios/self-improvement` has 9 files.
+  Switch state `improvement-off`: 1 scenario, 0 differences. `parity`, `lint`, `test` and `vuln` pass
+  (https://github.com/LuminaVault/Lumina-Vault-Server-Go/actions/runs/42071476680/job/127400255939).
+- First parity coverage of real SOUL bodies: `05-soul-bodies.yaml` approves 22 bodies with a `files` step
+  after each, and the transcripts show each approve returned 200. `internal/soul` showed no difference.
+- Swift bug kept: Fluent's `@ID(custom: "tenant_id")` on `SkillsState` makes `save()` on a loaded row
+  update every `skills_state` row of the tenant. So pinning one skill pins all of them, and a rollback
+  sets one curator state on all of them. Parity confirms it. Fixing it is an owner decision.
+- An empty `archivedPath` is skipped in Go. Swift would target the working directory. The curator never
+  writes that value, so parity doesn't cover it.
+
+## agents (wave 5)
+
+### G0 entry: met 2026-11-11
+
+- Routes: 10, under `/v1/agents`: instances, sessions, a session's messages, room candidates, and rooms
+  (list, create, get, delete, post as SSE `event: agent.room`, stop).
+- Prefixes: disjoint (`internal/manifest`).
+- Coupling: reads `conversations`, `conversation_messages`, `user_hermes_profiles`, `hermes_profiles` and
+  `user_hermes_config` (through `hermesresolve`). Writes only `agent_rooms`, `agent_room_members` and
+  `agent_room_messages`. No vault paths, so no `SanitizePath` call sites.
+- Jobs: none.
+- LLM: the central agent speaks through the shared stack's `ChatService` (`internal/llm`, not forked). BYO
+  members go to the user's own gateway, which never follows redirects.
+- Swift tests: all 23 ported: 8 `AgentGatewayClientTests`, 6 `AgentRoomTurnPolicyTests`,
+  6 `AgentRoomOrchestratorTests`, 2 `AgentRoomsControllerTests`, 1 `AgentsControllerTests`.
+
+### G1 parity: met 2026-11-11
+
+- CI run 43003550424 on head 198f80f: Swift vs Go gives **213 scenarios, 0 differences** (whole suite).
+  `parity/scenarios/agents` has 5 files. The new switch state `agents` gives 3 scenarios, 0 differences.
+  `parity`, `lint`, `test` and `vuln` pass
+  (https://github.com/LuminaVault/Lumina-Vault-Server-Go/actions/runs/43003550424/job/130465298732).
+- The `agents` state points the gateway at `llmstub` and allows private ranges over HTTP. Its stub
+  counters prove that both servers really ran the BYO and central paths: 10 calls on `/api/instance`,
+  10 on `/api/sessions/{id}/chat` and 20 on `/v1/chat/completions`.
+- Go tests only: the 409 `room_busy` and a chain stopped by the client leaving the stream, because both
+  depend on timing.
+- Not compared: the key order of a re-encoded multi-key `tool_calls` object, because Swift's
+  `JSONSerialization` order is unspecified.
+- G2 needs a staging stub for the success path. Staging has no Hermes.
+
+## me-providers (wave 5)
+
+### G0 entry: met 2026-11-11
+
+- Routes: 14, under `/v1/me/providers`, `/v1/me/preferences/llm` and `/v1/me/connections`. The nine
+  provider routes are mounted only with `LV_SECRET_MASTER_KEY`, as in Swift (state `no-master-key`).
+- Prefixes: disjoint (`internal/manifest`).
+- Coupling: writes `user_provider_credentials`, `user_provider_credential_pool_keys`,
+  `user_llm_preferences`, `router_profiles` (the preferences save rewrites the default profile) and
+  `connection_diagnostic_events`. Every write goes through the agent's one `llm.Stack`, so the
+  router's credential, preference and profile caches see it. Swift keeps its own 600 s caches, so
+  this module flips with 5C. The memory and workflows modules build their own `PreferenceRepository`
+  and keep a stale preference until their cache expires.
+- Paid path: `/test` and `/models` call the user's own provider key. The tool probe after a passing
+  `/test` runs detached, as a Swift `Task`. User base URLs are dialed unchecked, as in Swift (no SSRF
+  guard). Hardening that is an owner decision.
+- Swift tests: `ProviderCatalogTests` 6, `ProviderModelListingTests` 5, `ProviderToolProbeTests` 9,
+  the probe half of `OpenAICompletionReaderTests` and `Settings/LLMPreferencesControllerTests` 11,
+  all ported.
+
+### G1 parity: met 2026-11-11
+
+- CI run 43007663996 on head 2337ec9: self-test and Swift vs Go give **232 scenarios, 0 differences**
+  (whole suite), and every switch state shows 0 differences
+  (https://github.com/LuminaVault/Lumina-Vault-Server-Go/actions/runs/43007663996).
+  `parity/scenarios/me-providers` has 8 files. Switch states: `no-master-key` (provider routes 404)
+  and `llm` (`/test` and `/models` success against the stub).
+- Spec drift: the spec's `HermesGatewayID` has no `photon`, which Swift lists in every summary.
+
+## llm-router (wave 5)
+
+### G0 entry: met 2026-11-11
+
+- Routes: 17, under `/v1/router`.
+- Prefixes: disjoint (`internal/manifest`).
+- Coupling: writes `router_profiles`, `router_bindings`, `router_synthesis_presets` and deletes
+  `router_executions`. It shares the `llm.Stack` caches with `me-providers`.
+- Parallel: every `/parallel` and `/synthesis-presets` route is 403 unless `cerberus.parallelEnabled`
+  is on and the user is Ultimate. It is off in production and parity. `ParallelExecutor` stays a hook
+  (owner decision 7). With parallel on, Go's stream writes `token`, `done` and `error` frames only,
+  and records no execution.
+- Swift tests: `RouterPlaceholderRoutesTests` 7 and `RouterPlaceholderSaveTests` 4, ported.
+  `ParallelExecutorTests` 2 not ported: waiver proposed in PR #55.
+
+### G1 parity: met 2026-11-11
+
+- CI run 43007663996 on head 2337ec9: 0 differences (see me-providers). `parity/scenarios/llm-router`
+  has 9 files.
+- Swift bug kept: `/v1/router/dashboard` is a 500 on every call, because `RouterController` decodes
+  `SUM(bigint)`, which Postgres returns as numeric, into `Int64`. `Options.FixDashboard` serves it.
+  Turning that on is an owner decision.
+- Quirks kept: a BYOK write without `routingPolicy` defaults to `autoSmart` and needs an OpenRouter
+  credential (`AUTO_REQUIRES_OPENROUTER`). A duplicate profile name and unbinding the user scope are
+  bare 500s. A workflow binding loads the Fluent model, so a workflow whose draft doesn't decode is a
+  500 in Swift (Go reads only the row's existence).
+
+## llm-admin (wave 5)
+
+### G0 entry: met 2026-11-11
+
+- Routes: 1, `GET /admin/llm/health`, behind `X-Admin-Token` (empty token: 404, state `unconfigured`).
+- It pings every OpenAI-compatible adapter with the deployment key. It is not in smoke.
+- Swift tests: none.
+
+### G1 parity: met 2026-11-11
+
+- CI run 43007663996 on head 2337ec9: 0 differences. The error text and latency are ignored: the error
+  is Go's text, not Foundation's `String(describing:)`.

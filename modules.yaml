@@ -226,7 +226,7 @@ modules:
   agents:
     wave: 5
     swiftDir: Sources/App/Agents
-    status: swift
+    status: parity
     prefixes: [/v1/agents]
     jobs: []
   chat:
@@ -244,7 +244,7 @@ modules:
   llm-admin:
     wave: 5
     swiftDir: Sources/App/LLM/Routing
-    status: swift
+    status: parity
     prefixes: [/admin/llm/health]
     jobs: []
   llm-chat:
@@ -256,7 +256,7 @@ modules:
   llm-router:
     wave: 5
     swiftDir: Sources/App/LLM/Routing
-    status: swift
+    status: parity
     prefixes: [/v1/router]
     jobs: []
   llm-voice:
@@ -274,13 +274,13 @@ modules:
   me-providers:
     wave: 5
     swiftDir: Sources/App/Me
-    status: swift
+    status: parity
     prefixes: [/v1/me/connections, /v1/me/preferences/llm, /v1/me/providers]
     jobs: []
   self-improvement:
     wave: 5
     swiftDir: Sources/App/SelfImprovement
-    status: swift
+    status: parity
     prefixes: [/v1/me/improvement]
     jobs: []
   skills:

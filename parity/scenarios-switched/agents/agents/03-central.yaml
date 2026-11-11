@@ -1,0 +1,25 @@
+# The central agent's turns on the LLM stub as the gateway: a hand-over loop that stops
+# at the turn cap (the directive is in the room's title, so every turn's system message
+# carries it), the prompt each agent gets (digest), and a mixed room where the
+# central agent hands over to the caller's own Hermes.
+module: agents
+steps:
+  - name: a room of two
+    as: agents_ivy
+    request: {method: POST, path: /v1/agents/rooms, json: {title: "Loop [[stub:reply:ping @alpha and @beta]]", members: [{instanceID: central, profile: alpha}, {instanceID: central, profile: beta}]}}
+    capture: {room: $.room.id}
+  - {name: a hand-over loop stops at six replies, as: agents_ivy, request: {method: POST, path: "/v1/agents/rooms/{{room}}/messages", json: {body: "@alpha go"}}, stream: true, frames: 40, framesTimeout: 25s, snapshot: [agent_room_messages]}
+  - {name: what beta saw since its last reply, as: agents_ivy, request: {method: POST, path: "/v1/agents/rooms/{{room}}/messages", json: {body: "@beta [[stub:digest:all]]"}}, stream: true, frames: 30, framesTimeout: 25s}
+  - {name: the thread, as: agents_ivy, request: {method: GET, path: "/v1/agents/rooms/{{room}}"}, snapshot: [agent_rooms]}
+  # The stub's directive match is greedy, so the error gets a room of its own.
+  - name: a room of one
+    as: agents_ivy
+    request: {method: POST, path: /v1/agents/rooms, json: {title: Errors, members: [{instanceID: central, profile: alpha, respondMode: every_human_message}]}}
+    capture: {other: $.room.id}
+  - {name: an upstream error, as: agents_ivy, request: {method: POST, path: "/v1/agents/rooms/{{other}}/messages", json: {body: "[[stub:error:500]]"}}, stream: true, frames: 30, framesTimeout: 25s, snapshot: [agent_rooms]}
+  - name: central and own hermes
+    as: agents_jon
+    request: {method: POST, path: /v1/agents/rooms, json: {title: Mixed, members: [{instanceID: central, profile: alpha}, {instanceID: byo, displayName: Box}]}}
+    capture: {room: $.room.id}
+  - {name: central hands over to the hermes, as: agents_jon, request: {method: POST, path: "/v1/agents/rooms/{{room}}/messages", json: {body: "@alpha [[stub:reply:over to @hermes]]"}}, stream: true, frames: 30, framesTimeout: 25s}
+  - {name: each agent sees what it missed, as: agents_jon, request: {method: POST, path: "/v1/agents/rooms/{{room}}/messages", json: {body: "@hermes and @alpha [[stub:digest:all]]"}}, stream: true, frames: 30, framesTimeout: 25s, snapshot: [agent_room_messages]}

@@ -25,9 +25,12 @@
 #   tts-on          /v1/tts mounted: Swift on a fake OpenAI key, Go on TTS_BASE_URL, both on the LLM stub
 #   tts-billing     tts-on with BILLING_ENFORCEMENT_ENABLED=true
 #   no-master-key   LV_SECRET_MASTER_KEY empty: /v1/grok is not mounted
+#   improvement-off SELF_IMPROVEMENT_ENABLED=false and an empty SELF_IMPROVEMENT_ECONOMY_MODEL: /v1/me/improvement read-only, status unavailable
 #
 #   llm             HERMES_GATEWAY_URL on the LLM stub, and capture.autoFile.enabled on:
 #                   the model-calling routes' success paths (group 4F)
+#   agents          HERMES_GATEWAY_URL on the LLM stub, and BYO Hermes (private ranges over
+#                   HTTP allowed) on its gateway routes: agent rooms' turns (group 5D)
 #
 # A state for other LLM success paths, once Go serves them (wave 5), is one more
 # run_state with the stub up and SWITCH_HERMES_GATEWAY_URL=http://llmstub:8080,
@@ -154,6 +157,32 @@ voice_states() {
   done
 }
 
+# Agents (wave 5D): the central agent on the stub as the gateway, and BYO Hermes on the
+# stub's gateway routes, which the SSRF guard admits only with private ranges over HTTP.
+# The stub's counters have to show both servers asked a BYO Hermes for real.
+agents_state() {
+  local before after route calls
+  before=$(curl -fsS http://localhost:18085/stub/stats)
+  run_state agents SWITCH_HERMES_GATEWAY_URL=http://llmstub:8080 SWITCH_BYO_HERMES_ALLOW_PRIVATE=true SWITCH_BYO_HERMES_REQUIRE_HTTPS=false
+  after=$(curl -fsS http://localhost:18085/stub/stats)
+  # /v1/chat/completions is the central agent (llm.RoutedService through the gateway).
+  for route in /api/instance /api/sessions/{id}/chat /v1/chat/completions; do
+    calls=$(( $(stub_count "$after" "$route") - $(stub_count "$before" "$route") ))
+    echo "stub answered $calls on $route in state agents"
+    if [ "$calls" -lt 2 ]; then
+      echo "the servers never reached the stub on $route"
+      failed=1
+    fi
+  done
+}
+
+# stub_count STATS ROUTE prints ROUTE's counter in a /stub/stats body, 0 when absent.
+stub_count() {
+  local n
+  n=$(printf '%s' "$1" | sed -n "s|.*\"$2\":\([0-9]*\).*|\1|p" | head -1)
+  echo "${n:-0}"
+}
+
 failed=0
 run_state community-off SWITCH_COMMUNITY_ENABLED=false
 run_state posting-off SWITCH_COMMUNITY_POSTING_ENABLED=false
@@ -169,6 +198,7 @@ run_state vision-cohere-down SWITCH_VISION_COHERE_API_KEY=parity-cohere-key SWIT
 run_state studio-off SWITCH_CERBERUS_STUDIO_ENABLED=false
 run_state studio-on SWITCH_CERBERUS_STUDIO_ENABLED=true SWITCH_OPENROUTER_API_KEY=parity-openrouter-key
 run_state billing-on SWITCH_BILLING_ENFORCEMENT_ENABLED=true
+run_state improvement-off SWITCH_SELF_IMPROVEMENT_ENABLED=false SWITCH_SELF_IMPROVEMENT_ECONOMY_MODEL=
 voice_states
 run_state no-master-key SWITCH_LV_SECRET_MASTER_KEY=
 "${COMPOSE[@]}" up -d --build --force-recreate llmstub
@@ -177,6 +207,7 @@ for _ in $(seq 1 60); do
   sleep 1
 done
 run_state llm SWITCH_HERMES_GATEWAY_URL=http://llmstub:8080 SWITCH_CAPTURE_AUTO_FILE_ENABLED=true
+agents_state
 llm_selftest
 "${COMPOSE[@]}" stop swift-switched go-switched >/dev/null 2>&1 || true
 exit "$failed"

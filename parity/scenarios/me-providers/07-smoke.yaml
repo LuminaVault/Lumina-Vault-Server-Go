@@ -1,0 +1,10 @@
+# Smoke: a fresh account's reads. No seed ids, no provider call, one user.
+module: me-providers
+smoke: true
+steps:
+  - {name: catalog, as: mp_ivy, request: {method: GET, path: /v1/me/providers/catalog}}
+  - {name: credentials, as: mp_ivy, request: {method: GET, path: /v1/me/providers}}
+  - {name: preferences, as: mp_ivy, request: {method: GET, path: /v1/me/preferences/llm}}
+  - {name: connections, as: mp_ivy, request: {method: GET, path: /v1/me/connections}}
+  - {name: events, as: mp_ivy, request: {method: GET, path: /v1/me/connections/events}}
+  - {name: pool, as: mp_ivy, request: {method: GET, path: /v1/me/providers/openai/pool}}

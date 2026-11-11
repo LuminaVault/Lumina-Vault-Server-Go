@@ -1,0 +1,14 @@
+# LV_SECRET_MASTER_KEY empty: Swift builds providersController inside the SecretBox
+# branch, so /v1/me/providers is a plain 404. Preferences and connections still
+# serve, and read no secret.
+module: me-providers
+steps:
+  - {name: catalog, as: mp_ann, request: {method: GET, path: /v1/me/providers/catalog}}
+  - {name: list, as: mp_ann, request: {method: GET, path: /v1/me/providers}}
+  - {name: put, as: mp_ann, request: {method: PUT, path: /v1/me/providers/openai, json: {kind: apiKey, apiKey: k}}}
+  - {name: test, as: mp_ann, request: {method: POST, path: /v1/me/providers/openai/test}}
+  - {name: pool, as: mp_ann, request: {method: GET, path: /v1/me/providers/openai/pool}}
+  - {name: no token, request: {method: GET, path: /v1/me/providers, headers: {X-Forwarded-For: 10.95.1.1}}}
+  - {name: preferences still serve, as: mp_ann, request: {method: GET, path: /v1/me/preferences/llm}}
+  - {name: a managed save still works, as: mp_ann, request: {method: PUT, path: /v1/me/preferences/llm, json: {mode: managed, primaryProvider: openRouter, primaryModel: x, fallbackChain: []}}}
+  - {name: connections still serve, as: mp_eve, request: {method: GET, path: /v1/me/connections}}

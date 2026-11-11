@@ -24,7 +24,6 @@ import (
 	"lumina/internal/onboardlatch"
 	"lumina/internal/ratelimit"
 	"lumina/internal/secretbox"
-	"lumina/internal/ssrfguard"
 	"lumina/internal/vaultfiles"
 	"lumina/internal/vaultpaths"
 	"net/url"
@@ -40,18 +39,11 @@ import (
 // byoHermes builds the BYO Hermes middleware; nil without a secret box or a gateway URL
 // that parses, as in Swift.
 func byoHermes(pool *pgxpool.Pool, cfg config.Config, box *secretbox.Box) echo.MiddlewareFunc {
-	if box == nil {
+	resolver := hermesResolver(pool, cfg, box)
+	if resolver == nil {
 		return nil
 	}
-	gateway, err := url.Parse(cfg.HermesGatewayURL)
-	if err != nil {
-		return nil
-	}
-	return hermesresolve.New(pool, box, ssrfguard.Guard{
-		AllowPrivateRanges: strings.EqualFold(cfg.BYOHermesAllowPrivate, "true"),
-		RequireHTTPS:       cfg.BYOHermesRequireHTTPS(),
-		AllowTailnetHTTP:   strings.EqualFold(cfg.BYOHermesAllowTailnet, "true"),
-	}, gateway).Middleware()
+	return resolver.Middleware()
 }
 
 // agent holds the singletons the model-calling routes share: one LLM stack and one

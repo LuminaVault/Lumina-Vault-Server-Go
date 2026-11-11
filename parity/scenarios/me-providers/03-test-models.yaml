@@ -1,0 +1,43 @@
+# POST /{provider}/test and GET /{provider}/models with every provider host
+# refused (docker-compose.parity.yml): the error and fallback paths. A refused
+# connection is not evidence about the key, so nothing is stamped. The success
+# paths run against the LLM stub in scenarios-switched/llm.
+module: me-providers
+steps:
+  - {name: test without a credential, as: mp_cid, request: {method: POST, path: /v1/me/providers/openai/test}}
+  - {name: test unknown provider, as: mp_cid, request: {method: POST, path: /v1/me/providers/kimi/test}}
+  - {name: models without a credential fall back to the catalog, as: mp_cid, request: {method: GET, path: /v1/me/providers/openai/models}}
+  - {name: anthropic models without a key, as: mp_cid, request: {method: GET, path: /v1/me/providers/anthropic/models}}
+  - {name: gemini models without a key, as: mp_cid, request: {method: GET, path: /v1/me/providers/gemini/models}}
+  - {name: ollama models without a host, as: mp_cid, request: {method: GET, path: /v1/me/providers/ollama/models}}
+  - {name: nous models, as: mp_cid, request: {method: GET, path: /v1/me/providers/nous/models}}
+  - {name: models unknown provider, as: mp_cid, request: {method: GET, path: /v1/me/providers/deepseek/models}}
+
+  - {name: an openai key, as: mp_cid, request: {method: PUT, path: /v1/me/providers/openai, json: {kind: apiKey, apiKey: sk-parity-cid}}}
+  - name: test against a refused host is a network failure
+    as: mp_cid
+    request: {method: POST, path: /v1/me/providers/openai/test}
+    snapshot: [parity_mp_credentials]
+  - {name: models against a refused host fall back, as: mp_cid, request: {method: GET, path: /v1/me/providers/openai/models}}
+
+  - {name: an anthropic key, as: mp_cid, request: {method: PUT, path: /v1/me/providers/anthropic, json: {kind: apiKey, apiKey: sk-ant-parity}}}
+  - {name: anthropic test, as: mp_cid, request: {method: POST, path: /v1/me/providers/anthropic/test}}
+  - {name: anthropic models with a key, as: mp_cid, request: {method: GET, path: /v1/me/providers/anthropic/models}}
+
+  - {name: a gemini key, as: mp_cid, request: {method: PUT, path: /v1/me/providers/gemini, json: {kind: apiKey, apiKey: AIza-parity}}}
+  - {name: gemini test, as: mp_cid, request: {method: POST, path: /v1/me/providers/gemini/test}}
+  - {name: gemini models with a key, as: mp_cid, request: {method: GET, path: /v1/me/providers/gemini/models}}
+
+  - {name: an ollama host, as: mp_cid, request: {method: PUT, path: /v1/me/providers/ollama, json: {kind: hostURL, baseUrl: "http://127.0.0.1:9"}}}
+  - {name: ollama test, as: mp_cid, request: {method: POST, path: /v1/me/providers/ollama/test}}
+  - {name: ollama models with a host, as: mp_cid, request: {method: GET, path: /v1/me/providers/ollama/models}}
+
+  - {name: a custom endpoint, as: mp_cid, request: {method: PUT, path: /v1/me/providers/custom, json: {kind: hostURL, baseUrl: "http://127.0.0.1:9"}}}
+  - {name: custom test probes the model list, as: mp_cid, request: {method: POST, path: /v1/me/providers/custom/test}}
+  - {name: custom models, as: mp_cid, request: {method: GET, path: /v1/me/providers/custom/models}}
+
+  - {name: an oauth marker has no secret to test, as: mp_cid, request: {method: PUT, path: /v1/me/providers/nvidia, json: {kind: oauth}}}
+  - name: so test finds no credential
+    as: mp_cid
+    request: {method: POST, path: /v1/me/providers/nvidia/test}
+    snapshot: [parity_mp_credentials]

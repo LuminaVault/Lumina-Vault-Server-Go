@@ -1,0 +1,23 @@
+# The parallel executions and synthesis presets routes answer 403 unless
+# cerberus.parallelEnabled is on and the user is Ultimate. Parallel is off in
+# production and in parity (owner decision 7), so every call is the 403, for
+# ultimate and free alike, and nothing seeded is read or changed.
+module: llm-router
+steps:
+  - {name: stream, as: lr_ult, request: {method: POST, path: /v1/router/parallel/executions/stream, json: {prompt: Compare, strategy: debate}}}
+  - {name: stream with a bad body, as: lr_ult, request: {method: POST, path: /v1/router/parallel/executions/stream, raw: "{"}}
+  - {name: executions, as: lr_ult, request: {method: GET, path: /v1/router/parallel/executions}}
+  - {name: execution, as: lr_ult, request: {method: GET, path: /v1/router/parallel/executions/1a7e4000-0000-4000-8000-000000000010}}
+  - {name: execution bad id, as: lr_ult, request: {method: GET, path: /v1/router/parallel/executions/nope}}
+  - {name: delete execution, as: lr_ult, request: {method: DELETE, path: /v1/router/parallel/executions/1a7e4000-0000-4000-8000-000000000010}}
+  - {name: presets, as: lr_ult, request: {method: GET, path: /v1/router/synthesis-presets}}
+  - {name: create preset, as: lr_ult, request: {method: POST, path: /v1/router/synthesis-presets, json: {name: P, prompt: Q}}}
+  - {name: update preset, as: lr_ult, request: {method: PUT, path: /v1/router/synthesis-presets/1a7e5000-0000-4000-8000-000000000001, json: {name: P, prompt: Q}}}
+  - {name: delete preset, as: lr_ult, request: {method: DELETE, path: /v1/router/synthesis-presets/1a7e5000-0000-4000-8000-000000000001}}
+  - {name: free stream, as: lr_free, request: {method: POST, path: /v1/router/parallel/executions/stream, json: {prompt: p, strategy: auto}}}
+  - {name: free executions, as: lr_free, request: {method: GET, path: /v1/router/parallel/executions}}
+  - {name: free presets, as: lr_free, request: {method: GET, path: /v1/router/synthesis-presets}}
+  - name: free create preset
+    as: lr_free
+    request: {method: POST, path: /v1/router/synthesis-presets, json: {name: P, prompt: Q}}
+    snapshot: [parity_lr_parallel]

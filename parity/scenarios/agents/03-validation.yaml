@@ -1,0 +1,27 @@
+# Creating a room: every way the body can be wrong, then the edges that pass.
+module: agents
+steps:
+  - {"name": "no body", "as": "agents_dee", "request": {"method": "POST", "path": "/v1/agents/rooms"}}
+  - {"name": "not json", "as": "agents_dee", "request": {"method": "POST", "path": "/v1/agents/rooms", "raw": "{"}}
+  - {"name": "an array", "as": "agents_dee", "request": {"method": "POST", "path": "/v1/agents/rooms", "json": [1]}}
+  - {"name": "no title", "as": "agents_dee", "request": {"method": "POST", "path": "/v1/agents/rooms", "json": {"members": []}}}
+  - {"name": "null title", "as": "agents_dee", "request": {"method": "POST", "path": "/v1/agents/rooms", "json": {"title": null, "members": []}}}
+  - {"name": "title a number", "as": "agents_dee", "request": {"method": "POST", "path": "/v1/agents/rooms", "json": {"title": 3, "members": []}}}
+  - {"name": "no members", "as": "agents_dee", "request": {"method": "POST", "path": "/v1/agents/rooms", "json": {"title": "x"}}}
+  - {"name": "members not an array", "as": "agents_dee", "request": {"method": "POST", "path": "/v1/agents/rooms", "json": {"title": "x", "members": {}}}}
+  - {"name": "member without instance", "as": "agents_dee", "request": {"method": "POST", "path": "/v1/agents/rooms", "json": {"title": "x", "members": [{"profile": "default"}]}}}
+  - {"name": "member instance null", "as": "agents_dee", "request": {"method": "POST", "path": "/v1/agents/rooms", "json": {"title": "x", "members": [{"instanceID": null}]}}}
+  - {"name": "bad respond mode", "as": "agents_dee", "request": {"method": "POST", "path": "/v1/agents/rooms", "json": {"title": "x", "members": [{"instanceID": "central", "profile": "default", "respondMode": "always"}]}}}
+  - {"name": "respond mode a number", "as": "agents_dee", "request": {"method": "POST", "path": "/v1/agents/rooms", "json": {"title": "x", "members": [{"instanceID": "central", "profile": "default", "respondMode": 1}]}}}
+  - {"name": "blank title", "as": "agents_dee", "request": {"method": "POST", "path": "/v1/agents/rooms", "json": {"title": " \t\n", "members": [{"instanceID": "central", "profile": "default"}]}}}
+  - {"name": "title too long", "as": "agents_dee", "request": {"method": "POST", "path": "/v1/agents/rooms", "json": {"title": "ttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttt", "members": [{"instanceID": "central", "profile": "default"}]}}}
+  - {"name": "nobody", "as": "agents_dee", "request": {"method": "POST", "path": "/v1/agents/rooms", "json": {"title": "x", "members": []}}}
+  - {"name": "nine members", "as": "agents_dee", "request": {"method": "POST", "path": "/v1/agents/rooms", "json": {"title": "x", "members": [{"instanceID": "central", "profile": "default"}, {"instanceID": "central", "profile": "default"}, {"instanceID": "central", "profile": "default"}, {"instanceID": "central", "profile": "default"}, {"instanceID": "central", "profile": "default"}, {"instanceID": "central", "profile": "default"}, {"instanceID": "central", "profile": "default"}, {"instanceID": "central", "profile": "default"}, {"instanceID": "central", "profile": "default"}]}}}
+  - {"name": "unknown persona", "as": "agents_dee", "request": {"method": "POST", "path": "/v1/agents/rooms", "json": {"title": "x", "members": [{"instanceID": "central", "profile": "default"}, {"instanceID": "central", "profile": "nope"}]}}}
+  - {"name": "central without profile", "as": "agents_dee", "request": {"method": "POST", "path": "/v1/agents/rooms", "json": {"title": "x", "members": [{"instanceID": "central"}]}}}
+  - {"name": "no own hermes", "as": "agents_dee", "request": {"method": "POST", "path": "/v1/agents/rooms", "json": {"title": "Ghost", "members": [{"instanceID": "byo"}]}}}
+  - {"name": "bad handle", "as": "agents_dee", "request": {"method": "POST", "path": "/v1/agents/rooms", "json": {"title": "x", "members": [{"instanceID": "central", "profile": "default", "handle": "Bad Handle"}]}}}
+  - {"name": "handle starts with a dash", "as": "agents_dee", "request": {"method": "POST", "path": "/v1/agents/rooms", "json": {"title": "x", "members": [{"instanceID": "central", "profile": "default", "handle": "-ops"}]}}}
+  - {"name": "handle too long", "as": "agents_dee", "request": {"method": "POST", "path": "/v1/agents/rooms", "json": {"title": "x", "members": [{"instanceID": "central", "profile": "default", "handle": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}]}}}
+  - {"name": "same handle twice", "as": "agents_dee", "request": {"method": "POST", "path": "/v1/agents/rooms", "json": {"title": "x", "members": [{"instanceID": "central", "profile": "default", "handle": "x"}, {"instanceID": "central", "profile": "stocks", "handle": "X"}]}}}
+  - {"name": "120 characters, a blank handle and a long name pass", "as": "agents_dee", "request": {"method": "POST", "path": "/v1/agents/rooms", "json": {"title": "ééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé🇵🇹", "members": [{"instanceID": "central", "profile": "default", "handle": "   ", "displayName": "NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN"}, {"instanceID": "central", "profile": "default", "handle": "lumina-2", "respondMode": "mention", "displayName": "\n"}]}}, "snapshot": ["agent_rooms", "agent_room_members"]}

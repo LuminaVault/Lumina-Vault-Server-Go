@@ -1,0 +1,5 @@
+# ADMIN_TOKEN empty: every admin route answers 404 "admin disabled", whatever token.
+module: llm-admin
+steps:
+  - {name: no token, request: {method: GET, path: /admin/llm/health}}
+  - {name: any token, request: {method: GET, path: /admin/llm/health, headers: {X-Admin-Token: parity-admin-token}}}

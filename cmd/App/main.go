@@ -48,6 +48,7 @@ import (
 	"lumina/internal/modules/profiles"
 	"lumina/internal/modules/projects"
 	"lumina/internal/modules/reminders"
+	"lumina/internal/modules/selfimprovement"
 	"lumina/internal/modules/sessions"
 	"lumina/internal/modules/spaces"
 	"lumina/internal/modules/teams"
@@ -62,6 +63,8 @@ import (
 	"lumina/internal/ratelimit"
 	"lumina/internal/secretbox"
 	"lumina/internal/selfimprove"
+	"lumina/internal/skills"
+	"lumina/internal/soul"
 	"lumina/internal/ssrfguard"
 	"lumina/internal/telemetry"
 	"lumina/internal/usagemeter"
@@ -225,6 +228,7 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 			health.New(pool, healthGate, analytics),
 		)
 		deps.Modules = append(deps.Modules, memoryModule(pool, cfg, box, identify, limits, paths, embeddings, sink, meModule))
+		deps.Modules = append(deps.Modules, selfImprovementModule(pool, cfg, box, identify, paths))
 		// Wave 4: knowledge, vision and the compile probe. /v1/vision spends a platform
 		// key, so it has its own gate. Both groups read billing.enforcementEnabled.
 		enforcement := entitlement.EnforcementEnabled(cfg.BillingEnforcementEnabled)
@@ -283,6 +287,8 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 			deps.Modules = append(deps.Modules, workflowsModule(pool, cfg, box, identify, limits))
 		}
 		deps.Modules = append(deps.Modules, agent.modules(links, enrichment)...)
+		deps.Modules = append(deps.Modules, agent.agentsModule())
+		deps.Modules = append(deps.Modules, agent.routerModules()...)
 	}
 	// Deferred after the sink and the pool, so jobs stop first and can still use both.
 	stopJobs, err := startJobs(ctx, cfg, registered)
@@ -465,6 +471,44 @@ func memoryModule(pool *pgxpool.Pool, cfg config.Config, box *secretbox.Box, ide
 	}
 	opts.Hermes = byoHermes(pool, cfg, box)
 	return memory.New(pool, memorystore.New(pool, nil), opts)
+}
+
+// hermesResolver is HermesEndpointResolver, which Swift mounts only with a SecretBox.
+// Nil without one, or without a gateway URL that parses.
+func hermesResolver(pool *pgxpool.Pool, cfg config.Config, box *secretbox.Box) *hermesresolve.Resolver {
+	if box == nil {
+		return nil
+	}
+	gateway, err := url.Parse(cfg.HermesGatewayURL)
+	if err != nil {
+		return nil
+	}
+	return hermesresolve.New(pool, box, ssrfguard.Guard{
+		AllowPrivateRanges: strings.EqualFold(cfg.BYOHermesAllowPrivate, "true"),
+		RequireHTTPS:       cfg.BYOHermesRequireHTTPS(),
+		AllowTailnetHTTP:   strings.EqualFold(cfg.BYOHermesAllowTailnet, "true"),
+	}, gateway)
+}
+
+// selfImprovementModule builds /v1/me/improvement. SelfImprovementScheduler stays in
+// Swift and picks up the rows these routes queue.
+func selfImprovementModule(pool *pgxpool.Pool, cfg config.Config, box *secretbox.Box, identify echo.MiddlewareFunc, paths vaultpaths.Paths) httpserver.Module {
+	catalog := skills.NewCatalog(paths)
+	if strings.EqualFold(cfg.SkillsBuiltinScanEnabled, "false") {
+		catalog = skills.NewVaultCatalog(paths)
+	}
+	opts := selfimprovement.Options{
+		Identify:        identify,
+		Paths:           paths,
+		Soul:            soul.New(paths, cfg.HermesDataRoot),
+		Catalog:         catalog,
+		EconomyModel:    cfg.SelfImprovementEconomyModel,
+		GloballyEnabled: cfg.SelfImprovementEnabled,
+	}
+	if resolver := hermesResolver(pool, cfg, box); resolver != nil {
+		opts.IsUserOverride = selfimprove.ResolverOverride(resolver)
+	}
+	return selfimprovement.New(pool, opts)
 }
 
 func calendarModules(pool *pgxpool.Pool, cfg config.Config, identify echo.MiddlewareFunc, limits *ratelimit.Store, embeddings embedding.Service, analytics *posthog.Client) []httpserver.Module {
