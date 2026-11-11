@@ -9,6 +9,7 @@ import (
 	"lumina/internal/httpserver"
 	"lumina/internal/migrations"
 	"lumina/internal/modules/brain"
+	"lumina/internal/modules/brain/db"
 	"lumina/internal/ratelimit"
 	"lumina/parity/scenario"
 	"net/http"
@@ -679,4 +680,44 @@ func TestSimilarStaysInScope(t *testing.T) {
 		require.NotEqual(t, bm, e.From)
 		require.NotEqual(t, bm, e.To)
 	}
+}
+
+// The HTTP output cannot show a leak, because assemble drops edges to nodes that are not items.
+// This calls the query directly so each scope predicate is pinned on its own.
+func TestSimilarMemoriesQueryIsScoped(t *testing.T) {
+	v := setup(t)
+	embed(t, v)
+	exec(t, v, `UPDATE memories SET embedding = `+vecFirstHalf+` WHERE id = $1`, bm)
+	q := db.New(v.pool)
+	ids := func(ss ...string) []uuid.UUID {
+		out := make([]uuid.UUID, 0, len(ss))
+		for _, s := range ss {
+			out = append(out, uuid.MustParse(s))
+		}
+		return out
+	}
+	run := func(vaults, memories []uuid.UUID) []db.SimilarMemoriesRow {
+		rows, err := q.SimilarMemories(context.Background(), db.SimilarMemoriesParams{
+			VaultIds: vaults, MemoryIds: memories, MinSimilarity: 0.78, PerNode: 3,
+		})
+		require.NoError(t, err)
+		return rows
+	}
+
+	t.Run("foreign memory id is never returned", func(t *testing.T) {
+		rows := run([]uuid.UUID{alice, teamVault}, ids(m1, m2, bm))
+		require.NotEmpty(t, rows)
+		for _, r := range rows {
+			require.NotEqual(t, uuid.MustParse(bm), r.FromID)
+			require.NotEqual(t, uuid.MustParse(bm), r.ToID)
+		}
+	})
+	t.Run("vault ids bound the selected memories", func(t *testing.T) {
+		// m2 lives in the team vault, which is not in vault_ids.
+		require.Empty(t, run([]uuid.UUID{alice}, ids(m1, m2)))
+	})
+	t.Run("memory ids bound both sides", func(t *testing.T) {
+		// m2 is in scope and similar to m1, but was not selected.
+		require.Empty(t, run([]uuid.UUID{alice, teamVault}, ids(m1)))
+	})
 }
