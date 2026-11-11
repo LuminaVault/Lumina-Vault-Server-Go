@@ -82,3 +82,7 @@ CREATE VIEW parity_sk_state AS
 SELECT tenant_id, source, name, enabled, last_status, last_error IS NOT NULL AS failed, daily_run_count,
        last_run_at IS NOT NULL AS ran, origin_kind
 FROM skills_state WHERE tenant_id IN (SELECT id FROM users WHERE username IN ('sk_ivy', 'sk_jon'));
+
+CREATE VIEW parity_sk_briefs AS
+SELECT tenant_id, cards, end_note
+FROM briefs WHERE tenant_id IN (SELECT id FROM users WHERE username IN ('sk_ivy', 'sk_jon'));

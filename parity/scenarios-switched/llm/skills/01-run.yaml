@@ -37,3 +37,9 @@ steps:
     as: sk_jon
     request: {method: POST, path: /v1/skills/slash, json: {command: "/patterns sleep"}}
     ignore: ["$.id", "$.startedAt", "$.endedAt"]
+  - name: daily-brief composes cards and points chat at them
+    as: sk_jon
+    request: {method: POST, path: /v1/skills/daily-brief/run}
+    ignore: ["$.id", "$.startedAt", "$.endedAt"]
+    snapshot: [parity_sk_runs, parity_sk_briefs]
+    files: [sk_jon]
