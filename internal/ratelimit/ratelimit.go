@@ -92,6 +92,9 @@ var AchievementsByUser = Policy{Name: "achievementsByUser", Max: 60, Window: 60 
 // tier scale. Capture, memory upsert, memory search and knowledge share it.
 var CaptureByUser = Policy{Name: "captureByUser", Max: 60, Window: 60 * time.Second, TierScale: StandardTierScale}
 
+// BrainGraphByUser limits GET /v1/brain/graph: 30 per 60 s, keyed by user or IP.
+var BrainGraphByUser = Policy{Name: "brainGraphByUser", Max: 30, Window: 60 * time.Second}
+
 // MeTodayByUser is RateLimitPolicy.meTodayByUser: 60 per 60 s, keyed by user or
 // IP. `me` and /v1/me/suggestions share it.
 var MeTodayByUser = Policy{Name: "meTodayByUser", Max: 60, Window: 60 * time.Second}
