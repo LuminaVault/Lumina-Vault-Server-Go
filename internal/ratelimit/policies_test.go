@@ -64,7 +64,7 @@ func TestPolicyNumbersMatchSwift(t *testing.T) {
 func TestEveryPolicyNameIsUnique(t *testing.T) {
 	seen := map[string]bool{}
 	for _, p := range []ratelimit.Policy{
-		ratelimit.SettingsByUser, ratelimit.AchievementsByUser, ratelimit.CaptureByUser, ratelimit.MeTodayByUser,
+		ratelimit.SettingsByUser, ratelimit.SoulByUser, ratelimit.AchievementsByUser, ratelimit.CaptureByUser, ratelimit.MeTodayByUser,
 		ratelimit.VaultUploadByUser, ratelimit.VaultExportByUser, ratelimit.QueryByUser,
 		ratelimit.VisionEmbedByUserPerMinute, ratelimit.VisionEmbedByUserDaily,
 		ratelimit.ChatByUser, ratelimit.ConversationByUser, ratelimit.SkillRunByUser, ratelimit.SkillOutputsByUser,

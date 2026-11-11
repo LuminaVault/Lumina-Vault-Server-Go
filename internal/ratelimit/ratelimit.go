@@ -85,6 +85,10 @@ func VoiceTierScale(tier string) float64 {
 // SettingsByUser is RateLimitPolicy.settingsByUser: 30 per 60 s, keyed by user or IP.
 var SettingsByUser = Policy{Name: "settingsByUser", Max: 30, Window: 60 * time.Second}
 
+// SoulByUser is RateLimitPolicy.soulByUser: 30 per 60 s, keyed by user or IP, on
+// every /v1/soul route.
+var SoulByUser = Policy{Name: "soulByUser", Max: 30, Window: 60 * time.Second}
+
 // AchievementsByUser is RateLimitPolicy.achievementsByUser: 60 per 60 s, keyed by user or IP.
 var AchievementsByUser = Policy{Name: "achievementsByUser", Max: 60, Window: 60 * time.Second}
 
