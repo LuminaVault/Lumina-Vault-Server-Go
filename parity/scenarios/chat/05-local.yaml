@@ -1,0 +1,16 @@
+# Hybrid local execution with the gateway unroutable: prepare writes the user's turn and
+# then fails on the embedding; tools, commit and cancel run on unknown executions.
+module: chat
+steps:
+  - name: prepare stops at the embedding
+    as: chat_fay
+    request: {method: POST, path: /v1/conversations/C4A70000-0000-4000-8000-0000000001F1/messages/prepare, json: {content: "what did I plan?"}}
+    snapshot: [conversation_messages, prepared_local_executions]
+  - {name: tool on an unknown execution, as: chat_fay, request: {method: POST, path: /v1/conversations/C4A70000-0000-4000-8000-0000000001F1/local-executions/C4A70000-0000-4000-8000-00000000FFFF/tools, json: {name: memory_search, query: plan}}}
+  - {name: tool bad name, as: chat_fay, request: {method: POST, path: /v1/conversations/C4A70000-0000-4000-8000-0000000001F1/local-executions/C4A70000-0000-4000-8000-00000000FFFF/tools, json: {name: shell, query: plan}}}
+  - {name: tool bad execution id, as: chat_fay, request: {method: POST, path: /v1/conversations/C4A70000-0000-4000-8000-0000000001F1/local-executions/nope/tools, json: {name: memory_search, query: plan}}}
+  - {name: commit unknown execution, as: chat_fay, request: {method: POST, path: /v1/conversations/C4A70000-0000-4000-8000-0000000001F1/messages/commit, json: {executionID: C4A70000-0000-4000-8000-00000000FFFF, content: done, location: device, provider: apple, model: fm}}}
+  - {name: commit bad location, as: chat_fay, request: {method: POST, path: /v1/conversations/C4A70000-0000-4000-8000-0000000001F1/messages/commit, json: {executionID: C4A70000-0000-4000-8000-00000000FFFF, content: done, location: moon, provider: apple, model: fm}}}
+  - {name: commit missing field, as: chat_fay, request: {method: POST, path: /v1/conversations/C4A70000-0000-4000-8000-0000000001F1/messages/commit, json: {content: done}}}
+  - {name: cancel unknown execution, as: chat_fay, request: {method: DELETE, path: /v1/conversations/C4A70000-0000-4000-8000-0000000001F1/local-executions/C4A70000-0000-4000-8000-00000000FFFF}}
+  - {name: cancel bad execution id, as: chat_fay, request: {method: DELETE, path: /v1/conversations/C4A70000-0000-4000-8000-0000000001F1/local-executions/nope}}

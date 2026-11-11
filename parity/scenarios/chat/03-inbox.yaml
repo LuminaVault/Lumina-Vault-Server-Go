@@ -1,0 +1,13 @@
+# GET /v1/chat/inbox on seeds.
+module: chat
+steps:
+  - {name: limit one, as: chat_eve, request: {method: GET, path: "/v1/chat/inbox?limit=1"}}
+  - {name: limit zero clamps, as: chat_eve, request: {method: GET, path: "/v1/chat/inbox?limit=0"}}
+  - {name: limit huge clamps, as: chat_eve, request: {method: GET, path: "/v1/chat/inbox?limit=5000"}}
+  - {name: limit not a number, as: chat_eve, request: {method: GET, path: "/v1/chat/inbox?limit=abc"}}
+  - {name: by workspace, as: chat_eve, request: {method: GET, path: "/v1/chat/inbox?workspace=C4A70000-0000-4000-8000-0000000005A5"}}
+  - {name: by workspace lowercase, as: chat_eve, request: {method: GET, path: "/v1/chat/inbox?workspace=c4a70000-0000-4000-8000-0000000005a5"}}
+  - {name: unknown workspace, as: chat_eve, request: {method: GET, path: "/v1/chat/inbox?workspace=C4A70000-0000-4000-8000-00000000FFFF"}}
+  - {name: bad workspace is no filter, as: chat_eve, request: {method: GET, path: "/v1/chat/inbox?workspace=nope"}}
+  - {name: an empty inbox, as: chat_ben, request: {method: GET, path: /v1/chat/inbox}}
+  - {name: no token, request: {method: GET, path: /v1/chat/inbox}}

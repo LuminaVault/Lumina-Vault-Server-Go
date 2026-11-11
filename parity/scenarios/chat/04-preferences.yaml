@@ -1,0 +1,24 @@
+# Chat and hybrid-execution preferences.
+module: chat
+steps:
+  - name: put chat preferences creates the row
+    as: chat_cid
+    request: {method: PUT, path: /v1/me/chat-preferences, json: {preferences: {autoExpandThinking: false, sendOnReturn: true}}}
+    snapshot: [user_chat_preferences]
+  - {name: read back, as: chat_cid, request: {method: GET, path: /v1/me/chat-preferences}}
+  - {name: put again updates, as: chat_cid, request: {method: PUT, path: /v1/me/chat-preferences, json: {preferences: {autoExpandThinking: true, sendOnReturn: true}}}}
+  - {name: hybrid of a user with chat preferences only, as: chat_cid, request: {method: GET, path: /v1/me/preferences/hybrid-execution}}
+  - {name: put chat preferences missing a field, as: chat_cid, request: {method: PUT, path: /v1/me/chat-preferences, json: {preferences: {autoExpandThinking: true}}}}
+  - {name: put chat preferences flat, as: chat_cid, request: {method: PUT, path: /v1/me/chat-preferences, json: {autoExpandThinking: true, sendOnReturn: false}}}
+  - {name: put chat preferences malformed, as: chat_cid, request: {method: PUT, path: /v1/me/chat-preferences, raw: '{"preferences":'}}
+  - {name: hybrid default for a user with no row, as: chat_ben, request: {method: GET, path: /v1/me/preferences/hybrid-execution}}
+  - name: hybrid private forces sync off
+    as: chat_dee
+    request: {method: PUT, path: /v1/me/preferences/hybrid-execution, json: {profile: private, localFallbackEnabled: true, cloudFallbackEnabled: false, syncLocalConversations: true}}
+    snapshot: [user_chat_preferences]
+  - {name: hybrid private with cloud fallback, as: chat_dee, request: {method: PUT, path: /v1/me/preferences/hybrid-execution, json: {profile: private, localFallbackEnabled: true, cloudFallbackEnabled: true, syncLocalConversations: false}}}
+  - {name: hybrid balanced, as: chat_dee, request: {method: PUT, path: /v1/me/preferences/hybrid-execution, json: {profile: balanced, localFallbackEnabled: false, cloudFallbackEnabled: true, syncLocalConversations: true}}}
+  - {name: hybrid unknown profile, as: chat_dee, request: {method: PUT, path: /v1/me/preferences/hybrid-execution, json: {profile: turbo, localFallbackEnabled: false, cloudFallbackEnabled: true, syncLocalConversations: true}}}
+  - {name: hybrid missing field, as: chat_dee, request: {method: PUT, path: /v1/me/preferences/hybrid-execution, json: {profile: quality}}}
+  - {name: chat preferences of a hybrid-only change, as: chat_dee, request: {method: GET, path: /v1/me/chat-preferences}}
+  - {name: no token, request: {method: GET, path: /v1/me/chat-preferences}}
