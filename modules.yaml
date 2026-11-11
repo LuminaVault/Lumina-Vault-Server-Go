@@ -232,7 +232,7 @@ modules:
   chat:
     wave: 5
     swiftDir: Sources/App/Chat
-    status: swift
+    status: parity
     prefixes: [/v1/chat, /v1/conversations, /v1/me/chat-preferences, /v1/me/preferences/hybrid-execution]
     jobs: []
   grok:
@@ -250,7 +250,7 @@ modules:
   llm-chat:
     wave: 5
     swiftDir: Sources/App/LLM
-    status: swift
+    status: parity
     prefixes: [/v1/llm]
     jobs: []
   llm-router:

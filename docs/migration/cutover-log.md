@@ -1694,3 +1694,67 @@ Beyond the pilot gate (D-wave2-early):
 
 - CI run 43007663996 on head 2337ec9: 0 differences. The error text and latency are ignored: the error
   is Go's text, not Foundation's `String(describing:)`.
+
+## chat (wave 5)
+
+### G0 entry: met 2026-11-11
+
+- Routes: 15. `/v1/conversations`: create, list, get, delete, traces and the SSE `messages/stream`. Local
+  execution: `messages/prepare`, `messages/commit`, `local-executions/{executionID}` (DELETE) and its
+  `/tools`. Also `/v1/chat/inbox`, `/v1/me/chat-preferences` and `/v1/me/preferences/hybrid-execution`. The
+  local-execution routes and the hybrid document are mounted only with `hybridExecution.enabled` (state
+  `hybrid-off`), and `/tools` only with `localExecution.toolBroker.enabled`.
+- Prefixes: disjoint (`internal/manifest`).
+- Coupling: writes `conversations`, `conversation_messages`, `prepared_local_executions`,
+  `user_chat_preferences`, `agent_turn_traces`, memory outputs (`EnqueueOutput`), retrieval telemetry and
+  `hermes_profiles` (through the profile middleware). No vault paths are read or written, so there are no
+  `SanitizePath` call sites. SOUL.md is read through `internal/soul`.
+- Escalation: owner decision 1, option A. An escalated turn starts its run on the Swift API through
+  `CHAT_HERMES_RUNS_BRIDGE_URL` (`chat.Bridge`, behind the `chat.HermesRuns` interface). When it is unset,
+  turns never escalate, which matches Swift without a master key. Through the bridge, Swift keys the run on
+  `activeHermesSessionKey`, not on the vault UUID. Chat and 6C must flip in one infra commit (B12).
+- LLM: `internal/llm` is reused as is (`StreamService`, the Cerberus and failover sinks, the disclosure
+  scrubs, `SystemPromptGuard`, `StreamErrorFor`, `SanitizeToolOutput` and `TraceRecorder`). No
+  temperature, top_p, top_k or prefill was added to the Anthropic adapter.
+- Swift tests ported: `ChatAttachmentPrompt` 9, `HermesEscalationPolicy` 9, `ChatGrounding` 3,
+  `ChatSoulPrompt` 2, `ConversationE2E` 11 of 12, `ConversationEscalationE2E` 4, `Conversation` 7,
+  `AgentTurnTraceRoundTrip` 4 of 5, and the chat half of `UsabilityEndpoints` (2).
+- Swift tests not ported:
+  - `LLMPreferencesChatE2E` 3: they need signup and `/v1/me/preferences/llm` (me-providers) end to end.
+  - The free-tier `/v1/query/stream` case in `ConversationE2E`: that route belongs to memory-agent.
+  - The Fluent re-save case in `AgentTurnTraceRoundTrip`.
+  - The first-query cases in `GuidedStart`.
+
+### G1 parity: met 2026-11-11
+
+- CI run 43034886380 on head 52d3c1a: the self-test and Swift vs Go each give **240 scenarios,
+  0 differences** (whole suite), and every switch state shows 0 differences. `parity`, `lint`, `test` and
+  `vuln` pass (https://github.com/LuminaVault/Lumina-Vault-Server-Go/actions/runs/43034886380).
+  - `parity/scenarios/chat` has 6 files, with seed `parity/seed/chat.sql`.
+  - State `hybrid-off`: the unmounted routes.
+  - New state `chat`: the stub as the gateway, a fake OpenRouter key, and Go's runs bridge on
+    `swift2-switched` sharing Go's database. Its stub counters show 22 calls on `/v1/chat/completions` and
+    4 on `/v1/runs`.
+- Swift bug kept: `prepare` is always a bare 500 after the user's message is stored.
+  `PreparedLocalExecution.messages` is a `[ChatMessage]` `@Field`, which Fluent binds as `jsonb[]` into a
+  `jsonb` column. So no execution ever exists, and tools, commit and cancel can only answer 404.
+  `Options.FixLocalPrepare` stores the row instead. Turning it on is an owner decision.
+- Not compared: what an escalated run does after its `hermes_run` frame, because it finishes
+  asynchronously.
+
+## llm-chat (wave 5)
+
+### G0 entry: met 2026-11-11
+
+- Routes: 1, `POST /v1/llm/chat`. Middleware: jwt, BYO Hermes, `Entitlement .chat`, chatByUser, the
+  in-flight limit, and the context router (`skills.ContextRouter`).
+- It covers URL pre-enrichment (`X-Skip-URL-Enrichment`), the usage budget (`X-LuminaVault-Degraded`),
+  the detached APNs push, the `chatCompleted` achievement and the `.firstQuery` latch.
+- Swift tests ported: `URLExtractor` 8 and `LLMControllerPushSideEffect` 4.
+
+### G1 parity: met 2026-11-11
+
+- CI run 43034886380 on head 52d3c1a: 0 differences. `parity/scenarios/llm-chat` has 2 files, and state
+  `chat` has the success path through the stub.
+- Bug found and fixed: a message without `tool_calls` was rejected. Shared's `ChatMessage` makes the field
+  optional.
