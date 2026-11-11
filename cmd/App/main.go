@@ -28,6 +28,7 @@ import (
 	"lumina/internal/modules/account"
 	"lumina/internal/modules/achievements"
 	"lumina/internal/modules/apple"
+	"lumina/internal/modules/billing"
 	"lumina/internal/modules/brain"
 	"lumina/internal/modules/calendar"
 	"lumina/internal/modules/capture"
@@ -72,6 +73,7 @@ import (
 	"lumina/internal/usagemeter"
 	"lumina/internal/vaultfiles"
 	"lumina/internal/vaultpaths"
+	"lumina/internal/workers"
 	"lumina/internal/ws"
 	"net"
 	"net/url"
@@ -236,6 +238,9 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		deps.Modules = append(deps.Modules, memoryModule(pool, cfg, box, identify, limits, paths, embeddings, sink, meModule))
 		deps.Modules = append(deps.Modules, selfImprovementModule(pool, cfg, box, identify, paths))
 		deps.Modules = append(deps.Modules, soulModule(pool, cfg, box, identify, limits, paths, sink))
+		if m := settingsModule(pool, cfg, box, identify, limits); m != nil { // 6A: needs the secret box, as in Swift
+			deps.Modules = append(deps.Modules, m)
+		}
 		// Wave 4: knowledge, vision and the compile probe. /v1/vision spends a platform
 		// key, so it has its own gate. Both groups read billing.enforcementEnabled.
 		enforcement := entitlement.EnforcementEnabled(cfg.BillingEnforcementEnabled)
@@ -269,6 +274,9 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		if box != nil {
 			deps.Modules = append(deps.Modules, grok.New(hermescontainers.New(pool, box), entitlement.PremiumGuardMiddleware(pool), nil))
 		}
+		deps.Modules = append(deps.Modules, billing.New(pool, billing.Options{
+			WebhookSecret: cfg.RevenueCatWebhookSecret, AdminToken: cfg.AdminToken, EnforcementEnabled: entitlement.EnforcementEnabled(cfg.BillingEnforcementEnabled),
+		}))
 		if m := marketplace.New(pool, cfg.LVSecretMasterKey, pluginOptions, identify, limits, paths); m != nil { // nil without LV_SECRET_MASTER_KEY, as in Swift
 			deps.Modules = append(deps.Modules, m)
 		}
@@ -276,6 +284,10 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		disk := diskguard.New(paths.Root, cfg.StorageMinFreeBytes, cfg.StorageMinFreeRatio, diskguard.Options{})
 		memories := memorystore.New(pool, nil)
 		registered = append(registered, j1Jobs(pool, cfg, disk)...)
+		// LapseArchiverService (7A): dry run unless LV_LAPSE_DRY_RUN=false; off unless LV_GO_JOBS names it.
+		registered = append(registered, (&workers.LapseArchiver{
+			Pool: pool, Paths: paths, ColdStorageRoot: cfg.ColdStoragePath(), DryRun: cfg.LapseDryRun,
+		}).Job())
 		agent, stopAgent := newAgent(ctx, pool, cfg, box, paths, identify, limits, embeddings, sink, meModule, disk)
 		agent.sockets = sockets
 		defer stopAgent()

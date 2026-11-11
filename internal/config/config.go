@@ -8,6 +8,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/caarlos0/env/v11"
@@ -140,6 +141,16 @@ type Config struct {
 	// Swift enables it only when it lowercases to "true" (entitlement package).
 	HermesDataRoot            string `env:"HERMES_DATA_ROOT" envDefault:"/app/data/hermes"`
 	BillingEnforcementEnabled string `env:"BILLING_ENFORCEMENT_ENABLED" envDefault:"false"`
+
+	// Wave 7A billing. An empty webhook secret makes the RevenueCat webhook a 500,
+	// as in Swift. BillingTierOverrideEmails is TierOverrideAllowlist's
+	// `email=tier,...` (read by auth when token minting moves). Cold storage
+	// defaults to <VAULT_ROOT_PATH>/cold-storage (ColdStoragePath). The lapse
+	// archiver only logs what it would do until LV_LAPSE_DRY_RUN is false.
+	RevenueCatWebhookSecret   string `env:"REVENUECAT_WEBHOOK_SECRET"`
+	BillingTierOverrideEmails string `env:"BILLING_TIER_OVERRIDE_EMAILS"`
+	BillingColdStoragePath    string `env:"BILLING_COLD_STORAGE_PATH"`
+	LapseDryRun               bool   `env:"LV_LAPSE_DRY_RUN" envDefault:"true"`
 
 	// Job J1 (internal/workers). AccountDeletionPurgeAfterDays is
 	// account.deletion.purgeAfterDays, the recovery window before DeletedDataPurgeService
@@ -311,4 +322,13 @@ func (c Config) JobEnabled(name string) bool {
 		}
 	}
 	return false
+}
+
+// ColdStoragePath is billing.coldStoragePath: BILLING_COLD_STORAGE_PATH, or
+// <VAULT_ROOT_PATH>/cold-storage.
+func (c Config) ColdStoragePath() string {
+	if c.BillingColdStoragePath != "" {
+		return c.BillingColdStoragePath
+	}
+	return filepath.Join(c.VaultRootPath, "cold-storage")
 }

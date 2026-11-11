@@ -89,6 +89,8 @@ x-common-env: &common-env
   COMMUNITY_ENABLED: "true"
   COMMUNITY_POSTING_ENABLED: "true"
   ADMIN_TOKEN: parity-admin-token
+  # RevenueCat webhook (billing). Empty in the switched state "unconfigured".
+  REVENUECAT_WEBHOOK_SECRET: parity-rc-secret
   # Marketplace: the stub also answers as the plugin runner.
   PLUGIN_RUNNER_URL: http://feeds:8080
   PLUGIN_RUNNER_TOKEN: parity-runner-token
@@ -155,6 +157,7 @@ services:
       COMMUNITY_ENABLED: ${SWITCH_COMMUNITY_ENABLED:-true}
       COMMUNITY_POSTING_ENABLED: ${SWITCH_COMMUNITY_POSTING_ENABLED:-true}
       ADMIN_TOKEN: ${SWITCH_ADMIN_TOKEN-parity-admin-token}
+      REVENUECAT_WEBHOOK_SECRET: ${SWITCH_REVENUECAT_WEBHOOK_SECRET-parity-rc-secret}
       PLUGIN_ARTIFACT_SIGNING_KEY: ${SWITCH_SIGNING_KEY-parity-signing-key-parity-signing-key-0000}
       PLUGIN_RUNNER_TOKEN: ${SWITCH_RUNNER_TOKEN-parity-runner-token}
       HYBRID_EXECUTION_ENABLED: ${SWITCH_HYBRID_EXECUTION_ENABLED:-true}
@@ -187,6 +190,7 @@ services:
       COMMUNITY_ENABLED: ${SWITCH_COMMUNITY_ENABLED:-true}
       COMMUNITY_POSTING_ENABLED: ${SWITCH_COMMUNITY_POSTING_ENABLED:-true}
       ADMIN_TOKEN: ${SWITCH_ADMIN_TOKEN-parity-admin-token}
+      REVENUECAT_WEBHOOK_SECRET: ${SWITCH_REVENUECAT_WEBHOOK_SECRET-parity-rc-secret}
       PLUGIN_ARTIFACT_SIGNING_KEY: ${SWITCH_SIGNING_KEY-parity-signing-key-parity-signing-key-0000}
       PLUGIN_RUNNER_TOKEN: ${SWITCH_RUNNER_TOKEN-parity-runner-token}
       HYBRID_EXECUTION_ENABLED: ${SWITCH_HYBRID_EXECUTION_ENABLED:-true}
