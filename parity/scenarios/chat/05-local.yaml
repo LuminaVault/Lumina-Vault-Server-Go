@@ -1,37 +1,20 @@
-# Hybrid local execution with the gateway unroutable: the query embedding degrades to
-# lexical search, so prepare, the tool broker and commit all succeed.
+# Hybrid local execution. Swift's prepare stores the user's message, then fails to save
+# the execution (its [ChatMessage] field binds as jsonb[] into a jsonb column), so it is
+# a bare 500 and no execution ever exists: tools, commit and cancel only find nothing.
 module: chat
 steps:
-  - name: prepare
+  - name: prepare is a 500 after the user's message is stored
     as: chat_fay
     request: {method: POST, path: /v1/conversations/C4A70000-0000-4000-8000-0000000001F1/messages/prepare, json: {content: "what did I plan?"}}
-    capture: {exec: $.executionID}
     snapshot: [conversation_messages, prepared_local_executions]
-  - {name: tool, as: chat_fay, request: {method: POST, path: "/v1/conversations/C4A70000-0000-4000-8000-0000000001F1/local-executions/{{exec}}/tools", json: {name: memory_search, query: plan}}}
-  - {name: tool with a limit out of range, as: chat_fay, request: {method: POST, path: "/v1/conversations/C4A70000-0000-4000-8000-0000000001F1/local-executions/{{exec}}/tools", json: {name: memory_search, query: plan, limit: 50}}}
-  - {name: tool empty query, as: chat_fay, request: {method: POST, path: "/v1/conversations/C4A70000-0000-4000-8000-0000000001F1/local-executions/{{exec}}/tools", json: {name: memory_search, query: " "}}}
-  - {name: tool bad name, as: chat_fay, request: {method: POST, path: "/v1/conversations/C4A70000-0000-4000-8000-0000000001F1/local-executions/{{exec}}/tools", json: {name: shell, query: plan}}}
-  - {name: tool on the wrong conversation, as: chat_fay, request: {method: POST, path: "/v1/conversations/C4A70000-0000-4000-8000-0000000001F2/local-executions/{{exec}}/tools", json: {name: memory_search, query: plan}}}
   - {name: tool on an unknown execution, as: chat_fay, request: {method: POST, path: /v1/conversations/C4A70000-0000-4000-8000-0000000001F1/local-executions/C4A70000-0000-4000-8000-00000000FFFF/tools, json: {name: memory_search, query: plan}}}
+  - {name: tool bad name, as: chat_fay, request: {method: POST, path: /v1/conversations/C4A70000-0000-4000-8000-0000000001F1/local-executions/C4A70000-0000-4000-8000-00000000FFFF/tools, json: {name: shell, query: plan}}}
+  - {name: tool empty query, as: chat_fay, request: {method: POST, path: /v1/conversations/C4A70000-0000-4000-8000-0000000001F1/local-executions/C4A70000-0000-4000-8000-00000000FFFF/tools, json: {name: memory_search, query: " "}}}
   - {name: tool bad execution id, as: chat_fay, request: {method: POST, path: /v1/conversations/C4A70000-0000-4000-8000-0000000001F1/local-executions/nope/tools, json: {name: memory_search, query: plan}}}
-  - name: commit
-    as: chat_fay
-    request: {method: POST, path: /v1/conversations/C4A70000-0000-4000-8000-0000000001F1/messages/commit, json: {executionID: "{{exec}}", content: You planned a trip., location: on_device, provider: apple, model: fm, usage: {inputTokens: 10, outputTokens: 4, latencyMs: 250}}}
-    snapshot: [conversation_messages, prepared_local_executions, agent_turn_traces]
-  - {name: commit again, as: chat_fay, request: {method: POST, path: /v1/conversations/C4A70000-0000-4000-8000-0000000001F1/messages/commit, json: {executionID: "{{exec}}", content: again, location: on_device, provider: apple, model: fm}}}
-  - {name: cancel a committed one, as: chat_fay, request: {method: DELETE, path: "/v1/conversations/C4A70000-0000-4000-8000-0000000001F1/local-executions/{{exec}}"}}
-  - {name: read back, as: chat_fay, request: {method: GET, path: /v1/conversations/C4A70000-0000-4000-8000-0000000001F1}}
-  - name: prepare another
-    as: chat_fay
-    request: {method: POST, path: /v1/conversations/C4A70000-0000-4000-8000-0000000001F2/messages/prepare, json: {content: second}}
-    capture: {exec2: $.executionID}
-  - name: cancel
-    as: chat_fay
-    request: {method: DELETE, path: "/v1/conversations/C4A70000-0000-4000-8000-0000000001F2/local-executions/{{exec2}}"}
-    snapshot: [conversation_messages, prepared_local_executions]
-  - {name: cancel again, as: chat_fay, request: {method: DELETE, path: "/v1/conversations/C4A70000-0000-4000-8000-0000000001F2/local-executions/{{exec2}}"}}
   - {name: commit unknown execution, as: chat_fay, request: {method: POST, path: /v1/conversations/C4A70000-0000-4000-8000-0000000001F1/messages/commit, json: {executionID: C4A70000-0000-4000-8000-00000000FFFF, content: done, location: on_device, provider: apple, model: fm}}}
+  - {name: commit empty content, as: chat_fay, request: {method: POST, path: /v1/conversations/C4A70000-0000-4000-8000-0000000001F1/messages/commit, json: {executionID: C4A70000-0000-4000-8000-00000000FFFF, content: " ", location: on_device, provider: apple, model: fm}}}
   - {name: commit bad location, as: chat_fay, request: {method: POST, path: /v1/conversations/C4A70000-0000-4000-8000-0000000001F1/messages/commit, json: {executionID: C4A70000-0000-4000-8000-00000000FFFF, content: done, location: moon, provider: apple, model: fm}}}
   - {name: commit missing field, as: chat_fay, request: {method: POST, path: /v1/conversations/C4A70000-0000-4000-8000-0000000001F1/messages/commit, json: {content: done}}}
   - {name: cancel unknown execution, as: chat_fay, request: {method: DELETE, path: /v1/conversations/C4A70000-0000-4000-8000-0000000001F1/local-executions/C4A70000-0000-4000-8000-00000000FFFF}}
   - {name: cancel bad execution id, as: chat_fay, request: {method: DELETE, path: /v1/conversations/C4A70000-0000-4000-8000-0000000001F1/local-executions/nope}}
+  - {name: read back, as: chat_fay, request: {method: GET, path: /v1/conversations/C4A70000-0000-4000-8000-0000000001F1}}

@@ -83,6 +83,9 @@ type Options struct {
 	HybridExecutionEnabled          bool
 	LocalExecutionToolBrokerEnabled bool
 	MaxGroundingDistance            float32
+	// FixLocalPrepare stores the prepared execution. Off, prepare is Swift's bare 500
+	// (see errPrepareSave), and so tools, commit and cancel never find one.
+	FixLocalPrepare bool
 }
 
 // Module is the chat routes.

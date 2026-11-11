@@ -99,7 +99,9 @@ type env struct {
 	stream *stubStream
 }
 
-func newEnv(t *testing.T, runs HermesRuns) env {
+func newEnv(t *testing.T, runs HermesRuns) env { return newEnvWith(t, runs, false) }
+
+func newEnvWith(t *testing.T, runs HermesRuns, fixPrepare bool) env {
 	t.Helper()
 	pool := dbtest.Postgres(t)
 	require.NoError(t, migrations.Up(context.Background(), pool, migrations.SQL()))
@@ -115,6 +117,7 @@ func newEnv(t *testing.T, runs HermesRuns) env {
 		Traces:       llm.PGMeters{Pool: pool}.TraceRecorder(),
 		Runs:         runs,
 		DefaultModel: "test", HybridExecutionEnabled: true, LocalExecutionToolBrokerEnabled: true,
+		FixLocalPrepare: fixPrepare,
 	})
 	e := httpserver.New(config.Config{}, httpserver.Deps{Auth: auth.Middleware(testKeys, users), Modules: []httpserver.Module{module}})
 	return env{t: t, e: e, pool: pool, stream: stream}
@@ -567,8 +570,23 @@ func TestHybridPrivateCannotFallBackToCloud(t *testing.T) {
 
 // MARK: - local execution
 
-func TestLocalExecutionPrepareToolCommit(t *testing.T) {
+// Swift's prepare stores the user's message, then fails to save the execution.
+func TestLocalPrepareIsSwiftsBare500(t *testing.T) {
 	v := newEnv(t, nil)
+	user := v.tenant()
+	dto := v.create(user, `{"title":"x"}`)
+	rec := v.do(user, http.MethodPost, "/v1/conversations/"+dto.ID.String()+"/messages/prepare", `{"content":"plan?"}`)
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+	var messages, executions int
+	ctx := context.Background()
+	require.NoError(t, v.pool.QueryRow(ctx, `SELECT count(*) FROM conversation_messages WHERE conversation_id = $1`, dto.ID.UUID).Scan(&messages))
+	require.NoError(t, v.pool.QueryRow(ctx, `SELECT count(*) FROM prepared_local_executions`).Scan(&executions))
+	assert.Equal(t, 1, messages)
+	assert.Zero(t, executions)
+}
+
+func TestLocalExecutionPrepareToolCommit(t *testing.T) {
+	v := newEnvWith(t, nil, true)
 	user := v.tenant()
 	dto := v.create(user, `{"title":"x"}`)
 	base := "/v1/conversations/" + dto.ID.String()

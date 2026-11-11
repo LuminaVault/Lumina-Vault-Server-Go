@@ -162,6 +162,9 @@ func (m *Module) prepareLocalReply(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
+	if !m.opts.FixLocalPrepare {
+		return errPrepareSave
+	}
 	execID := uuid.New()
 	if _, err := m.pool.Exec(ctx, `INSERT INTO prepared_local_executions
 		(id, tenant_id, conversation_id, user_message_id, messages, source_ids, expires_at, created_at)
@@ -177,6 +180,12 @@ func (m *Module) prepareLocalReply(c *echo.Context) error {
 		ExpiresAt: wire.Time{Time: expires}, AllowedTools: tools,
 	})
 }
+
+// errPrepareSave is Swift's failure to save the execution: PreparedLocalExecution's
+// `messages` is a [ChatMessage] @Field, which Fluent binds as jsonb[] into a jsonb
+// column, so every save is a PSQLError and a bare 500, after the user's message is
+// stored. Options.FixLocalPrepare stores the row instead.
+var errPrepareSave = errors.New("prepared_local_executions: messages bound as jsonb[] into jsonb (Swift parity)")
 
 func (m *Module) invokeLocalTool(c *echo.Context) error {
 	actor, err := requireUser(c)
