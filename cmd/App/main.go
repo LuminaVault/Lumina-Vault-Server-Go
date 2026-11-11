@@ -27,6 +27,7 @@ import (
 	"lumina/internal/modules/account"
 	"lumina/internal/modules/achievements"
 	"lumina/internal/modules/apple"
+	"lumina/internal/modules/brain"
 	"lumina/internal/modules/calendar"
 	"lumina/internal/modules/capture"
 	"lumina/internal/modules/community"
@@ -237,6 +238,7 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 			vision.New(memorystore.New(pool, nil), usagemeter.New(pool), identify,
 				entitlement.PlatformFundedMiddleware(pool, entitlement.MemoryQuery, enforcement), limits, visionConfig(cfg)),
 			kb.New(pool),
+			brain.New(pool, identify, limits),
 		)
 		// Wave 5: speech to text, on the cluster's own whisper, and the 501 for spoken replies.
 		deps.Modules = append(deps.Modules, voice.New(pool, usagemeter.New(pool), identify, auth.AudioIdentify(keys, auth.PGAudioUsers(pool)),
