@@ -1,0 +1,6 @@
+# Empty REVENUECAT_WEBHOOK_SECRET and ADMIN_TOKEN: the webhook is a 500 before it
+# reads anything, and the admin override says "admin disabled".
+module: billing
+steps:
+  - {name: webhook without a secret, request: {method: POST, path: /v1/billing/revenuecat-webhook, headers: {Authorization: Bearer anything}, json: {event: {id: bl-evt-z, type: RENEWAL, app_user_id: rc_bo}}}, snapshot: [parity_bl_events]}
+  - {name: admin disabled, request: {method: PUT, path: /v1/admin/users/B1110000-0000-4000-8000-0000000000A8/tier-override, headers: {X-Admin-Token: ""}, json: {tierOverride: pro}}}

@@ -4,6 +4,7 @@
 package httpserver
 
 import (
+	"log/slog"
 	"lumina/internal/config"
 	"lumina/internal/wire"
 	"net/http"
@@ -98,6 +99,19 @@ func New(cfg config.Config, deps Deps) *echo.Echo {
 	e.GET("/.well-known/apple-app-site-association", func(c *echo.Context) error {
 		return c.Blob(http.StatusOK, echo.MIMEApplicationJSON, []byte(AASA))
 	})
+
+	// Legacy kb-compile aliases (App+build.swift:2537): permanent redirects to
+	// memory-compile, no auth, logged so stragglers can be found.
+	for from, to := range map[[2]string]string{
+		{http.MethodPost, "/v1/kb-compile"}:        "/v1/memory-compile",
+		{http.MethodGet, "/v1/kb-compile/pending"}: "/v1/memory-compile/pending",
+	} {
+		e.Add(from[0], from[1], func(c *echo.Context) error {
+			slog.WarnContext(c.Request().Context(), "legacy "+from[0]+" "+from[1]+" hit — caller should migrate to "+to)
+			c.Response().Header().Set(echo.HeaderLocation, to)
+			return c.NoContent(http.StatusPermanentRedirect)
+		})
+	}
 
 	for _, m := range deps.Modules {
 		m.Register(s, deps.Auth)

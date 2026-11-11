@@ -8,6 +8,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/caarlos0/env/v11"
@@ -121,6 +122,17 @@ type Config struct {
 	UsageEventsRetentionDays      int    `env:"USAGE_EVENTS_RETENTION_DAYS" envDefault:"0"`
 	UsageEventsRetentionBatchSize int    `env:"USAGE_EVENTS_RETENTION_BATCH_SIZE" envDefault:"5000"`
 
+	// hermes.central.* (system module, /v1/system/hermes).
+	HermesCentralContainerName string `env:"HERMES_CENTRAL_CONTAINER_NAME" envDefault:"luminavault-hermes"`
+	HermesCentralRegistryImage string `env:"HERMES_CENTRAL_REGISTRY_IMAGE" envDefault:"ghcr.io/luminavault/luminavault-hermes"`
+	HermesCentralChannelTag    string `env:"HERMES_CENTRAL_CHANNEL_TAG" envDefault:"latest"`
+	HermesCentralTempName      string `env:"HERMES_CENTRAL_TEMP_CONTAINER_NAME" envDefault:"luminavault-hermes-next"`
+	HermesCentralVolumePath    string `env:"HERMES_CENTRAL_VOLUME_PATH" envDefault:"/app/data/hermes"`
+	HermesCentralPort          int    `env:"HERMES_CENTRAL_PORT" envDefault:"8642"`
+	HermesCentralTempPort      int    `env:"HERMES_CENTRAL_TEMP_PORT" envDefault:"8643"`
+	// hermes.perTenant.network, shared with the container manager.
+	HermesCentralNetwork string `env:"HERMES_PER_TENANT_NETWORK" envDefault:"luminavault-hermes-net"`
+
 	// WASM plugin runner and artifact store (marketplace module).
 	PluginRunnerURL          string `env:"PLUGIN_RUNNER_URL" envDefault:"http://plugin-runner:8090"`
 	PluginRunnerToken        string `env:"PLUGIN_RUNNER_TOKEN"`
@@ -146,6 +158,16 @@ type Config struct {
 	// Swift enables it only when it lowercases to "true" (entitlement package).
 	HermesDataRoot            string `env:"HERMES_DATA_ROOT" envDefault:"/app/data/hermes"`
 	BillingEnforcementEnabled string `env:"BILLING_ENFORCEMENT_ENABLED" envDefault:"false"`
+
+	// Wave 7A billing. An empty webhook secret makes the RevenueCat webhook a 500,
+	// as in Swift. BillingTierOverrideEmails is TierOverrideAllowlist's
+	// `email=tier,...` (read by auth when token minting moves). Cold storage
+	// defaults to <VAULT_ROOT_PATH>/cold-storage (ColdStoragePath). The lapse
+	// archiver only logs what it would do until LV_LAPSE_DRY_RUN is false.
+	RevenueCatWebhookSecret   string `env:"REVENUECAT_WEBHOOK_SECRET"`
+	BillingTierOverrideEmails string `env:"BILLING_TIER_OVERRIDE_EMAILS"`
+	BillingColdStoragePath    string `env:"BILLING_COLD_STORAGE_PATH"`
+	LapseDryRun               bool   `env:"LV_LAPSE_DRY_RUN" envDefault:"true"`
 
 	// Job J1 (internal/workers). AccountDeletionPurgeAfterDays is
 	// account.deletion.purgeAfterDays, the recovery window before DeletedDataPurgeService
@@ -297,4 +319,13 @@ func (c Config) JobEnabled(name string) bool {
 		}
 	}
 	return false
+}
+
+// ColdStoragePath is billing.coldStoragePath: BILLING_COLD_STORAGE_PATH, or
+// <VAULT_ROOT_PATH>/cold-storage.
+func (c Config) ColdStoragePath() string {
+	if c.BillingColdStoragePath != "" {
+		return c.BillingColdStoragePath
+	}
+	return filepath.Join(c.VaultRootPath, "cold-storage")
 }

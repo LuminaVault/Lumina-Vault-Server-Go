@@ -199,8 +199,8 @@ Fixes that later remove the held routes and gaps (Go only unless stated; no modu
   (`api-go-production.horus.svc.cluster.local:8080`), and add Go's pod label (`api-go-production`) to
   `allow-metrics-from-isis-api`. Go reads `METRICS_SECRET` (wave 7B) from the same sealed env; check it's set there, or
   Go answers 404 "metrics disabled".
-- **Also.** `/v1/admin/users` (tier-override) is wave 7A's route under the admin prefix. Flip `admin` only once 7A has
-  ported it, or hold `/v1/admin/users` on Swift in the same PR.
+- **Also.** `/v1/admin/users` (tier-override) sits under the admin prefix but is served by Go's billing module (7A).
+  Flipping the `admin` prefixes moves it too, so flip `admin` with or after `billing`.
 - **Swift change.** None. **Unlocks.** 1 module.
 
 ## Gap found that wasn't recorded: server-side PostHog events
