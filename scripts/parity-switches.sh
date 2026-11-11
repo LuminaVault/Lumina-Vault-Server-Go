@@ -29,6 +29,8 @@
 #
 #   llm             HERMES_GATEWAY_URL on the LLM stub, and capture.autoFile.enabled on:
 #                   the model-calling routes' success paths (group 4F)
+#   agents          HERMES_GATEWAY_URL on the LLM stub, and BYO Hermes (private ranges over
+#                   HTTP allowed) on its gateway routes: agent rooms' turns (group 5D)
 #
 # A state for other LLM success paths, once Go serves them (wave 5), is one more
 # run_state with the stub up and SWITCH_HERMES_GATEWAY_URL=http://llmstub:8080,
@@ -155,6 +157,32 @@ voice_states() {
   done
 }
 
+# Agents (wave 5D): the central agent on the stub as the gateway, and BYO Hermes on the
+# stub's gateway routes, which the SSRF guard admits only with private ranges over HTTP.
+# The stub's counters have to show both servers asked a BYO Hermes for real.
+agents_state() {
+  local before after route calls
+  before=$(curl -fsS http://localhost:18085/stub/stats)
+  run_state agents SWITCH_HERMES_GATEWAY_URL=http://llmstub:8080 SWITCH_BYO_HERMES_ALLOW_PRIVATE=true SWITCH_BYO_HERMES_REQUIRE_HTTPS=false
+  after=$(curl -fsS http://localhost:18085/stub/stats)
+  # /v1/chat/completions is the central agent (llm.RoutedService through the gateway).
+  for route in /api/instance /api/sessions/{id}/chat /v1/chat/completions; do
+    calls=$(( $(stub_count "$after" "$route") - $(stub_count "$before" "$route") ))
+    echo "stub answered $calls on $route in state agents"
+    if [ "$calls" -lt 2 ]; then
+      echo "the servers never reached the stub on $route"
+      failed=1
+    fi
+  done
+}
+
+# stub_count STATS ROUTE prints ROUTE's counter in a /stub/stats body, 0 when absent.
+stub_count() {
+  local n
+  n=$(printf '%s' "$1" | sed -n "s|.*\"$2\":\([0-9]*\).*|\1|p" | head -1)
+  echo "${n:-0}"
+}
+
 failed=0
 run_state community-off SWITCH_COMMUNITY_ENABLED=false
 run_state posting-off SWITCH_COMMUNITY_POSTING_ENABLED=false
@@ -179,6 +207,7 @@ for _ in $(seq 1 60); do
   sleep 1
 done
 run_state llm SWITCH_HERMES_GATEWAY_URL=http://llmstub:8080 SWITCH_CAPTURE_AUTO_FILE_ENABLED=true
+agents_state
 llm_selftest
 "${COMPOSE[@]}" stop swift-switched go-switched >/dev/null 2>&1 || true
 exit "$failed"

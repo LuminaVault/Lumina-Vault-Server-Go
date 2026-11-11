@@ -226,7 +226,7 @@ modules:
   agents:
     wave: 5
     swiftDir: Sources/App/Agents
-    status: swift
+    status: parity
     prefixes: [/v1/agents]
     jobs: []
   chat:

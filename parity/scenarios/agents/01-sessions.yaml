@@ -1,0 +1,29 @@
+# The Agents page for a user with conversations and no BYO Hermes: the central agent
+# only. Every filter, the limit clamp, and the session log.
+module: agents
+steps:
+  - {name: instances, as: agents_ann, request: {method: GET, path: /v1/agents/instances}}
+  - {name: sessions, as: agents_ann, request: {method: GET, path: /v1/agents/sessions}}
+  - {name: limit 1, as: agents_ann, request: {method: GET, path: "/v1/agents/sessions?limit=1"}}
+  - {name: limit 0 clamps to 1, as: agents_ann, request: {method: GET, path: "/v1/agents/sessions?limit=0"}}
+  - {name: limit 999 clamps to 200, as: agents_ann, request: {method: GET, path: "/v1/agents/sessions?limit=999"}}
+  - {name: limit not a number, as: agents_ann, request: {method: GET, path: "/v1/agents/sessions?limit=two&live=yes"}}
+  - {name: live true, as: agents_ann, request: {method: GET, path: "/v1/agents/sessions?live=true"}}
+  - {name: live 1 central, as: agents_ann, request: {method: GET, path: "/v1/agents/sessions?live=1&instance=central"}}
+  - {name: byo only, as: agents_ann, request: {method: GET, path: "/v1/agents/sessions?instance=byo"}}
+  - {name: empty instance is none, as: agents_ann, request: {method: GET, path: "/v1/agents/sessions?instance=&source=app"}}
+  - {name: unknown instance, as: agents_ann, request: {method: GET, path: "/v1/agents/sessions?instance=Central"}}
+  - {name: a profile never matches central, as: agents_ann, request: {method: GET, path: "/v1/agents/sessions?profile=default"}}
+  - {name: another source, as: agents_ann, request: {method: GET, path: "/v1/agents/sessions?source=telegram"}}
+  - {name: log, as: agents_ann, request: {method: GET, path: /v1/agents/instances/central/sessions/A9E7C000-0000-4000-8000-000000000001/messages}}
+  - {name: log lowercase id, as: agents_ann, request: {method: GET, path: "/v1/agents/instances/central/sessions/a9e7c000-0000-4000-8000-000000000001/messages?profile=x"}}
+  - {name: empty log, as: agents_ann, request: {method: GET, path: /v1/agents/instances/central/sessions/A9E7C000-0000-4000-8000-000000000002/messages}}
+  - {name: another user's log, as: agents_ann, request: {method: GET, path: /v1/agents/instances/central/sessions/A9E7C000-0000-4000-8000-000000000004/messages}}
+  - {name: not a uuid, as: agents_ann, request: {method: GET, path: /v1/agents/instances/central/sessions/a9e7c000000040008000000000000001/messages}}
+  - {name: no own hermes, as: agents_ann, request: {method: GET, path: "/v1/agents/instances/byo/sessions/..%2Fx/messages?profile=default"}}
+  - {name: unknown instance log, as: agents_ann, request: {method: GET, path: /v1/agents/instances/Central/sessions/A9E7C000-0000-4000-8000-000000000001/messages}}
+  - {name: candidates, as: agents_ann, request: {method: GET, path: /v1/agents/room-candidates}}
+  - {name: other user sees only theirs, as: agents_ben, request: {method: GET, path: /v1/agents/sessions}}
+  - {name: other user can't read the log, as: agents_ben, request: {method: GET, path: /v1/agents/instances/central/sessions/A9E7C000-0000-4000-8000-000000000001/messages}}
+  - {name: sessions no token, request: {method: GET, path: /v1/agents/sessions, headers: {X-Forwarded-For: "10.97.0.3"}}}
+  - {name: messages no token, request: {method: GET, path: /v1/agents/instances/central/sessions/x/messages, headers: {X-Forwarded-For: "10.97.0.4"}}}
