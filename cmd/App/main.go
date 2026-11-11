@@ -188,6 +188,13 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		// One rate-limit store per process: Swift's buckets are shared by
 		// every route group that uses the same policy name.
 		limits := ratelimit.NewStore()
+		// makeRateLimitStorage: Go has only the per-process store. The owner keeps
+		// rate-limit storage in memory (decisions.md D-ratelimit-memory).
+		if ratelimit.ParseStorageKind(cfg.RateLimitStorageKind) == ratelimit.StorageRedis {
+			slog.Error("rate-limit storage: RATE_LIMIT_STORAGE_KIND=redis but Go has no Valkey driver; using per-process memory")
+		} else {
+			slog.Info("rate-limit storage: memory (per-process)", "config", "RATE_LIMIT_STORAGE_KIND=memory")
+		}
 		// Identify: vault-scoped routes check X-Vault-ID before identity (decisions.md D-identify).
 		identify := auth.Identify(keys, auth.PGUsers(pool))
 		paths := vaultpaths.Paths{Root: cfg.VaultRootPath}
