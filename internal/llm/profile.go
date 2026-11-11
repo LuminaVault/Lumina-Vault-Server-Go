@@ -631,3 +631,27 @@ func (r *RouterProfileRepository) managedDocument(d RouterProfileDocument) Route
 		RoutingPolicy:    d.RoutingPolicy,
 	}
 }
+
+// ManagedModel is hermes.defaultManagedModel, the model a managed profile routes
+// to. LLMPreferencesController stores it as a managed preference's primary model.
+func (r *RouterProfileRepository) ManagedModel() string { return r.managedModel }
+
+// MarshalJSON writes the id as Swift's JSONEncoder writes a UUID, uppercase. The
+// document is stored as JSONB and returned by /v1/router, so a lowercase id would
+// differ from a row Swift wrote.
+func (r RouterRule) MarshalJSON() ([]byte, error) {
+	type plain RouterRule
+	return json.Marshal(struct {
+		ID string `json:"id"`
+		plain
+	}{swiftUUID(r.ID), plain(r)})
+}
+
+// MarshalJSON writes the id uppercase, as RouterRule's does.
+func (p ParallelParticipant) MarshalJSON() ([]byte, error) {
+	type plain ParallelParticipant
+	return json.Marshal(struct {
+		ID string `json:"id"`
+		plain
+	}{swiftUUID(p.ID), plain(p)})
+}
