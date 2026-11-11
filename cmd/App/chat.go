@@ -80,10 +80,7 @@ func (a *agent) chatModules(links *linkcapture.Service, enrichment *linkcapture.
 		opts.Runs = bridge
 	}
 
-	catalog := skills.NewCatalog(a.paths)
-	if strings.EqualFold(cfg.SkillsBuiltinScanEnabled, "false") {
-		catalog = skills.NewVaultCatalog(a.paths)
-	}
+	catalog := a.skillCatalog()
 	selectorTransport := llmchat.SelectorTransport{Transport: a.stack.Transport}
 	router := skills.NewContextRouter(catalog, func(tenant uuid.UUID, _ string) skills.Selector {
 		return skills.DefaultSelector{Transport: selectorTransport, Model: cfg.HermesDefaultModel, SessionKey: ids.Upper(tenant)}

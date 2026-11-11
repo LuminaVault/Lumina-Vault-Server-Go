@@ -1,0 +1,16 @@
+# POST /v1/jobs and /v1/jobs/detect. Detect fails closed with no LLM reachable.
+module: skills
+steps:
+  - {name: no token, request: {method: POST, path: /v1/jobs, json: {title: x, cron: "0 8 * * *", spec: y}}}
+  - {name: detect, as: sk_gus, request: {method: POST, path: /v1/jobs/detect, json: {text: every morning tell me the weather}}}
+  - {name: detect missing text, as: sk_gus, request: {method: POST, path: /v1/jobs/detect, json: {}}}
+  - {name: missing cron, as: sk_gus, request: {method: POST, path: /v1/jobs, json: {title: x, spec: y}}}
+  - {name: invalid cron, as: sk_gus, request: {method: POST, path: /v1/jobs, json: {title: x, cron: every day, spec: y}}}
+  - {name: foreign conversation, as: sk_gus, request: {method: POST, path: /v1/jobs, json: {title: x, cron: "0 8 * * *", spec: y, conversationId: 5C10C100-0000-4000-8000-0000000000FF}}}
+  - {name: bad conversation id, as: sk_gus, request: {method: POST, path: /v1/jobs, json: {title: x, cron: "0 8 * * *", spec: y, conversationId: nope}}}
+  - name: create from chat
+    as: sk_gus
+    request: {method: POST, path: /v1/jobs, json: {title: "Daily Stock Prices!", cron: "0 8 * * 1-5", domain: stocks, spec: "Report the closing prices of AAPL and MSFT with a short summary of the day.", conversationId: 5c10c100-0000-4000-8000-000000000001}}
+    snapshot: [skills_state]
+  - {name: re-create without origin keeps it, as: sk_gus, request: {method: POST, path: /v1/jobs, json: {title: "daily stock prices", cron: "30 7 * * *", spec: short}}, snapshot: [skills_state]}
+  - {name: list shows the vault job, as: sk_gus, request: {method: GET, path: /v1/skills}}

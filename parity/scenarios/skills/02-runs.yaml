@@ -1,0 +1,13 @@
+# GET /v1/skills/{name}/runs: history newest first, blocks re-encoded (or dropped when
+# Swift could not decode them), statuses outside the enum read as error, and a 14-day
+# sparkline. The skill need not exist.
+module: skills
+steps:
+  - {name: no token, request: {method: GET, path: /v1/skills/daily-brief/runs}}
+  - {name: runs, as: sk_ann, request: {method: GET, path: /v1/skills/daily-brief/runs}}
+  - {name: limit 2, as: sk_ann, request: {method: GET, path: "/v1/skills/daily-brief/runs?limit=2"}}
+  - {name: limit 0 clamps to 1, as: sk_ann, request: {method: GET, path: "/v1/skills/daily-brief/runs?limit=0"}}
+  - {name: limit huge clamps, as: sk_ann, request: {method: GET, path: "/v1/skills/daily-brief/runs?limit=99999"}}
+  - {name: limit junk is default, as: sk_ann, request: {method: GET, path: "/v1/skills/daily-brief/runs?limit=abc"}}
+  - {name: unknown skill, as: sk_ann, request: {method: GET, path: /v1/skills/nope/runs}}
+  - {name: another skill, as: sk_ann, request: {method: GET, path: /v1/skills/pattern-detector/runs}}
