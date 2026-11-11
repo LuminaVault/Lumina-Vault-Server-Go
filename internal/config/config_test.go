@@ -43,6 +43,9 @@ func TestConfigEnvNamesComeFromSwiftKeys(t *testing.T) {
 		"LV_GO_JOBS": true,
 		// Go-only: /v1/tts's switch, for a self-hosted service (internal/modules/tts).
 		"TTS_BASE_URL": true,
+		// Go-only until wave 6C: the Swift API escalated chat turns start their run on
+		// (owner decision 1, option A; internal/modules/chat/runs.go).
+		"CHAT_HERMES_RUNS_BRIDGE_URL": true,
 		// TranscribeProviderRegistry.loadConfig builds these with key = "openai".
 		"TRANSCRIBE_RATECARD_OPENAI_MTOK_PER_SECOND":              true,
 		"TRANSCRIBE_RATECARD_OPENAI_IMPUTED_USD_PER_AUDIO_MINUTE": true,
