@@ -136,6 +136,13 @@ type Config struct {
 	HermesDataRoot            string `env:"HERMES_DATA_ROOT" envDefault:"/app/data/hermes"`
 	BillingEnforcementEnabled string `env:"BILLING_ENFORCEMENT_ENABLED" envDefault:"false"`
 
+	// Job J1 (internal/workers). AccountDeletionPurgeAfterDays is
+	// account.deletion.purgeAfterDays, the recovery window before DeletedDataPurgeService
+	// erases a deleted account's folders. RetrievalLeakReportSurfaceInsight is
+	// retrieval.leakReport.surfaceInsight; only "true", in any case, turns it on.
+	AccountDeletionPurgeAfterDays     int    `env:"ACCOUNT_DELETION_PURGE_AFTER_DAYS" envDefault:"30"`
+	RetrievalLeakReportSurfaceInsight string `env:"RETRIEVAL_LEAK_REPORT_SURFACE_INSIGHT" envDefault:"false"`
+
 	// Daily caps in million tokens, and the model the trial tier's soft cap degrades
 	// to (usagemeter.Budgets). SelfImprovementEnabled is the operator's switch
 	// (selfimprove.Activity).
