@@ -6,13 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"lumina/internal/modules/calendar"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
-
-	"lumina/internal/modules/calendar"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -441,4 +440,3 @@ func (r *Runner) gmailInbox(ctx context.Context, tenant uuid.UUID, limit int) st
 	}
 	return encodeToolJSON(map[string]any{"status": "ok", "window": "last 24h", "count": len(items), "messages": items})
 }
-

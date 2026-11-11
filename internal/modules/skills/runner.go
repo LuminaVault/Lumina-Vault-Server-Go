@@ -8,14 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/http"
-	"os"
-	"path/filepath"
-	"sort"
-	"strconv"
-	"strings"
-	"time"
-
 	"lumina/internal/apns"
 	"lumina/internal/devicetools"
 	"lumina/internal/embedding"
@@ -29,6 +21,13 @@ import (
 	"lumina/internal/vaultfiles"
 	"lumina/internal/vaultpaths"
 	"lumina/internal/wire"
+	"net/http"
+	"os"
+	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -103,9 +102,8 @@ type runResult struct {
 
 // runUser is what the controller already loaded for the caller.
 type runUser struct {
-	tenant                  uuid.UUID
+	tenant                   uuid.UUID
 	tier, override, username string
-	noCN                    bool
 }
 
 // Run is SkillRunner.run with trigger .manual, the only trigger the HTTP routes use.

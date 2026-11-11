@@ -2,9 +2,8 @@ package skills
 
 import (
 	"encoding/json"
-	"testing"
-
 	"lumina/internal/memorycompile"
+	"testing"
 
 	"github.com/stretchr/testify/require"
 )

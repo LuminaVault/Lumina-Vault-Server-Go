@@ -5,6 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"lumina/internal/embedding"
+	"lumina/internal/memorystore"
+	"lumina/internal/swiftstr"
+	"lumina/internal/wire"
 	"math"
 	"net/http"
 	"os"
@@ -12,11 +16,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"lumina/internal/embedding"
-	"lumina/internal/memorystore"
-	"lumina/internal/swiftstr"
-	"lumina/internal/wire"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -401,9 +400,11 @@ func (r *Runner) photoHits(ctx context.Context, tenant uuid.UUID, query string, 
 		if err := rows.Scan(&takenAt, &screenshot, &ocr, &tags, &distance); err != nil {
 			return nil, err
 		}
-		item := map[string]string{"taken_at": "", "is_screenshot": strconv.FormatBool(screenshot), "ocr_text": "",
+		item := map[string]string{
+			"taken_at": "", "is_screenshot": strconv.FormatBool(screenshot), "ocr_text": "",
 			"scene_tags": strings.Join(tags, ", "),
-			"score":      strconv.FormatFloat(math.Max(0, 1-float64(distance)/2), 'f', 3, 64)}
+			"score":      strconv.FormatFloat(math.Max(0, 1-float64(distance)/2), 'f', 3, 64),
+		}
 		if takenAt != nil {
 			item["taken_at"] = dateStamp(*takenAt)
 		}
