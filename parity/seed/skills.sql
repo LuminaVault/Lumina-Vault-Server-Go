@@ -16,7 +16,7 @@ INSERT INTO users (id, email, password_hash, is_verified, username, tier, create
 INSERT INTO skills_state (tenant_id, source, name, enabled, schedule_override, last_run_at, last_status, last_error, apns_category, origin_kind, origin_id) VALUES
   ('5c100000-0000-4000-8000-0000000000a1', 'builtin', 'daily-brief', false, '0 6 * * *', '2026-02-01T08:00:00Z', 'success', NULL, 'digest', NULL, NULL),
   ('5c100000-0000-4000-8000-0000000000a1', 'builtin', 'pattern-detector', true, NULL, '2026-02-02T08:00:00.250Z', 'exploded', 'boom', 'shouty', 'card', '5c10c000-0000-4000-8000-000000000001'),
-  ('5c100000-0000-4000-8000-0000000000a1', 'builtin', 'not-in-catalog', true, NULL, NULL, NULL, NULL, NULL, 'mystery', '5c10c000-0000-4000-8000-000000000002');
+  ('5c100000-0000-4000-8000-0000000000a1', 'builtin', 'not-in-catalog', true, NULL, NULL, NULL, NULL, NULL, NULL, '5c10c000-0000-4000-8000-000000000002');
 
 INSERT INTO hermes_mirrored_skills (id, tenant_id, name, description, enabled, source, updated_at) VALUES
   ('5c10a000-0000-4000-8000-000000000001', '5c100000-0000-4000-8000-0000000000a1', 'web-search', 'Searches the web for the latest on a topic', true, 'builtin', '2026-02-01T00:00:00Z'),
