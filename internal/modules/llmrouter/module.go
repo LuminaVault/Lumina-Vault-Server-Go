@@ -44,6 +44,10 @@ type Options struct {
 	Stack      *llm.Stack
 	Memories   *memorystore.Repository
 	Embeddings embedding.Service
+	// FixDashboard serves /v1/router/dashboard. Off, it is Swift's bare 500:
+	// RouterController decodes SUM(bigint), which Postgres returns as numeric,
+	// into Int64, so the route fails on every call.
+	FixDashboard bool
 }
 
 // Module is the /v1/router group: jwtAuthenticator + settingsByUser.

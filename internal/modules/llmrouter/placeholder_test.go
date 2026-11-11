@@ -98,3 +98,9 @@ func TestSavedByokChainDropsPlaceholders(t *testing.T) {
 	assert.Empty(t, savedByokChain(pref))
 	assert.Empty(t, savedByokChain(nil))
 }
+
+// Without FixDashboard the route is Swift's bare 500.
+func TestDashboardIsSwiftsBare500ByDefault(t *testing.T) {
+	m := New(nil, Options{})
+	assert.ErrorIs(t, m.dashboard(nil), errDashboardDecode)
+}

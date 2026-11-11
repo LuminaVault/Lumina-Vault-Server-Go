@@ -73,7 +73,7 @@ func setup(t *testing.T, parallel bool) env {
 	e := httpserver.New(config.Config{}, httpserver.Deps{
 		Auth: auth.Middleware(keys, auth.PGUsers(pool)),
 		Modules: []httpserver.Module{
-			llmrouter.New(pool, llmrouter.Options{Identify: identify, Limits: limits, Stack: stack}),
+			llmrouter.New(pool, llmrouter.Options{Identify: identify, Limits: limits, Stack: stack, FixDashboard: true}),
 			meproviders.New(pool, meproviders.Options{Identify: identify, Limits: limits, Stack: stack, Box: box}),
 		},
 	})
@@ -282,6 +282,7 @@ func TestBindingsOwnershipAndScopes(t *testing.T) {
 
 // MARK: - Dashboard
 
+// Swift's dashboard is a 500 on every call; FixDashboard serves it.
 func TestDashboardSumsThisMonthAndCarriesTheDefaultBudget(t *testing.T) {
 	v := setup(t, false)
 	def := v.defaultProfile(lrDash)

@@ -504,7 +504,13 @@ func (m *Module) deleteBinding(c *echo.Context) error {
 
 // MARK: - Dashboard
 
+// errDashboardDecode is the Swift failure: a plain error, so a 500 with an empty body.
+var errDashboardDecode = errors.New("router dashboard: numeric sums do not decode as Int64 (Swift parity)")
+
 func (m *Module) dashboard(c *echo.Context) error {
+	if !m.opts.FixDashboard {
+		return errDashboardDecode
+	}
 	tenant := auth.UserID(c)
 	ctx := c.Request().Context()
 	row, err := m.q.Dashboard(ctx, tenant)

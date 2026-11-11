@@ -122,8 +122,10 @@ CREATE VIEW parity_mp_router_bindings AS
 SELECT tenant_id, scope, scope_id, profile_id, created_at, updated_at, id
 FROM router_bindings WHERE tenant_id::text LIKE '3e9a0000-%';
 
+-- Events leave out ids and times: test-all stamps one time per run in Go and
+-- one per row in Swift, and the snapshot's text order would follow them.
 CREATE VIEW parity_mp_events AS
-SELECT tenant_id, kind, connection_id, severity, message, code, connection_title, occurred_at, created_at, id
+SELECT tenant_id, kind, connection_id, severity, message, code, connection_title, created_at IS NOT NULL AS has_created_at
 FROM connection_diagnostic_events WHERE tenant_id::text LIKE '3e9a0000-%';
 
 -- The verdict fields are written by a detached probe, so the LLM state leaves them out.

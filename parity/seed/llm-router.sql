@@ -34,7 +34,7 @@ VALUES
    '{"steps":[{"provider":"openRouter","model":"LuminaVault Brain · Auto"},{"provider":"openRouter","model":"auto"},{"provider":"openai","model":"gpt-4o"},{"provider":"anthropic","model":"claude-sonnet-4-6"}]}',
    '{"providers":["openai","anthropic"]}', '{"providers":[]}', '2026-01-02T00:00:00Z', '2026-01-02T00:00:00Z');
 
--- bind's scopes: a space and a workflow of its own, a job by name, and another
+-- bind's scopes (a workflow's draft must decode: Swift loads the Fluent model): a space and a workflow of its own, a job by name, and another
 -- tenant's space and workflow.
 INSERT INTO spaces (id, tenant_id, name, slug, note_count, created_at, updated_at)
 VALUES
@@ -43,8 +43,8 @@ VALUES
 
 INSERT INTO workflows (id, tenant_id, name, draft_definition, created_at, updated_at)
 VALUES
-  ('1a7e3000-0000-4000-8000-000000000001', '1a7e0000-0000-4000-8000-0000000000a7', 'Digest', '{}', '2026-01-02T00:00:00Z', '2026-01-02T00:00:00Z'),
-  ('1a7e3000-0000-4000-8000-000000000002', '1a7e0000-0000-4000-8000-0000000000a2', 'Other', '{}', '2026-01-02T00:00:00Z', '2026-01-02T00:00:00Z');
+  ('1a7e3000-0000-4000-8000-000000000001', '1a7e0000-0000-4000-8000-0000000000a7', 'Digest', '{"schemaVersion":1,"trigger":"manual","triggerConfiguration":{},"nodes":[{"id":"1A7ED000-0000-4000-8000-000000000001","kind":"trigger","name":"Start","x":0,"y":0,"configuration":{}}],"edges":[]}', '2026-01-02T00:00:00Z', '2026-01-02T00:00:00Z'),
+  ('1a7e3000-0000-4000-8000-000000000002', '1a7e0000-0000-4000-8000-0000000000a2', 'Other', '{"schemaVersion":1,"trigger":"manual","triggerConfiguration":{},"nodes":[{"id":"1A7ED000-0000-4000-8000-000000000001","kind":"trigger","name":"Start","x":0,"y":0,"configuration":{}}],"edges":[]}', '2026-01-02T00:00:00Z', '2026-01-02T00:00:00Z');
 
 INSERT INTO skills_state (tenant_id, source, name)
 VALUES ('1a7e0000-0000-4000-8000-0000000000a7', 'builtin', 'morning-brief');
