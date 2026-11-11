@@ -80,10 +80,16 @@ type failedCandidate struct {
 
 // ChatCompletions dispatches a buffered completion.
 func (t *Transport) ChatCompletions(ctx context.Context, payload []byte, sessionKey, sessionID string) (Metadata, error) {
+	decision := t.pickDecision(ctx, payload, RoutingValues(ctx).CurrentUser)
+	return t.completeDecided(ctx, payload, sessionKey, sessionID, decision, true)
+}
+
+// completeDecided is the candidate loop shared by ChatCompletions (which picks)
+// and ChatCompletionsDecided (which is handed a pick). allowEnsemble is false on
+// the decided path, which walks the candidates only.
+func (t *Transport) completeDecided(ctx context.Context, payload []byte, sessionKey, sessionID string, decision Decision, allowEnsemble bool) (Metadata, error) {
 	values := RoutingValues(ctx)
-	user := values.CurrentUser
 	prompt := extractLatestUserPrompt(payload)
-	decision := t.pickDecision(ctx, payload, user)
 	if c := decision.Cerberus; c != nil {
 		if err := c.PreflightError(); err != nil {
 			return Metadata{}, err
@@ -93,7 +99,7 @@ func (t *Transport) ChatCompletions(ctx context.Context, payload []byte, session
 	started := time.Now()
 	fallbackCount := 0
 
-	if c := decision.Cerberus; c != nil && c.Strategy == StrategyEnsemble {
+	if c := decision.Cerberus; allowEnsemble && c != nil && c.Strategy == StrategyEnsemble {
 		if ensemble := t.runEnsemble(ctx, payload, sessionKey, sessionID, c, prompt); ensemble != nil {
 			t.completeEnsemble(ctx, values, c, ensemble)
 			publishRouteOutcome(values, ensemble.Route, c)
