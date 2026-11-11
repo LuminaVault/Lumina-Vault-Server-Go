@@ -2,20 +2,21 @@ package voice
 
 import (
 	"context"
+	"lumina/internal/telemetry"
 
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 )
 
 // VoiceMetrics: is voice healthy right now. Dimensions stay bounded, so no tenant ID
 // and only known channels; what one tenant used is the usage_events rows' question.
+// The histograms carry swift-otel's bucket bounds (telemetry.SwiftDurationBuckets),
+// so Go's le labels line up with Swift's.
 var (
-	meter               = otel.Meter("lumina/voice")
-	requestCounter, _   = meter.Int64Counter("luminavault.voice.transcribe.requests")
-	audioDurationHis, _ = meter.Float64Histogram("luminavault.voice.transcribe.audio_duration", metric.WithUnit("s"))
-	latencyHis, _       = meter.Float64Histogram("luminavault.voice.transcribe.latency", metric.WithUnit("s"))
-	audioBytesHis, _    = meter.Int64Histogram("luminavault.voice.transcribe.audio_bytes")
+	requestCounter   = telemetry.Global.Voice.Requests
+	audioDurationHis = telemetry.Global.Voice.AudioDuration
+	latencyHis       = telemetry.Global.Voice.Latency
+	audioBytesHis    = telemetry.Global.Voice.AudioBytes
 )
 
 // metricAttributes is VoiceMetrics.dimensions.

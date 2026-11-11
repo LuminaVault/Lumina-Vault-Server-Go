@@ -6,11 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"lumina/internal/telemetry"
 	"net/http"
 	"time"
-
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/metric"
 )
 
 // The non-streaming chat types are LuminaVaultShared's ChatRequest, ChatMessage,
@@ -128,12 +126,12 @@ type RoutedService struct {
 
 var _ ChatService = (*RoutedService)(nil)
 
-// The meter returns no-op instruments when none is installed, so the errors are
-// ignored, as upstreamErrorCounter's is.
+// Swift's chat timer has no unit dimension, so the duration has none either: a unit
+// would rename the Prometheus series to *_duration_seconds.
 var (
-	chatSuccessCounter, _ = otel.Meter("lumina/llm").Int64Counter("luminavault.llm.chat.success")
-	chatFailureCounter, _ = otel.Meter("lumina/llm").Int64Counter("luminavault.llm.chat.failure")
-	chatDuration, _       = otel.Meter("lumina/llm").Float64Histogram("luminavault.llm.chat.duration", metric.WithUnit("s"))
+	chatSuccessCounter = telemetry.Global.LLM.ChatSuccess
+	chatFailureCounter = telemetry.Global.LLM.ChatFailure
+	chatDuration       = telemetry.Global.LLM.ChatDuration
 )
 
 // completionPayload is RoutedHermesLLMService's ChatCompletionPayload. Swift's

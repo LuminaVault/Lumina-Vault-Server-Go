@@ -5,12 +5,12 @@ import (
 	"errors"
 	"log/slog"
 	"lumina/internal/swiftstr"
+	"lumina/internal/telemetry"
 	"strconv"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 )
@@ -669,7 +669,7 @@ func extractUsage(metadata Metadata) (tokensIn, tokensOut int) {
 // upstreamErrorMetric is UpstreamErrorTelemetry's counter label.
 const upstreamErrorMetric = "luminavault.llm.chat.upstream_error"
 
-var upstreamErrorCounter = newUpstreamErrorCounter(otel.GetMeterProvider())
+var upstreamErrorCounter = telemetry.Global.LLM.UpstreamError
 
 // newUpstreamErrorCounter is the seam Swift's factory: parameter gives the tests.
 func newUpstreamErrorCounter(provider metric.MeterProvider) metric.Int64Counter {
