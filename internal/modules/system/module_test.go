@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -39,12 +40,31 @@ const token = "admin-secret"
 // gate blocks docker until released, so a job stays running.
 type gate struct{ release chan struct{} }
 
-func (g gate) Run(ctx context.Context, args []string) (string, int, error) {
+func (g gate) Run(ctx context.Context, args []string) (system.Result, error) {
 	if args[0] == "inspect" {
-		return "", 1, nil
+		return system.Result{ExitCode: 1}, nil
 	}
 	<-g.release
-	return "", -1, system.ErrNoDocker
+	return system.Result{}, system.ErrNoDocker
+}
+
+// stubDocker is StubDockerExec: every call succeeds and is recorded.
+type stubDocker struct {
+	mu    sync.Mutex
+	calls [][]string
+}
+
+func (d *stubDocker) Run(_ context.Context, args []string) (system.Result, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.calls = append(d.calls, append([]string(nil), args...))
+	return system.Result{}, nil
+}
+
+func (d *stubDocker) invocations() [][]string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return append([][]string(nil), d.calls...)
 }
 
 type env struct {
@@ -56,6 +76,11 @@ type env struct {
 
 func setup(t *testing.T, docker system.Docker, adminToken string) env {
 	t.Helper()
+	return setupWith(t, adminToken, system.Options{Docker: docker, PerTenant: true})
+}
+
+func setupWith(t *testing.T, adminToken string, opt system.Options) env {
+	t.Helper()
 	ctx := context.Background()
 	pool := dbtest.Postgres(t)
 	require.NoError(t, migrations.Up(ctx, pool, migrations.SQL()))
@@ -65,9 +90,8 @@ func setup(t *testing.T, docker system.Docker, adminToken string) env {
 	require.NoError(t, err)
 	wg := &sync.WaitGroup{}
 	identify := auth.Identify(keys, auth.PGUsers(pool))
-	m := system.New(pool, system.Options{
-		Identify: identify, AdminToken: adminToken, PerTenant: true, Docker: docker, BackgroundWait: wg,
-	})
+	opt.Identify, opt.AdminToken, opt.BackgroundWait = identify, adminToken, wg
+	m := system.New(pool, opt)
 	e := httpserver.New(config.Config{}, httpserver.Deps{
 		Auth:    auth.Middleware(keys, auth.PGUsers(pool)),
 		Modules: []httpserver.Module{m},
@@ -224,4 +248,101 @@ func TestReprovision(t *testing.T) {
 	v := setup(t, nil, token)
 	r := v.do(http.MethodPost, "/v1/system/hermes/reprovision", "", token)
 	require.Equal(t, 500, r.Code, r.Body.String())
+}
+
+func (v env) runJob(body string) map[string]any {
+	v.t.Helper()
+	r := v.do(http.MethodPost, "/v1/system/hermes/update", body, token)
+	require.Equal(v.t, 200, r.Code, r.Body.String())
+	id, _ := obj(v.t, r)["jobID"].(string)
+	v.wg.Wait()
+	r = v.do(http.MethodGet, "/v1/system/hermes/update/"+id, "", token)
+	require.Equal(v.t, 200, r.Code, r.Body.String())
+	status, _ := obj(v.t, r)["status"].(map[string]any)
+	return status
+}
+
+func runNames(calls [][]string) []string {
+	names := []string{}
+	for _, c := range calls {
+		if c[0] != "run" {
+			continue
+		}
+		for i := range c[:len(c)-1] {
+			if c[i] == "--name" {
+				names = append(names, c[i+1])
+			}
+		}
+	}
+	return names
+}
+
+// `happy path runs full pipeline and promotes new image`.
+func TestHappyPathRunsFullPipelineAndPromotesNewImage(t *testing.T) {
+	docker := &stubDocker{}
+	v := setupWith(t, token, system.Options{
+		Docker:      docker,
+		HealthProbe: func(context.Context, int, string) bool { return true },
+	})
+	status := v.runJob(`{"targetTag":"v2"}`)
+	require.Equal(t, "succeeded", status["state"], status)
+	require.Equal(t, "ghcr.io/luminavault/luminavault-hermes:v2", status["toVersion"])
+	for _, s := range status["steps"].([]any) {
+		step := s.(map[string]any)
+		if step["id"] == "reprovisionTenants" {
+			require.Equal(t, "skipped", step["state"])
+			continue
+		}
+		require.Equal(t, "succeeded", step["state"], step["id"])
+	}
+	names := runNames(docker.invocations())
+	require.Contains(t, names, "luminavault-hermes-next")
+	require.Contains(t, names, "luminavault-hermes")
+}
+
+// `unhealthy new version keeps current and reports rolled back`.
+func TestUnhealthyNewVersionKeepsCurrentAndReportsRolledBack(t *testing.T) {
+	docker := &stubDocker{}
+	v := setupWith(t, token, system.Options{
+		Docker:         docker,
+		HealthProbe:    func(context.Context, int, string) bool { return false },
+		HealthTimeout:  time.Second,
+		HealthInterval: 100 * time.Millisecond,
+	})
+	status := v.runJob(`{"targetTag":"broken"}`)
+	require.Equal(t, "rolledBack", status["state"], status)
+	for _, s := range status["steps"].([]any) {
+		if step := s.(map[string]any); step["id"] == "healthCheckCentral" {
+			require.Equal(t, "failed", step["state"])
+		}
+	}
+	calls := docker.invocations()
+	require.NotContains(t, runNames(calls), "luminavault-hermes")
+	removedTemp := false
+	for _, c := range calls {
+		removedTemp = removedTemp || (c[0] == "rm" && c[len(c)-1] == "luminavault-hermes-next")
+	}
+	require.True(t, removedTemp)
+}
+
+// The same digest after pull short-circuits: verify succeeds, the rest skip.
+func TestAlreadyUpToDateSkipsTheSwap(t *testing.T) {
+	docker := digestDocker{}
+	v := setupWith(t, token, system.Options{Docker: docker})
+	status := v.runJob(`{}`)
+	require.Equal(t, "succeeded", status["state"])
+	steps := status["steps"].([]any)
+	require.Equal(t, "already up to date", steps[2].(map[string]any)["detail"])
+	for _, s := range steps[3:] {
+		require.Equal(t, "skipped", s.(map[string]any)["state"])
+	}
+}
+
+type digestDocker struct{}
+
+func (digestDocker) Run(_ context.Context, args []string) (system.Result, error) {
+	if args[0] == "inspect" || args[0] == "image" {
+		return system.Result{Stdout: "sha256:abc\n"}, nil
+	}
+	return system.Result{}, nil
 }

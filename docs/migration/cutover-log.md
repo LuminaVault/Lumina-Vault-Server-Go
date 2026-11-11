@@ -1810,15 +1810,16 @@ Beyond the pilot gate (D-wave2-early):
   disabled", mismatch 401 "admin token invalid"), mounted only with the secret box, as in Swift:
   `version`, `update`, `update/current`, `update/:jobID`, `update/:jobID/stream` (SSE),
   `update/:jobID/rollback`, `reprovision`.
-- Decision O1: no docker in the pod. The routes, the `hermes_update_jobs` rows and the SSE stream
-  are ported. The step engine runs up to its first docker call, which fails as Swift's does: an
-  update fails at `preflight`, a manual rollback fails at restore with Swift's message, and
-  `reprovision` is a 500 (`ensureNetworkExists` throws). `version` falls back to the channel tag.
-- Config: `HERMES_CENTRAL_CONTAINER_NAME`, `HERMES_CENTRAL_REGISTRY_IMAGE`,
-  `HERMES_CENTRAL_CHANNEL_TAG` (Swift's `hermes.central.*` defaults).
-- Swift tests: `HermesUpdateServiceTests` 3. `second update while one is running is rejected` is
-  ported. The happy path and the unhealthy-version rollback drive docker to success; a waiver is
-  proposed in the PR (O1).
+- The whole engine is ported: CentralHermesManager (blue-green temp container, cutover, restore,
+  loopback health probe), the step engine, auto and manual rollback, tenant reprovision. Docker is
+  an interface. Production has no docker binary (O1), so `NoDocker` fails every call as Swift's
+  spawn does: an update fails at `preflight`, a manual rollback fails at restore, `reprovision`
+  is a 500, and `version` falls back to the channel tag. Tenant reprovision runs through a
+  no-docker container manager until 6D's `hermescontainers` lifecycle is wired in.
+- Config: `HERMES_CENTRAL_{CONTAINER_NAME,TEMP_CONTAINER_NAME,REGISTRY_IMAGE,CHANNEL_TAG,
+  VOLUME_PATH,PORT,TEMP_PORT}`, `HERMES_PER_TENANT_NETWORK`, `HERMES_API_KEY` (Swift's defaults).
+- Swift tests: `HermesUpdateServiceTests` 3, all ported against a stub Docker and probe (owner
+  rejected waivers 2026-11-11).
 
 ### G1 parity: met 2026-11-11
 

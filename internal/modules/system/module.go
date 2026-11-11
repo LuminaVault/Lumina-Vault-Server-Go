@@ -24,28 +24,27 @@ import (
 	"github.com/labstack/echo/v5"
 )
 
-// Docker is the part of DockerExec the update engine uses.
-type Docker interface {
-	Run(ctx context.Context, args []string) (stdout string, exitCode int, err error)
-}
-
-// NoDocker is the default Docker: the binary does not exist, so nothing runs.
-type NoDocker struct{}
-
-// ErrNoDocker is what launching a missing docker binary reports.
-var ErrNoDocker = errors.New("docker binary not found")
-
-func (NoDocker) Run(context.Context, []string) (string, int, error) { return "", -1, ErrNoDocker }
-
 // Options are the hermes.central.* settings and the admin token.
 type Options struct {
-	Identify       echo.MiddlewareFunc
-	AdminToken     string
-	ContainerName  string
-	RegistryImage  string
-	ChannelTag     string
-	PerTenant      bool // a container manager exists (always, beside the secret box)
+	Identify      echo.MiddlewareFunc
+	AdminToken    string
+	ContainerName string // hermes.central.containerName
+	TempName      string // hermes.central.tempContainerName
+	RegistryImage string
+	ChannelTag    string
+	Network       string // hermes.perTenant.network
+	VolumePath    string // hermes.central.volumePath
+	Port          int    // hermes.central.port
+	TempPort      int    // hermes.central.tempPort
+	APIKey        string // hermes.apiKey
+	// Tenants is the container manager; nil is Swift's containerManager == nil
+	// (per-tenant disabled). New's caller passes one whenever the box exists.
+	Tenants        Tenants
+	PerTenant      bool // build the no-docker container manager when Tenants is nil
 	Docker         Docker
+	HealthProbe    HealthProbe
+	HealthTimeout  time.Duration // healthTimeoutSeconds, 90 s
+	HealthInterval time.Duration // awaitHealthy's interval, 2 s
 	Now            func() time.Time
 	Log            *slog.Logger
 	BackgroundWait *sync.WaitGroup // tests wait for the job engine
@@ -56,8 +55,9 @@ type Module struct {
 	pool *pgxpool.Pool
 	opt  Options
 	// mu serialises start and rollback, as the Swift actor does.
-	mu   sync.Mutex
-	subs *subscribers
+	mu      sync.Mutex
+	subs    *subscribers
+	central *central
 }
 
 func New(pool *pgxpool.Pool, opt Options) *Module {
@@ -79,7 +79,41 @@ func New(pool *pgxpool.Pool, opt Options) *Module {
 	if opt.ChannelTag == "" {
 		opt.ChannelTag = "latest"
 	}
-	return &Module{pool: pool, opt: opt, subs: &subscribers{m: map[uuid.UUID]map[int]chan event{}}}
+	def := func(v *string, d string) {
+		if *v == "" {
+			*v = d
+		}
+	}
+	def(&opt.TempName, "luminavault-hermes-next")
+	def(&opt.Network, "luminavault-hermes-net")
+	def(&opt.VolumePath, "/app/data/hermes")
+	if opt.Port == 0 {
+		opt.Port = 8642
+	}
+	if opt.TempPort == 0 {
+		opt.TempPort = 8643
+	}
+	if opt.HealthProbe == nil {
+		opt.HealthProbe = LoopbackProbe
+	}
+	if opt.HealthTimeout == 0 {
+		opt.HealthTimeout = 90 * time.Second
+	}
+	if opt.HealthInterval == 0 {
+		opt.HealthInterval = 2 * time.Second
+	}
+	if opt.Tenants == nil && opt.PerTenant {
+		opt.Tenants = noDockerTenants{docker: opt.Docker, network: opt.Network}
+	}
+	return &Module{
+		pool: pool, opt: opt, subs: &subscribers{m: map[uuid.UUID]map[int]chan event{}},
+		central: &central{
+			docker: opt.Docker, containerName: opt.ContainerName, tempName: opt.TempName,
+			registryImage: opt.RegistryImage, network: opt.Network, volume: opt.VolumePath,
+			port: opt.Port, tempPort: opt.TempPort, apiKey: opt.APIKey,
+			mnemosyneDir: "/opt/data/mnemosyne", probe: opt.HealthProbe, interval: opt.HealthInterval,
+		},
+	}
 }
 
 // Register mounts JWT then the admin token, as App+build.swift does.
@@ -274,22 +308,6 @@ func (m *Module) hasRunningJob(ctx context.Context) (bool, error) {
 	return running, err
 }
 
-// MARK: - Central manager (CentralHermesManager): docker inspection
-
-func (m *Module) fullRef(tag string) string { return m.opt.RegistryImage + ":" + tag }
-
-func (m *Module) inspect(ctx context.Context, format string) *string {
-	out, code, err := m.opt.Docker.Run(ctx, []string{"inspect", "--format", format, m.opt.ContainerName})
-	if err != nil || code != 0 {
-		return nil
-	}
-	v := strings.TrimSpace(out)
-	if v == "" {
-		return nil
-	}
-	return &v
-}
-
 // MARK: - Handlers
 
 type versionInfo struct {
@@ -328,11 +346,11 @@ func shortLabel(ref string, digest *string) string {
 
 func (m *Module) version(c *echo.Context) error {
 	ctx := c.Request().Context()
-	ref := m.fullRef(m.opt.ChannelTag)
-	if r := m.inspect(ctx, "{{.Config.Image}}"); r != nil {
+	ref := m.central.fullRef(m.opt.ChannelTag)
+	if r := m.central.currentImageRef(ctx); r != nil {
 		ref = *r
 	}
-	digest := m.inspect(ctx, "{{.Image}}")
+	digest := m.central.currentImageDigest(ctx)
 	info := versionInfo{CurrentRef: ref, CurrentDigest: digest, CurrentLabel: shortLabel(ref, digest)}
 	var last *time.Time
 	err := m.pool.QueryRow(ctx, `SELECT updated_at FROM hermes_update_jobs WHERE state = 'succeeded'
@@ -373,8 +391,8 @@ func (m *Module) startUpdate(c *echo.Context) error {
 			tag = t
 		}
 	}
-	targetRef := m.fullRef(tag)
-	currentRef := m.inspect(ctx, "{{.Config.Image}}")
+	targetRef := m.central.fullRef(tag)
+	currentRef := m.central.currentImageRef(ctx)
 	steps := make([]Step, len(pipeline))
 	for i, id := range pipeline {
 		steps[i] = Step{ID: id, State: "pending"}
@@ -385,7 +403,7 @@ func (m *Module) startUpdate(c *echo.Context) error {
 		VALUES ($1, 'running', $2, $3, $4, NULL, $5, $5)`, id, encodeSteps(steps), currentRef, targetRef, now); err != nil {
 		return err
 	}
-	m.background(func(ctx context.Context) { m.execute(ctx, id) })
+	m.background(func(ctx context.Context) { m.execute(ctx, id, targetRef, currentRef) })
 	return wire.JSON(c, http.StatusOK, startResponse{JobID: wire.UUID{UUID: id}, State: "running"})
 }
 
@@ -478,16 +496,16 @@ func (m *Module) rollback(c *echo.Context) error {
 	return wire.JSON(c, http.StatusOK, startResponse{JobID: wire.UUID{UUID: newID}, State: "running"})
 }
 
-// reprovision is reprovisionTenants: the container manager's reprovisionAll
-// starts with `docker network inspect`, which throws here.
+// reprovision is reprovisionTenants.
 func (m *Module) reprovision(c *echo.Context) error {
-	if !m.opt.PerTenant {
+	if m.opt.Tenants == nil {
 		return wire.NewError(http.StatusServiceUnavailable, "per_tenant_disabled")
 	}
-	if _, _, err := m.opt.Docker.Run(c.Request().Context(), []string{"network", "inspect", "lv-hermes"}); err != nil {
+	n, err := m.opt.Tenants.ReprovisionAll(c.Request().Context())
+	if err != nil {
 		return err
 	}
-	return errors.New("reprovision needs docker")
+	return wire.JSON(c, http.StatusOK, map[string]int{"reprovisioned": n})
 }
 
 // MARK: - Step engine
@@ -542,31 +560,204 @@ func (m *Module) finalize(ctx context.Context, id uuid.UUID, state string, errMe
 
 func ptr(s string) *string { return &s }
 
-// userMessage is HermesUpdateService.userMessage(for:): with no docker binary
-// every failure is the default case.
-func userMessage(err error) string { return fmt.Sprintf("The update failed: %v", err) }
+// step is HermesUpdateService.step: running, work, succeeded with its detail.
+func (m *Module) step(ctx context.Context, id uuid.UUID, stepID string, work func() (*string, error)) error {
+	if err := m.mark(ctx, id, stepID, "running", nil); err != nil {
+		return err
+	}
+	detail, err := work()
+	if err != nil {
+		return err
+	}
+	return m.mark(ctx, id, stepID, "succeeded", detail)
+}
 
-// execute is the step engine up to its first docker call, preflight's
-// `docker version`, which fails here: the active step fails and the job ends
-// failed, as Swift's does when Process cannot launch docker.
-func (m *Module) execute(ctx context.Context, id uuid.UUID) {
-	fail := func(err error) {
-		m.opt.Log.ErrorContext(ctx, "hermes update failed", "jobID", id, "error", err)
-		m.markActiveStepFailed(ctx, id, err)
+func (m *Module) skipRemaining(ctx context.Context, id uuid.UUID, from string) error {
+	started := false
+	for _, s := range pipeline {
+		started = started || s == from
+		if started {
+			if err := m.mark(ctx, id, s, "skipped", nil); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// addOrMark is mark, appending the step first when the job lacks it (rollback).
+func (m *Module) addOrMark(ctx context.Context, id uuid.UUID, stepID, state string, detail *string) error {
+	j, err := m.loadJob(ctx, id)
+	if err != nil || j == nil {
+		return err
+	}
+	steps := decodeSteps(j.stepsJSON)
+	found := false
+	for _, s := range steps {
+		found = found || s.ID == stepID
+	}
+	if !found {
+		steps = append(steps, Step{ID: stepID, State: "pending"})
+		if _, err := m.pool.Exec(ctx, `UPDATE hermes_update_jobs SET steps_json = $2, updated_at = $3 WHERE id = $1`,
+			id, encodeSteps(steps), m.opt.Now()); err != nil {
+			return err
+		}
+	}
+	return m.mark(ctx, id, stepID, state, detail)
+}
+
+// execute is HermesUpdateService.execute: blue-green swap of the central
+// container, then tenant reprovision.
+func (m *Module) execute(ctx context.Context, id uuid.UUID, targetRef string, previousRef *string) {
+	c := m.central
+	swapStarted, oldRemoved := false, false
+	err := func() error {
+		if err := m.step(ctx, id, "preflight", func() (*string, error) {
+			return ptr(m.opt.ContainerName), c.assertDockerReachable(ctx)
+		}); err != nil {
+			return err
+		}
+		previousDigest := c.currentImageDigest(ctx)
+		if err := m.step(ctx, id, "pullImage", func() (*string, error) {
+			return ptr(targetRef), c.pull(ctx, targetRef)
+		}); err != nil {
+			return err
+		}
+		newDigest := c.imageDigest(ctx, targetRef)
+		if newDigest != nil && previousDigest != nil && *newDigest == *previousDigest {
+			if err := m.mark(ctx, id, "verifyImage", "succeeded", ptr("already up to date")); err != nil {
+				return err
+			}
+			if err := m.skipRemaining(ctx, id, "snapshotCurrent"); err != nil {
+				return err
+			}
+			m.finalize(ctx, id, "succeeded", nil)
+			return nil
+		}
+		verified := targetRef
+		if newDigest != nil {
+			verified = *newDigest
+		}
+		if err := m.mark(ctx, id, "verifyImage", "succeeded", &verified); err != nil {
+			return err
+		}
+		snap := "none"
+		if previousRef != nil {
+			snap = *previousRef
+		}
+		if err := m.mark(ctx, id, "snapshotCurrent", "succeeded", &snap); err != nil {
+			return err
+		}
+		if err := m.mark(ctx, id, "swapCentral", "running", nil); err != nil {
+			return err
+		}
+		swapStarted = true
+		if err := c.runTemp(ctx, targetRef); err != nil {
+			return err
+		}
+		if err := m.mark(ctx, id, "swapCentral", "succeeded", nil); err != nil {
+			return err
+		}
+		if err := m.mark(ctx, id, "healthCheckCentral", "running", nil); err != nil {
+			return err
+		}
+		if !c.awaitHealthy(ctx, c.tempPort, m.opt.HealthTimeout) {
+			c.removeTemp(ctx)
+			if err := m.mark(ctx, id, "healthCheckCentral", "failed", ptr("new version didn't respond in time")); err != nil {
+				return err
+			}
+			m.finalize(ctx, id, "rolledBack",
+				ptr("The new version started but didn't respond in time. The previous version is still running."))
+			return nil
+		}
+		if err := c.promoteTempToCanonical(ctx, targetRef); err != nil {
+			return err
+		}
+		oldRemoved = true
+		if !c.awaitHealthy(ctx, c.port, m.opt.HealthTimeout) {
+			if err := m.mark(ctx, id, "healthCheckCentral", "failed", ptr("cutover container unhealthy")); err != nil {
+				return err
+			}
+			m.rollbackToPrevious(ctx, id, previousRef)
+			return nil
+		}
+		if err := m.mark(ctx, id, "healthCheckCentral", "succeeded", nil); err != nil {
+			return err
+		}
+		if err := m.mark(ctx, id, "reprovisionTenants", "running", nil); err != nil {
+			return err
+		}
+		if t := m.opt.Tenants; t != nil {
+			t.SetImage(targetRef)
+			n, rerr := t.ReprovisionAll(ctx)
+			if rerr != nil {
+				n = 0 // (try? cm.reprovisionAll()) ?? 0
+			}
+			if err := m.mark(ctx, id, "reprovisionTenants", "succeeded", ptr(fmt.Sprintf("%d tenant container(s) updated", n))); err != nil {
+				return err
+			}
+		} else if err := m.mark(ctx, id, "reprovisionTenants", "skipped", ptr("per-tenant containers disabled")); err != nil {
+			return err
+		}
+		if err := m.mark(ctx, id, "verifyTenants", "succeeded", ptr("ok")); err != nil {
+			return err
+		}
+		if err := m.mark(ctx, id, "promote", "succeeded", &targetRef); err != nil {
+			return err
+		}
+		m.finalize(ctx, id, "succeeded", nil)
+		return nil
+	}()
+	if err == nil {
+		return
+	}
+	m.opt.Log.ErrorContext(ctx, "hermes update failed", "jobID", id, "error", err)
+	m.markActiveStepFailed(ctx, id, err)
+	switch {
+	case swapStarted && oldRemoved:
+		m.rollbackToPrevious(ctx, id, previousRef)
+	case swapStarted:
+		c.removeTemp(ctx)
+		m.finalize(ctx, id, "rolledBack", ptr(userMessage(err)+" The previous version is still running."))
+	default:
 		m.finalize(ctx, id, "failed", ptr(userMessage(err)))
 	}
-	if err := m.mark(ctx, id, "preflight", "running", nil); err != nil {
-		fail(err)
+}
+
+// rollbackToPrevious is the auto-rollback after the old container was removed.
+func (m *Module) rollbackToPrevious(ctx context.Context, id uuid.UUID, restoreRef *string) {
+	if restoreRef == nil {
+		m.finalize(ctx, id, "failed", ptr("Update failed and no previous version was recorded to restore. Manual recovery required."))
 		return
 	}
-	if _, code, err := m.opt.Docker.Run(ctx, []string{"version", "--format", "{{.Server.Version}}"}); err != nil {
-		fail(err)
-		return
-	} else if code != 0 {
-		fail(errors.New("dockerUnreachable"))
+	if err := m.restore(ctx, id, *restoreRef, m.addOrMark); err != nil {
+		_ = m.addOrMark(ctx, id, "rollback", "failed", ptr(err.Error()))
+		m.finalize(ctx, id, "failed",
+			ptr("The update failed and automatic restore did not succeed. Your assistant may be offline — manual recovery required."))
 		return
 	}
-	fail(errors.New("hermes update needs docker"))
+	m.finalize(ctx, id, "rolledBack", ptr("The update didn't complete, so the previous version was restored."))
+}
+
+type markFunc func(ctx context.Context, id uuid.UUID, stepID, state string, detail *string) error
+
+// restore is the shared body of both rollbacks: the rollback step, the
+// canonical container on restoreRef, health, tenants back to restoreRef.
+func (m *Module) restore(ctx context.Context, id uuid.UUID, restoreRef string, mark markFunc) error {
+	if err := mark(ctx, id, "rollback", "running", ptr("restoring "+restoreRef)); err != nil {
+		return err
+	}
+	if err := m.central.restoreCanonical(ctx, restoreRef); err != nil {
+		return err
+	}
+	if !m.central.awaitHealthy(ctx, m.central.port, m.opt.HealthTimeout) {
+		return &updateError{kind: "rollbackFailed", stderr: "restored container unhealthy"}
+	}
+	if t := m.opt.Tenants; t != nil {
+		t.SetImage(restoreRef)
+		_, _ = t.ReprovisionAll(ctx)
+	}
+	return mark(ctx, id, "rollback", "succeeded", ptr("restored "+restoreRef))
 }
 
 func (m *Module) markActiveStepFailed(ctx context.Context, id uuid.UUID, cause error) {
@@ -585,16 +776,14 @@ func (m *Module) markActiveStepFailed(ctx context.Context, id uuid.UUID, cause e
 	}
 }
 
-// executeManualRollback: restoreCanonical's first docker call fails.
+// executeManualRollback is the manual rollback job body (one rollback step).
 func (m *Module) executeManualRollback(ctx context.Context, id uuid.UUID, restoreRef string) {
-	if err := m.mark(ctx, id, "rollback", "running", ptr("restoring "+restoreRef)); err == nil {
-		_, _, err = m.opt.Docker.Run(ctx, []string{"rm", "-f", m.opt.ContainerName})
-		if err == nil {
-			err = errors.New("restore needs docker")
-		}
+	if err := m.restore(ctx, id, restoreRef, m.mark); err != nil {
 		_ = m.mark(ctx, id, "rollback", "failed", ptr(err.Error()))
+		m.finalize(ctx, id, "failed", ptr("Restore did not succeed. Manual recovery may be required."))
+		return
 	}
-	m.finalize(ctx, id, "failed", ptr("Restore did not succeed. Manual recovery may be required."))
+	m.finalize(ctx, id, "rolledBack", nil)
 }
 
 // MARK: - SSE (HermesUpdateSSEResponse)

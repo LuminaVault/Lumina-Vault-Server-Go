@@ -272,7 +272,9 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 			deps.Modules = append(deps.Modules, system.New(pool, system.Options{
 				Identify: identify, AdminToken: cfg.AdminToken, PerTenant: true,
 				ContainerName: cfg.HermesCentralContainerName, RegistryImage: cfg.HermesCentralRegistryImage,
-				ChannelTag: cfg.HermesCentralChannelTag,
+				ChannelTag: cfg.HermesCentralChannelTag, TempName: cfg.HermesCentralTempName,
+				Network: cfg.HermesCentralNetwork, VolumePath: cfg.HermesCentralVolumePath,
+				Port: cfg.HermesCentralPort, TempPort: cfg.HermesCentralTempPort, APIKey: cfg.HermesAPIKey,
 			}))
 		}
 		if m := marketplace.New(pool, cfg.LVSecretMasterKey, pluginOptions, identify, limits, paths); m != nil { // nil without LV_SECRET_MASTER_KEY, as in Swift
