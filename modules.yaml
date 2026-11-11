@@ -286,7 +286,7 @@ modules:
   skills:
     wave: 5
     swiftDir: Sources/App/Skills
-    status: swift
+    status: parity
     prefixes: [/v1/jobs, /v1/skills]
     jobs: []
   tts:
