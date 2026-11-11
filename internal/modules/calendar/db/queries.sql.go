@@ -107,6 +107,31 @@ func (q *Queries) CalendarConsent(ctx context.Context, tenantID uuid.UUID) (bool
 	return allowed, err
 }
 
+const connectedAccountTenants = `-- name: ConnectedAccountTenants :many
+SELECT tenant_id FROM calendar_accounts WHERE status = 'connected'
+`
+
+// CalendarSyncWorker.tick: every connected row, of any provider, in no order.
+func (q *Queries) ConnectedAccountTenants(ctx context.Context) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, connectedAccountTenants)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var tenant_id uuid.UUID
+		if err := rows.Scan(&tenant_id); err != nil {
+			return nil, err
+		}
+		items = append(items, tenant_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const deleteGoogleAccount = `-- name: DeleteGoogleAccount :exec
 DELETE FROM calendar_accounts WHERE tenant_id = $1 AND provider = 'google'
 `

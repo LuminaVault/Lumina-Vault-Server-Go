@@ -46,6 +46,7 @@ tags:
   - name: LLM
     description: Chat (HER-161/165), transcribe (HER-203), TTS (HER-204), vision/embed (HER-205).
   - name: Memory
+  - name: Brain
   - name: Capture
     description: URL capture with async enrichment (HER-149).
   - name: Query
@@ -5910,6 +5911,30 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/KnowledgeGraphResponse' }
+
+  /v1/brain/graph:
+    get:
+      tags: [Brain]
+      operationId: brainGraph
+      x-lv-module: brain
+      summary: One knowledge graph across all of the caller's readable vaults.
+      description: >
+        Notes and memories as item nodes, with tag, author, entity and Space hubs.
+        `X-Vault-ID` is ignored on this route.
+      parameters:
+        - { in: query, name: vaults, schema: { type: string }, description: "CSV of vault ids. Default: every vault the caller can read." }
+        - { in: query, name: links, schema: { type: string }, description: "CSV of edge kinds from link, source, tag, author, entity, space, similar. Unknown values are ignored. Default: all except similar. Similarity considers the 400 most recently updated memories in the result and is dropped if it cannot be computed in time." }
+        - { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 2000, default: 400 }, description: "Item nodes (notes plus memories) across all vaults, most recently updated first." }
+        - { in: query, name: focus, schema: { type: string, minLength: 1, maxLength: 300 }, description: "A node id. Returns only nodes within `depth` hops of it. A uuid, whole or after `space:` or `author:user:`, matches in either case; any other value is matched exactly." }
+        - { in: query, name: depth, schema: { type: integer, minimum: 1, maximum: 3, default: 1 }, description: "Used with `focus`." }
+      responses:
+        '200':
+          description: The caller's brain graph.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BrainGraphResponse' }
+        '304':
+          description: Not modified.
 
   /v1/knowledge/reason:
     post:
@@ -15381,6 +15406,77 @@ components:
           type: array
           items: { $ref: '#/components/schemas/KnowledgeEdgeDTO' }
         generatedAt: { type: string, format: date-time }
+
+    BrainGraphResponse:
+      type: object
+      required: [generatedAt, truncated, vaults, nodes, edges]
+      properties:
+        generatedAt: { type: string, format: date-time }
+        truncated: { type: boolean }
+        vaults:
+          type: array
+          items: { $ref: '#/components/schemas/BrainGraphVault' }
+        nodes:
+          type: array
+          items: { $ref: '#/components/schemas/BrainGraphNode' }
+        edges:
+          type: array
+          items: { $ref: '#/components/schemas/BrainGraphEdge' }
+
+    BrainGraphVault:
+      type: object
+      required: [id, name, personal]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        personal: { type: boolean }
+
+    BrainGraphNode:
+      type: object
+      required: [id, kind, label, weight]
+      properties:
+        id:
+          type: string
+          description: >
+            Notes and memories use their uuid. Hubs use `tag:<normalised tag>`, `author:user:<uuid>`,
+            `author:model:<provider>/<model>`, `entity:<canonical key>` and `space:<uuid>`. Every uuid
+            is UPPERCASE, as in `vaultID` and `spaceID`; the prefixes are lowercase and tag text,
+            model names and canonical keys are as stored.
+        kind: { type: string, enum: [note, memory, tag, author, entity, space] }
+        label: { type: string }
+        vaultID: { type: string, format: uuid, description: "Set on notes, memories and Space hubs." }
+        spaceID: { type: string, format: uuid }
+        weight: { type: integer, description: "The node's edge count in the returned graph." }
+        createdAt: { type: string, format: date-time }
+        pos: { $ref: '#/components/schemas/BrainGraphPosition' }
+        refs:
+          type: array
+          description: "Entity hubs only: the knowledge_nodes id per vault."
+          items: { $ref: '#/components/schemas/BrainGraphRef' }
+
+    BrainGraphPosition:
+      type: object
+      required: [x, y, z]
+      properties:
+        x: { type: number }
+        y: { type: number }
+        z: { type: number }
+
+    BrainGraphRef:
+      type: object
+      required: [vaultID, id]
+      properties:
+        vaultID: { type: string, format: uuid }
+        id: { type: string, format: uuid }
+
+    BrainGraphEdge:
+      type: object
+      required: [from, to, kind]
+      properties:
+        from: { type: string }
+        to: { type: string }
+        kind: { type: string, enum: [link, source, tag, author, entity, space, similar] }
+        weight: { type: number, description: "Set only on similar: the cosine similarity." }
 
     KnowledgePathDTO:
       type: object
