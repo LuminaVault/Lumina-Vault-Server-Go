@@ -157,6 +157,8 @@ func (v env) seedJobOutput(job, stamp, markdown string) {
 	require.NoError(v.t, os.WriteFile(filepath.Join(dir, stamp+".md"), []byte(markdown), 0o600))
 }
 
+// TestMirrorRoutes ports HermesMirrorControllerTests (its status-code mapping
+// test is TestTransportErrorsMapToStableStatusCodes).
 func TestMirrorRoutes(t *testing.T) {
 	v := setup(t)
 

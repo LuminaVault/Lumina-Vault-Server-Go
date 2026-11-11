@@ -171,6 +171,7 @@ func vaultFiles(t *testing.T, pool *pgxpool.Pool, tenant uuid.UUID) (paths []str
 	return paths, provenances
 }
 
+// TestService ports HermesMirrorServiceTests, one subtest per Swift test.
 func TestService(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
