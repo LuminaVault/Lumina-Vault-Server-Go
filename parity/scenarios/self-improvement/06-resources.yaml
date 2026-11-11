@@ -1,0 +1,165 @@
+# Curator resources: vault skills from the catalog, plus archived state rows with no file.
+module: self-improvement
+steps:
+  - name: "list with no token"
+    request: {method: GET, path: "/v1/me/improvement/resources"}
+  - name: "list with a bad token"
+    request: {method: GET, path: "/v1/me/improvement/resources", headers: {Authorization: Bearer not-a-token}}
+  - name: "list nothing yet"
+    as: si_fresh
+    request: {method: GET, path: "/v1/me/improvement/resources"}
+  - name: "pin with no token"
+    request: {method: PATCH, path: "/v1/me/improvement/resources/skill/alpha", raw: "{\"pinned\":true}"}
+  - name: "pin with a bad token"
+    request: {method: PATCH, path: "/v1/me/improvement/resources/skill/alpha", raw: "{\"pinned\":true}", headers: {Authorization: Bearer not-a-token}}
+  - name: "pin with no token and a bad kind answers 400 first"
+    request: {method: PATCH, path: "/v1/me/improvement/resources/nope/alpha", raw: "{\"pinned\":true}"}
+  - name: "pin with no token and a bad body answers 400 first"
+    request: {method: PATCH, path: "/v1/me/improvement/resources/skill/alpha", raw: "{"}
+  - name: "pin with no token and a bad name is 401, the name is checked later"
+    request: {method: PATCH, path: "/v1/me/improvement/resources/skill/a.b", raw: "{\"pinned\":true}"}
+  - name: "wrong method on a resource"
+    as: si_res
+    request: {method: GET, path: "/v1/me/improvement/resources/skill/alpha"}
+  - name: "put the skills on disk"
+    as: si_res
+    request: {method: POST, path: "/v1/me/improvement/runs/5e1f1000-0000-4000-8000-000000000028/rollback"}
+    snapshot: [skills_state]
+    files: [si_res]
+  - name: "the catalog finds them, with archived rows and without the active orphan"
+    as: si_res
+    request: {method: GET, path: "/v1/me/improvement/resources"}
+  - name: "another tenant sees none of it"
+    as: si_foe
+    request: {method: GET, path: "/v1/me/improvement/resources"}
+  - name: "pinning a loaded row updates every row of the tenant"
+    as: si_res
+    request: {method: PATCH, path: "/v1/me/improvement/resources/skill/alpha", raw: "{\"pinned\":true}"}
+    snapshot: [skills_state]
+  - name: "the list shows it"
+    as: si_res
+    request: {method: GET, path: "/v1/me/improvement/resources"}
+  - name: "unpin does the same"
+    as: si_res
+    request: {method: PATCH, path: "/v1/me/improvement/resources/skill/alpha", raw: "{\"pinned\":false}"}
+    snapshot: [skills_state]
+  - name: "a state this version does not know reads as active"
+    as: si_res
+    request: {method: PATCH, path: "/v1/me/improvement/resources/skill/beta", raw: "{\"pinned\":false}"}
+  - name: "pin a job"
+    as: si_res
+    request: {method: PATCH, path: "/v1/me/improvement/resources/job/job-nightly", raw: "{\"pinned\":true}"}
+  - name: "a schedule makes it a job"
+    as: si_res
+    request: {method: PATCH, path: "/v1/me/improvement/resources/job/cron-skill", raw: "{\"pinned\":true}"}
+  - name: "a manifest name with no state row inserts one"
+    as: si_res
+    request: {method: PATCH, path: "/v1/me/improvement/resources/skill/other-name", raw: "{\"pinned\":true}"}
+    snapshot: [skills_state]
+  - name: "a vault skill replacing a built-in can be pinned"
+    as: si_res
+    request: {method: PATCH, path: "/v1/me/improvement/resources/skill/daily-brief", raw: "{\"pinned\":true}"}
+  - name: "a hidden directory counts"
+    as: si_res
+    request: {method: PATCH, path: "/v1/me/improvement/resources/skill/hidden-one", raw: "{\"pinned\":true}"}
+  - name: "kind mismatch, skill as job"
+    as: si_res
+    request: {method: PATCH, path: "/v1/me/improvement/resources/job/alpha", raw: "{\"pinned\":true}"}
+  - name: "kind mismatch, job as skill"
+    as: si_res
+    request: {method: PATCH, path: "/v1/me/improvement/resources/skill/job-nightly", raw: "{\"pinned\":true}"}
+  - name: "kind mismatch, schedule as skill"
+    as: si_res
+    request: {method: PATCH, path: "/v1/me/improvement/resources/skill/cron-skill", raw: "{\"pinned\":true}"}
+  - name: "an archived row with no file"
+    as: si_res
+    request: {method: PATCH, path: "/v1/me/improvement/resources/skill/gone-skill", raw: "{\"pinned\":true}"}
+    snapshot: [skills_state]
+  - name: "an archived job row with no file takes either kind"
+    as: si_res
+    request: {method: PATCH, path: "/v1/me/improvement/resources/skill/job-gone", raw: "{\"pinned\":true}"}
+  - name: "an archived row named like a built-in uses the built-in title"
+    as: si_res
+    request: {method: PATCH, path: "/v1/me/improvement/resources/skill/belief-evolution", raw: "{\"pinned\":true}"}
+  - name: "its kind comes from the built-in"
+    as: si_res
+    request: {method: PATCH, path: "/v1/me/improvement/resources/job/belief-evolution", raw: "{\"pinned\":true}"}
+  - name: "a built-in with no row is not found"
+    as: si_res
+    request: {method: PATCH, path: "/v1/me/improvement/resources/skill/creative", raw: "{\"pinned\":true}"}
+  - name: "an active row with no file is not found"
+    as: si_res
+    request: {method: PATCH, path: "/v1/me/improvement/resources/skill/orphan-active", raw: "{\"pinned\":true}"}
+  - name: "a skill that does not parse is not found"
+    as: si_res
+    request: {method: PATCH, path: "/v1/me/improvement/resources/skill/broken", raw: "{\"pinned\":true}"}
+  - name: "a directory name is not the manifest name"
+    as: si_res
+    request: {method: PATCH, path: "/v1/me/improvement/resources/skill/dir-x", raw: "{\"pinned\":true}"}
+  - name: "unknown"
+    as: si_res
+    request: {method: PATCH, path: "/v1/me/improvement/resources/skill/nothing-here", raw: "{\"pinned\":true}"}
+  - name: "another tenant's skill"
+    as: si_foe
+    request: {method: PATCH, path: "/v1/me/improvement/resources/skill/alpha", raw: "{\"pinned\":true}"}
+  - name: "bad kind"
+    as: si_res
+    request: {method: PATCH, path: "/v1/me/improvement/resources/nope/alpha", raw: "{\"pinned\":true}"}
+  - name: "kind is exact"
+    as: si_res
+    request: {method: PATCH, path: "/v1/me/improvement/resources/Skill/alpha", raw: "{\"pinned\":true}"}
+  - name: "an escaped kind is not decoded"
+    as: si_res
+    request: {method: PATCH, path: "/v1/me/improvement/resources/ski%6C/alpha", raw: "{\"pinned\":true}"}
+  - name: "a dot in the name"
+    as: si_res
+    request: {method: PATCH, path: "/v1/me/improvement/resources/skill/a.b", raw: "{\"pinned\":true}"}
+  - name: "an escaped name is not decoded"
+    as: si_res
+    request: {method: PATCH, path: "/v1/me/improvement/resources/skill/al%70ha", raw: "{\"pinned\":true}"}
+  - name: "an escaped slash is not decoded"
+    as: si_res
+    request: {method: PATCH, path: "/v1/me/improvement/resources/skill/a%2Fb", raw: "{\"pinned\":true}"}
+  - name: "an escaped letter outside ASCII is not decoded"
+    as: si_res
+    request: {method: PATCH, path: "/v1/me/improvement/resources/skill/caf%C3%A9", raw: "{\"pinned\":true}"}
+  - name: "80 characters are allowed"
+    as: si_res
+    request: {method: PATCH, path: "/v1/me/improvement/resources/skill/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", raw: "{\"pinned\":true}"}
+  - name: "81 are not"
+    as: si_res
+    request: {method: PATCH, path: "/v1/me/improvement/resources/skill/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", raw: "{\"pinned\":true}"}
+  - name: "an extra segment"
+    as: si_res
+    request: {method: PATCH, path: "/v1/me/improvement/resources/skill/a/b", raw: "{\"pinned\":true}"}
+  - name: "no name"
+    as: si_res
+    request: {method: PATCH, path: "/v1/me/improvement/resources/skill", raw: "{\"pinned\":true}"}
+  - name: "pin body: empty"
+    as: si_res
+    request: {method: PATCH, path: "/v1/me/improvement/resources/skill/alpha", raw: ""}
+  - name: "pin body: malformed"
+    as: si_res
+    request: {method: PATCH, path: "/v1/me/improvement/resources/skill/alpha", raw: "{"}
+  - name: "pin body: array"
+    as: si_res
+    request: {method: PATCH, path: "/v1/me/improvement/resources/skill/alpha", raw: "[]"}
+  - name: "pin body: null"
+    as: si_res
+    request: {method: PATCH, path: "/v1/me/improvement/resources/skill/alpha", raw: "null"}
+  - name: "pin body: missing"
+    as: si_res
+    request: {method: PATCH, path: "/v1/me/improvement/resources/skill/alpha", raw: "{}"}
+  - name: "pin body: pinned null"
+    as: si_res
+    request: {method: PATCH, path: "/v1/me/improvement/resources/skill/alpha", raw: "{\"pinned\":null}"}
+  - name: "pin body: pinned a string"
+    as: si_res
+    request: {method: PATCH, path: "/v1/me/improvement/resources/skill/alpha", raw: "{\"pinned\":\"yes\"}"}
+  - name: "pin body: pinned a number"
+    as: si_res
+    request: {method: PATCH, path: "/v1/me/improvement/resources/skill/alpha", raw: "{\"pinned\":1}"}
+  - name: "the list at the end"
+    as: si_res
+    request: {method: GET, path: "/v1/me/improvement/resources"}
+    snapshot: [skills_state]

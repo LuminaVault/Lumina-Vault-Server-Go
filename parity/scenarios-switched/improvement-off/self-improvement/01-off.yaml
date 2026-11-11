@@ -1,0 +1,68 @@
+# SELF_IMPROVEMENT_ENABLED=false stops every write here. Reads still answer, and the status
+# says why. SELF_IMPROVEMENT_ECONOMY_MODEL is empty too, for economyModelAvailable.
+module: self-improvement
+steps:
+  - name: "status is unavailable, with no economy model"
+    as: si_sw
+    request: {method: GET, path: "/v1/me/improvement"}
+    snapshot: [self_improvement_settings]
+  - name: "out-of-range settings answer first"
+    as: si_sw
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":{\"enabled\":true,\"curatorEnabled\":true,\"intervalHours\":1,\"minimumIdleHours\":2,\"consolidate\":true,\"pruneBuiltins\":false,\"backupKeep\":5,\"soulReviewEnabled\":true,\"reviewComplexSessions\":true,\"soulReviewWindowDays\":14,\"soulReviewCooldownHours\":24,\"modelMode\":\"economy\"}}"}
+  - name: "put"
+    as: si_sw
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":{\"enabled\":true,\"curatorEnabled\":true,\"intervalHours\":168,\"minimumIdleHours\":2,\"consolidate\":true,\"pruneBuiltins\":false,\"backupKeep\":5,\"soulReviewEnabled\":true,\"reviewComplexSessions\":true,\"soulReviewWindowDays\":14,\"soulReviewCooldownHours\":24,\"modelMode\":\"economy\"}}"}
+  - name: "dry curator"
+    as: si_sw
+    request: {method: POST, path: "/v1/me/improvement/curator/runs"}
+    snapshot: [self_improvement_runs]
+  - name: "live curator reads the settings, then answers 503"
+    as: si_sw
+    request: {method: POST, path: "/v1/me/improvement/curator/runs", raw: "{\"dryRun\":false}"}
+  - name: "live curator with the curator off is the 409, which comes first"
+    as: si_off
+    request: {method: POST, path: "/v1/me/improvement/curator/runs", raw: "{\"dryRun\":false}"}
+  - name: "soul"
+    as: si_sw
+    request: {method: POST, path: "/v1/me/improvement/soul/reviews"}
+  - name: "soul with its review off is the 409, which comes first"
+    as: si_off
+    request: {method: POST, path: "/v1/me/improvement/soul/reviews"}
+  - name: "soul with a non-manual trigger"
+    as: si_sw
+    request: {method: POST, path: "/v1/me/improvement/soul/reviews", raw: "{\"trigger\":\"weekly\"}"}
+  - name: "a bad resource name answers first"
+    as: si_sw
+    request: {method: PATCH, path: "/v1/me/improvement/resources/skill/a.b", raw: "{\"pinned\":true}"}
+  - name: "pin"
+    as: si_sw
+    request: {method: PATCH, path: "/v1/me/improvement/resources/skill/alpha", raw: "{\"pinned\":true}"}
+  - name: "approve"
+    as: si_sw
+    request: {method: POST, path: "/v1/me/improvement/changes/5e1f2000-0000-4000-8000-000000000021/approve"}
+  - name: "reject"
+    as: si_sw
+    request: {method: POST, path: "/v1/me/improvement/changes/5e1f2000-0000-4000-8000-000000000021/reject"}
+    snapshot: [self_improvement_changes]
+  - name: "rollback"
+    as: si_sw
+    request: {method: POST, path: "/v1/me/improvement/runs/5e1f1000-0000-4000-8000-00000000002a/rollback"}
+    snapshot: [self_improvement_runs, skills_state]
+    files: [si_sw]
+  - name: "runs still answer"
+    as: si_sw
+    request: {method: GET, path: "/v1/me/improvement/runs"}
+  - name: "a run still answers"
+    as: si_sw
+    request: {method: GET, path: "/v1/me/improvement/runs/5e1f1000-0000-4000-8000-00000000002a"}
+  - name: "changes still answer"
+    as: si_sw
+    request: {method: GET, path: "/v1/me/improvement/changes"}
+  - name: "resources still answer"
+    as: si_sw
+    request: {method: GET, path: "/v1/me/improvement/resources"}
+  - name: "BYO status says unavailable, not read only"
+    as: si_byo
+    request: {method: GET, path: "/v1/me/improvement"}
+  - name: "no token"
+    request: {method: GET, path: "/v1/me/improvement"}

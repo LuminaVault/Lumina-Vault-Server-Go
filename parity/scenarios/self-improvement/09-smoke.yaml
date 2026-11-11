@@ -1,0 +1,39 @@
+# Staging smoke with a fresh user: no seed ids, no second user, no provider. It skips curator/runs
+# and soul/reviews, because on staging the scheduler would run those against a real model.
+module: self-improvement
+smoke: true
+steps:
+  - name: "status"
+    as: si_smoke
+    request: {method: GET, path: "/v1/me/improvement"}
+    ignore: [$.lastCuratorReviewAt, $.lastSoulReviewAt]
+  - name: "settings"
+    as: si_smoke
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":{\"enabled\":true,\"curatorEnabled\":true,\"intervalHours\":168,\"minimumIdleHours\":2,\"consolidate\":true,\"pruneBuiltins\":false,\"backupKeep\":5,\"soulReviewEnabled\":true,\"reviewComplexSessions\":true,\"soulReviewWindowDays\":14,\"soulReviewCooldownHours\":24,\"modelMode\":\"economy\"}}"}
+    ignore: [$.lastCuratorReviewAt, $.lastSoulReviewAt]
+  - name: "refused settings"
+    as: si_smoke
+    request: {method: PUT, path: "/v1/me/improvement", raw: "{\"settings\":{\"enabled\":true,\"curatorEnabled\":true,\"intervalHours\":1,\"minimumIdleHours\":2,\"consolidate\":true,\"pruneBuiltins\":false,\"backupKeep\":5,\"soulReviewEnabled\":true,\"reviewComplexSessions\":true,\"soulReviewWindowDays\":14,\"soulReviewCooldownHours\":24,\"modelMode\":\"economy\"}}"}
+  - name: "runs"
+    as: si_smoke
+    request: {method: GET, path: "/v1/me/improvement/runs?limit=1"}
+  - name: "changes"
+    as: si_smoke
+    request: {method: GET, path: "/v1/me/improvement/changes"}
+  - name: "resources"
+    as: si_smoke
+    request: {method: GET, path: "/v1/me/improvement/resources"}
+  - name: "unknown run"
+    as: si_smoke
+    request: {method: GET, path: "/v1/me/improvement/runs/5e1f9999-0000-4000-8000-000000000000"}
+  - name: "nothing to roll back"
+    as: si_smoke
+    request: {method: POST, path: "/v1/me/improvement/runs/5e1f9999-0000-4000-8000-000000000000/rollback"}
+  - name: "unknown change"
+    as: si_smoke
+    request: {method: POST, path: "/v1/me/improvement/changes/5e1f9999-0000-4000-8000-000000000000/approve"}
+  - name: "unknown resource"
+    as: si_smoke
+    request: {method: PATCH, path: "/v1/me/improvement/resources/skill/no-such-skill", raw: "{\"pinned\":true}"}
+  - name: "no token"
+    request: {method: GET, path: "/v1/me/improvement"}
