@@ -1,6 +1,8 @@
 package brain
 
 import (
+	"lumina/internal/modules/brain/db"
+	"lumina/internal/wire"
 	"strings"
 	"testing"
 	"time"
@@ -112,4 +114,59 @@ func TestParseLinks(t *testing.T) {
 	require.Equal(t, defaults, parseLinks(""))
 	require.Equal(t, defaults, parseLinks("bogus"))
 	require.Equal(t, map[string]bool{"tag": true, "similar": true}, parseLinks("tag,similar,bogus"))
+}
+
+func TestNormaliseTag(t *testing.T) {
+	require.Equal(t, "go", normaliseTag(" Go "))
+	require.Equal(t, "", normaliseTag("  "))
+	require.Equal(t, "ünï", normaliseTag("ÜNÏ"))
+}
+
+func TestTagHubsNormaliseAndSkipEmpty(t *testing.T) {
+	a, b := mem(idA), mem(idB)
+	a.Tags = []string{" Go ", "go", "  "}
+	b.Tags = []string{"GO"}
+	hubs, rels := tagHubs([]item{a, b, note(idC)})
+	require.Len(t, hubs, 1)
+	require.Equal(t, hub{ID: "tag:go", Kind: "tag", Label: "go"}, hubs[0])
+	require.Len(t, rels, 3, "duplicates collapse later in assemble")
+	nodes, edges := assemble([]item{a, b}, hubs, rels)
+	require.Len(t, nodes, 3)
+	require.Len(t, edges, 2)
+}
+
+func TestModelAuthorHubIDWithNullProvider(t *testing.T) {
+	prov := "anthropic"
+	hubs, rels := modelAuthorHubs([]db.ModelAuthorsRow{
+		{MemoryID: idA, Provider: nil, Model: "m1"},
+		{MemoryID: idB, Provider: &prov, Model: "m1"},
+	})
+	ids := []string{}
+	for _, h := range hubs {
+		ids = append(ids, h.ID)
+	}
+	require.ElementsMatch(t, []string{"author:model:/m1", "author:model:anthropic/m1"}, ids)
+	require.Len(t, rels, 2)
+}
+
+func TestEntityHubsPickBestLabelAndSortRefs(t *testing.T) {
+	v1 := uuid.MustParse("00000000-0000-4000-8000-0000000000f1")
+	v2 := uuid.MustParse("00000000-0000-4000-8000-0000000000f2")
+	n1 := uuid.MustParse("00000000-0000-4000-8000-000000000001")
+	n2 := uuid.MustParse("00000000-0000-4000-8000-000000000002")
+	n3 := uuid.MustParse("00000000-0000-4000-8000-000000000003")
+	hubs, rels := entityHubs([]db.EntitiesRow{
+		{ID: n2, TenantID: v2, CanonicalKey: "acme", Label: "Beta", Confidence: 0.8, MemoryID: idA},
+		{ID: n1, TenantID: v1, CanonicalKey: "acme", Label: "Alpha low", Confidence: 0.6, MemoryID: idB},
+		{ID: n3, TenantID: v1, CanonicalKey: "acme", Label: "Alpha high", Confidence: 0.8, MemoryID: idB},
+		{ID: n3, TenantID: v1, CanonicalKey: "acme", Label: "Alpha high", Confidence: 0.8, MemoryID: idC},
+	})
+	require.Len(t, hubs, 1)
+	require.Equal(t, "entity:acme", hubs[0].ID)
+	require.Equal(t, "Beta", hubs[0].Label, "0.8 ties across vaults; the smallest id (…02) wins")
+	require.Equal(t, []BrainGraphRef{
+		{VaultID: wire.UUID{UUID: v1}, Id: wire.UUID{UUID: n3}},
+		{VaultID: wire.UUID{UUID: v2}, Id: wire.UUID{UUID: n2}},
+	}, hubs[0].Refs)
+	require.Len(t, rels, 4)
 }

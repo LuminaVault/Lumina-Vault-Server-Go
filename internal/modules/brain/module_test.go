@@ -340,3 +340,249 @@ func TestLinksParamFilters(t *testing.T) {
 	require.Len(t, g.Edges, 1)
 	require.Equal(t, "link", g.Edges[0].Kind)
 }
+
+// exec runs setup SQL for one test. The shared seed stays free of hub attributes so that the
+// edge and count assertions above describe only links and sources.
+func exec(t *testing.T, v env, sql string, args ...any) {
+	t.Helper()
+	_, err := v.pool.Exec(context.Background(), sql, args...)
+	require.NoError(t, err, sql)
+}
+
+type hubGraph struct {
+	Nodes []struct {
+		ID      string  `json:"id"`
+		Kind    string  `json:"kind"`
+		Label   string  `json:"label"`
+		VaultID *string `json:"vaultID"`
+		Weight  int     `json:"weight"`
+		Refs    []struct {
+			VaultID string `json:"vaultID"`
+			ID      string `json:"id"`
+		} `json:"refs"`
+	} `json:"nodes"`
+	Edges []struct {
+		From string `json:"from"`
+		To   string `json:"to"`
+		Kind string `json:"kind"`
+	} `json:"edges"`
+}
+
+func getHubs(t *testing.T, v env, query string) hubGraph {
+	t.Helper()
+	rec := v.do(alice, http.MethodGet, "/v1/brain/graph"+query, "")
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	validate(t, http.MethodGet, "/v1/brain/graph"+query, rec)
+	var out hubGraph
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &out))
+	return out
+}
+
+func (g hubGraph) node(id string) (kind, label string, vault *string, weight int, ok bool) {
+	for _, n := range g.Nodes {
+		if n.ID == id {
+			return n.Kind, n.Label, n.VaultID, n.Weight, true
+		}
+	}
+	return "", "", nil, 0, false
+}
+
+func (g hubGraph) edgesTo(to string) []string {
+	var out []string
+	for _, e := range g.Edges {
+		if e.To == to {
+			out = append(out, e.Kind+":"+e.From)
+		}
+	}
+	return out
+}
+
+func TestSharedTagHubAcrossVaults(t *testing.T) {
+	v := setup(t)
+	exec(t, v, `UPDATE memories SET tags = ARRAY[' Go ', 'solo'] WHERE id = $1`, m1)
+	exec(t, v, `UPDATE memories SET tags = ARRAY['go'] WHERE id = $1`, m2)
+	g := getHubs(t, v, "")
+	kind, label, vault, weight, ok := g.node("tag:go")
+	require.True(t, ok)
+	require.Equal(t, "tag", kind)
+	require.Equal(t, "go", label)
+	require.Nil(t, vault)
+	require.Equal(t, 2, weight)
+	require.Equal(t, []string{"tag:" + m1, "tag:" + m2}, g.edgesTo("tag:go"))
+	_, _, _, _, ok = g.node("tag:solo")
+	require.False(t, ok)
+	require.Empty(t, g.edgesTo("tag:solo"))
+}
+
+func TestSpaceHub(t *testing.T) {
+	v := setup(t)
+	space := "5ace0000-0000-4000-8000-000000000001"
+	exec(t, v, `INSERT INTO spaces (id, tenant_id, name, slug) VALUES ($1, $2, 'Research', 'research')`, space, alice)
+	exec(t, v, `UPDATE vault_files SET space_id = $1 WHERE id = $2`, space, n1)
+	exec(t, v, `UPDATE memories SET space_id = $1 WHERE id = $2`, space, m1)
+	g := getHubs(t, v, "")
+	kind, label, vault, weight, ok := g.node("space:" + space)
+	require.True(t, ok)
+	require.Equal(t, "space", kind)
+	require.Equal(t, "Research", label)
+	require.NotNil(t, vault)
+	require.Equal(t, alice.String(), strings.ToLower(*vault))
+	require.Equal(t, 2, weight)
+	require.Equal(t, []string{"space:" + n1, "space:" + m1}, g.edgesTo("space:"+space))
+}
+
+func TestSpaceInOtherVaultIsNotRead(t *testing.T) {
+	v := setup(t)
+	// Bob's space is referenced by two of alice's items; it is outside her scope.
+	space := "5ace0000-0000-4000-8000-000000000002"
+	exec(t, v, `INSERT INTO spaces (id, tenant_id, name, slug) VALUES ($1, $2, 'Bob Private', 'bp')`, space, bob)
+	exec(t, v, `UPDATE vault_files SET space_id = $1 WHERE id = $2`, space, n1)
+	exec(t, v, `UPDATE memories SET space_id = $1 WHERE id = $2`, space, m1)
+	rec := v.do(alice, http.MethodGet, "/v1/brain/graph", "")
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.NotContains(t, rec.Body.String(), "Bob Private")
+	require.NotContains(t, rec.Body.String(), "space:")
+}
+
+func TestUserAuthorHub(t *testing.T) {
+	v := setup(t)
+	exec(t, v, `UPDATE vault_files SET created_by_user_id = $1 WHERE id = $2`, alice, n1)
+	exec(t, v, `UPDATE memories SET created_by_user_id = $1 WHERE id = $2`, alice, m1)
+	g := getHubs(t, v, "")
+	id := "author:user:" + alice.String()
+	kind, label, vault, weight, ok := g.node(id)
+	require.True(t, ok)
+	require.Equal(t, "author", kind)
+	require.Equal(t, "alice", label)
+	require.Nil(t, vault)
+	require.Equal(t, 2, weight)
+	require.Equal(t, []string{"author:" + n1, "author:" + m1}, g.edgesTo(id))
+}
+
+func TestModelAuthorHub(t *testing.T) {
+	v := setup(t)
+	// memory_contributions.tenant_id references users, so both memories live in alice's vault.
+	m3 := "00000000-0000-4000-8000-0000000002a3"
+	exec(t, v, `INSERT INTO memories (id, tenant_id, content, created_at, updated_at) VALUES ($1, $2, 'third', now(), now())`, m3, alice)
+	for _, mem := range []string{m1, m3} {
+		// Two rows for one memory must still count once.
+		for j := 0; j < 2; j++ {
+			exec(t, v, `INSERT INTO memory_contributions (id, tenant_id, memory_id, operation, actor_kind, source_kind, provider, model)
+				VALUES (gen_random_uuid(), $1, $2, 'create', 'model', 'extraction', 'anthropic', 'claude-haiku-5-5')`, alice, mem)
+		}
+	}
+	// A human contribution and a model row without a model add nothing.
+	exec(t, v, `INSERT INTO memory_contributions (id, tenant_id, memory_id, operation, actor_kind, source_kind, provider, model)
+		VALUES (gen_random_uuid(), $1, $2, 'create', 'user', 'manual', NULL, 'ignored'), (gen_random_uuid(), $1, $2, 'create', 'model', 'extraction', 'x', NULL)`, alice, m1)
+	g := getHubs(t, v, "")
+	id := "author:model:anthropic/claude-haiku-5-5"
+	kind, label, _, weight, ok := g.node(id)
+	require.True(t, ok)
+	require.Equal(t, "author", kind)
+	require.Equal(t, "claude-haiku-5-5", label)
+	require.Equal(t, 2, weight)
+	require.Equal(t, []string{"author:" + m1, "author:" + m3}, g.edgesTo(id))
+	for _, n := range g.Nodes {
+		require.NotContains(t, n.ID, "ignored")
+	}
+}
+
+func TestModelContributionInOtherVaultIsIgnored(t *testing.T) {
+	v := setup(t)
+	// Rows filed under bob's tenant for alice's memories must not be read.
+	for _, mem := range []string{m1, m2} {
+		exec(t, v, `INSERT INTO memory_contributions (id, tenant_id, memory_id, operation, actor_kind, source_kind, provider, model)
+			VALUES (gen_random_uuid(), $1, $2, 'create', 'model', 'extraction', 'p', 'm')`, bob, mem)
+	}
+	require.NotContains(t, v.do(alice, http.MethodGet, "/v1/brain/graph", "").Body.String(), "author:model")
+}
+
+func TestUnknownAuthorIsSkipped(t *testing.T) {
+	v := setup(t)
+	ghost := "dead0000-0000-4000-8000-000000000001"
+	exec(t, v, `ALTER TABLE memories DROP CONSTRAINT memories_created_by_user_id_fkey`)
+	exec(t, v, `UPDATE memories SET created_by_user_id = $1 WHERE id = $2`, ghost, m1)
+	exec(t, v, `UPDATE memories SET created_by_user_id = $1 WHERE id = $2`, ghost, m2)
+	g := getHubs(t, v, "")
+	for _, e := range g.Edges {
+		require.NotEqual(t, "author", e.Kind)
+	}
+	for _, n := range g.Nodes {
+		require.NotEqual(t, "author", n.Kind)
+	}
+}
+
+func TestEntityHubCarriesRefs(t *testing.T) {
+	v := setup(t)
+	acmeA, acmeB, weak := "e0000000-0000-4000-8000-0000000000a1", "e0000000-0000-4000-8000-0000000000a2", "e0000000-0000-4000-8000-0000000000a3"
+	exec(t, v, `INSERT INTO knowledge_nodes (id, tenant_id, kind, canonical_key, label, confidence) VALUES
+		($1, $4, 'entity', 'acme', 'Acme', 0.7),
+		($2, $5, 'entity', 'acme', 'ACME Corp', 0.9),
+		($3, $4, 'entity', 'weak', 'Weak', 0.4)`, acmeA, acmeB, weak, alice, teamVault)
+	exec(t, v, `INSERT INTO knowledge_nodes (id, tenant_id, kind, canonical_key, label, confidence) VALUES
+		('e0000000-0000-4000-8000-0000000000a4', $1, 'entity', 'weak', 'Weak', 0.4)`, teamVault)
+	exec(t, v, `INSERT INTO knowledge_evidence (id, tenant_id, node_id, memory_id, quote) VALUES
+		(gen_random_uuid(), $1, $3, $5, 'q'),
+		(gen_random_uuid(), $2, $4, $6, 'q'),
+		(gen_random_uuid(), $1, $7, $5, 'q'),
+		(gen_random_uuid(), $2, 'e0000000-0000-4000-8000-0000000000a4', $6, 'q')`, alice, teamVault, acmeA, acmeB, m1, m2, weak)
+	g := getHubs(t, v, "")
+	kind, label, vault, weight, ok := g.node("entity:acme")
+	require.True(t, ok)
+	require.Equal(t, "entity", kind)
+	require.Equal(t, "ACME Corp", label, "label comes from the highest-confidence row")
+	require.Nil(t, vault)
+	require.Equal(t, 2, weight)
+	require.Equal(t, []string{"entity:" + m1, "entity:" + m2}, g.edgesTo("entity:acme"))
+	for _, n := range g.Nodes {
+		if n.ID == "entity:acme" {
+			require.Len(t, n.Refs, 2)
+			got := map[string]string{}
+			for _, r := range n.Refs {
+				got[strings.ToLower(r.VaultID)] = strings.ToLower(r.ID)
+			}
+			require.Equal(t, map[string]string{alice.String(): acmeA, teamVault.String(): acmeB}, got)
+		}
+	}
+	_, _, _, _, ok = g.node("entity:weak")
+	require.False(t, ok)
+}
+
+func TestEntityEvidenceFromOtherVaultIsIgnored(t *testing.T) {
+	v := setup(t)
+	// Bob's entity node, evidenced against alice's memories under bob's tenant: out of scope.
+	exec(t, v, `INSERT INTO knowledge_nodes (id, tenant_id, kind, canonical_key, label, confidence)
+		VALUES ('e0000000-0000-4000-8000-0000000000b1', $1, 'entity', 'secret', 'Secret', 0.9)`, bob)
+	for _, mem := range []string{m1, m2} {
+		exec(t, v, `INSERT INTO knowledge_evidence (id, tenant_id, node_id, memory_id, quote)
+			VALUES (gen_random_uuid(), $1, 'e0000000-0000-4000-8000-0000000000b1', $2, 'q')`, bob, mem)
+	}
+	require.NotContains(t, v.do(alice, http.MethodGet, "/v1/brain/graph", "").Body.String(), "Secret")
+}
+
+func TestLinksParamDropsHubKinds(t *testing.T) {
+	v := setup(t)
+	space := "5ace0000-0000-4000-8000-000000000001"
+	exec(t, v, `INSERT INTO spaces (id, tenant_id, name, slug) VALUES ($1, $2, 'Research', 'research')`, space, alice)
+	exec(t, v, `UPDATE vault_files SET space_id = $1, created_by_user_id = $2 WHERE id IN ($3, $4)`, space, alice, n1, n2)
+	exec(t, v, `UPDATE memories SET tags = ARRAY['go'], space_id = $1, created_by_user_id = $2 WHERE id IN ($3, $4)`, space, alice, m1, m2)
+	exec(t, v, `INSERT INTO knowledge_nodes (id, tenant_id, kind, canonical_key, label, confidence)
+		VALUES ('e0000000-0000-4000-8000-0000000000c1', $1, 'entity', 'acme', 'Acme', 0.9)`, alice)
+	exec(t, v, `INSERT INTO knowledge_evidence (id, tenant_id, node_id, memory_id, quote)
+		VALUES (gen_random_uuid(), $1, 'e0000000-0000-4000-8000-0000000000c1', $2, 'q')`, alice, m1)
+	all := getHubs(t, v, "")
+	seen := map[string]bool{}
+	for _, n := range all.Nodes {
+		seen[n.Kind] = true
+	}
+	require.True(t, seen["tag"] && seen["space"] && seen["author"])
+
+	g := getHubs(t, v, "?links=tag")
+	for _, n := range g.Nodes {
+		require.Contains(t, []string{"note", "memory", "tag"}, n.Kind)
+	}
+	require.NotEmpty(t, g.edgesTo("tag:go"))
+	for _, e := range g.Edges {
+		require.Equal(t, "tag", e.Kind)
+	}
+}

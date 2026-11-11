@@ -12,6 +12,38 @@ import (
 	"github.com/google/uuid"
 )
 
+const authors = `-- name: Authors :many
+SELECT u.id, u.username
+FROM users u
+WHERE u.id = ANY($1::uuid[])
+`
+
+type AuthorsRow struct {
+	ID       uuid.UUID
+	Username string
+}
+
+// Only id and username leave the users table.
+func (q *Queries) Authors(ctx context.Context, userIds []uuid.UUID) ([]AuthorsRow, error) {
+	rows, err := q.db.Query(ctx, authors, userIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AuthorsRow
+	for rows.Next() {
+		var i AuthorsRow
+		if err := rows.Scan(&i.ID, &i.Username); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const candidateVaults = `-- name: CandidateVaults :many
 
 SELECT v.id, v.name
@@ -49,18 +81,71 @@ func (q *Queries) CandidateVaults(ctx context.Context, userID uuid.UUID) ([]Cand
 	return items, nil
 }
 
+const entities = `-- name: Entities :many
+SELECT kn.id, kn.tenant_id, kn.canonical_key, kn.label, kn.confidence, ke.memory_id
+FROM knowledge_nodes kn
+JOIN knowledge_evidence ke ON ke.node_id = kn.id
+WHERE kn.kind = 'entity'
+  AND kn.confidence >= 0.5
+  AND kn.tenant_id = ANY($1::uuid[])
+  AND ke.tenant_id = ANY($1::uuid[])
+  AND ke.memory_id = ANY($2::uuid[])
+`
+
+type EntitiesParams struct {
+	VaultIds  []uuid.UUID
+	MemoryIds []uuid.UUID
+}
+
+type EntitiesRow struct {
+	ID           uuid.UUID
+	TenantID     uuid.UUID
+	CanonicalKey string
+	Label        string
+	Confidence   float64
+	MemoryID     uuid.UUID
+}
+
+func (q *Queries) Entities(ctx context.Context, arg EntitiesParams) ([]EntitiesRow, error) {
+	rows, err := q.db.Query(ctx, entities, arg.VaultIds, arg.MemoryIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []EntitiesRow
+	for rows.Next() {
+		var i EntitiesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.CanonicalKey,
+			&i.Label,
+			&i.Confidence,
+			&i.MemoryID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const items = `-- name: Items :many
 
-SELECT id, vault_id, space_id, kind, body, created_at, graph_x, graph_y, graph_z
+SELECT id, vault_id, space_id, kind, body, created_at, graph_x, graph_y, graph_z, tags, created_by_user_id
 FROM (
   SELECT vf.id, vf.tenant_id AS vault_id, vf.space_id, 'note'::text AS kind, vf.path AS body,
          vf.created_at, vf.updated_at,
-         NULL::double precision AS graph_x, NULL::double precision AS graph_y, NULL::double precision AS graph_z
+         NULL::double precision AS graph_x, NULL::double precision AS graph_y, NULL::double precision AS graph_z,
+         NULL::text[] AS tags, vf.created_by_user_id
   FROM vault_files vf
   WHERE vf.tenant_id = ANY($1::uuid[])
   UNION ALL
   SELECT m.id, m.tenant_id, m.space_id, 'memory'::text, left(m.content, 400),
-         m.created_at, m.updated_at, m.graph_x, m.graph_y, m.graph_z
+         m.created_at, m.updated_at, m.graph_x, m.graph_y, m.graph_z, m.tags, m.created_by_user_id
   FROM memories m
   WHERE m.tenant_id = ANY($1::uuid[])
 ) items
@@ -74,15 +159,17 @@ type ItemsParams struct {
 }
 
 type ItemsRow struct {
-	ID        uuid.UUID
-	VaultID   uuid.UUID
-	SpaceID   *uuid.UUID
-	Kind      string
-	Body      string
-	CreatedAt *time.Time
-	GraphX    *float64
-	GraphY    *float64
-	GraphZ    *float64
+	ID              uuid.UUID
+	VaultID         uuid.UUID
+	SpaceID         *uuid.UUID
+	Kind            string
+	Body            string
+	CreatedAt       *time.Time
+	GraphX          *float64
+	GraphY          *float64
+	GraphZ          *float64
+	Tags            []string
+	CreatedByUserID *uuid.UUID
 }
 
 // Item nodes. Every query below is restricted to vault ids that scopes() already
@@ -106,6 +193,8 @@ func (q *Queries) Items(ctx context.Context, arg ItemsParams) ([]ItemsRow, error
 			&i.GraphX,
 			&i.GraphY,
 			&i.GraphZ,
+			&i.Tags,
+			&i.CreatedByUserID,
 		); err != nil {
 			return nil, err
 		}
@@ -155,6 +244,46 @@ func (q *Queries) MemorySources(ctx context.Context, arg MemorySourcesParams) ([
 	return items, nil
 }
 
+const modelAuthors = `-- name: ModelAuthors :many
+SELECT DISTINCT mc.memory_id, mc.provider, mc.model::text AS model
+FROM memory_contributions mc
+WHERE mc.tenant_id = ANY($1::uuid[])
+  AND mc.memory_id = ANY($2::uuid[])
+  AND mc.actor_kind = 'model'
+  AND mc.model IS NOT NULL
+`
+
+type ModelAuthorsParams struct {
+	VaultIds  []uuid.UUID
+	MemoryIds []uuid.UUID
+}
+
+type ModelAuthorsRow struct {
+	MemoryID uuid.UUID
+	Provider *string
+	Model    string
+}
+
+func (q *Queries) ModelAuthors(ctx context.Context, arg ModelAuthorsParams) ([]ModelAuthorsRow, error) {
+	rows, err := q.db.Query(ctx, modelAuthors, arg.VaultIds, arg.MemoryIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ModelAuthorsRow
+	for rows.Next() {
+		var i ModelAuthorsRow
+		if err := rows.Scan(&i.MemoryID, &i.Provider, &i.Model); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const noteLinks = `-- name: NoteLinks :many
 SELECT l.source_vault_file_id AS from_id, l.target_vault_file_id AS to_id
 FROM vault_links l
@@ -184,6 +313,46 @@ func (q *Queries) NoteLinks(ctx context.Context, arg NoteLinksParams) ([]NoteLin
 	for rows.Next() {
 		var i NoteLinksRow
 		if err := rows.Scan(&i.FromID, &i.ToID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const spaces = `-- name: Spaces :many
+
+SELECT s.id, s.tenant_id, s.name
+FROM spaces s
+WHERE s.tenant_id = ANY($1::uuid[])
+  AND s.id = ANY($2::uuid[])
+`
+
+type SpacesParams struct {
+	VaultIds []uuid.UUID
+	SpaceIds []uuid.UUID
+}
+
+type SpacesRow struct {
+	ID       uuid.UUID
+	TenantID uuid.UUID
+	Name     string
+}
+
+// Hub attributes. Each query is bound to the admitted vault ids and to the selected item ids.
+func (q *Queries) Spaces(ctx context.Context, arg SpacesParams) ([]SpacesRow, error) {
+	rows, err := q.db.Query(ctx, spaces, arg.VaultIds, arg.SpaceIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SpacesRow
+	for rows.Next() {
+		var i SpacesRow
+		if err := rows.Scan(&i.ID, &i.TenantID, &i.Name); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

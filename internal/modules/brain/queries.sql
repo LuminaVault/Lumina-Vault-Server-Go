@@ -16,16 +16,17 @@ SELECT name FROM vaults WHERE id = $1;
 -- admitted through vaultaccess; none reads outside them.
 
 -- name: Items :many
-SELECT id, vault_id, space_id, kind, body, created_at, graph_x, graph_y, graph_z
+SELECT id, vault_id, space_id, kind, body, created_at, graph_x, graph_y, graph_z, tags, created_by_user_id
 FROM (
   SELECT vf.id, vf.tenant_id AS vault_id, vf.space_id, 'note'::text AS kind, vf.path AS body,
          vf.created_at, vf.updated_at,
-         NULL::double precision AS graph_x, NULL::double precision AS graph_y, NULL::double precision AS graph_z
+         NULL::double precision AS graph_x, NULL::double precision AS graph_y, NULL::double precision AS graph_z,
+         NULL::text[] AS tags, vf.created_by_user_id
   FROM vault_files vf
   WHERE vf.tenant_id = ANY(@vault_ids::uuid[])
   UNION ALL
   SELECT m.id, m.tenant_id, m.space_id, 'memory'::text, left(m.content, 400),
-         m.created_at, m.updated_at, m.graph_x, m.graph_y, m.graph_z
+         m.created_at, m.updated_at, m.graph_x, m.graph_y, m.graph_z, m.tags, m.created_by_user_id
   FROM memories m
   WHERE m.tenant_id = ANY(@vault_ids::uuid[])
 ) items
@@ -46,3 +47,35 @@ FROM memories m
 WHERE m.tenant_id = ANY(@vault_ids::uuid[])
   AND m.id = ANY(@memory_ids::uuid[])
   AND m.source_vault_file_id IS NOT NULL;
+
+-- Hub attributes. Each query is bound to the admitted vault ids and to the selected item ids.
+
+-- name: Spaces :many
+SELECT s.id, s.tenant_id, s.name
+FROM spaces s
+WHERE s.tenant_id = ANY(@vault_ids::uuid[])
+  AND s.id = ANY(@space_ids::uuid[]);
+
+-- Only id and username leave the users table.
+-- name: Authors :many
+SELECT u.id, u.username
+FROM users u
+WHERE u.id = ANY(@user_ids::uuid[]);
+
+-- name: ModelAuthors :many
+SELECT DISTINCT mc.memory_id, mc.provider, mc.model::text AS model
+FROM memory_contributions mc
+WHERE mc.tenant_id = ANY(@vault_ids::uuid[])
+  AND mc.memory_id = ANY(@memory_ids::uuid[])
+  AND mc.actor_kind = 'model'
+  AND mc.model IS NOT NULL;
+
+-- name: Entities :many
+SELECT kn.id, kn.tenant_id, kn.canonical_key, kn.label, kn.confidence, ke.memory_id
+FROM knowledge_nodes kn
+JOIN knowledge_evidence ke ON ke.node_id = kn.id
+WHERE kn.kind = 'entity'
+  AND kn.confidence >= 0.5
+  AND kn.tenant_id = ANY(@vault_ids::uuid[])
+  AND ke.tenant_id = ANY(@vault_ids::uuid[])
+  AND ke.memory_id = ANY(@memory_ids::uuid[]);

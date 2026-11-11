@@ -6,6 +6,7 @@ package brain
 //go:generate sh -c "cd ../../.. && go tool oapi-codegen -config internal/modules/brain/oapi-codegen.yaml api/openapi.yaml"
 
 import (
+	"context"
 	"lumina/internal/auth"
 	"lumina/internal/httpserver"
 	"lumina/internal/ids"
@@ -149,7 +150,11 @@ func (m *Module) graph(c *echo.Context) error {
 			}
 		}
 	}
-	nodes, edges := assemble(items, nil, rels)
+	hubs, hubRels, err := m.hubs(ctx, p.links, vaultIDs, items, memoryIDs)
+	if err != nil {
+		return err
+	}
+	nodes, edges := assemble(items, hubs, append(rels, hubRels...))
 	vaults := make([]BrainGraphVault, 0, len(scopes))
 	for _, s := range scopes {
 		vaults = append(vaults, BrainGraphVault{Id: wire.UUID{UUID: s.ID}, Name: s.Name, Personal: s.Personal})
@@ -161,4 +166,63 @@ func (m *Module) graph(c *echo.Context) error {
 		Nodes:       nodes,
 		Edges:       edges,
 	})
+}
+
+// hubs runs the hub queries for the requested kinds. Each is bound to the admitted vaults and
+// the selected items; assemble later drops hubs with fewer than two members.
+func (m *Module) hubs(ctx context.Context, links map[string]bool, vaultIDs []uuid.UUID, items []item, memoryIDs []uuid.UUID) ([]hub, []relation, error) {
+	var hubs []hub
+	var rels []relation
+	add := func(h []hub, r []relation) {
+		hubs = append(hubs, h...)
+		rels = append(rels, r...)
+	}
+	if links["tag"] {
+		add(tagHubs(items))
+	}
+	if links["space"] {
+		var spaceIDs []uuid.UUID
+		for _, it := range items {
+			if it.SpaceID != nil {
+				spaceIDs = append(spaceIDs, *it.SpaceID)
+			}
+		}
+		if len(spaceIDs) > 0 {
+			rows, err := m.q.Spaces(ctx, db.SpacesParams{VaultIds: vaultIDs, SpaceIds: spaceIDs})
+			if err != nil {
+				return nil, nil, err
+			}
+			add(spaceHubs(items, rows))
+		}
+	}
+	if links["author"] {
+		var userIDs []uuid.UUID
+		for _, it := range items {
+			if it.CreatedBy != nil {
+				userIDs = append(userIDs, *it.CreatedBy)
+			}
+		}
+		if len(userIDs) > 0 {
+			rows, err := m.q.Authors(ctx, userIDs)
+			if err != nil {
+				return nil, nil, err
+			}
+			add(userAuthorHubs(items, rows))
+		}
+		if len(memoryIDs) > 0 {
+			rows, err := m.q.ModelAuthors(ctx, db.ModelAuthorsParams{VaultIds: vaultIDs, MemoryIds: memoryIDs})
+			if err != nil {
+				return nil, nil, err
+			}
+			add(modelAuthorHubs(rows))
+		}
+	}
+	if links["entity"] && len(memoryIDs) > 0 {
+		rows, err := m.q.Entities(ctx, db.EntitiesParams{VaultIds: vaultIDs, MemoryIds: memoryIDs})
+		if err != nil {
+			return nil, nil, err
+		}
+		add(entityHubs(rows))
+	}
+	return hubs, rels, nil
 }

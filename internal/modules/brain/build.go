@@ -21,6 +21,9 @@ type item struct {
 	Label       string
 	CreatedAt   *time.Time
 	Pos         *[3]float64
+	// Tags and CreatedBy feed the tag and author hubs; memories carry tags, notes do not.
+	Tags      []string
+	CreatedBy *uuid.UUID
 }
 
 // relation is an edge candidate between two node ids.
@@ -90,7 +93,7 @@ func noteLabel(p string) string {
 
 // itemFromRow maps an Items row to an item. The memory body is already cut to 400 characters by SQL.
 func itemFromRow(r db.ItemsRow) item {
-	it := item{ID: r.ID, VaultID: r.VaultID, SpaceID: r.SpaceID, Kind: r.Kind, CreatedAt: r.CreatedAt}
+	it := item{ID: r.ID, VaultID: r.VaultID, SpaceID: r.SpaceID, Kind: r.Kind, CreatedAt: r.CreatedAt, Tags: r.Tags, CreatedBy: r.CreatedByUserID}
 	if r.Kind == "memory" {
 		it.Label = memoryLabel(r.Body)
 		if r.GraphX != nil && r.GraphY != nil && r.GraphZ != nil {
@@ -100,6 +103,135 @@ func itemFromRow(r db.ItemsRow) item {
 		it.Label = noteLabel(r.Body)
 	}
 	return it
+}
+
+// normaliseTag trims and lowercases a tag. An empty result means the tag is skipped.
+func normaliseTag(s string) string { return strings.ToLower(strings.TrimSpace(s)) }
+
+// tagHubs makes one hub per normalised tag and one edge from each tagged item.
+func tagHubs(items []item) ([]hub, []relation) {
+	var hubs []hub
+	var rels []relation
+	seen := map[string]bool{}
+	for _, it := range items {
+		for _, raw := range it.Tags {
+			tag := normaliseTag(raw)
+			if tag == "" {
+				continue
+			}
+			id := "tag:" + tag
+			if !seen[id] {
+				seen[id] = true
+				hubs = append(hubs, hub{ID: id, Kind: "tag", Label: tag})
+			}
+			rels = append(rels, relation{From: it.ID.String(), To: id, Kind: "tag"})
+		}
+	}
+	return hubs, rels
+}
+
+// spaceHubs makes a hub per Space row. Items whose Space is not in rows get no edge.
+func spaceHubs(items []item, spaces []db.SpacesRow) ([]hub, []relation) {
+	hubs := make([]hub, 0, len(spaces))
+	known := make(map[uuid.UUID]bool, len(spaces))
+	for _, s := range spaces {
+		known[s.ID] = true
+		vault := s.TenantID
+		hubs = append(hubs, hub{ID: "space:" + s.ID.String(), Kind: "space", Label: s.Name, VaultID: &vault})
+	}
+	var rels []relation
+	for _, it := range items {
+		if it.SpaceID != nil && known[*it.SpaceID] {
+			rels = append(rels, relation{From: it.ID.String(), To: "space:" + it.SpaceID.String(), Kind: "space"})
+		}
+	}
+	return hubs, rels
+}
+
+// userAuthorHubs makes a hub per user found in users. An item whose creator is not in
+// users gets no edge.
+func userAuthorHubs(items []item, users []db.AuthorsRow) ([]hub, []relation) {
+	hubs := make([]hub, 0, len(users))
+	known := make(map[uuid.UUID]bool, len(users))
+	for _, u := range users {
+		known[u.ID] = true
+		hubs = append(hubs, hub{ID: "author:user:" + u.ID.String(), Kind: "author", Label: u.Username})
+	}
+	var rels []relation
+	for _, it := range items {
+		if it.CreatedBy != nil && known[*it.CreatedBy] {
+			rels = append(rels, relation{From: it.ID.String(), To: "author:user:" + it.CreatedBy.String(), Kind: "author"})
+		}
+	}
+	return hubs, rels
+}
+
+// modelAuthorHubs makes a hub per provider/model pair. A null provider is the empty string.
+func modelAuthorHubs(rows []db.ModelAuthorsRow) ([]hub, []relation) {
+	var hubs []hub
+	var rels []relation
+	seen := map[string]bool{}
+	for _, r := range rows {
+		provider := ""
+		if r.Provider != nil {
+			provider = *r.Provider
+		}
+		id := "author:model:" + provider + "/" + r.Model
+		if !seen[id] {
+			seen[id] = true
+			hubs = append(hubs, hub{ID: id, Kind: "author", Label: r.Model})
+		}
+		rels = append(rels, relation{From: r.MemoryID.String(), To: id, Kind: "author"})
+	}
+	return hubs, rels
+}
+
+// entityHubs keys hubs by canonical_key across vaults. Per vault the highest-confidence row
+// stands for the entity; the label comes from the best row overall (ties go to the smallest id)
+// and refs hold one entry per vault, sorted by (vaultID, id).
+func entityHubs(rows []db.EntitiesRow) ([]hub, []relation) {
+	better := func(a, b db.EntitiesRow) bool {
+		if a.Confidence != b.Confidence {
+			return a.Confidence > b.Confidence
+		}
+		return a.ID.String() < b.ID.String()
+	}
+	type key struct {
+		canonical string
+		vault     uuid.UUID
+	}
+	perVault := map[key]db.EntitiesRow{}
+	var rels []relation
+	for _, r := range rows {
+		k := key{r.CanonicalKey, r.TenantID}
+		if cur, ok := perVault[k]; !ok || better(r, cur) {
+			perVault[k] = r
+		}
+		rels = append(rels, relation{From: r.MemoryID.String(), To: "entity:" + r.CanonicalKey, Kind: "entity"})
+	}
+	byKey := map[string][]db.EntitiesRow{}
+	for k, r := range perVault {
+		byKey[k.canonical] = append(byKey[k.canonical], r)
+	}
+	hubs := make([]hub, 0, len(byKey))
+	for canonical, rs := range byKey {
+		sort.Slice(rs, func(i, j int) bool {
+			if rs[i].TenantID != rs[j].TenantID {
+				return rs[i].TenantID.String() < rs[j].TenantID.String()
+			}
+			return rs[i].ID.String() < rs[j].ID.String()
+		})
+		best := rs[0]
+		refs := make([]BrainGraphRef, 0, len(rs))
+		for _, r := range rs {
+			if better(r, best) {
+				best = r
+			}
+			refs = append(refs, BrainGraphRef{VaultID: wire.UUID{UUID: r.TenantID}, Id: wire.UUID{UUID: r.ID}})
+		}
+		hubs = append(hubs, hub{ID: "entity:" + canonical, Kind: "entity", Label: best.Label, Refs: refs})
+	}
+	return hubs, rels
 }
 
 func undirected(kind string) bool { return kind == "link" || kind == "similar" }
