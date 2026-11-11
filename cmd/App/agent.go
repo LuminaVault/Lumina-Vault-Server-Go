@@ -68,6 +68,8 @@ type agent struct {
 	// compile is the kb-compile route, set by modules(); /v1/skills/slash's
 	// /kb-compile runs through it.
 	compile *kbcompile.Module
+	// imports is the import pipeline plugin syncs stage through (6F).
+	imports *imports.Service
 }
 
 func newAgent(ctx context.Context, pool *pgxpool.Pool, cfg config.Config, box *secretbox.Box, paths vaultpaths.Paths, identify echo.MiddlewareFunc,
@@ -183,6 +185,7 @@ func (a *agent) modules(links *capture.Service, enrichment *capture.EnrichmentSe
 	reason := knowledge.NewReason(knowledge.New(a.pool, a.identify, a.gate(entitlement.MemoryQuery), a.limits), transport, a.cfg.HermesDefaultModel)
 
 	importService := imports.NewService(a.pool, links, spaces.New(a.pool, a.paths, a.identify), a.paths, compile, enrichment)
+	a.imports = importService
 	importRoutes := imports.New(importService,
 		&imports.Categorizer{Service: importService, Transport: transport, DefaultModel: a.cfg.HermesDefaultModel},
 		imports.NewIngest(a.pool, importService, a.memories, a.embeddings,

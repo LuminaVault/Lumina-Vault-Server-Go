@@ -1,0 +1,5 @@
+# A BYO Hermes on the LLM stub: GET /v1/plugins/hermes-skills reads its /v1/skills.
+module: plugins
+steps:
+  - {name: installed skills from the byo hermes, as: pl_eve, request: {method: GET, path: /v1/plugins/hermes-skills}}
+  - {name: managed gateway skills, as: pl_amy, request: {method: GET, path: /v1/plugins/hermes-skills}}
