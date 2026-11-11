@@ -74,10 +74,14 @@ func (a *agent) chatModules(links *linkcapture.Service, enrichment *linkcapture.
 	if strings.EqualFold(cfg.AutoSaveLinksEnabled, "true") {
 		opts.Links = links
 	}
-	// Owner decision 1, option A: escalated turns start their run on the Swift API
-	// until wave 6C ports HermesRunsService.
+	// Owner decision 1, option A: while CHAT_HERMES_RUNS_BRIDGE_URL is set, escalated
+	// turns start their run on the Swift API, whose watcher follows it. Unset, they
+	// start on this process's HermesRunsService (6C), as Swift's chat does; the 6C
+	// flip removes the bridge URL (decisions.md D-6c-runs).
 	if bridge := chat.NewBridge(cfg.ChatHermesRunsBridgeURL); bridge != nil {
 		opts.Runs = bridge
+	} else if a.runs != nil {
+		opts.Runs = runsStarter{svc: a.runs}
 	}
 
 	catalog := a.skillCatalog()

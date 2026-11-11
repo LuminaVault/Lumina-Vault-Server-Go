@@ -1950,6 +1950,110 @@ Beyond the pilot gate (D-wave2-early):
 - Left: `/health/deep`, which shares `HermesGatewayProbe` with the 7B reconciler (lands after 7B),
   and the `/v1/auth/me*` handlers, which are 8A. `app` stays at `swift` until both are in.
 
+## me-gateways (wave 6, 6D)
+
+### G0 entry: met 2026-11-11
+
+- Routes: 16. `/v1/me/hermes-gateways` list, get, put, delete, test, apply (start, current, status,
+  stream), WhatsApp pair, pair stream and unlink, Photon setup, phone and setup stream (JWT,
+  `settingsByUser`, byoHermes resolver), and `POST /v1/gateways/photon/inbound` (sidecar token only).
+- O1, P4: `internal/hermescontainers.Lifecycle` is HermesContainerManager, ported in full behind the
+  `Docker` interface: ensureRunning (port allocation, sealed API key, `docker run` args with resource
+  limits, row rollback, "already in use" restart), config.yaml/.env seeding with SHA-256 drift and the
+  audio-proxy credential (`auth.AudioTokens`), evictIdle, reprovisionAll, seedGatewayConfig and
+  applyGatewayConfig. The default `ProcessDocker` forks docker as Swift does, so in a pod with no docker
+  every container call fails at spawn and answers Swift's empty 500. `ContainerReaperService` is not in
+  this PR.
+- Photon sidecar: `megateways.HTTPSidecarClient` (activate, deactivate, send, health) and the inbound
+  delivery service are ported. Provisioning activates the sidecar when `PHOTON_SIDECAR_URL` and
+  `PHOTON_SIDECAR_TOKEN` are both set; without them inbound answers 503, and with no token the route is
+  the disabled 404. `docker/photon-sidecar` is retired with the Swift archive (decisions.md D-6de-waivers).
+- Route order: "apply", "whatsapp" and "photon" are constant segments that win over a terminal `:id`
+  (empty 404); `/:id/test` backtracks. `parity/scenarios/me-gateways/02-shadowing.yaml`.
+- Config: `DOCKER_BINARY_PATH`, `HERMES_PER_TENANT_*`, `HERMES_AUDIO_PROXY_BASE_URL`, `MNEMOSYNE_ENABLED`,
+  `PHOTON_SIDECAR_URL`, `PHOTON_SIDECAR_TOKEN`.
+- Swift tests: `HermesGatewaysControllerTests` 6 (DB), `WhatsAppPairParserTests` 8,
+  `SidecarTokenMiddlewareTests` 5, `HermesContainerManagerTests` 7 (DB, stub docker),
+  `HermesTenantConfigSeedTests` 6, `HermesAudioProxySeedTests` 10. New Go tests cover the sidecar client,
+  delivery and the Photon provisioning flow against httptest stubs.
+
+### G1 parity: pending CI
+
+- `parity/scenarios/me-gateways` 00-04 with `parity/seed/gateways.sql`. Photon setup start is compared
+  with Photon's hosts pointed at 127.0.0.1 (compose `x-no-external`): both servers fail the device-code
+  request. A new apply's job is compared on its acknowledgement only.
+- Flip: one group. The apply SSE, WhatsApp pairing and Photon setup sessions are in-memory.
+
+## integrations (wave 6, 6E)
+
+### G0 entry: met 2026-11-11
+
+- Routes: 8. `/v1/integrations/xai` and `/v1/integrations/nous`: status, start, complete, revoke (JWT
+  only, no rate limit).
+- The live CLI backends (`hermes auth add xai-oauth`, `hermes auth add nous`, `portal status`, the
+  loopback `curl` forward) are ported over `hermescontainers.Docker`. Without docker, start is the
+  empty 500 of a failed spawn, and revoke's CLI call fails and is ignored, as in Swift.
+- `complete` has no identity check, as in Swift: it decodes the body first and completes by session.
+- Kept Swift weakness: xAI revoke demotes the tenant to `trial` and deletes any `xai` credential row,
+  not only the OAuth marker.
+- Swift tests: `XaiOAuthServiceTests` 5, `NousOAuthServiceTests` 5, `XaiOAuthControllerTests` 4 (DB),
+  `LiveXaiOAuthBackendTests` 8.
+
+### G1 parity: pending CI
+
+- `parity/scenarios/integrations/00-oauth.yaml` with `parity/seed/gateways.sql`.
+- Flip: one group. OAuth sessions and parked CLI processes are in-memory, so start and complete must
+  reach the same server.
+## hermes-runs (wave 6, 6C)
+
+The `hermes` module stays `swift`: 6A and 6B (`/v1/hermes` mirror and webhooks) are not ported. 6C's routes are
+served by Go but flip only with chat, in one infra commit (B12, decisions.md D-6c-runs).
+
+### G0 entry: met 2026-11-11
+
+- Routes: 6, `Hermes/Runs/HermesRunsController.swift:34-39`. `POST`/`GET /v1/hermes/runs`, `GET /{id}`,
+  `GET /{id}/events` (SSE, event name `hermes.run.event`, replay then live), `POST /{id}/approval`,
+  `POST /{id}/stop`. They are mounted only with `LV_SECRET_MASTER_KEY`, as in Swift (state `no-master-key`).
+- Middleware, in Swift's order: jwt, byo, hermesProfile, `conversationByUser`, `Entitlement .chat`.
+- Coupling: reads and writes `hermes_runs` and `hermes_run_events`, and inserts assistant turns into
+  `conversation_messages` (idempotent on `hermes_run_id`). Events are published on an in-process bus, and the feed
+  re-reads every 5 s, so a run watched by another process still streams.
+- Job: `HermesRunsService` (boot re-attach for runs younger than 300 s), registered and off unless `LV_GO_JOBS`
+  names it.
+- Pushes: `apns.CategoryApproval` and `apns.CategoryRunCompleted`, through `apns.Service`.
+- Swift tests: all 78 ported.
+  - `HermesRunEvent` 15, `HermesRunsClient` 14, `HermesRunsService` 17, `HermesRunConversationPersistence` 5,
+    `HermesRunsListFilter` 4, `HermesRunsController` 11.
+  - `HermesRunPersistence` 8: the M117–M119 cases check the goose baseline.
+  - `HermesRunPushNotifier` 4: the prefs-table case goes through `apns.NewWithSender` with a recording sender.
+  - Go adds a stream-idle client test and a tool-name test.
+
+## P9 minting + P10 auth rate limits (wave 8 prep)
+
+### Landed 2026-11-11 (no route flips)
+
+- `internal/auth`: `MintSession`/`MintAccess` (SessionToken: HS256, active kid header, uppercase `sub`/`jti`,
+  fractional `exp`/`iat` as JWTKit writes them, `hpid` only when given, `scp` only for scoped tokens),
+  `HashPassword`/`VerifyPassword` (bcrypt cost 12, first 72 bytes as Swift's C bcrypt; `$2a$`/`$2b$` verify on both
+  sides), refresh tokens (32 random bytes base64url, `sha256Hex` in `refresh_tokens`, 30 days, rotate = revoke then
+  issue, not transactional, no reuse detection).
+- Legacy single-key config now signs and verifies as kid `lv-default` when `JWT_KID` is unset, as `App+build.swift`.
+  Before, Go used an empty kid and would have refused Swift's legacy tokens. Production uses `JWT_HMAC_SECRETS` or
+  sets `JWT_KID`, since flipped routes already accept Swift tokens, so nothing live changes.
+- Cross-server: the parity harness's `scenario.Mint` is now `auth.MintAccess`, so every authenticated step of every
+  scenario checks that a token Go mints passes Swift's `JWTAuthenticator`. Swift to Go was already covered by
+  `TestGoldenTokenVerifies`. The register/refresh/login/reset cross-server scenario waits for 8A routes.
+- `internal/ratelimit`: the 16 auth policies (`registerByIP` … `emailMagicStartByIPDaily`, `webAuthnEnrolByUser`),
+  flat for every tier; `IPKey` already matched `ipKey` (first `X-Forwarded-For` piece). `RATE_LIMIT_STORAGE_KIND`
+  parsed, memory only (decisions.md D-ratelimit-memory).
+- Swift tests: `JWTKeyLoader` 10, `SessionToken` 3, `JWTAuthenticatorE2E` 7, `PasswordHasher` 2,
+  `RateLimitMiddleware` (auth flat, all names unique), `RateLimitStorageFactory` memory cases,
+  `ValkeyPersistDriverIntegration` on the memory store. `SessionTokenScope` was already ported.
+- **8A TODO (issueTokens):** P9 ports only the minter and the refresh store. The 8A port of `AuthService.issueTokens`
+  must, on every session issued (register, login, refresh, OAuth, pairing, MFA), apply the
+  `BILLING_TIER_OVERRIDE_EMAILS` allowlist (#78 parses it; `applyTierOverrideAllowlist`: only raises, never
+  overwrites `ultimate`), then `$set is_internal`, put `hpid` only for a `ready` profile, and cover the allowlist with a test.
+
 ## jobs J2 (part 1): LearnedDigestScheduler, MeetingBriefScheduler
 
 ### Ported 2026-11-11

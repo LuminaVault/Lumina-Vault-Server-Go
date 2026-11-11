@@ -1,0 +1,30 @@
+# The catalog, a credential round trip and its validation. Secrets are sealed,
+# never echoed.
+module: me-gateways
+steps:
+  - {name: list starts empty, as: gw_ann, request: {method: GET, path: /v1/me/hermes-gateways}}
+  - {name: get unconfigured, as: gw_ann, request: {method: GET, path: /v1/me/hermes-gateways/telegram}}
+  - {name: get a pairing gateway, as: gw_ann, request: {method: GET, path: /v1/me/hermes-gateways/email}}
+  - name: put telegram
+    as: gw_ann
+    request: {method: PUT, path: /v1/me/hermes-gateways/telegram, json: {config: {bot_token: TELEGRAM-SECRET-XYZ-123, allowed_users: "123456789"}}}
+    snapshot: [parity_gw_rows]
+  - {name: get configured, as: gw_ann, request: {method: GET, path: /v1/me/hermes-gateways/telegram}}
+  - {name: list shows it, as: gw_ann, request: {method: GET, path: /v1/me/hermes-gateways}}
+  - {name: another tenant does not see it, as: gw_fay, request: {method: GET, path: /v1/me/hermes-gateways/telegram}}
+  - {name: put again with blank optional, as: gw_ann, request: {method: PUT, path: /v1/me/hermes-gateways/telegram, json: {config: {bot_token: other, allowed_users: "1", extra: ""}}}}
+  - {name: missing required field, as: gw_ann, request: {method: PUT, path: /v1/me/hermes-gateways/discord, json: {config: {bot_token: abc}}}}
+  - {name: blank required field, as: gw_ann, request: {method: PUT, path: /v1/me/hermes-gateways/discord, json: {config: {bot_token: "  ", allowed_users: "1"}}}}
+  - {name: no config key, as: gw_ann, request: {method: PUT, path: /v1/me/hermes-gateways/discord, json: {}}}
+  - {name: malformed body, as: gw_ann, request: {method: PUT, path: /v1/me/hermes-gateways/discord, raw: "{"}}
+  - {name: unsupported gateway put, as: gw_ann, request: {method: PUT, path: /v1/me/hermes-gateways/signal, json: {config: {}}}}
+  - {name: unsupported gateway get, as: gw_ann, request: {method: GET, path: /v1/me/hermes-gateways/signal}}
+  - {name: unsupported gateway delete, as: gw_ann, request: {method: DELETE, path: /v1/me/hermes-gateways/signal}}
+  - {name: put a pairing gateway, as: gw_ann, request: {method: PUT, path: /v1/me/hermes-gateways/photon, json: {config: {}}}}
+  - {name: delete a pairing gateway, as: gw_ann, request: {method: DELETE, path: /v1/me/hermes-gateways/photon}}
+  - name: delete telegram
+    as: gw_ann
+    request: {method: DELETE, path: /v1/me/hermes-gateways/telegram}
+    snapshot: [parity_gw_rows]
+  - {name: delete again, as: gw_ann, request: {method: DELETE, path: /v1/me/hermes-gateways/telegram}}
+  - {name: get after delete, as: gw_ann, request: {method: GET, path: /v1/me/hermes-gateways/telegram}}

@@ -188,6 +188,13 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		// One rate-limit store per process: Swift's buckets are shared by
 		// every route group that uses the same policy name.
 		limits := ratelimit.NewStore()
+		// makeRateLimitStorage: Go has only the per-process store. The owner keeps
+		// rate-limit storage in memory (decisions.md D-ratelimit-memory).
+		if ratelimit.ParseStorageKind(cfg.RateLimitStorageKind) == ratelimit.StorageRedis {
+			slog.Error("rate-limit storage: RATE_LIMIT_STORAGE_KIND=redis but Go has no Valkey driver; using per-process memory")
+		} else {
+			slog.Info("rate-limit storage: memory (per-process)", "config", "RATE_LIMIT_STORAGE_KIND=memory")
+		}
 		// Identify: vault-scoped routes check X-Vault-ID before identity (decisions.md D-identify).
 		identify := auth.Identify(keys, auth.PGUsers(pool))
 		paths := vaultpaths.Paths{Root: cfg.VaultRootPath}
@@ -325,6 +332,7 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 			deps.Modules = append(deps.Modules, workflowsModule(pool, cfg, box, identify, limits))
 		}
 		deps.Modules = append(deps.Modules, agent.modules(links, enrichment)...)
+		deps.Modules = append(deps.Modules, agent.containerModules(keys)...)
 		// /v1/ws (5J) flips with kb-compile, the device result route, mcp and skills.
 		deps.Modules = append(deps.Modules, wsroute.New(pool, sockets, identify))
 		deps.Modules = append(deps.Modules, agent.agentsModule())
@@ -335,6 +343,10 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		if m := agent.pluginsModule(); m != nil { // nil without LV_SECRET_MASTER_KEY, as in Swift
 			deps.Modules = append(deps.Modules, m)
 		}
+		if m := agent.hermesRunsModule(); m != nil {
+			deps.Modules = append(deps.Modules, m)
+		}
+		registered = append(registered, agent.hermesRunsJob()...)
 	}
 	// Deferred after the sink and the pool, so jobs stop first and can still use both.
 	stopJobs, err := startJobs(ctx, cfg, registered)

@@ -1,0 +1,19 @@
+# Every gateway route without a token. Anonymous steps send their own
+# X-Forwarded-For, so their settingsByUser bucket is theirs alone. The Photon
+# inbound webhook takes the sidecar token, not a JWT: parity sets none, so it is
+# the disabled 404 whatever is presented.
+module: me-gateways
+steps:
+  - {name: list no token, request: {method: GET, path: /v1/me/hermes-gateways, headers: {X-Forwarded-For: 10.96.0.1}}}
+  - {name: get no token, request: {method: GET, path: /v1/me/hermes-gateways/telegram, headers: {X-Forwarded-For: 10.96.0.1}}}
+  - {name: put no token, request: {method: PUT, path: /v1/me/hermes-gateways/telegram, json: {config: {bot_token: x}}, headers: {X-Forwarded-For: 10.96.0.1}}}
+  - {name: delete no token, request: {method: DELETE, path: /v1/me/hermes-gateways/telegram, headers: {X-Forwarded-For: 10.96.0.1}}}
+  - {name: test no token, request: {method: POST, path: /v1/me/hermes-gateways/telegram/test, headers: {X-Forwarded-For: 10.96.0.1}}}
+  - {name: apply no token, request: {method: POST, path: /v1/me/hermes-gateways/apply, headers: {X-Forwarded-For: 10.96.0.1}}}
+  - {name: apply current no token, request: {method: GET, path: /v1/me/hermes-gateways/apply/current, headers: {X-Forwarded-For: 10.96.0.1}}}
+  - {name: whatsapp pair no token, request: {method: POST, path: /v1/me/hermes-gateways/whatsapp/pair, headers: {X-Forwarded-For: 10.96.0.1}}}
+  - {name: whatsapp unlink no token, request: {method: DELETE, path: /v1/me/hermes-gateways/whatsapp/session, headers: {X-Forwarded-For: 10.96.0.1}}}
+  - {name: photon setup no token, request: {method: POST, path: /v1/me/hermes-gateways/photon/setup, headers: {X-Forwarded-For: 10.96.0.1}}}
+  - {name: list bad token, request: {method: GET, path: /v1/me/hermes-gateways, headers: {Authorization: "Bearer not.a.jwt", X-Forwarded-For: 10.96.0.2}}}
+  - {name: photon inbound no sidecar token, request: {method: POST, path: /v1/gateways/photon/inbound, json: {}}}
+  - {name: photon inbound with a token, request: {method: POST, path: /v1/gateways/photon/inbound, json: {}, headers: {X-Lumina-Sidecar-Token: anything}}}

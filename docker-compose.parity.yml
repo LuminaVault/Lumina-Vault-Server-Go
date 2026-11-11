@@ -27,6 +27,8 @@ x-no-external: &no-external
   - "inference-api.nousresearch.com:127.0.0.1"
   - "api.cohere.com:127.0.0.1"
   - "api-atlas.nomic.ai:127.0.0.1"
+  - "app.photon.codes:127.0.0.1"
+  - "spectrum.photon.codes:127.0.0.1"
 
 x-common-env: &common-env
   POSTGRES_HOST: pg

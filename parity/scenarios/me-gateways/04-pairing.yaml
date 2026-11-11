@@ -1,0 +1,40 @@
+# WhatsApp pairing and Photon setup without a container. Neither server can run
+# docker here, so starting a pairing is the empty 500 of a failed spawn. Photon's
+# hosts (app.photon.codes, spectrum.photon.codes) are fixed https URLs in Swift, so
+# the compose file points them at 127.0.0.1 (x-no-external): setup start fails on
+# the device-code request in both servers, never reaching the real API. The
+# success path is covered in Go against httptest stubs. Streams for unknown
+# sessions send one error frame.
+module: me-gateways
+steps:
+  - {name: photon setup start with the Photon API unreachable, as: gw_fay, request: {method: POST, path: /v1/me/hermes-gateways/photon/setup}}
+  - {name: whatsapp pair without docker, as: gw_eve, request: {method: POST, path: /v1/me/hermes-gateways/whatsapp/pair}}
+  - name: whatsapp unknown session stream
+    as: gw_eve
+    request: {method: GET, path: /v1/me/hermes-gateways/whatsapp/pair/6A7E2000-0000-4000-8000-000000000001/stream}
+    stream: true
+    frames: 1
+    framesTimeout: 5s
+    headers: [Cache-Control, X-Accel-Buffering]
+  - {name: whatsapp stream not a uuid, as: gw_eve, request: {method: GET, path: /v1/me/hermes-gateways/whatsapp/pair/nope/stream}}
+  - {name: whatsapp unlink with no container, as: gw_eve, request: {method: DELETE, path: /v1/me/hermes-gateways/whatsapp/session}}
+  - name: photon unknown session stream
+    as: gw_eve
+    request: {method: GET, path: /v1/me/hermes-gateways/photon/setup/6A7E2000-0000-4000-8000-000000000002/stream}
+    stream: true
+    frames: 1
+    framesTimeout: 5s
+    headers: [Cache-Control, X-Accel-Buffering]
+  - {name: photon stream not a uuid, as: gw_eve, request: {method: GET, path: /v1/me/hermes-gateways/photon/setup/nope/stream}}
+  - {name: photon phone not a uuid, as: gw_eve, request: {method: POST, path: /v1/me/hermes-gateways/photon/setup/nope/phone, json: {phone: "+15555550100"}}}
+  - {name: photon phone unknown session, as: gw_eve, request: {method: POST, path: /v1/me/hermes-gateways/photon/setup/6A7E2000-0000-4000-8000-000000000002/phone, json: {phone: "+15555550100"}}}
+  - {name: photon phone no body, as: gw_eve, request: {method: POST, path: /v1/me/hermes-gateways/photon/setup/6A7E2000-0000-4000-8000-000000000002/phone}}
+  - name: test telegram against the managed Hermes
+    as: gw_eve
+    request: {method: POST, path: /v1/me/hermes-gateways/telegram/test}
+  - {name: put telegram for test, as: gw_eve, request: {method: PUT, path: /v1/me/hermes-gateways/telegram, json: {config: {bot_token: t, allowed_users: "1"}}}}
+  - name: test records the failure
+    as: gw_eve
+    request: {method: POST, path: /v1/me/hermes-gateways/telegram/test}
+    snapshot: [parity_gw_rows]
+  - {name: test a pairing gateway, as: gw_eve, request: {method: POST, path: /v1/me/hermes-gateways/email/test}}
