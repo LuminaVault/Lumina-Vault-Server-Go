@@ -191,12 +191,15 @@ type Bus struct {
 	subs map[chan Published]struct{}
 }
 
+// busCapacity is EventBus.bufferCapacity: each subscriber buffers this many.
+const busCapacity = 64
+
 // NewBus returns an empty bus.
 func NewBus() *Bus { return &Bus{subs: map[chan Published]struct{}{}} }
 
 // Subscribe returns a channel of events and the function that ends it.
 func (b *Bus) Subscribe() (<-chan Published, func()) {
-	ch := make(chan Published, 16)
+	ch := make(chan Published, busCapacity)
 	b.mu.Lock()
 	b.subs[ch] = struct{}{}
 	b.mu.Unlock()
@@ -207,16 +210,34 @@ func (b *Bus) Subscribe() (<-chan Published, func()) {
 	}
 }
 
-// Publish never blocks: a full subscriber drops the event.
+// Publish never blocks. A full subscriber drops its oldest queued event to make
+// room, as Swift's AsyncStream .bufferingNewest(64) does.
 func (b *Bus) Publish(p Published) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	for ch := range b.subs {
 		select {
 		case ch <- p:
+			continue
+		default:
+		}
+		// Publishers hold mu, so only the reader can race us, and it only frees room.
+		select {
+		case <-ch:
+		default:
+		}
+		select {
+		case ch <- p:
 		default:
 		}
 	}
+}
+
+// SubscriberCount is EventBus.subscriberCount(for: .hermesRunEvent).
+func (b *Bus) SubscriberCount() int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return len(b.subs)
 }
 
 // Store is HermesRunStore.
