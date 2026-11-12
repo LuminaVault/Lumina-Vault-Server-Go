@@ -1,0 +1,60 @@
+name: Restore Drill
+
+# HER-131 — quarterly proof that the encrypted backup scripts actually restore.
+# Moved from LuminaVaultServer (migration D6) so it outlives the Swift archive.
+# Runs the full backup → wipe → restore round-trip against an ephemeral Postgres
+# using an ephemeral age key and rclone's local backend, so it needs ZERO cloud
+# credentials. A red run means restore.sh is broken — investigate before the
+# next disaster makes you find out the hard way.
+on:
+  schedule:
+    # 06:00 UTC on the 1st of Jan, Apr, Jul, Oct.
+    - cron: '0 6 1 1,4,7,10 *'
+  workflow_dispatch:
+  # Also prove the round-trip whenever the backup tooling itself changes.
+  pull_request:
+    paths:
+      - scripts/backup*.sh
+      - scripts/restore.sh
+      - docker/backup*
+      - docker/run-backup.sh
+      - .github/workflows/restore-drill.yml
+
+jobs:
+  drill:
+    name: Backup → Restore round-trip
+    runs-on: ubuntu-latest
+
+    # Run inside the pg18 client image so pg_dump/pg_restore match the server
+    # major exactly (same base as docker/backup.Dockerfile).
+    container:
+      image: postgres:18-alpine
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg18
+        env:
+          POSTGRES_USER: hermes
+          POSTGRES_PASSWORD: hermes_password
+          POSTGRES_DB: hermes_db
+        options: >-
+          --health-cmd "pg_isready -U hermes -d hermes_db"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Install tools (age, rclone, bash)
+        run: apk add --no-cache age rclone bash coreutils
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run restore drill
+        env:
+          POSTGRES_HOST: postgres
+          POSTGRES_PORT: "5432"
+          POSTGRES_USER: hermes
+          POSTGRES_PASSWORD: hermes_password
+          POSTGRES_DATABASE: hermes_db
+        run: bash scripts/backup-drill.sh

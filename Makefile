@@ -1,4 +1,4 @@
-.PHONY: help build test lint fmt vuln check
+.PHONY: help build test lint fmt vuln check backup-image backup-drill
 
 help: ## Show targets
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -61,3 +61,9 @@ SWIFT_TESTS ?= $(HOME)/Work/production/apps/lumina/LuminaVaultServer/Tests/AppTe
 
 swift-test-coverage: ## List Swift test files with no Go test, scenario or waiver (SWIFT_TESTS=<dir>)
 	python3 scripts/swift-test-coverage.py --swift-tests "$(SWIFT_TESTS)"
+
+backup-image: ## Build the encrypted backup sidecar image (pg_dump + age + rclone)
+	docker build -f docker/backup.Dockerfile -t luminavault-backup:local .
+
+backup-drill: ## Backup→restore round-trip with an ephemeral age key and local rclone remote
+	./scripts/backup-drill.sh
