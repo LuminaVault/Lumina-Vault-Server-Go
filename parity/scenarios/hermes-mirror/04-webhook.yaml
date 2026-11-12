@@ -1,0 +1,21 @@
+# The push webhook: nothing configured, and the public route's single 401 for
+# every authentication failure.
+module: hermes-mirror
+steps:
+  - {name: read without a token, request: {method: GET, path: /v1/hermes/mirror/webhook}}
+  - {name: nothing configured, as: hm_eve, request: {method: GET, path: /v1/hermes/mirror/webhook}}
+  - name: unknown token
+    request:
+      method: POST
+      path: /v1/hermes/mirror/webhook/0000000000000000000000000000000000000000000000000000000000000000
+      headers: {X-Webhook-Timestamp: "1700000000", X-Webhook-Signature-V2: "sha256=00"}
+      json: {job_id: j1}
+  - name: unsigned push
+    request: {method: POST, path: /v1/hermes/mirror/webhook/abc, json: {job_id: j1}}
+  - name: token over the length cap
+    request:
+      method: POST
+      path: /v1/hermes/mirror/webhook/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      headers: {X-Webhook-Timestamp: "1700000000", X-Webhook-Signature-V2: "sha256=00"}
+      json: {job_id: j1}
+  - {name: still nothing configured, as: hm_eve, request: {method: GET, path: /v1/hermes/mirror/webhook}, snapshot: [parity_hm_state]}

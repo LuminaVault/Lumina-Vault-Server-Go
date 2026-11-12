@@ -129,6 +129,15 @@ func reembedUser(t *testing.T, pool *pgxpool.Pool) uuid.UUID {
 	require.NoError(t, err)
 	_, err = pool.Exec(ctx, `INSERT INTO vaults (id, personal_owner_user_id, name, created_at, updated_at) VALUES ($1, $1, 'v', now(), now())`, id)
 	require.NoError(t, err)
+	// The re-embed walk covers every tenant's rows, so a subtest's leftovers (a
+	// FAIL row stays un-embedded) would fail every batch of a later subtest whose
+	// test sleep never waits: an endless loop. Each subtest removes its own rows.
+	t.Cleanup(func() {
+		for _, table := range []string{"memory_chunks", "memories_archive", "memories"} {
+			_, err := pool.Exec(context.Background(), `DELETE FROM `+table+` WHERE tenant_id = $1`, id)
+			require.NoError(t, err)
+		}
+	})
 	return id
 }
 

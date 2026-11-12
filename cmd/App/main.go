@@ -19,6 +19,7 @@ import (
 	"lumina/internal/embedding"
 	"lumina/internal/entitlement"
 	"lumina/internal/hermescontainers"
+	"lumina/internal/hermesprofile"
 	"lumina/internal/hermesresolve"
 	"lumina/internal/httpserver"
 	"lumina/internal/jobs"
@@ -170,7 +171,13 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		stopAnalytics()
 		<-analyticsDone
 	}()
-	deps := httpserver.Deps{}
+	// One HermesGatewayProbe, as Swift's gatewayProbe: /health/deep and the
+	// hermes-profiles reconciler share its 30 s cache.
+	gatewayProbe := hermesprofile.NewGatewayProbe(cfg.HermesAPIKey)
+	deps := httpserver.Deps{DeepHealth: func(ctx context.Context) (bool, *int) {
+		r := gatewayProbe.Probe(ctx, cfg.HermesGatewayURL)
+		return r.Reachable, r.LatencyMs
+	}}
 	// Background jobs a port has registered. A job that needs the database goes in the
 	// FluentEnabled block, so naming it in LV_GO_JOBS without a database fails boot.
 	var registered []jobs.Job
@@ -308,6 +315,7 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 			Pool: pool, Paths: paths, ColdStorageRoot: cfg.ColdStoragePath(), DryRun: cfg.LapseDryRun,
 		}).Job())
 		agent, stopAgent := newAgent(ctx, pool, cfg, box, paths, identify, limits, embeddings, sink, meModule, disk)
+		agent.gatewayProbe = gatewayProbe
 		agent.sockets = sockets
 		registered = append(registered, j2Jobs(pool, cfg, embeddings, embeddingKind, agent.stack.Transport)...)
 		registered = append(registered, communityDailyJobs(cfg, communityModule, agent.stack.Transport)...)
@@ -333,6 +341,9 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 			deps.Modules = append(deps.Modules, workflowsModule(pool, cfg, box, identify, limits))
 		}
 		deps.Modules = append(deps.Modules, agent.modules(links, enrichment)...)
+		if m := agent.hermesMirrorModule(); m != nil { // 6B: needs the secret box and the resolver, as in Swift
+			deps.Modules = append(deps.Modules, m)
+		}
 		deps.Modules = append(deps.Modules, agent.containerModules(keys)...)
 		// /v1/ws (5J) flips with kb-compile, the device result route, mcp and skills.
 		deps.Modules = append(deps.Modules, wsroute.New(pool, sockets, identify))

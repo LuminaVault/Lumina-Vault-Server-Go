@@ -516,3 +516,10 @@ hr_dee: E6C00000-0000-4000-8000-0000000000D4
 # auth (parity/seed/auth.sql, wave 8A): the /v1/auth/me reader and the allowlisted founder.
 auth_me: A0700000-0000-4000-8000-0000000000AB
 auth_founder: A0700000-0000-4000-8000-0000000000AC
+
+# hermes mirror (parity/seed/hermes-mirror.sql): one user per scenario file so settingsByUser never fills.
+hm_amy: 4E770000-0000-4000-8000-0000000000A1
+hm_bea: 4E770000-0000-4000-8000-0000000000B2
+hm_cy: 4E770000-0000-4000-8000-0000000000C3
+hm_dee: 4E770000-0000-4000-8000-0000000000D4
+hm_eve: 4E770000-0000-4000-8000-0000000000E5

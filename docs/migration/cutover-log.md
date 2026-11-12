@@ -2208,5 +2208,44 @@ served by Go but flip only with chat, in one infra commit (B12, decisions.md D-6
   401 enumerates accounts and the new challenge id is never returned), register 409s enumerate, reset/verify locks
   per code row (a new code clears them), non-constant-time code compares, confirm 204 for verified vs 401 unknown,
   the logging sender writes codes to logs, reset leaves access tokens valid, refresh rotation without reuse detection.
-- Left: `auth` stays `swift` until 8B (OAuth, X, phone, magic link, pairing) and 8C (WebAuthn); `app` until
-  `/health/deep`.
+- Left: `auth` stays `swift` until 8B (OAuth, X, phone, magic link, pairing) and 8C (WebAuthn). With `/health/deep`
+  (#83) and these `/v1/auth/me*` handlers every `app` route is in Go; its status is left to the flip.
+
+## hermes mirror (wave 6, 6B + P2)
+
+### G0 entry: met 2026-11-11
+
+- Routes: 26. `/v1/hermes/mirror/*` (status, sync, skills + toggle, jobs list/create/update/
+  pause/resume/trigger/delete/runs/collect/install-compile, vault import/create/import-sessions,
+  webhook read/rotate), `/v1/hermes/artifacts` list + get, `/v1/hermes/workspace/*` (status, diff,
+  files, file), and the public `POST /v1/hermes/mirror/webhook/:token`. JWT, `settingsByUser`, then
+  the BYO resolver middleware; mounted only with `LV_SECRET_MASTER_KEY`, an ingest pipeline and a
+  Hermes resolver, as in Swift.
+- P2 in `internal/hermesdash`: `Filesystem` (managed home, cron `jobs.json` under the advisory lock,
+  `cron/output` runs), `Remote` (gateway-only reads and `/api/jobs` writes, dashboard when linked),
+  `Dashboard` (the full `/api/*` client: 429 back-off, SSRF on every call, body caps, path guards),
+  `Gateway`, and `Factory` (a configured gateway that won't resolve is raised, never swapped for our
+  disk). `hermescaps` now probes through `hermesdash.Dashboard` instead of its own copy.
+- `internal/hermesmirror` ports HermesMirrorService: sync, skills, jobs, vault import/create, session
+  import, compile job, collect, artifacts, workspace. New config:
+  `HERMES_PER_TENANT_DATA_ROOT_BASE` (default `/app/data/hermes-tenants`).
+- `HermesMirrorRefreshWorker` stays on Swift (O4). Its pass, `collectAllJobRuns`, is ported and
+  tested so the job can move later without re-deriving it.
+- Swift weaknesses kept: the per-tenant in-flight latch is process-local, and the webhook collect
+  swallows a collect failure as a zero result.
+- Swift tests ported: HermesMirrorService 23, HermesMirrorController 8, HermesMirrorWebhookController
+  5, HermesArtifactsFilter 5, HermesArtifactExtractor 6, HermesJobRunModel 2, HermesBundledSkills 2,
+  FilesystemHermesTransport 13, GatewayOnlyMirror 10, HermesDashboardClient 18,
+  HermesDashboardProbe 6, HermesWorkspacePath 5, JSONValueFoundationBridge 4,
+  MirrorTransportFallback 5. HTTP goes through `hermesdash/hermesdashtest.Stub`, never a real host.
+- Not ported here: HermesMirrorRefreshWorker 5 (the worker is Swift's, O4) and the dashboard
+  client's `cron bridge keeps its legacy BYO error codes` (CronBridgeService has no Go port yet).
+
+### G1 parity: met 2026-11-11
+
+- `parity/scenarios/hermes-mirror` 01-04 (managed transport reads, sync, error paths; stored
+  artifacts; stored runs and collect; webhook refusals) with `parity/seed/hermes-mirror.sql` and its
+  `parity_hm_*` views, plus `parity/scenarios-switched/agents/hermes-mirror/01-gateway-only.yaml`
+  (a gateway-only BYO tenant on the LLM stub).
+- `modules.yaml` keeps `hermes` at `swift`: its prefixes include `/v1/hermes/runs` (6C).
+

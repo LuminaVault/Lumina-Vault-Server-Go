@@ -62,6 +62,17 @@ func verifyWebhook(signature, secret, timestamp string, body []byte) bool {
 	return subtle.ConstantTimeCompare([]byte(want), []byte(strings.ToLower(signature))) == 1
 }
 
+// VerifyWebhookSignature is WorkflowWebhookSignature.verify for other
+// modules (the Hermes mirror push uses the same envelope).
+func VerifyWebhookSignature(signature, secret, timestamp string, body []byte) bool {
+	return verifyWebhook(signature, secret, timestamp, body)
+}
+
+// SignWebhook is WorkflowWebhookSignature.sign, for tests and senders.
+func SignWebhook(secret, timestamp string, body []byte) string {
+	return signWebhook(secret, timestamp, body)
+}
+
 // rotateWebhook is WorkflowController.rotateWebhook and WorkflowWebhookController.rotate.
 func (m *Module) rotateWebhook(ctx context.Context, tenant, workflowID uuid.UUID) (WorkflowWebhookCredentialDTO, error) {
 	var out WorkflowWebhookCredentialDTO
