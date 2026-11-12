@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// WikilinkParsingTests.
+// WikilinkTests (Indexing/WikilinkTests.swift): its WikilinkParsingTests suite.
 
 func slugs(links []ParsedWikilink) []string {
 	out := make([]string, len(links))
@@ -78,7 +78,7 @@ func TestPathSpellingsAreNormalizedButCaseIsPreserved(t *testing.T) {
 	assert.NotEqual(t, NormalizeSlug("Notes/A.md"), NormalizeSlug("notes/a.md"))
 }
 
-// WikilinkResolverTests.
+// WikilinkTests: its WikilinkResolverTests suite.
 
 func target(path string) WikilinkTarget {
 	return WikilinkTarget{VaultFileID: uuid.New(), Path: path}

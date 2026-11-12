@@ -127,6 +127,8 @@ func run(args []string) error {
 		return serve(ctx, cfg, cmd)
 	case "migrate":
 		return migrate(ctx, cfg, cmd)
+	case "bootstrap-admin":
+		return bootstrapAdmin(ctx, cfg, os.Stdout)
 	default:
 		return fmt.Errorf("%s: not implemented", cmd.Name)
 	}
@@ -182,7 +184,11 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 	// FluentEnabled block, so naming it in LV_GO_JOBS without a database fails boot.
 	var registered []jobs.Job
 	if cfg.FluentEnabled {
-		pool, err := db.Open(ctx, db.DSN(cfg))
+		// App+build.swift wraps its first database work (the boot migration check)
+		// in StartupRetry; Go's first is opening the pool.
+		pool, err := db.StartupRetry(ctx, "boot database connect", db.StartupRetryOptions{}, func() (*pgxpool.Pool, error) {
+			return db.Open(ctx, db.DSN(cfg))
+		})
 		if err != nil {
 			return err
 		}
@@ -363,6 +369,8 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 			deps.Modules = append(deps.Modules, m)
 		}
 		registered = append(registered, agent.hermesRunsJob()...)
+		registered = append(registered, agent.hermesMirrorJob()...)
+		registered = append(registered, agent.containerReaperJob()...)
 	}
 	// Deferred after the sink and the pool, so jobs stop first and can still use both.
 	stopJobs, err := startJobs(ctx, cfg, registered)

@@ -56,6 +56,8 @@ func newTestServer() *echo.Echo {
 	return New(prodCfg, Deps{Auth: denyAll, Modules: []Module{testModule{}}})
 }
 
+// AppTests: "hello route serves" (GET / is "Hello!") and "health route
+// returns OK" (GET /health is 200 "ok").
 func TestBaseRoutes(t *testing.T) {
 	e := newTestServer()
 	rec := do(t, e, httptest.NewRequest(http.MethodGet, "/health", nil))
