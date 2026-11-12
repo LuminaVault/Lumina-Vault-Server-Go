@@ -268,8 +268,9 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		deps.Modules = append(deps.Modules, memoryModule(pool, cfg, box, identify, limits, paths, embeddings, sink, meModule))
 		deps.Modules = append(deps.Modules, selfImprovementModule(pool, cfg, box, identify, paths))
 		deps.Modules = append(deps.Modules, soulModule(pool, cfg, box, identify, limits, paths, sink))
-		if m := settingsModule(pool, cfg, box, identify, limits); m != nil { // 6A: needs the secret box, as in Swift
-			deps.Modules = append(deps.Modules, m)
+		settingsMod := settingsModule(pool, cfg, box, identify, limits)
+		if settingsMod != nil { // 6A: needs the secret box, as in Swift
+			deps.Modules = append(deps.Modules, settingsMod)
 		}
 		// Wave 4: knowledge, vision and the compile probe. /v1/vision spends a platform
 		// key, so it has its own gate. Both groups read billing.enforcementEnabled.
@@ -356,6 +357,9 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		deps.Modules = append(deps.Modules, agent.modules(links, enrichment)...)
 		if m := agent.hermesMirrorModule(); m != nil { // 6B: needs the secret box and the resolver, as in Swift
 			deps.Modules = append(deps.Modules, m)
+		}
+		if settingsMod != nil && agent.mirrorWorker != nil { // saving a gateway nudges the mirror worker, as in Swift
+			settingsMod.UseMirrorNudge(agent.mirrorWorker)
 		}
 		deps.Modules = append(deps.Modules, agent.containerModules(keys)...)
 		// /v1/ws (5J) flips with kb-compile, the device result route, mcp and skills.

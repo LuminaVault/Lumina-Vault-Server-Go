@@ -37,10 +37,24 @@ type Options struct {
 	Box          *secretbox.Box
 	Guard        ssrfguard.Guard
 	Capabilities *hermescaps.Service
-	Log          *slog.Logger
+	// MirrorNudge is HermesMirrorNudging: a saved gateway is refreshed within
+	// seconds instead of at the next 15-minute tick. Nil means no nudge.
+	MirrorNudge MirrorNudger
+	Log         *slog.Logger
 }
 
 // Module is the route group.
+// MirrorNudger is HermesMirrorNudging.
+type MirrorNudger interface {
+	Enqueue(tenant uuid.UUID)
+}
+
+// UseMirrorNudge wires the mirror worker once it exists. Call it before the
+// server starts: the option is read without a lock.
+func (m *Module) UseMirrorNudge(n MirrorNudger) {
+	m.opt.MirrorNudge = n
+}
+
 type Module struct {
 	pool  *pgxpool.Pool
 	opt   Options
@@ -221,8 +235,10 @@ func (m *Module) put(c *echo.Context) error {
 	if m.opt.Capabilities != nil {
 		_ = m.opt.Capabilities.Capabilities(ctx, tenant, true)
 	}
-	// Swift nudges its in-process mirror worker here. That worker stays in Swift
-	// until wave 6B, so a newly linked Hermes waits for its 15-minute tick.
+	// Do not wait on the upstream list: a down VPS must not stall Save.
+	if m.opt.MirrorNudge != nil {
+		m.opt.MirrorNudge.Enqueue(tenant)
+	}
 	return wire.JSON(c, http.StatusOK, getResponse{BaseURL: baseURL, HasAuthHeader: ciphertext != nil, Name: name})
 }
 

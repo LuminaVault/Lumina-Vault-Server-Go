@@ -316,8 +316,7 @@ type CollectSummary struct {
 }
 
 // CollectAllJobRuns is collectAllJobRuns(tenantID:), the refresh worker's
-// pass. The worker itself stays on Swift (O4); the pass is ported so its
-// behaviour is pinned before the job moves.
+// pass.
 func (s *Service) CollectAllJobRuns(ctx context.Context, tenant uuid.UUID) (CollectSummary, error) {
 	if err := s.beginExclusive(tenant); err != nil {
 		return CollectSummary{}, err

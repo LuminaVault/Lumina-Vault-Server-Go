@@ -71,8 +71,8 @@ func (a *agent) hermesMirrorModule() httpserver.Module {
 	})
 }
 
-// hermesMirrorJob is HermesMirrorRefreshWorker: every 15 min after a start jitter
-// of up to 30 s. Swift runs it with the mirror, Fluent on and LV_ENVIRONMENT !=
+// hermesMirrorJob is HermesMirrorRefreshWorker: a full turn every 15 min after a
+// start jitter of up to 30 s, or within 5 s of a nudge (Poll). Swift runs it with the mirror, Fluent on and LV_ENVIRONMENT !=
 // test; Go only when LV_GO_JOBS names it, because two processes walking every
 // tenant duplicate upstream traffic (jobs.md).
 func (a *agent) hermesMirrorJob() []jobs.Job {
@@ -81,7 +81,7 @@ func (a *agent) hermesMirrorJob() []jobs.Job {
 	}
 	return []jobs.Job{{
 		Name:     "HermesMirrorRefreshWorker",
-		Schedule: jobs.Every(hermesmirror.WorkerTickInterval, hermesmirror.WorkerMaxJitter),
-		Run:      a.mirrorWorker.Run,
+		Schedule: jobs.Every(hermesmirror.WorkerNudgeSlice, hermesmirror.WorkerMaxJitter),
+		Run:      a.mirrorWorker.Poll,
 	}}
 }
