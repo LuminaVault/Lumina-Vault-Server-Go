@@ -292,6 +292,7 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 				Port: cfg.HermesCentralPort, TempPort: cfg.HermesCentralTempPort, APIKey: cfg.HermesAPIKey,
 			}))
 		}
+		deps.Modules = append(deps.Modules, authModule(pool, authService(pool, cfg, keys, paths, analytics), limits, analytics))
 		deps.Modules = append(deps.Modules, billing.New(pool, billing.Options{
 			WebhookSecret: cfg.RevenueCatWebhookSecret, AdminToken: cfg.AdminToken, EnforcementEnabled: entitlement.EnforcementEnabled(cfg.BillingEnforcementEnabled),
 		}))
