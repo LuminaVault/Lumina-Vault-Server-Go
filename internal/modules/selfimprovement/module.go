@@ -1,8 +1,8 @@
 // Package selfimprovement serves /v1/me/improvement: the Go port of
-// LuminaVaultServer Sources/App/SelfImprovement's controller and the request half of
-// SelfImprovementService. SelfImprovementScheduler stays in Swift: curator/runs and
-// soul/reviews only queue rows, which it claims with SKIP LOCKED, and its review LLM
-// goes straight to the gateway.
+// LuminaVaultServer Sources/App/SelfImprovement: the controller and request half of
+// SelfImprovementService (module.go), and SelfImprovementScheduler with the tick half
+// (worker.go): curator/runs and soul/reviews queue rows the worker claims with SKIP
+// LOCKED, and its review LLM goes straight to the gateway (llm.DirectHermes).
 package selfimprovement
 
 //go:generate sh -c "cd ../../.. && go tool oapi-codegen -config internal/modules/selfimprovement/oapi-codegen.yaml api/openapi.yaml"
@@ -87,6 +87,7 @@ type Options struct {
 // no rate limit, and each handler reaches requireIdentity() where Swift does: body
 // and path checks that come first answer 400 without a token.
 type Module struct {
+	pool     *pgxpool.Pool
 	q        *db.Queries
 	identify echo.MiddlewareFunc
 	paths    vaultpaths.Paths
@@ -101,6 +102,7 @@ type Module struct {
 // New builds the module.
 func New(pool *pgxpool.Pool, opts Options) *Module {
 	return &Module{
+		pool:     pool,
 		q:        db.New(pool),
 		identify: opts.Identify,
 		paths:    opts.Paths,

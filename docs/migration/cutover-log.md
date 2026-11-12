@@ -1577,6 +1577,7 @@ Beyond the pilot gate (D-wave2-early):
   `soul/reviews` queue. A Go test mimics the claim SQL. Parity doesn't prove the pickup, so check it at G2.
 - Swift tests: 12 of 13 ported: 6 `SelfImprovementPolicyTests` and 6 of 7 `SelfImprovementServiceTests`.
   Not ported, because it tests the scheduler: "tick dry-run skips pinned skill and applies zero mutations".
+  (2026-11-12: ported with the scheduler, `worker_test.go`; 13 of 13.)
 - Paths: `skillFile` and `restore`'s `os.MkdirAll` and `os.RemoveAll` skip `SanitizePath`, as Swift does.
   Their names and paths come from `snapshot_json`. Parity shows `../outside-skills` writing outside
   `skills/` on both servers. Hardening them is an owner decision.
