@@ -254,12 +254,23 @@ func TestDeepHealth(t *testing.T) {
 		status int
 		body   string
 	}{
-		{"reachable", func(context.Context) (bool, *int) { return true, &ms }, http.StatusOK,
-			`{"status":"ok","hermes":{"reachable":true,"latencyMs":12}}`},
-		{"unreachable", func(context.Context) (bool, *int) { return false, nil }, http.StatusServiceUnavailable,
-			`{"status":"degraded","hermes":{"reachable":false,"latencyMs":null}}`},
-		{"no probe", nil, http.StatusServiceUnavailable,
-			`{"status":"degraded","hermes":{"reachable":false,"latencyMs":null}}`},
+		{
+			name:   "reachable",
+			probe:  func(context.Context) (bool, *int) { return true, &ms },
+			status: http.StatusOK,
+			body:   `{"status":"ok","hermes":{"reachable":true,"latencyMs":12}}`,
+		},
+		{
+			name:   "unreachable",
+			probe:  func(context.Context) (bool, *int) { return false, nil },
+			status: http.StatusServiceUnavailable,
+			body:   `{"status":"degraded","hermes":{"reachable":false,"latencyMs":null}}`,
+		},
+		{
+			name:   "no probe",
+			status: http.StatusServiceUnavailable,
+			body:   `{"status":"degraded","hermes":{"reachable":false,"latencyMs":null}}`,
+		},
 	} {
 		e := New(prodCfg, Deps{Auth: denyAll, DeepHealth: tc.probe})
 		rec := do(t, e, httptest.NewRequest(http.MethodGet, "/health/deep", nil))
