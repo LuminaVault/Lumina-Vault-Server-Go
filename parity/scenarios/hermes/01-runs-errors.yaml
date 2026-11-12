@@ -1,6 +1,7 @@
 # /v1/hermes/runs validation and error paths (wave 6C). The base Hermes is a dead
 # address, so a start that passes validation fails reaching it.
 module: hermes
+smoke: true
 steps:
   - {name: no token list, request: {method: GET, path: /v1/hermes/runs}}
   - {name: no token start, request: {method: POST, path: /v1/hermes/runs, json: {prompt: hi}}}

@@ -2334,3 +2334,30 @@ Still held: `/v1/me/recap/period` (me). It is released in the same infra change 
 `LV_GO_JOBS`, so the claim and the worker run in one process.
 
 Swift test coverage: #92 and #93 port the last 35 files; `swift-test-coverage.py` reports 332 of 332 cited, 0 waived.
+
+## Flip batches 5-1, 5-2, 6 and 5-3: staging G2 2026-11-12
+
+Throwaway staging users per run, Swift staging as the control, against the CI run's Swift transcripts. Infra PRs are
+stacked and merged by the owner in this order: #598, #599, #600.
+
+### G2 for 5-1 and 5-2 on `b0b99bc` (infra #598)
+
+- CI run 43231765421. workflows, self-improvement, llm-voice, agents, grok: 0 mismatches on both servers. The 22
+  modules already on Go, re-smoked for the image move: Go matches Swift on every one. The only mismatches are seed-ID
+  404s that both servers return.
+- Real `POST /v1/audio/transcriptions`, 14 KB m4a: 200 with the same text on both servers (Go 6.9 s, Swift 5.9 s).
+  `api-go-*` is in `allow-whisper`.
+
+### G2 for 6 and 5-3 on `c57fb1d` (infra #599, #600)
+
+- CI run 43240658970. 43 modules were smoked; Go and Swift answer alike on every one. Every mismatch comes from the
+  environment, and both servers show it: seed IDs, `COMMUNITY_ENABLED` off on staging, no container or dashboard for
+  skills-cron, and `hermes-stub-staging` being reachable where CI's Hermes is dead. devices differed only by run order
+  on the shared DB (device tokens); with one user on both servers it is identical.
+- Real requests through `hermes-stub-staging`, the same on both servers: a chat turn (682-byte SSE),
+  `POST /v1/memory/search`, and `POST /v1/knowledge/reason/stream` (580 bytes, `context, token, suggestions, done`).
+- `api-go-staging`: 0 restarts. The only errors were those the scenarios ask for: SSRF rejections on cron config, the
+  `/v1/audio/speech` 501, and `community_disabled`.
+- community could not be exercised on staging (disabled there); CI parity covers it. The #599 body lets the owner drop
+  its two entries.
+- `community/00-auth`, `skills-cron/01-routes` and `hermes/01-runs-errors` gained `smoke: true`.
