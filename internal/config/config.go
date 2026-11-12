@@ -332,6 +332,8 @@ type Config struct {
 	// on api-go-* (extraEnv), so a Swift job flag inherited from api-* never
 	// starts a Go job by accident. See the roadmap's background job rule. Names are
 	// the Swift type names, and internal/jobs fails boot on one it doesn't know.
+	// "*" runs every job this process registers: registration mirrors Swift's own
+	// start conditions, so it is the set Swift ran, for when Swift is at 0 replicas.
 	LVGoJobs []string `env:"LV_GO_JOBS" envSeparator:","`
 }
 
@@ -391,10 +393,13 @@ func (c Config) BYOHermesRequireHTTPS() bool {
 	return strings.EqualFold(c.BYOHermesRequireHTTPSRaw, "true")
 }
 
+// AllJobs in LV_GO_JOBS turns on every registered job.
+const AllJobs = "*"
+
 // JobEnabled reports whether this process should run the named background job.
 func (c Config) JobEnabled(name string) bool {
 	for _, j := range c.LVGoJobs {
-		if j == name {
+		if j == name || j == AllJobs {
 			return true
 		}
 	}
