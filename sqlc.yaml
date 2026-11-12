@@ -875,3 +875,35 @@ sql:
         overrides:
           - db_type: uuid
             go_type: github.com/google/uuid.UUID
+  - engine: postgresql
+    schema:
+      - internal/migrations/sql/schema-swift.sql
+      - internal/migrations/sql/00002_assistant_pending_actions.sql
+    queries: internal/modules/quickassistant/queries.sql
+    gen:
+      go:
+        package: db
+        out: internal/modules/quickassistant/db
+        sql_package: pgx/v5
+        emit_pointers_for_null_types: true
+        omit_unused_structs: true
+        overrides:
+          - db_type: uuid
+            go_type: github.com/google/uuid.UUID
+          - db_type: uuid
+            nullable: true
+            go_type:
+              import: github.com/google/uuid
+              type: UUID
+              pointer: true
+          - db_type: pg_catalog.timestamptz
+            go_type: time.Time
+          - db_type: pg_catalog.timestamptz
+            nullable: true
+            go_type:
+              type: time.Time
+              pointer: true
+          - db_type: timestamptz
+            go_type: time.Time
+          - db_type: jsonb
+            go_type: encoding/json.RawMessage
