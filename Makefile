@@ -1,4 +1,4 @@
-.PHONY: help build test lint fmt vuln check
+.PHONY: help build test lint fmt vuln check bruno-regen
 
 help: ## Show targets
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -61,3 +61,6 @@ SWIFT_TESTS ?= $(HOME)/Work/production/apps/lumina/LuminaVaultServer/Tests/AppTe
 
 swift-test-coverage: ## List Swift test files with no Go test, scenario or waiver (SWIFT_TESTS=<dir>)
 	python3 scripts/swift-test-coverage.py --swift-tests "$(SWIFT_TESTS)"
+
+bruno-regen: ## Regenerate the LuminaVaultCollection Bruno collection from api/openapi.yaml
+	./scripts/generate-bruno.sh
