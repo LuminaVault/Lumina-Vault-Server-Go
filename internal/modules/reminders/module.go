@@ -53,6 +53,15 @@ func New(pool *pgxpool.Pool, transport ChatTransport, model string) *Module {
 	return &Module{q: db.New(pool), store: NewStore(pool), classifier: Classifier{Transport: transport, Model: model}, now: time.Now}
 }
 
+// UseTransport swaps in the routed LLM transport once the agent stack exists
+// (App+build.swift hands the classifier routedTransport). Call it before the
+// server starts: the classifier is read without a lock.
+func (m *Module) UseTransport(transport ChatTransport) {
+	if transport != nil {
+		m.classifier.Transport = transport
+	}
+}
+
 func (m *Module) Register(r httpserver.Router, authMW echo.MiddlewareFunc) {
 	r.GET("/v1/reminders", m.list, authMW)
 	r.POST("/v1/reminders", m.create, authMW)
