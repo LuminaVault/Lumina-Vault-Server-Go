@@ -4,6 +4,7 @@
 # NL preview (its LLM fallback is unroutable here, so it answers 422), the SSRF
 # refusals, and the failed docker spawn's empty 500.
 module: skills-cron
+smoke: true
 steps:
   - {name: list without a token, request: {method: GET, path: /v1/me/hermes/cron}}
   - {name: create without a token, request: {method: POST, path: /v1/me/hermes/cron, json: {schedule: "0 9 * * *"}}}
