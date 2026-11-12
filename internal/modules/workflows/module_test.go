@@ -110,7 +110,8 @@ func webhookDefinition() WorkflowDefinitionDTO {
 	return testDefinition(Webhook, []WorkflowNodeDTO{trigger, output}, []WorkflowEdgeDTO{testEdge(trigger, output)})
 }
 
-// TestCreatesPublishesDeduplicatesAndCancelsRun is the Swift lifecycle test. The
+// TestCreatesPublishesDeduplicatesAndCancelsRun ports WorkflowLifecycleIntegrationTests
+// (creates publishes deduplicates and cancels run). The
 // engine's reserve and reconcile stay in Swift, so the 12345 micros they would book
 // is written as they write it.
 func TestCreatesPublishesDeduplicatesAndCancelsRun(t *testing.T) {
@@ -170,6 +171,8 @@ func TestCreatesPublishesDeduplicatesAndCancelsRun(t *testing.T) {
 	require.Equal(t, WorkflowRunStatusCancelled, runs.Runs[0].Status)
 }
 
+// TestResumeRespectsActiveRunLimit ports WorkflowLifecycleIntegrationTests (resume
+// respects active run limit).
 func TestResumeRespectsActiveRunLimit(t *testing.T) {
 	v := setup(t, nil)
 	ctx := context.Background()

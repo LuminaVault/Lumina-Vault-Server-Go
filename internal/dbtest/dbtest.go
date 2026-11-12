@@ -20,6 +20,14 @@ const Image = "pgvector/pgvector:pg18"
 // the test ends. Tests are skipped under -short.
 func Postgres(t *testing.T) *pgxpool.Pool {
 	t.Helper()
+	pool, _ := PostgresDSN(t)
+	return pool
+}
+
+// PostgresDSN is Postgres plus the database's connection string, for code under
+// test that opens its own pool (the CLI subcommands).
+func PostgresDSN(t *testing.T) (*pgxpool.Pool, string) {
+	t.Helper()
 	if testing.Short() {
 		t.Skip("integration test (needs Docker); skipped with -short")
 	}
@@ -43,5 +51,5 @@ func Postgres(t *testing.T) *pgxpool.Pool {
 		t.Fatal(err)
 	}
 	t.Cleanup(pool.Close)
-	return pool
+	return pool, dsn
 }

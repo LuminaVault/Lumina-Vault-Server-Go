@@ -9,6 +9,8 @@ import (
 	"lumina/internal/diskguard"
 	"lumina/internal/embedding"
 	"lumina/internal/entitlement"
+	"lumina/internal/hermescontainers"
+	"lumina/internal/hermesmirror"
 	"lumina/internal/hermesprofile"
 	"lumina/internal/hermesresolve"
 	"lumina/internal/hermesruns"
@@ -79,11 +81,16 @@ type agent struct {
 	// runs is the one HermesRunsService (6C), shared by chat and /v1/hermes/runs;
 	// nil without the endpoint resolver.
 	runs *hermesruns.Service
+	// mirrorWorker is HermesMirrorRefreshWorker, set by hermesMirrorModule().
+	mirrorWorker *hermesmirror.Worker
 	// mcp is /v1/mcp's tool service, set by mcpModule(); Quick Assistant's vault
 	// tools run through the same instance (Decision 1).
 	mcp *mcp.Service
 	// gatewayProbe is shared with /health/deep (set by main).
 	gatewayProbe *hermesprofile.GatewayProbe
+	// containers is the HermesContainerManager the container modules share,
+	// set by containerModules(); the reaper job evicts through it.
+	containers *hermescontainers.Lifecycle
 }
 
 func newAgent(ctx context.Context, pool *pgxpool.Pool, cfg config.Config, box *secretbox.Box, paths vaultpaths.Paths, identify echo.MiddlewareFunc,

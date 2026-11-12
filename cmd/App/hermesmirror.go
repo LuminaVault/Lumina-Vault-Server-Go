@@ -8,6 +8,7 @@ import (
 	"lumina/internal/hermesdash"
 	"lumina/internal/hermesmirror"
 	"lumina/internal/httpserver"
+	"lumina/internal/jobs"
 	hermesmirrormod "lumina/internal/modules/hermesmirror"
 	"lumina/internal/modules/kbcompile"
 	"lumina/internal/ssrfguard"
@@ -32,8 +33,8 @@ func (r kbCompileRunner) Compile(ctx context.Context, tenant uuid.UUID, fileIDs 
 // hermesMirrorModule is HermesMirrorWiring (6B): /v1/hermes/mirror,
 // /v1/hermes/artifacts, /v1/hermes/workspace and the webhook push. Swift mounts
 // it only with a secret box and an endpoint resolver. Call after modules():
-// it needs the ingest service and the compile route. HermesMirrorRefreshWorker
-// stays on Swift (O4).
+// it needs the ingest service and the compile route. It also builds
+// HermesMirrorRefreshWorker, which hermesMirrorJob registers.
 func (a *agent) hermesMirrorModule() httpserver.Module {
 	if a.box == nil || a.ingest == nil {
 		return nil
@@ -64,7 +65,23 @@ func (a *agent) hermesMirrorModule() httpserver.Module {
 	if a.compile != nil {
 		service.Compile = kbCompileRunner{compile: a.compile}
 	}
+	a.mirrorWorker = &hermesmirror.Worker{Service: service}
 	return hermesmirrormod.New(a.pool, hermesmirrormod.Options{
 		Identify: a.identify, Limits: a.limits, BYO: resolver.Middleware(), Box: a.box, Service: service,
 	})
+}
+
+// hermesMirrorJob is HermesMirrorRefreshWorker: every 15 min after a start jitter
+// of up to 30 s. Swift runs it with the mirror, Fluent on and LV_ENVIRONMENT !=
+// test; Go only when LV_GO_JOBS names it, because two processes walking every
+// tenant duplicate upstream traffic (jobs.md).
+func (a *agent) hermesMirrorJob() []jobs.Job {
+	if a.mirrorWorker == nil || a.cfg.LVEnvironment == "test" {
+		return nil
+	}
+	return []jobs.Job{{
+		Name:     "HermesMirrorRefreshWorker",
+		Schedule: jobs.Every(hermesmirror.WorkerTickInterval, hermesmirror.WorkerMaxJitter),
+		Run:      a.mirrorWorker.Run,
+	}}
 }

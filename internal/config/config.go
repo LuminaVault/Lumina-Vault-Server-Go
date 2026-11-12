@@ -26,6 +26,11 @@ type Config struct {
 	JWTKID         string `env:"JWT_KID"`
 	JWTHMACSecrets string `env:"JWT_HMAC_SECRETS"`
 
+	// The bootstrap-admin subcommand's inputs (CLI/BootstrapAdminCommand.swift).
+	BootstrapAdminEmail    string `env:"BOOTSTRAP_ADMIN_EMAIL"`
+	BootstrapAdminPassword string `env:"BOOTSTRAP_ADMIN_PASSWORD"`
+	BootstrapAdminUsername string `env:"BOOTSTRAP_ADMIN_USERNAME" envDefault:"admin"`
+
 	LVSecretMasterKey string `env:"LV_SECRET_MASTER_KEY"`
 	LVEnvironment     string `env:"LV_ENVIRONMENT"`
 

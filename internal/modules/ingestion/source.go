@@ -26,6 +26,28 @@ func sourceTokenHash(token string) string {
 	return hex.EncodeToString(sum[:])
 }
 
+// SupportsContentType is MultimodalIngestionService.supports: contentType is
+// accepted when a pattern equals it or, for "type/*", when it starts with
+// "type/", ignoring case. The worker that checks a source against the connected
+// Hermes' ingestionSupportedMimeTypes still runs on Swift (jobs_j1.go); this is
+// the check it will use when it moves.
+func SupportsContentType(contentType string, patterns []string) bool {
+	value := swiftstr.Lowercased(contentType)
+	for _, pattern := range patterns {
+		normalized := swiftstr.Lowercased(pattern)
+		if prefix, ok := strings.CutSuffix(normalized, "/*"); ok {
+			if strings.HasPrefix(value, prefix+"/") {
+				return true
+			}
+			continue
+		}
+		if value == normalized {
+			return true
+		}
+	}
+	return false
+}
+
 // source is the public route BYO Hermes reads a file from.
 //
 // The path comes from the vault_files row, not from a client, so as in Swift it

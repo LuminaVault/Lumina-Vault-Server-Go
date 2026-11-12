@@ -238,6 +238,14 @@ func (l *Lifecycle) RecordNousConnected(ctx context.Context, tenant uuid.UUID, a
 	return err
 }
 
+// ReaperIntervalSeconds is HermesContainerReaperService.intervalSeconds: the
+// reaper runs every quarter of the idle TTL, which bounds how long a container
+// sits idle past its deadline to 25% of the window, and never more often than
+// once a minute, so a short TTL can't make it a busy loop against Postgres.
+func ReaperIntervalSeconds(idleTTLSeconds int) int {
+	return max(60, idleTTLSeconds/4)
+}
+
 // EvictIdle is evictIdle: removes containers idle past the TTL with neither an
 // xAI nor a Nous connection, and answers how many.
 func (l *Lifecycle) EvictIdle(ctx context.Context) (int, error) {
