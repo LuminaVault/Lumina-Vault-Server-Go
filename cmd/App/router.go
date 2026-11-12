@@ -31,10 +31,9 @@ func (a *agent) adminModule() httpserver.Module {
 	indexer := chunkindex.NewIndexer(chunks, a.embeddings, chunkindex.NewLinkRepository(a.pool))
 	service := hermesprofile.New(a.pool, hermesprofile.NewGateway(cfg.HermesGatewayKind, cfg.HermesDataRoot), a.paths)
 	return admin.New(a.pool, admin.Options{
-		AdminToken:    cfg.AdminToken,
-		MetricsSecret: cfg.MetricsSecret,
-		Reconciler: hermesprofile.NewReconciler(a.pool, service, cfg.HermesDataRoot, cfg.HermesGatewayURL,
-			hermesprofile.NewGatewayProbe(cfg.HermesAPIKey)),
+		AdminToken:         cfg.AdminToken,
+		MetricsSecret:      cfg.MetricsSecret,
+		Reconciler:         hermesprofile.NewReconciler(a.pool, service, cfg.HermesDataRoot, cfg.HermesGatewayURL, a.gatewayProbe),
 		Backfill:           chunkindex.NewBackfiller(a.pool, a.paths, indexer),
 		Transport:          a.stack.Transport,
 		Embeddings:         a.embeddings,

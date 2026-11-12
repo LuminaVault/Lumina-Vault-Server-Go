@@ -9,6 +9,7 @@ import (
 	"lumina/internal/diskguard"
 	"lumina/internal/embedding"
 	"lumina/internal/entitlement"
+	"lumina/internal/hermesprofile"
 	"lumina/internal/hermesresolve"
 	"lumina/internal/hermesruns"
 	"lumina/internal/httpserver"
@@ -74,6 +75,8 @@ type agent struct {
 	// runs is the one HermesRunsService (6C), shared by chat and /v1/hermes/runs;
 	// nil without the endpoint resolver.
 	runs *hermesruns.Service
+	// gatewayProbe is shared with /health/deep (set by main).
+	gatewayProbe *hermesprofile.GatewayProbe
 }
 
 func newAgent(ctx context.Context, pool *pgxpool.Pool, cfg config.Config, box *secretbox.Box, paths vaultpaths.Paths, identify echo.MiddlewareFunc,
