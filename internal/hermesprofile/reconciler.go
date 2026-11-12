@@ -54,7 +54,7 @@ type Health struct {
 // Reconciler is HermesProfileReconciler (Admin/HermesProfileReconciler.swift):
 // the admin routes' view of hermes_profiles against the users table and the
 // profile directories on the Hermes volume. Its daily job,
-// HermesProfileReconcilerService, isn't ported (job move rule).
+// HermesProfileReconcilerService, is cmd/App/profilereconciler.go.
 type Reconciler struct {
 	pool       *pgxpool.Pool
 	service    *Service

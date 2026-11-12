@@ -332,6 +332,7 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		agent.sockets = sockets
 		registered = append(registered, j2Jobs(pool, cfg, embeddings, embeddingKind, agent.stack.Transport)...)
 		registered = append(registered, communityDailyJobs(cfg, communityModule, agent.stack.Transport)...)
+		registered = append(registered, agent.profileReconcilerJob()...)
 		remindersModule.UseTransport(reminders.RoutedTransport{LLM: agent.stack.Transport})
 		if themes != nil {
 			themes.Transport = agent.stack.Transport
