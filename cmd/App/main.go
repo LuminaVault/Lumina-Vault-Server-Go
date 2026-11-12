@@ -234,6 +234,9 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		// Migrated modules (modules.yaml status ≥ parity). Traffic only reaches
 		// them through the api ingress.extraPaths that name them.
 		remindersModule := reminders.New(pool, nil, cfg.HermesDefaultModel) // routed transport set once the agent exists
+		ingestionMod := ingestion.New(pool, identify, limits, paths,
+			diskguard.New(cfg.VaultRootPath, cfg.StorageMinFreeBytes, cfg.StorageMinFreeRatio, diskguard.Options{}),
+			ingestion.QuotaFromConfig(cfg))
 		deps.Modules = []httpserver.Module{
 			projects.New(pool),
 			kanban.New(pool, identify, limits, paths),
@@ -251,9 +254,7 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 			}, slog.Default().With("module", "teams"))),
 			meModule,
 			dashboardModule,
-			ingestion.New(pool, identify, limits, paths,
-				diskguard.New(cfg.VaultRootPath, cfg.StorageMinFreeBytes, cfg.StorageMinFreeRatio, diskguard.Options{}),
-				ingestion.QuotaFromConfig(cfg)),
+			ingestionMod,
 		}
 		// Wave 3: account, onboarding, health. Health ingest sits behind the
 		// billing gate; the BYO-key exemption needs the SecretBox (nil without
@@ -390,6 +391,13 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		deps.Modules = append(deps.Modules, skillsMod)
 		if cfg.LVEnvironment != "test" { // CronScheduler: Fluent on, not test, as App+build.swift
 			registered = append(registered, skillsMod.CronJob(slog.Default().With("label", "lv.skills")))
+		}
+		if cfg.LVEnvironment != "test" { // MultimodalIngestionWorker: Fluent on, not test, as App+build.swift
+			job, err := agent.ingestionWorkerJob(ingestionMod, links, memories)
+			if err != nil {
+				return err
+			}
+			registered = append(registered, job)
 		}
 		if wf != nil && cfg.LVEnvironment != "test" { // WorkflowEngine: the studio block's worker, as App+build.swift
 			registered = append(registered, agent.workflowEngineJob(wf, skillsMod, memories))

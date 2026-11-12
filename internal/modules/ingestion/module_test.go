@@ -50,6 +50,7 @@ type env struct {
 	e     *echo.Echo
 	pool  *pgxpool.Pool
 	paths vaultpaths.Paths
+	m     *ingestion.Module
 }
 
 // setup seeds parity's rows. free is what the injected disk reports.
@@ -76,7 +77,7 @@ func setup(t *testing.T, free int64) env {
 		Auth:    auth.Middleware(keys, auth.PGUsers(pool)),
 		Modules: []httpserver.Module{m},
 	})
-	return env{t: t, e: e, pool: pool, paths: paths}
+	return env{t: t, e: e, pool: pool, paths: paths, m: m}
 }
 
 const plentyOfDisk = 50 * 1024 * 1024 * 1024

@@ -17,7 +17,7 @@ import (
 // j1Jobs builds group J1's jobs (wave-6-8-plan.md "J1, J2") under Swift's own start
 // conditions, so naming one in LV_GO_JOBS where Swift wouldn't run it fails boot.
 // None runs unless LV_GO_JOBS names it. MultimodalIngestionWorker isn't here: it
-// needs the Hermes capabilities service, which 6A ports.
+// needs the agent's LLM stack and link capture (ingestionworker.go).
 func j1Jobs(pool *pgxpool.Pool, cfg config.Config, disk *diskguard.Guard) []jobs.Job {
 	// Always, in Swift.
 	out := []jobs.Job{
