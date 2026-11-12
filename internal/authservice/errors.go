@@ -12,9 +12,8 @@
 package authservice
 
 import (
-	"net/http"
-
 	"lumina/internal/wire"
+	"net/http"
 )
 
 // AuthError, verbatim (Sources/App/Auth/Errors/AuthError.swift).

@@ -7,11 +7,10 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"lumina/internal/wire"
 	"net/http"
 	"strings"
 	"time"
-
-	"lumina/internal/wire"
 )
 
 // Sender is EmailOTPSender: one code to one address. purpose is "login",

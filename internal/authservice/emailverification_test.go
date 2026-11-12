@@ -2,9 +2,8 @@ package authservice_test
 
 import (
 	"context"
-	"testing"
-
 	"lumina/internal/authservice"
+	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"

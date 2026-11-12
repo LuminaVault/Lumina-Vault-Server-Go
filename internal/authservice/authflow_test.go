@@ -2,13 +2,12 @@ package authservice_test
 
 import (
 	"context"
-	"testing"
-	"time"
-
 	"lumina/internal/auth"
 	"lumina/internal/authservice"
 	"lumina/internal/ids"
 	"lumina/internal/modules/billing"
+	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

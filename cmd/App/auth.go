@@ -2,7 +2,6 @@ package main
 
 import (
 	"log/slog"
-
 	"lumina/internal/auth"
 	"lumina/internal/authservice"
 	"lumina/internal/config"

@@ -5,14 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"lumina/internal/authservice"
+	"lumina/internal/wire"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
-
-	"lumina/internal/authservice"
-	"lumina/internal/wire"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
