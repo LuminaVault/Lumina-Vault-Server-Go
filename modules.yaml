@@ -55,7 +55,7 @@ modules:
   reminders:
     wave: 2
     swiftDir: Sources/App/Reminders
-    status: swift
+    status: parity
     prefixes: [/v1/reminders/detect]
     exactPaths: [/v1/reminders]
     sharedPrefixes: [/v1/reminders]
@@ -89,13 +89,13 @@ modules:
   community:
     wave: 3
     swiftDir: Sources/App/Community
-    status: swift
+    status: parity
     prefixes: [/v1/admin/community, /v1/community]
     jobs: []
   dashboard:
     wave: 3
     swiftDir: Sources/App/Dashboard
-    status: swift
+    status: parity
     prefixes: [/v1/analytics, /v1/dashboard, /v1/insights, /v1/tasks]
     jobs: []
   health:
@@ -305,7 +305,7 @@ modules:
   hermes:
     wave: 6
     swiftDir: Sources/App/Hermes
-    status: swift
+    status: parity
     prefixes: [/v1/hermes, /v1/me/hermes/capabilities]
     jobs: []
   integrations:
