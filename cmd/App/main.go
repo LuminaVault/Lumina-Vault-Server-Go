@@ -266,7 +266,13 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 			health.New(pool, healthGate, analytics),
 		)
 		deps.Modules = append(deps.Modules, memoryModule(pool, cfg, box, identify, limits, paths, embeddings, sink, meModule))
-		deps.Modules = append(deps.Modules, selfImprovementModule(pool, cfg, box, identify, paths))
+		selfImprovementMod := selfImprovementModule(pool, cfg, box, identify, paths)
+		deps.Modules = append(deps.Modules, selfImprovementMod)
+		if cfg.LVEnvironment != "test" { // SelfImprovementScheduler: Fluent on, not test, as App+build.swift
+			if job, ok := selfImprovementJob(selfImprovementMod, cfg); ok {
+				registered = append(registered, job)
+			}
+		}
 		deps.Modules = append(deps.Modules, soulModule(pool, cfg, box, identify, limits, paths, sink))
 		settingsMod := settingsModule(pool, cfg, box, identify, limits)
 		if settingsMod != nil { // 6A: needs the secret box, as in Swift
@@ -604,9 +610,9 @@ func hermesResolver(pool *pgxpool.Pool, cfg config.Config, box *secretbox.Box) *
 	}, gateway)
 }
 
-// selfImprovementModule builds /v1/me/improvement. SelfImprovementScheduler stays in
-// Swift and picks up the rows these routes queue.
-func selfImprovementModule(pool *pgxpool.Pool, cfg config.Config, box *secretbox.Box, identify echo.MiddlewareFunc, paths vaultpaths.Paths) httpserver.Module {
+// selfImprovementModule builds /v1/me/improvement; selfImprovementJob is the
+// SelfImprovementScheduler that claims the rows these routes queue.
+func selfImprovementModule(pool *pgxpool.Pool, cfg config.Config, box *secretbox.Box, identify echo.MiddlewareFunc, paths vaultpaths.Paths) *selfimprovement.Module {
 	catalog := skills.NewCatalog(paths)
 	if strings.EqualFold(cfg.SkillsBuiltinScanEnabled, "false") {
 		catalog = skills.NewVaultCatalog(paths)
@@ -623,6 +629,24 @@ func selfImprovementModule(pool *pgxpool.Pool, cfg config.Config, box *secretbox
 		opts.IsUserOverride = selfimprove.ResolverOverride(resolver)
 	}
 	return selfimprovement.New(pool, opts)
+}
+
+// selfImprovementJob is SelfImprovementScheduler over DefaultHermesLLMService: the
+// central gateway at HERMES_GATEWAY_URL with HERMES_API_KEY, no routing. ok is false
+// when the gateway URL doesn't parse (Swift's App+build refuses to boot then).
+func selfImprovementJob(m *selfimprovement.Module, cfg config.Config) (jobs.Job, bool) {
+	base, err := url.Parse(cfg.HermesGatewayURL)
+	if err != nil {
+		return jobs.Job{}, false
+	}
+	return m.NewWorker(selfimprovement.WorkerDeps{
+		LLM: &llm.DirectHermes{
+			BaseURL: base, APIKey: cfg.HermesAPIKey, DefaultModel: cfg.HermesDefaultModel,
+			Log: slog.Default().With("label", "lv.self-improvement.llm"),
+		},
+		MainModel: cfg.HermesDefaultModel,
+		Log:       slog.Default().With("label", "lv.self-improvement"),
+	}).Job(), true
 }
 
 func calendarModules(pool *pgxpool.Pool, cfg config.Config, identify echo.MiddlewareFunc, limits *ratelimit.Store, embeddings embedding.Service, analytics *posthog.Client) []httpserver.Module {
