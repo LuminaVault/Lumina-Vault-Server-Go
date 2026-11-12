@@ -177,7 +177,7 @@ func (m *Module) pairingApprove(c *echo.Context) error {
 	if rec.code != body.Code {
 		return errPairingMismatch
 	}
-	ctx := c.Request().Context()
+	ctx := finish(c)
 	u, err := m.opt.Service.FindUserByID(ctx, userID)
 	if err != nil {
 		return err

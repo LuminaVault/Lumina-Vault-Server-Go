@@ -1,6 +1,7 @@
 package authroutes
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -73,7 +74,7 @@ func (m *Module) oauthExchange(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	resp, err := m.opt.Service.ExchangeOAuth(c.Request().Context(), provider, body.IDToken)
+	resp, err := m.opt.Service.ExchangeOAuth(finish(c), provider, body.IDToken)
 	var oauthErr authservice.OAuthError
 	if errors.As(err, &oauthErr) {
 		return errInvalidIDToken
@@ -94,7 +95,7 @@ func (m *Module) xExchange(c *echo.Context) error {
 	if body.AccessToken == "" {
 		return errAccessTokenRequired
 	}
-	ctx := c.Request().Context()
+	ctx := finish(c)
 	xUser, err := m.opt.XClient.FetchMe(ctx, body.AccessToken)
 	if err != nil {
 		return err
@@ -114,6 +115,12 @@ func (m *Module) xExchange(c *echo.Context) error {
 	}
 	return writeJSON(c, resp)
 }
+
+// finish is the request context without its cancellation: Hummingbird runs a
+// handler to the end after the client leaves, so a sign-in that has consumed
+// its code or fetched its identity still writes the user, the identity and the
+// refresh token.
+func finish(c *echo.Context) context.Context { return context.WithoutCancel(c.Request().Context()) }
 
 // e164 is PhoneAuthController's pattern under NSRegularExpression, where \d is
 // any Unicode decimal digit.
@@ -169,7 +176,7 @@ func (m *Module) phoneVerify(c *echo.Context) error {
 	default:
 		return errOTPInvalid
 	}
-	ctx := c.Request().Context()
+	ctx := finish(c)
 	placeholder := strings.TrimPrefix(phone, "+") + "@phone.luminavault.local"
 	u, err := m.opt.Service.UpsertOAuthUser(ctx, "phone", phone, placeholder, false)
 	if err != nil {
@@ -228,7 +235,7 @@ func (m *Module) magicVerify(c *echo.Context) error {
 	if _, _, ok := m.opt.Challenges.Consume(email, body.Code); !ok {
 		return errOTPInvalid
 	}
-	ctx := c.Request().Context()
+	ctx := finish(c)
 	u, err := m.opt.Service.UpsertOAuthUser(ctx, "email_magic_link", email, email, true)
 	if err != nil {
 		return err
