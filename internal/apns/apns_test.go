@@ -237,6 +237,24 @@ func TestService(t *testing.T) {
 		require.Equal(t, "ran", m.Body)
 	})
 
+	t.Run("workflow push carries the run, its state and the Studio deep link", func(t *testing.T) {
+		tenant := newTenant(t)
+		addToken(t, tenant, unique("workflow"), nil)
+		sender := &stubSender{}
+		workflow, run := uuid.New(), uuid.New()
+		require.NoError(t, NewWithSender(pool, "com.luminavault.test", sender).
+			NotifyWorkflow(ctx, tenant, workflow, run, "Workflow paused", "Open Cerberus Studio to continue this run.", "paused"))
+		require.Len(t, sender.sent, 1)
+		m := sender.sent[0].Message
+		require.Equal(t, CategoryWorkflow, m.Category)
+		require.Equal(t, "Cerberus Studio", *m.Subtitle)
+		require.Equal(t, "Workflow paused", m.Title)
+		require.Equal(t, map[string]string{
+			"workflowID": strings.ToUpper(workflow.String()), "runID": strings.ToUpper(run.String()), "state": "paused",
+			"deepLink": "luminavault://studio/runs/" + strings.ToUpper(run.String()),
+		}, m.Payload)
+	})
+
 	t.Run("a lookup failure is returned", func(t *testing.T) {
 		closed, err := pgxpool.New(ctx, pool.Config().ConnString())
 		require.NoError(t, err)
