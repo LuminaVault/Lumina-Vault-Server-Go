@@ -359,14 +359,14 @@ modules:
   app:
     wave: 8
     swiftDir: Sources/App/App+build.swift
-    status: swift
+    status: parity
     prefixes: [/.well-known, /health, /v1/auth/me, /v1/kb-compile]
     exactPaths: [/]
     jobs: []
   auth:
     wave: 8
     swiftDir: Sources/App/Auth
-    status: swift
+    status: parity
     prefixes: [/v1/auth/email, /v1/auth/forgot-password, /v1/auth/login, /v1/auth/logout, /v1/auth/mfa, /v1/auth/oauth, /v1/auth/pairing, /v1/auth/phone, /v1/auth/refresh, /v1/auth/register, /v1/auth/resend-reset, /v1/auth/reset-password, /v1/auth/webauthn]
     jobs: []
   soul:
