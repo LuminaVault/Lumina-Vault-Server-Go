@@ -98,12 +98,28 @@ func NewJWKSCache(url string, client *http.Client) *JWKSCache {
 }
 
 func (c *JWKSCache) current(ctx context.Context) (*jwkSet, error) {
+	// Swift's actor is re-entrant across the fetch's await: a stale cache sends
+	// each caller to fetch on its own and the last result wins. The lock guards
+	// only the cache fields, never the HTTP call, so one stalled fetch does not
+	// queue every other sign-in behind it.
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	now := c.Now()
-	if c.keys != nil && now.Sub(c.fetchedAt) < jwksTTL {
-		return c.keys, nil
+	if c.keys != nil && c.Now().Sub(c.fetchedAt) < jwksTTL {
+		keys := c.keys
+		c.mu.Unlock()
+		return keys, nil
 	}
+	c.mu.Unlock()
+	set, err := c.fetch(ctx)
+	if err != nil {
+		return nil, err
+	}
+	c.mu.Lock()
+	c.keys, c.fetchedAt = set, c.Now()
+	c.mu.Unlock()
+	return set, nil
+}
+
+func (c *JWKSCache) fetch(ctx context.Context) (*jwkSet, error) {
 	// URLSession is not cancelled when the client goes away.
 	req, err := http.NewRequestWithContext(context.WithoutCancel(ctx), http.MethodGet, c.URL, http.NoBody)
 	if err != nil {
@@ -118,12 +134,7 @@ func (c *JWKSCache) current(ctx context.Context) (*jwkSet, error) {
 	if err != nil {
 		return nil, err
 	}
-	set, err := parseJWKS(body)
-	if err != nil {
-		return nil, err
-	}
-	c.keys, c.fetchedAt = set, c.Now()
-	return set, nil
+	return parseJWKS(body)
 }
 
 // jwkSet is JWTKeyCollection after add(jwksJSON:): keys by kid, and the first

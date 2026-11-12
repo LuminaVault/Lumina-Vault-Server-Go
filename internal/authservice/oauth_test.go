@@ -365,3 +365,34 @@ func TestJWKSECKey(t *testing.T) {
 	_, err = p.Verify(context.Background(), sign(t, signingKey(t), "ec1", googleClaims()))
 	assert.Equal(t, authservice.OAuthInvalidToken, err)
 }
+
+// Swift's JWKSCache actor is re-entrant across the fetch, so a stalled fetch
+// never blocks another caller's own fetch. Go must not hold its lock over HTTP.
+func TestJWKSCacheStalledFetchDoesNotBlockOthers(t *testing.T) {
+	release := make(chan struct{})
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if calls.Add(1) == 1 {
+			<-release
+		}
+		_, _ = w.Write([]byte(`{"keys":[]}`))
+	}))
+	t.Cleanup(srv.Close)
+	t.Cleanup(func() { close(release) })
+	p := authservice.NewGoogleProvider(map[string]bool{testAudience: true}, srv.URL, srv.Client())
+	key := signingKey(t)
+	go func() { _, _ = p.Verify(context.Background(), sign(t, key, testKID, googleClaims())) }()
+	for calls.Load() == 0 {
+		time.Sleep(time.Millisecond)
+	}
+	done := make(chan struct{})
+	go func() {
+		_, _ = p.Verify(context.Background(), sign(t, key, testKID, googleClaims()))
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("second sign-in waited behind the stalled JWKS fetch")
+	}
+}
