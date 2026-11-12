@@ -243,6 +243,11 @@ type Config struct {
 	// CerberusStudioEnabled is raw: workflows.Enabled reads it as Swift's reader.bool
 	// does. Off unmounts /v1/workflows, /v1/workflow-templates and /v1/workflow-hooks.
 	CerberusStudioEnabled string `env:"CERBERUS_STUDIO_ENABLED" envDefault:"true"`
+	// cerberus.studio.globalDailyUsdMicros / globalMonthlyUsdMicros / workerCount:
+	// WorkflowEngine's platform-wide managed spend caps and worker slots.
+	CerberusStudioGlobalDailyUsdMicros   int64 `env:"CERBERUS_STUDIO_GLOBAL_DAILY_USD_MICROS" envDefault:"10000000"`
+	CerberusStudioGlobalMonthlyUsdMicros int64 `env:"CERBERUS_STUDIO_GLOBAL_MONTHLY_USD_MICROS" envDefault:"100000000"`
+	CerberusStudioWorkerCount            int   `env:"CERBERUS_STUDIO_WORKER_COUNT" envDefault:"4"`
 
 	// Hermes tenant containers (wave 6D/6E). DockerBinaryPath is forked for every
 	// container operation; in a pod with no docker each call fails as in Swift.

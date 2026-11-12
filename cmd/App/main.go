@@ -353,8 +353,9 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 			todos.New(pool, paths, todos.Options{Disk: disk, Memories: memories, Embeddings: embeddings}),
 			captureModule(pool, cfg, box, limits, links, analytics),
 		)
+		var wf *workflows.Module
 		if workflows.Enabled(cfg.CerberusStudioEnabled) {
-			wf := workflowsModule(pool, cfg, box, identify, limits)
+			wf = workflowsModule(pool, cfg, box, identify, limits)
 			deps.Modules = append(deps.Modules, wf)
 			// WorkflowScheduler, WorkflowMaintenanceService and LegacyJobWorkflowMigrator, as App+build.swift
 			// registers them: Fluent on, not the test environment.
@@ -383,6 +384,9 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		deps.Modules = append(deps.Modules, skillsMod)
 		if cfg.LVEnvironment != "test" { // CronScheduler: Fluent on, not test, as App+build.swift
 			registered = append(registered, skillsMod.CronJob(slog.Default().With("label", "lv.skills")))
+		}
+		if wf != nil && cfg.LVEnvironment != "test" { // WorkflowEngine: the studio block's worker, as App+build.swift
+			registered = append(registered, agent.workflowEngineJob(wf, skillsMod, memories))
 		}
 		if m := agent.pluginsModule(); m != nil { // nil without LV_SECRET_MASTER_KEY, as in Swift
 			deps.Modules = append(deps.Modules, m)
@@ -419,7 +423,7 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 }
 
 // workflowsModule builds the workflow routes, the "if workflowStudioEnabled" block of
-// App+build.swift without its background services, which stay in Swift.
+// App+build.swift; main registers its background services as jobs.
 func workflowsModule(pool *pgxpool.Pool, cfg config.Config, box *secretbox.Box, identify echo.MiddlewareFunc, limits *ratelimit.Store) *workflows.Module {
 	var isUserOverride func(context.Context, uuid.UUID) bool
 	if box != nil {
@@ -441,6 +445,8 @@ func workflowsModule(pool *pgxpool.Pool, cfg config.Config, box *secretbox.Box, 
 		Activity:    selfimprove.NewActivity(pool, cfg.SelfImprovementEnabled, isUserOverride),
 		// providerAPIKey("openRouter", alias: "openrouter.api_key").
 		ManagedInferenceAvailable: cfg.LLMOpenRouterAPIKey != "" || cfg.LLMOpenRouterAPIKeyLegacy != "" || cfg.OpenRouterAPIKey != "",
+		GlobalDailyUsdMicros:      &cfg.CerberusStudioGlobalDailyUsdMicros,
+		GlobalMonthlyUsdMicros:    &cfg.CerberusStudioGlobalMonthlyUsdMicros,
 	})
 }
 

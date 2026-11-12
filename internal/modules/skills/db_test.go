@@ -190,6 +190,7 @@ func TestSkillsDB(t *testing.T) {
 	t.Run("JobOrigin", func(t *testing.T) { testJobOrigin(t, v) })
 	t.Run("WeatherForecastTool", func(t *testing.T) { testWeatherTool(t, v) })
 	t.Run("CronScheduler", func(t *testing.T) { testCronScheduler(t, v) })
+	t.Run("RunWorkflowSkill", func(t *testing.T) { testRunWorkflowSkill(t, v) })
 }
 
 // MARK: - SkillRunCapGuardTests
