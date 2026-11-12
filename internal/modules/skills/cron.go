@@ -232,3 +232,22 @@ func sameMinute(a, b time.Time, zone *time.Location) bool {
 	const minute = "2006-01-02T15:04"
 	return a.In(zone).Format(minute) == b.In(zone).Format(minute)
 }
+
+// RunWorkflowSkill is WorkflowEngine's skill node: the tenant's catalog skill run
+// with trigger .event(name: "workflow"), whose prompt description is Swift's
+// "event:workflow payload:[:]". found is false when the tenant has no such skill.
+func (m *Module) RunWorkflowSkill(ctx context.Context, tenant uuid.UUID, tier, username, name, input string) (string, *string, bool, error) {
+	if m.opt.Catalog == nil || m.opt.Runner == nil {
+		return "", nil, false, nil
+	}
+	mf, ok := m.opt.Catalog.Manifest(name, tenant)
+	if !ok {
+		return "", nil, false, nil
+	}
+	res, err := m.opt.Runner.Run(ctx, mf,
+		runUser{tenant: tenant, tier: tier, username: username, trigger: "event:workflow payload:[:]"}, &input, map[string]string{})
+	if err != nil {
+		return "", nil, true, err
+	}
+	return res.markdown, res.modelUsed, true, nil
+}

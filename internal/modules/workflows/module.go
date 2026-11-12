@@ -5,14 +5,16 @@
 // WorkflowSchedulePolicy, WorkflowTemplateCatalog and the read half of
 // WorkflowSpendService).
 //
-// The routes, plus WorkflowScheduler and WorkflowMaintenanceService (jobs.go).
-// WorkflowEngine and LegacyJobWorkflowMigrator stay in Swift and poll the rows
-// these routes write.
+// The routes, plus the background services: WorkflowScheduler and
+// WorkflowMaintenanceService (jobs.go), LegacyJobWorkflowMigrator (legacy.go) and
+// WorkflowEngine (engine.go, with the reservation half of WorkflowSpendService in
+// reserve.go).
 package workflows
 
 //go:generate sh -c "cd ../../.. && go tool oapi-codegen -config internal/modules/workflows/oapi-codegen.yaml api/openapi.yaml"
 
 import (
+	"log/slog"
 	"lumina/internal/auth"
 	"lumina/internal/httpserver"
 	"lumina/internal/ids"
@@ -54,6 +56,10 @@ type Options struct {
 	// fail on any row as Swift does; see errEventRows. It's the one-line fix once
 	// the owner chooses to diverge.
 	DecodeEventRows bool
+	// GlobalDailyUsdMicros and GlobalMonthlyUsdMicros are
+	// cerberus.studio.globalDailyUsdMicros / globalMonthlyUsdMicros, the platform-wide
+	// managed spend caps WorkflowEngine reserves against. Nil means the default.
+	GlobalDailyUsdMicros, GlobalMonthlyUsdMicros *int64
 }
 
 // Module is the workflow route group. Each handler keeps Swift's order: most
@@ -66,6 +72,8 @@ type Module struct {
 	opts Options
 	now  func() time.Time
 }
+
+func (m *Module) log() *slog.Logger { return slog.Default().With("label", "lv.workflows") }
 
 // New builds the module.
 func New(pool *pgxpool.Pool, opts Options) *Module {

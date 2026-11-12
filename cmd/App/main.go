@@ -234,6 +234,9 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		// Migrated modules (modules.yaml status ≥ parity). Traffic only reaches
 		// them through the api ingress.extraPaths that name them.
 		remindersModule := reminders.New(pool, nil, cfg.HermesDefaultModel) // routed transport set once the agent exists
+		ingestionMod := ingestion.New(pool, identify, limits, paths,
+			diskguard.New(cfg.VaultRootPath, cfg.StorageMinFreeBytes, cfg.StorageMinFreeRatio, diskguard.Options{}),
+			ingestion.QuotaFromConfig(cfg))
 		deps.Modules = []httpserver.Module{
 			projects.New(pool),
 			kanban.New(pool, identify, limits, paths),
@@ -251,9 +254,7 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 			}, slog.Default().With("module", "teams"))),
 			meModule,
 			dashboardModule,
-			ingestion.New(pool, identify, limits, paths,
-				diskguard.New(cfg.VaultRootPath, cfg.StorageMinFreeBytes, cfg.StorageMinFreeRatio, diskguard.Options{}),
-				ingestion.QuotaFromConfig(cfg)),
+			ingestionMod,
 		}
 		// Wave 3: account, onboarding, health. Health ingest sits behind the
 		// billing gate; the BYO-key exemption needs the SecretBox (nil without
@@ -266,7 +267,13 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 			health.New(pool, healthGate, analytics),
 		)
 		deps.Modules = append(deps.Modules, memoryModule(pool, cfg, box, identify, limits, paths, embeddings, sink, meModule))
-		deps.Modules = append(deps.Modules, selfImprovementModule(pool, cfg, box, identify, paths))
+		selfImprovementMod := selfImprovementModule(pool, cfg, box, identify, paths)
+		deps.Modules = append(deps.Modules, selfImprovementMod)
+		if cfg.LVEnvironment != "test" { // SelfImprovementScheduler: Fluent on, not test, as App+build.swift
+			if job, ok := selfImprovementJob(selfImprovementMod, cfg); ok {
+				registered = append(registered, job)
+			}
+		}
 		deps.Modules = append(deps.Modules, soulModule(pool, cfg, box, identify, limits, paths, sink))
 		settingsMod := settingsModule(pool, cfg, box, identify, limits)
 		if settingsMod != nil { // 6A: needs the secret box, as in Swift
@@ -353,15 +360,17 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 			todos.New(pool, paths, todos.Options{Disk: disk, Memories: memories, Embeddings: embeddings}),
 			captureModule(pool, cfg, box, limits, links, analytics),
 		)
+		var wf *workflows.Module
 		if workflows.Enabled(cfg.CerberusStudioEnabled) {
-			wf := workflowsModule(pool, cfg, box, identify, limits)
+			wf = workflowsModule(pool, cfg, box, identify, limits)
 			deps.Modules = append(deps.Modules, wf)
-			// WorkflowScheduler and WorkflowMaintenanceService, as App+build.swift
+			// WorkflowScheduler, WorkflowMaintenanceService and LegacyJobWorkflowMigrator, as App+build.swift
 			// registers them: Fluent on, not the test environment.
 			if cfg.LVEnvironment != "test" {
 				registered = append(registered,
 					wf.SchedulerJob(slog.Default().With("label", "lv.workflows.scheduler")),
-					wf.MaintenanceJob(slog.Default().With("label", "lv.workflows.maintenance")))
+					wf.MaintenanceJob(slog.Default().With("label", "lv.workflows.maintenance")),
+					wf.LegacyMigratorJob(agent.skillCatalog(), slog.Default().With("label", "lv.workflows.legacy-migrator")))
 			}
 		}
 		deps.Modules = append(deps.Modules, agent.modules(links, enrichment)...)
@@ -382,6 +391,16 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		deps.Modules = append(deps.Modules, skillsMod)
 		if cfg.LVEnvironment != "test" { // CronScheduler: Fluent on, not test, as App+build.swift
 			registered = append(registered, skillsMod.CronJob(slog.Default().With("label", "lv.skills")))
+		}
+		if cfg.LVEnvironment != "test" { // MultimodalIngestionWorker: Fluent on, not test, as App+build.swift
+			job, err := agent.ingestionWorkerJob(ingestionMod, links, memories)
+			if err != nil {
+				return err
+			}
+			registered = append(registered, job)
+		}
+		if wf != nil && cfg.LVEnvironment != "test" { // WorkflowEngine: the studio block's worker, as App+build.swift
+			registered = append(registered, agent.workflowEngineJob(wf, skillsMod, memories))
 		}
 		if m := agent.pluginsModule(); m != nil { // nil without LV_SECRET_MASTER_KEY, as in Swift
 			deps.Modules = append(deps.Modules, m)
@@ -418,7 +437,7 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 }
 
 // workflowsModule builds the workflow routes, the "if workflowStudioEnabled" block of
-// App+build.swift without its background services, which stay in Swift.
+// App+build.swift; main registers its background services as jobs.
 func workflowsModule(pool *pgxpool.Pool, cfg config.Config, box *secretbox.Box, identify echo.MiddlewareFunc, limits *ratelimit.Store) *workflows.Module {
 	var isUserOverride func(context.Context, uuid.UUID) bool
 	if box != nil {
@@ -440,6 +459,8 @@ func workflowsModule(pool *pgxpool.Pool, cfg config.Config, box *secretbox.Box, 
 		Activity:    selfimprove.NewActivity(pool, cfg.SelfImprovementEnabled, isUserOverride),
 		// providerAPIKey("openRouter", alias: "openrouter.api_key").
 		ManagedInferenceAvailable: cfg.LLMOpenRouterAPIKey != "" || cfg.LLMOpenRouterAPIKeyLegacy != "" || cfg.OpenRouterAPIKey != "",
+		GlobalDailyUsdMicros:      &cfg.CerberusStudioGlobalDailyUsdMicros,
+		GlobalMonthlyUsdMicros:    &cfg.CerberusStudioGlobalMonthlyUsdMicros,
 	})
 }
 
@@ -597,9 +618,9 @@ func hermesResolver(pool *pgxpool.Pool, cfg config.Config, box *secretbox.Box) *
 	}, gateway)
 }
 
-// selfImprovementModule builds /v1/me/improvement. SelfImprovementScheduler stays in
-// Swift and picks up the rows these routes queue.
-func selfImprovementModule(pool *pgxpool.Pool, cfg config.Config, box *secretbox.Box, identify echo.MiddlewareFunc, paths vaultpaths.Paths) httpserver.Module {
+// selfImprovementModule builds /v1/me/improvement; selfImprovementJob is the
+// SelfImprovementScheduler that claims the rows these routes queue.
+func selfImprovementModule(pool *pgxpool.Pool, cfg config.Config, box *secretbox.Box, identify echo.MiddlewareFunc, paths vaultpaths.Paths) *selfimprovement.Module {
 	catalog := skills.NewCatalog(paths)
 	if strings.EqualFold(cfg.SkillsBuiltinScanEnabled, "false") {
 		catalog = skills.NewVaultCatalog(paths)
@@ -616,6 +637,24 @@ func selfImprovementModule(pool *pgxpool.Pool, cfg config.Config, box *secretbox
 		opts.IsUserOverride = selfimprove.ResolverOverride(resolver)
 	}
 	return selfimprovement.New(pool, opts)
+}
+
+// selfImprovementJob is SelfImprovementScheduler over DefaultHermesLLMService: the
+// central gateway at HERMES_GATEWAY_URL with HERMES_API_KEY, no routing. ok is false
+// when the gateway URL doesn't parse (Swift's App+build refuses to boot then).
+func selfImprovementJob(m *selfimprovement.Module, cfg config.Config) (jobs.Job, bool) {
+	base, err := url.Parse(cfg.HermesGatewayURL)
+	if err != nil {
+		return jobs.Job{}, false
+	}
+	return m.NewWorker(selfimprovement.WorkerDeps{
+		LLM: &llm.DirectHermes{
+			BaseURL: base, APIKey: cfg.HermesAPIKey, DefaultModel: cfg.HermesDefaultModel,
+			Log: slog.Default().With("label", "lv.self-improvement.llm"),
+		},
+		MainModel: cfg.HermesDefaultModel,
+		Log:       slog.Default().With("label", "lv.self-improvement"),
+	}).Job(), true
 }
 
 func calendarModules(pool *pgxpool.Pool, cfg config.Config, identify echo.MiddlewareFunc, limits *ratelimit.Store, embeddings embedding.Service, analytics *posthog.Client) []httpserver.Module {

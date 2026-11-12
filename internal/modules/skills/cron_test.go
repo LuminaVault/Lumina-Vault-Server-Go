@@ -155,3 +155,23 @@ func testCronScheduler(t *testing.T, v dbEnv) {
 		require.Nil(t, s.lastRunAt)
 	})
 }
+
+func testRunWorkflowSkill(t *testing.T, v dbEnv) {
+	ctx := context.Background()
+	tenant := v.user()
+	writeCronSkill(t, v, tenant, "brief", "")
+	tr := &scriptedTransport{steps: []string{contentStep("the brief")}}
+	m := cronModule(v, tr, nil)
+
+	markdown, _, found, err := m.RunWorkflowSkill(ctx, tenant, "pro", "u", "brief", "topic=go")
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, "the brief", markdown)
+	require.Len(t, tr.payloads(), 1)
+	require.Contains(t, string(tr.payloads()[0]), `Trigger: event:workflow payload:[:]`)
+	require.Contains(t, string(tr.payloads()[0]), `topic=go`)
+
+	_, _, found, err = m.RunWorkflowSkill(ctx, tenant, "pro", "u", "missing", "")
+	require.NoError(t, err)
+	require.False(t, found)
+}

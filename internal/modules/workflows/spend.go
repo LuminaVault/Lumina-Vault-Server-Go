@@ -31,8 +31,7 @@ func policyFor(tier string) tierPolicy {
 }
 
 // ensureCanEnqueue is WorkflowSpendService.ensureCanEnqueue. The reservation half
-// of that service (reserveManagedCall, reconcile, the CERBERUS_STUDIO_GLOBAL_* caps)
-// belongs to WorkflowEngine, which stays in Swift: no route calls it.
+// (reserveManagedCall, reconcile) is in reserve.go.
 func (m *Module) ensureCanEnqueue(ctx context.Context, tenant uuid.UUID, tier string) (tierPolicy, error) {
 	policy := policyFor(tier)
 	if policy.activeRunLimit <= 0 {

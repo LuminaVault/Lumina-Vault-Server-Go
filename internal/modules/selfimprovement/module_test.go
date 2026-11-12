@@ -45,6 +45,7 @@ type env struct {
 	soul      *soul.Service
 	overrides map[uuid.UUID]bool
 	e         *echo.Echo
+	m         *selfimprovement.Module
 }
 
 type envOption func(*selfimprovement.Options)
@@ -72,9 +73,10 @@ func setup(t *testing.T, options ...envOption) *env {
 	for _, option := range options {
 		option(&opts)
 	}
+	v.m = selfimprovement.New(pool, opts)
 	v.e = httpserver.New(config.Config{}, httpserver.Deps{
 		Auth:    auth.Middleware(keys, auth.PGUsers(pool)),
-		Modules: []httpserver.Module{selfimprovement.New(pool, opts)},
+		Modules: []httpserver.Module{v.m},
 	})
 	return v
 }

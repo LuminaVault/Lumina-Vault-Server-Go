@@ -216,6 +216,24 @@ func (s *Service) NotifyCron(ctx context.Context, tenant uuid.UUID, skillName, b
 	})
 }
 
+// NotifyWorkflow is notifyWorkflow: WorkflowEngine's push when a run completes,
+// pauses, fails or waits for approval. The deep link opens the run in Studio.
+func (s *Service) NotifyWorkflow(ctx context.Context, tenant, workflowID, runID uuid.UUID, title, body, state string) error {
+	subtitle := "Cerberus Studio"
+	return s.Notify(ctx, tenant, Message{
+		Title:    title,
+		Subtitle: &subtitle,
+		Body:     body,
+		Category: CategoryWorkflow,
+		Payload: map[string]string{
+			"workflowID": ids.Upper(workflowID),
+			"runID":      ids.Upper(runID),
+			"state":      state,
+			"deepLink":   "luminavault://studio/runs/" + ids.Upper(runID),
+		},
+	})
+}
+
 // Notify pushes to every device token of tenant, each under its own app's topic.
 // It returns an error only for the opt-out and token lookups: a failed device is
 // logged and the rest still get theirs. A dead token's row is deleted.
