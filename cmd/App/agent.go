@@ -70,6 +70,9 @@ type agent struct {
 	// compile is the kb-compile route, set by modules(); /v1/skills/slash's
 	// /kb-compile runs through it.
 	compile *kbcompile.Module
+	// ingest is VaultIngestService, set by modules(); the Hermes mirror (6B)
+	// files vault, session and job output through it.
+	ingest *imports.Ingest
 	// imports is the import pipeline plugin syncs stage through (6F).
 	imports *imports.Service
 	// runs is the one HermesRunsService (6C), shared by chat and /v1/hermes/runs;
@@ -196,11 +199,11 @@ func (a *agent) modules(links *capture.Service, enrichment *capture.EnrichmentSe
 	reason := knowledge.NewReason(knowledge.New(a.pool, a.identify, a.gate(entitlement.MemoryQuery), a.limits), transport, a.cfg.HermesDefaultModel)
 
 	importService := imports.NewService(a.pool, links, spaces.New(a.pool, a.paths, a.identify), a.paths, compile, enrichment)
+	a.ingest = imports.NewIngest(a.pool, importService, a.memories, a.embeddings,
+		chunkindex.NewIndexer(chunks, a.embeddings, chunkindex.NewLinkRepository(a.pool)), a.disk)
 	a.imports = importService
 	importRoutes := imports.New(importService,
 		&imports.Categorizer{Service: importService, Transport: transport, DefaultModel: a.cfg.HermesDefaultModel},
-		imports.NewIngest(a.pool, importService, a.memories, a.embeddings,
-			chunkindex.NewIndexer(chunks, a.embeddings, chunkindex.NewLinkRepository(a.pool)), a.disk),
-		a.identify)
+		a.ingest, a.identify)
 	return []httpserver.Module{agentRoutes, compileRoute, reason, importRoutes}
 }

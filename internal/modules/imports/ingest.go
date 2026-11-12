@@ -55,11 +55,20 @@ type IngestResult struct {
 	Imported  int
 	Skipped   int
 	Failed    int
+	// VaultFileIDs are the rows written or updated by this batch (the Hermes
+	// mirror feeds them straight into a memory compile).
+	VaultFileIDs []uuid.UUID
 }
 
 // IngestBatch is ingestBatch. The disk check comes first, so a refused import leaves
 // nothing half-written.
 func (i *Ingest) IngestBatch(ctx context.Context, tenant uuid.UUID, spaceName string, files []FileInput) (IngestResult, error) {
+	return i.IngestBatchWithProvenance(ctx, tenant, spaceName, files, nil)
+}
+
+// IngestBatchWithProvenance is ingestBatch(..., provenance:): provenance is
+// stamped on every written row's metadata (hermes-mirror, hermes-session).
+func (i *Ingest) IngestBatchWithProvenance(ctx context.Context, tenant uuid.UUID, spaceName string, files []FileInput, provenance *string) (IngestResult, error) {
 	if i.guard != nil {
 		var total int64
 		for _, f := range files {
@@ -78,13 +87,14 @@ func (i *Ingest) IngestBatch(ctx context.Context, tenant uuid.UUID, spaceName st
 	}
 	result := IngestResult{SpaceID: spaceID, SpaceSlug: slug}
 	for _, file := range files {
-		ingested, err := i.ingestOne(ctx, tenant, spaceID, slug, file)
+		saved, err := i.ingestOne(ctx, tenant, spaceID, slug, file, provenance)
 		switch {
 		case err != nil:
 			result.Failed++
 			slog.ErrorContext(ctx, "vault ingest failed", "tenant", tenant, "path", file.Path, "error", err)
-		case ingested:
+		case saved != nil:
 			result.Imported++
+			result.VaultFileIDs = append(result.VaultFileIDs, *saved)
 		default:
 			result.Skipped++
 		}
@@ -105,15 +115,15 @@ func (i *Ingest) ensureSpace(ctx context.Context, tenant uuid.UUID, name string)
 	return i.imports.spaces.CreateSpace(ctx, tenant, name, slug, &description, &icon)
 }
 
-// ingestOne is ingestOne. It reports whether the file was (re)ingested: an empty or
-// unchanged one is not.
+// ingestOne is ingestOne. It returns the row id when the file was (re)ingested: an
+// empty or unchanged one is not.
 //
 // The path goes through SafePath and ResolveInside, not SanitizePath, which would
 // refuse the spaces and emoji Obsidian filenames carry. Same as Swift.
-func (i *Ingest) ingestOne(ctx context.Context, tenant, spaceID uuid.UUID, slug string, input FileInput) (bool, error) {
+func (i *Ingest) ingestOne(ctx context.Context, tenant, spaceID uuid.UUID, slug string, input FileInput, provenance *string) (*uuid.UUID, error) {
 	content := input.Content
 	if swiftstr.TrimWhitespacesAndNewlines(content) == "" {
-		return false, nil
+		return nil, nil
 	}
 	safe := SafePath(slug, input.Path)
 	data := []byte(content)
@@ -121,28 +131,28 @@ func (i *Ingest) ingestOne(ctx context.Context, tenant, spaceID uuid.UUID, slug 
 	digest := hex.EncodeToString(sum[:])
 	existing, err := i.store.FindByPath(ctx, tenant, safe)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 	if existing != nil && existing.SHA256 == digest {
-		return false, nil
+		return nil, nil
 	}
 	target, err := vaultfiles.ResolveInside(i.paths.Raw(tenant), safe)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 	if err := vaultfiles.CreateParent(target); err != nil {
-		return false, err
+		return nil, err
 	}
 	if err := vaultfiles.WriteAtomic(target, data); err != nil {
-		return false, err
+		return nil, err
 	}
 	title := Title(content, vaultfiles.LastPathComponent(input.Path))
-	metadata := &vaultfiles.Metadata{Title: &title}
+	metadata := &vaultfiles.Metadata{Title: &title, Provenance: provenance}
 	var saved uuid.UUID
 	if existing != nil {
 		saved = existing.ID
 		if err := i.store.UpdateIngested(ctx, saved, spaceID, int64(len(data)), digest, metadata); err != nil {
-			return false, err
+			return nil, err
 		}
 	} else {
 		saved, err = i.store.Insert(ctx, vaultfiles.UpsertParams{
@@ -150,24 +160,24 @@ func (i *Ingest) ingestOne(ctx context.Context, tenant, spaceID uuid.UUID, slug 
 			SizeBytes: int64(len(data)), SHA256: digest, Processed: true, Metadata: metadata,
 		})
 		if err != nil {
-			return false, err
+			return nil, err
 		}
 	}
 	// The file is already written, so an embedding outage stores the memory without a
 	// vector rather than half-import it.
 	vec, err := embedding.EmbedForWrite(ctx, i.embeddings, content, tenant, "vault.ingest")
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 	memoryID, err := i.memories.IDBySourceVaultFileID(ctx, tenant, saved)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 	var id uuid.UUID
 	if memoryID != nil {
 		id = *memoryID
 		if _, err := i.memories.UpdateContent(ctx, tenant, id, content, vec, nil); err != nil {
-			return false, err
+			return nil, err
 		}
 	} else {
 		created, err := i.memories.Create(ctx, memorystore.CreateParams{
@@ -175,7 +185,7 @@ func (i *Ingest) ingestOne(ctx context.Context, tenant, spaceID uuid.UUID, slug 
 			SpaceID: &spaceID, ReviewState: "auto",
 		})
 		if err != nil {
-			return false, err
+			return nil, err
 		}
 		id = created.ID
 	}
@@ -185,7 +195,7 @@ func (i *Ingest) ingestOne(ctx context.Context, tenant, spaceID uuid.UUID, slug 
 			SourcePath: &safe, Content: content,
 		})
 	}
-	return true, nil
+	return &saved, nil
 }
 
 // Title is title(from:fallback:): the first H1 among the file's first 21 nonempty lines,

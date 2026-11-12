@@ -1,0 +1,17 @@
+# /v1/hermes/artifacts over seeded rows: filters, escaped search, cursor paging, get.
+module: hermes-mirror
+steps:
+  - {name: every artifact, as: hm_bea, request: {method: GET, path: /v1/hermes/artifacts}}
+  - {name: one session, as: hm_bea, request: {method: GET, path: "/v1/hermes/artifacts?sessionID=s1"}}
+  - {name: empty session is no filter, as: hm_bea, request: {method: GET, path: "/v1/hermes/artifacts?sessionID="}}
+  - {name: unknown session, as: hm_bea, request: {method: GET, path: "/v1/hermes/artifacts?sessionID=nope"}}
+  - {name: session and kind, as: hm_bea, request: {method: GET, path: "/v1/hermes/artifacts?sessionID=s2&kind=file"}}
+  - {name: search escapes wildcards, as: hm_bea, request: {method: GET, path: "/v1/hermes/artifacts?q=%25_"}}
+  - {name: first page, as: hm_bea, request: {method: GET, path: "/v1/hermes/artifacts?limit=2"}}
+  - {name: next page, as: hm_bea, request: {method: GET, path: "/v1/hermes/artifacts?limit=2&before=2026-09-01T12:03:00.000Z"}}
+  - {name: limit out of range, as: hm_bea, request: {method: GET, path: "/v1/hermes/artifacts?limit=0"}}
+  - {name: bad before, as: hm_bea, request: {method: GET, path: "/v1/hermes/artifacts?before=yesterday"}}
+  - {name: get one, as: hm_bea, request: {method: GET, path: /v1/hermes/artifacts/4e771000-0000-4000-8000-000000000003}}
+  - {name: get not a uuid, as: hm_bea, request: {method: GET, path: /v1/hermes/artifacts/not-a-uuid}}
+  - {name: get someone else's, as: hm_amy, request: {method: GET, path: /v1/hermes/artifacts/4e771000-0000-4000-8000-000000000003}}
+  - {name: nothing stored, as: hm_amy, request: {method: GET, path: /v1/hermes/artifacts}, snapshot: [parity_hm_artifacts]}

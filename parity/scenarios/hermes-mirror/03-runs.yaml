@@ -1,0 +1,12 @@
+# Stored runs for a mirrored job, and a collect against the managed home where the
+# job has no output directory.
+module: hermes-mirror
+steps:
+  - {name: runs newest first, as: hm_cy, request: {method: GET, path: /v1/hermes/mirror/jobs/digest/runs}}
+  - {name: runs limited, as: hm_cy, request: {method: GET, path: "/v1/hermes/mirror/jobs/digest/runs?limit=1"}}
+  - {name: runs limit clamped, as: hm_cy, request: {method: GET, path: "/v1/hermes/mirror/jobs/digest/runs?limit=999"}}
+  - {name: runs of an unmirrored job, as: hm_cy, request: {method: GET, path: /v1/hermes/mirror/jobs/other/runs}}
+  - {name: runs traversal, as: hm_cy, request: {method: GET, path: "/v1/hermes/mirror/jobs/..%2Fetc/runs"}}
+  - {name: collect with nothing on disk, as: hm_cy, request: {method: POST, path: /v1/hermes/mirror/jobs/digest/collect}, snapshot: [parity_hm_jobs]}
+  - {name: pause a job the home does not have, as: hm_cy, request: {method: POST, path: /v1/hermes/mirror/jobs/digest/pause}}
+  - {name: runs unchanged, as: hm_cy, request: {method: GET, path: /v1/hermes/mirror/jobs/digest/runs}}

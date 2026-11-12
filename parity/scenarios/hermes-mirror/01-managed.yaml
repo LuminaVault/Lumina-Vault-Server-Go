@@ -1,0 +1,29 @@
+# /v1/hermes/mirror on the managed transport (the Hermes home on our own disk; its
+# sessions go to HERMES_GATEWAY_URL, where nothing listens). Only the scopes whose
+# outcome does not depend on the gateway's error text are synced.
+module: hermes-mirror
+steps:
+  - {name: no token, request: {method: GET, path: /v1/hermes/mirror/status}}
+  - {name: status before any sync, as: hm_amy, request: {method: GET, path: /v1/hermes/mirror/status}}
+  - {name: no mirrored skills, as: hm_amy, request: {method: GET, path: /v1/hermes/mirror/skills}}
+  - {name: live jobs, as: hm_amy, request: {method: GET, path: /v1/hermes/mirror/jobs}}
+  - name: sync skills and jobs
+    as: hm_amy
+    request: {method: POST, path: /v1/hermes/mirror/sync, json: {scope: [skills, jobs]}}
+    snapshot: [parity_hm_state, parity_hm_skills, parity_hm_jobs]
+  - {name: unknown scope, as: hm_amy, request: {method: POST, path: /v1/hermes/mirror/sync, json: {scope: [nope]}}}
+  - {name: toggle a skill that is not there, as: hm_amy, request: {method: PUT, path: /v1/hermes/mirror/skills/not-a-skill, json: {enabled: false}}}
+  - {name: toggle without enabled, as: hm_amy, request: {method: PUT, path: /v1/hermes/mirror/skills/not-a-skill, json: {}}}
+  - {name: update an unknown job, as: hm_amy, request: {method: PUT, path: /v1/hermes/mirror/jobs/does-not-exist, json: {schedule: "0 6 * * *"}}}
+  - {name: empty update, as: hm_amy, request: {method: PUT, path: /v1/hermes/mirror/jobs/does-not-exist, json: {}}}
+  - {name: pause an unknown job, as: hm_amy, request: {method: POST, path: /v1/hermes/mirror/jobs/does-not-exist/pause}}
+  - {name: trigger an unknown job, as: hm_amy, request: {method: POST, path: /v1/hermes/mirror/jobs/does-not-exist/trigger}}
+  - {name: delete a traversing id, as: hm_amy, request: {method: DELETE, path: "/v1/hermes/mirror/jobs/..%2Fetc"}}
+  - {name: collect an unknown job, as: hm_amy, request: {method: POST, path: /v1/hermes/mirror/jobs/does-not-exist/collect}}
+  - {name: blank job name, as: hm_amy, request: {method: POST, path: /v1/hermes/mirror/jobs, json: {name: "  ", schedule: "0 9 * * *"}}}
+  - {name: vault import traversal, as: hm_amy, request: {method: POST, path: /v1/hermes/mirror/vault/import, json: {vaultPath: "/tmp/../etc"}}}
+  - {name: import sessions over a dead gateway, as: hm_amy, request: {method: POST, path: /v1/hermes/mirror/vault/import-sessions}}
+  - {name: workspace needs a path, as: hm_amy, request: {method: GET, path: /v1/hermes/workspace/status}}
+  - {name: workspace diff needs a file, as: hm_amy, request: {method: GET, path: "/v1/hermes/workspace/diff?path=/repo"}}
+  - {name: workspace is unsupported here, as: hm_amy, request: {method: GET, path: "/v1/hermes/workspace/file?path=/repo/a.md"}}
+  - {name: status after sync, as: hm_amy, request: {method: GET, path: /v1/hermes/mirror/status}, snapshot: [parity_hm_state]}

@@ -12,6 +12,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"lumina/internal/hermesdash"
 	"lumina/internal/hermesresolve"
 	"lumina/internal/ids"
 	"lumina/internal/secretbox"
@@ -19,7 +20,6 @@ import (
 	"lumina/internal/wire"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
@@ -181,7 +181,7 @@ func (s *Service) Capabilities(ctx context.Context, tenant uuid.UUID, force bool
 	if isUserOverride {
 		probed = s.probeRemote(ctx, res)
 	}
-	probed.Dashboard = dashboard
+	probed = Attach(dashboard, probed)
 	if row.exists {
 		if encoded, err := wire.MarshalFoundation(probed); err == nil {
 			_, _ = s.pool.Exec(ctx, `UPDATE user_hermes_config SET capabilities = $2, capabilities_checked_at = $3, updated_at = NOW()
@@ -189,6 +189,13 @@ func (s *Service) Capabilities(ctx context.Context, tenant uuid.UUID, force bool
 		}
 	}
 	return Response{Capabilities: probed, CheckedAt: &wire.Time{Time: now}}
+}
+
+// Attach is HermesRemoteCapabilitiesService.attach(dashboard:to:): every
+// gateway field kept, the dashboard probe added.
+func Attach(dashboard *Dashboard, to Capabilities) Capabilities {
+	to.Dashboard = dashboard
+	return to
 }
 
 // decodeCapabilities is JSONDecoder's decode of HermesCapabilities: required
@@ -357,8 +364,7 @@ func ParseFlags(data []byte) *Flags {
 }
 
 const (
-	dashboardTimeout    = 15 * time.Second
-	dashboardMaxRetries = 3
+	dashboardTimeout = 15 * time.Second
 )
 
 // probeDashboard reads the sealed dashboard credentials and probes them. A token
@@ -375,92 +381,20 @@ func (s *Service) probeDashboard(ctx context.Context, tenant uuid.UUID, row conf
 	return s.probeDashboardWith(ctx, *row.dashboardURL, token)
 }
 
-// probeDashboardWith is HermesRemoteCapabilitiesService.probeDashboard(client:).
+// probeDashboardWith is HermesRemoteCapabilitiesService.probeDashboard(client:):
+// status (public), then one protected call to classify the auth mode. Every
+// capability is gated on bearer.
 func (s *Service) probeDashboardWith(ctx context.Context, baseURL, token string) *Dashboard {
-	status, body, err := s.dashboardGet(ctx, baseURL, token, "/api/status")
-	var obj map[string]any
-	if err != nil || !ok2xx(status) || json.Unmarshal(body, &obj) != nil || obj == nil {
+	return ProbeDashboard(ctx, hermesdash.NewDashboard(baseURL, token, s.guard, s.dashboard))
+}
+
+// ProbeDashboard is the pure probe over a dashboard client.
+func ProbeDashboard(ctx context.Context, client *hermesdash.Dashboard) *Dashboard {
+	status, err := client.Status(ctx)
+	if err != nil {
 		return &Dashboard{AuthMode: Unreachable}
 	}
-	// Swift's status() also reads /api/fs/default-cwd; the probe ignores it.
-	_, _, _ = s.dashboardGet(ctx, baseURL, token, "/api/fs/default-cwd")
-	var authRequired *bool
-	if b, ok := obj["auth_required"].(bool); ok {
-		authRequired = &b
-	}
-	var version *string
-	if v, ok := obj["version"].(string); ok {
-		version = &v
-	}
-	mode := Unreachable
-	if st, _, err := s.dashboardGet(ctx, baseURL, token, "/api/skills"); err == nil {
-		switch {
-		case ok2xx(st):
-			mode = Bearer
-		case st >= 300 && st < 400:
-			mode = OAuthOnly
-		case st == 401 || st == 403:
-			mode = Unauthorized
-			if authRequired != nil && *authRequired {
-				mode = OAuthOnly
-			}
-		}
-	}
+	mode := AuthMode(client.ProbeAuthMode(ctx, status.AuthRequired))
 	usable := mode == Bearer
-	return &Dashboard{Reachable: true, AuthMode: mode, SkillsWrite: usable, Cron: usable, FS: usable, Sessions: usable, Version: version}
-}
-
-// dashboardGet is HermesDashboardClient.send for a GET: SSRF validation on every
-// call, both token headers, and up to three tries on 429.
-func (s *Service) dashboardGet(ctx context.Context, baseURL, token, path string) (int, []byte, error) {
-	validated, err := s.guard.Validate(ctx, baseURL)
-	if err != nil {
-		return 0, nil, err
-	}
-	u := *validated
-	u.Path = strings.TrimRight(u.Path, "/") + path
-	u.RawPath, u.RawQuery, u.Fragment = "", "", ""
-	for attempt := 1; ; attempt++ {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), http.NoBody)
-		if err != nil {
-			return 0, nil, err
-		}
-		req.Header.Set("Authorization", "Bearer "+token)
-		req.Header.Set("X-Hermes-Session-Token", token)
-		req.Header.Set("Accept", "application/json")
-		resp, err := s.dashboard.Do(req)
-		if err != nil {
-			return 0, nil, err
-		}
-		body, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
-		_ = resp.Body.Close()
-		if err != nil {
-			return 0, nil, err
-		}
-		if resp.StatusCode == http.StatusTooManyRequests && attempt < dashboardMaxRetries {
-			if !sleep(ctx, retryDelay(resp.Header.Get("Retry-After"), attempt)) {
-				return 0, nil, ctx.Err()
-			}
-			continue
-		}
-		return resp.StatusCode, body, nil
-	}
-}
-
-func retryDelay(retryAfter string, attempt int) time.Duration {
-	if seconds, err := strconv.ParseFloat(retryAfter, 64); err == nil && seconds > 0 {
-		return time.Duration(min(seconds, 30) * float64(time.Second))
-	}
-	return time.Duration(attempt) * time.Second
-}
-
-func sleep(ctx context.Context, d time.Duration) bool {
-	t := time.NewTimer(d)
-	defer t.Stop()
-	select {
-	case <-ctx.Done():
-		return false
-	case <-t.C:
-		return true
-	}
+	return &Dashboard{Reachable: true, AuthMode: mode, SkillsWrite: usable, Cron: usable, FS: usable, Sessions: usable, Version: status.Version}
 }
