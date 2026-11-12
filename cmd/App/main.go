@@ -224,6 +224,7 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		deviceRPC := devicerpc.New(sockets, 0)
 		// Migrated modules (modules.yaml status ≥ parity). Traffic only reaches
 		// them through the api ingress.extraPaths that name them.
+		remindersModule := reminders.New(pool, nil, cfg.HermesDefaultModel) // routed transport set once the agent exists
 		deps.Modules = []httpserver.Module{
 			projects.New(pool),
 			kanban.New(pool, identify, limits, paths),
@@ -233,7 +234,7 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 			// apple, devices and reminders flip together (D-shared-prefixes).
 			apple.New(pool, apple.Options{Embedder: embeddings, Analytics: analytics, Devices: deviceRPC}),
 			devices.New(pool, cfg.APNSBundleID),
-			reminders.New(pool, nil, cfg.HermesDefaultModel),
+			remindersModule,
 			achievements.New(pool, identify, limits),
 			teams.New(pool, identify, limits, paths, teams.NewSender(teams.SenderConfig{
 				Kind: cfg.EmailKind, APIKey: cfg.EmailResendAPIKey, FromAddress: cfg.EmailFromAddress,
@@ -321,6 +322,7 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		agent.sockets = sockets
 		registered = append(registered, j2Jobs(pool, cfg, embeddings, embeddingKind, agent.stack.Transport)...)
 		registered = append(registered, communityDailyJobs(cfg, communityModule, agent.stack.Transport)...)
+		remindersModule.UseTransport(reminders.RoutedTransport{LLM: agent.stack.Transport})
 		if themes != nil {
 			themes.Transport = agent.stack.Transport
 			registered = append(registered, themes.Job())
