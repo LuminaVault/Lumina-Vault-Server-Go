@@ -18,6 +18,7 @@ steps:
   - {name: empty update, as: hm_amy, request: {method: PUT, path: /v1/hermes/mirror/jobs/does-not-exist, json: {}}}
   - {name: pause an unknown job, as: hm_amy, request: {method: POST, path: /v1/hermes/mirror/jobs/does-not-exist/pause}}
   - {name: trigger an unknown job, as: hm_amy, request: {method: POST, path: /v1/hermes/mirror/jobs/does-not-exist/trigger}}
+  - {name: resume an unknown job, as: hm_amy, request: {method: POST, path: /v1/hermes/mirror/jobs/does-not-exist/resume}}
   - {name: delete a traversing id, as: hm_amy, request: {method: DELETE, path: "/v1/hermes/mirror/jobs/..%2Fetc"}}
   - {name: collect an unknown job, as: hm_amy, request: {method: POST, path: /v1/hermes/mirror/jobs/does-not-exist/collect}}
   - {name: blank job name, as: hm_amy, request: {method: POST, path: /v1/hermes/mirror/jobs, json: {name: "  ", schedule: "0 9 * * *"}}}
