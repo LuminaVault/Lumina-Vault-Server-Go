@@ -354,7 +354,15 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 			captureModule(pool, cfg, box, limits, links, analytics),
 		)
 		if workflows.Enabled(cfg.CerberusStudioEnabled) {
-			deps.Modules = append(deps.Modules, workflowsModule(pool, cfg, box, identify, limits))
+			wf := workflowsModule(pool, cfg, box, identify, limits)
+			deps.Modules = append(deps.Modules, wf)
+			// WorkflowScheduler and WorkflowMaintenanceService, as App+build.swift
+			// registers them: Fluent on, not the test environment.
+			if cfg.LVEnvironment != "test" {
+				registered = append(registered,
+					wf.SchedulerJob(slog.Default().With("label", "lv.workflows.scheduler")),
+					wf.MaintenanceJob(slog.Default().With("label", "lv.workflows.maintenance")))
+			}
 		}
 		deps.Modules = append(deps.Modules, agent.modules(links, enrichment)...)
 		if m := agent.hermesMirrorModule(); m != nil { // 6B: needs the secret box and the resolver, as in Swift
@@ -407,7 +415,7 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 
 // workflowsModule builds the workflow routes, the "if workflowStudioEnabled" block of
 // App+build.swift without its background services, which stay in Swift.
-func workflowsModule(pool *pgxpool.Pool, cfg config.Config, box *secretbox.Box, identify echo.MiddlewareFunc, limits *ratelimit.Store) httpserver.Module {
+func workflowsModule(pool *pgxpool.Pool, cfg config.Config, box *secretbox.Box, identify echo.MiddlewareFunc, limits *ratelimit.Store) *workflows.Module {
 	var isUserOverride func(context.Context, uuid.UUID) bool
 	if box != nil {
 		if gateway, err := url.Parse(cfg.HermesGatewayURL); err == nil {

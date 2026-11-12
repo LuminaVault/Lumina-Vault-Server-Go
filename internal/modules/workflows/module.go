@@ -5,9 +5,9 @@
 // WorkflowSchedulePolicy, WorkflowTemplateCatalog and the read half of
 // WorkflowSpendService).
 //
-// Only the routes are here. WorkflowEngine, WorkflowScheduler,
-// WorkflowMaintenanceService and LegacyJobWorkflowMigrator stay in Swift and poll
-// the rows these routes write.
+// The routes, plus WorkflowScheduler and WorkflowMaintenanceService (jobs.go).
+// WorkflowEngine and LegacyJobWorkflowMigrator stay in Swift and poll the rows
+// these routes write.
 package workflows
 
 //go:generate sh -c "cd ../../.. && go tool oapi-codegen -config internal/modules/workflows/oapi-codegen.yaml api/openapi.yaml"
