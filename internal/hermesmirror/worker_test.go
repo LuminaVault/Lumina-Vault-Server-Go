@@ -111,6 +111,26 @@ func TestRefreshWorker(t *testing.T) {
 		assert.Equal(t, []uuid.UUID{tenant}, worker.PendingTenantIDs())
 	})
 
+	t.Run("poll runs a turn at boot, on a nudge, and once a tick interval has passed", func(t *testing.T) {
+		now := time.Date(2026, 11, 12, 12, 0, 0, 0, time.UTC)
+		worker := &Worker{Service: workerService(t, pool, newPerTenant()), Log: quietLog, now: func() time.Time { return now }}
+		require.NoError(t, worker.Poll(ctx))
+		assert.Equal(t, now, worker.lastPass, "the first poll is a full turn")
+
+		now = now.Add(WorkerNudgeSlice)
+		require.NoError(t, worker.Poll(ctx))
+		assert.Equal(t, now.Add(-WorkerNudgeSlice), worker.lastPass, "nothing nudged and the tick is not due")
+
+		worker.Enqueue(uuid.New())
+		require.NoError(t, worker.Poll(ctx))
+		assert.Equal(t, now, worker.lastPass, "a nudge starts a turn at once")
+		assert.Empty(t, worker.PendingTenantIDs())
+
+		now = now.Add(WorkerTickInterval)
+		require.NoError(t, worker.Poll(ctx))
+		assert.Equal(t, now, worker.lastPass, "a full tick interval after the last turn")
+	})
+
 	t.Run("tick syncs only tenants with a dashboard, pages by id, and isolates failures", func(t *testing.T) {
 		configuredA := seedWorkerTenant(t, pool, true)
 		configuredB := seedWorkerTenant(t, pool, true)

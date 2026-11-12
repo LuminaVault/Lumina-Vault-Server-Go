@@ -36,7 +36,7 @@ type env struct {
 }
 
 // setup mirrors dbTestReader: private ranges allowed, plain http accepted.
-func setup(t *testing.T) env {
+func setup(t *testing.T, nudge ...settings.MirrorNudger) env {
 	t.Helper()
 	ctx := context.Background()
 	pool := dbtest.Postgres(t)
@@ -54,6 +54,9 @@ func setup(t *testing.T) env {
 		Identify: auth.Identify(keys, auth.PGUsers(pool)), Limits: ratelimit.NewStore(),
 		Box: box, Guard: guard, Capabilities: hermescaps.New(pool, resolver, box, guard),
 	})
+	for _, n := range nudge {
+		module.UseMirrorNudge(n)
+	}
 	e := httpserver.New(config.Config{}, httpserver.Deps{Auth: auth.Middleware(keys, auth.PGUsers(pool)), Modules: []httpserver.Module{module}})
 	return env{t: t, pool: pool, srv: e}
 }
@@ -230,4 +233,20 @@ func TestCapabilitiesManagedDefaultAndOverrideProbe(t *testing.T) {
 	require.Equal(t, hermescaps.Live, over.Capabilities.Sessions)
 	require.Equal(t, hermescaps.ReadOnly, over.Capabilities.Skills, "Swift: skills_api reads read_only")
 	require.NotNil(t, over.CheckedAt)
+}
+
+type nudgeRecorder struct{ tenants []uuid.UUID }
+
+func (n *nudgeRecorder) Enqueue(tenant uuid.UUID) { n.tenants = append(n.tenants, tenant) }
+
+// HermesConfigController nudges the mirror worker after a save, so a newly
+// linked Hermes is refreshed within seconds; a rejected save nudges nothing.
+func TestPutNudgesTheMirrorWorker(t *testing.T) {
+	nudge := &nudgeRecorder{}
+	v := setup(t, nudge)
+	u := v.user()
+	v.do(u, http.MethodPut, "/v1/settings/hermes", `{"baseUrl":"http://127.0.0.1:9999"}`)
+	require.Equal(t, []uuid.UUID{u}, nudge.tenants)
+	v.do(u, http.MethodPut, "/v1/settings/hermes", `{"baseUrl":"not a url"}`)
+	require.Equal(t, []uuid.UUID{u}, nudge.tenants)
 }
