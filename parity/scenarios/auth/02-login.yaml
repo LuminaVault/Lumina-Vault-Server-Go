@@ -1,0 +1,35 @@
+# POST /v1/auth/login (AuthService.login): bcrypt $2a$ and $2b$, the 15-minute lockout, the
+# mfa-auth-v1 pending response, and issueTokens' tier-override stamp read back through
+# /v1/auth/me/billing. Tokens are random, so successful bodies ignore them; the pending
+# response has empty ones and is compared whole.
+module: auth
+steps:
+  - {name: login a2a hash, request: {method: POST, path: /v1/auth/login, headers: {X-Forwarded-For: 198.51.101.1}, json: {email: auth-login@parity.test, password: parity-login-pass-1}}, ignore: ["$.accessToken", "$.refreshToken"]}
+  - {name: login a2b hash, request: {method: POST, path: /v1/auth/login, headers: {X-Forwarded-For: 198.51.101.2}, json: {email: auth-2b@parity.test, password: parity-login-pass-2}}, ignore: ["$.accessToken", "$.refreshToken"]}
+  - {name: login email any case, request: {method: POST, path: /v1/auth/login, headers: {X-Forwarded-For: 198.51.101.3}, json: {email: Auth-2B@PARITY.test, password: parity-login-pass-2}}, ignore: ["$.accessToken", "$.refreshToken"]}
+  - {name: login padded email is another email, request: {method: POST, path: /v1/auth/login, headers: {X-Forwarded-For: 198.51.101.4}, json: {email: " auth-2b@parity.test", password: parity-login-pass-2}}}
+  - {name: login wrong password, request: {method: POST, path: /v1/auth/login, headers: {X-Forwarded-For: 198.51.101.5}, json: {email: auth-2b@parity.test, password: parity-login-pass-1}}}
+  - {name: login unknown email, request: {method: POST, path: /v1/auth/login, headers: {X-Forwarded-For: 198.51.101.6}, json: {email: nobody@parity.test, password: parity-login-pass-1}}}
+  - {name: login locked account right password, request: {method: POST, path: /v1/auth/login, headers: {X-Forwarded-For: 198.51.101.7}, json: {email: auth-locked@parity.test, password: parity-login-pass-1}}}
+  - {name: lockme 1, request: {method: POST, path: /v1/auth/login, headers: {X-Forwarded-For: 198.51.101.8}, json: {email: auth-lockme@parity.test, password: wrong-password-0}}}
+  - {name: lockme 2, request: {method: POST, path: /v1/auth/login, headers: {X-Forwarded-For: 198.51.101.8}, json: {email: auth-lockme@parity.test, password: wrong-password-0}}}
+  - {name: lockme 3, request: {method: POST, path: /v1/auth/login, headers: {X-Forwarded-For: 198.51.101.8}, json: {email: auth-lockme@parity.test, password: wrong-password-0}}}
+  - {name: lockme 4, request: {method: POST, path: /v1/auth/login, headers: {X-Forwarded-For: 198.51.101.8}, json: {email: auth-lockme@parity.test, password: wrong-password-0}}}
+  - {name: lockme 5 locks, request: {method: POST, path: /v1/auth/login, headers: {X-Forwarded-For: 198.51.101.8}, json: {email: auth-lockme@parity.test, password: wrong-password-0}}}
+  - {name: lockme right password now locked, request: {method: POST, path: /v1/auth/login, headers: {X-Forwarded-For: 198.51.101.9}, json: {email: auth-lockme@parity.test, password: parity-login-pass-1}}}
+  - {name: mfa header true, request: {method: POST, path: /v1/auth/login, headers: {X-Forwarded-For: 198.51.101.10, mfa-auth-v1: "true"}, json: {email: auth-login@parity.test, password: parity-login-pass-1}}}
+  - {name: mfa header TRUE, request: {method: POST, path: /v1/auth/login, headers: {X-Forwarded-For: 198.51.101.11, MFA-Auth-V1: "TRUE"}, json: {email: auth-login@parity.test, password: parity-login-pass-1}}}
+  - {name: mfa header false issues tokens, request: {method: POST, path: /v1/auth/login, headers: {X-Forwarded-For: 198.51.101.12, mfa-auth-v1: "false"}, json: {email: auth-login@parity.test, password: parity-login-pass-1}}, ignore: ["$.accessToken", "$.refreshToken"]}
+  - {name: mfa header with wrong password, request: {method: POST, path: /v1/auth/login, headers: {X-Forwarded-For: 198.51.101.13, mfa-auth-v1: "true"}, json: {email: auth-login@parity.test, password: nope}}}
+  - {name: mfaCode is ignored, request: {method: POST, path: /v1/auth/login, headers: {X-Forwarded-For: 198.51.101.14}, json: {email: auth-login@parity.test, password: parity-login-pass-1, mfaCode: "000000"}}, ignore: ["$.accessToken", "$.refreshToken"]}
+  - name: founder login stamps the allowlisted override
+    request: {method: POST, path: /v1/auth/login, headers: {X-Forwarded-For: 198.51.101.15}, json: {email: auth-founder@parity.test, password: parity-login-pass-1}}
+    capture: {founder_token: "$.accessToken"}
+    ignore: ["$.accessToken", "$.refreshToken"]
+  - {name: founder billing reads pro, request: {method: GET, path: /v1/auth/me/billing, headers: {Authorization: "Bearer {{founder_token}}"}}}
+  - name: ultimate is not lowered to pro
+    request: {method: POST, path: /v1/auth/login, headers: {X-Forwarded-For: 198.51.101.16}, json: {email: auth-ultimate@parity.test, password: parity-login-pass-1}}
+    capture: {ultimate_token: "$.accessToken"}
+    ignore: ["$.accessToken", "$.refreshToken"]
+  - {name: ultimate billing, request: {method: GET, path: /v1/auth/me/billing, headers: {Authorization: "Bearer {{ultimate_token}}"}}}
+  - {name: the minted token reads me, request: {method: GET, path: /v1/auth/me, headers: {Authorization: "Bearer {{founder_token}}"}}}

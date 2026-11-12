@@ -40,6 +40,9 @@ type Target struct {
 	Files    FileReader   // nil fails a step with `files`, except in smoke mode
 	Token    string       // when set, used for every authenticated step (smoke mode)
 	Client   *http.Client // nil uses a 30 s default
+	// Peer is the base URL of a server of the other kind on this target's
+	// database. Steps with `on: peer` go there; "" sends them to BaseURL.
+	Peer string
 }
 
 type Transcript struct {
@@ -100,7 +103,11 @@ func runStep(ctx context.Context, sc Scenario, st Step, t Target, client *http.C
 		reqCtx, cancel = context.WithTimeout(ctx, timeout)
 		defer cancel()
 	}
-	req, err := buildRequest(reqCtx, t, st.As, st.Request, vars)
+	dest := t
+	if st.On == "peer" && t.Peer != "" {
+		dest.BaseURL = t.Peer
+	}
+	req, err := buildRequest(reqCtx, dest, st.As, st.Request, vars)
 	if err != nil {
 		return res, err
 	}

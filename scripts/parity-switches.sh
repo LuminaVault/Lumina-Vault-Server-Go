@@ -26,6 +26,9 @@
 #   tts-billing     tts-on with BILLING_ENFORCEMENT_ENABLED=true
 #   no-master-key   LV_SECRET_MASTER_KEY empty: /v1/grok is not mounted
 #   improvement-off SELF_IMPROVEMENT_ENABLED=false and an empty SELF_IMPROVEMENT_ECONOMY_MODEL: /v1/me/improvement read-only, status unavailable
+#   auth-writes     no switch: a successful register or password reset writes a random bcrypt salt into users
+#   cross           sessions across the cutover (8A): "on: peer" steps go to a server of the other kind on
+#                   the target's database (go2-switched beside Swift, swift2-switched beside Go)
 #
 #   llm             HERMES_GATEWAY_URL on the LLM stub, and capture.autoFile.enabled on:
 #                   the model-calling routes' success paths (group 4F)
@@ -48,6 +51,7 @@ COMPOSE=(docker compose -f docker-compose.parity.yml -p lvparity --profile serve
 
 # RUN_STATE_ALSO names more services to recreate with the pair, after the databases
 # (state "chat": swift2-switched, the Go server's runs bridge, on parity_go_switched).
+# RUN_STATE_FLAGS adds flags to the compare (state "cross": --swift-peer, --go-peer).
 run_state() {
   local state=$1
   shift
@@ -66,6 +70,7 @@ run_state() {
   env "$@" "${COMPOSE[@]}" up -d --force-recreate swift-switched go-switched $also
   local port ports="18083 18084"
   case " $also " in *" swift2-switched "*) ports="$ports 18086" ;; esac
+  case " $also " in *" go2-switched "*) ports="$ports 18087" ;; esac
   for port in $ports; do
     for _ in $(seq 1 60); do
       curl -fsS "http://localhost:$port/health" >/dev/null 2>&1 && break
@@ -76,12 +81,13 @@ run_state() {
   done
   echo "==> state $state"
   # A difference fails the script at the end, so one run reports every state.
+  # shellcheck disable=SC2086
   go run ./parity/cmd/parity compare \
     --swift http://localhost:18083 --swift-db postgres://lv:lv@localhost:15432/parity_swift_switched \
     --go http://localhost:18084 --go-db postgres://lv:lv@localhost:15432/parity_go_switched \
     --swift-files docker:lvparity-swift-switched-1:/tmp/luminavault \
     --go-files docker:lvparity-go-switched-1:/tmp/luminavault \
-    --scenarios "parity/scenarios-switched/$state" || failed=1
+    --scenarios "parity/scenarios-switched/$state" ${RUN_STATE_FLAGS:-} || failed=1
 }
 
 # Swift against Swift with HERMES_GATEWAY_URL on the stub: zero differences shows
@@ -233,6 +239,12 @@ run_state billing-on SWITCH_BILLING_ENFORCEMENT_ENABLED=true
 run_state improvement-off SWITCH_SELF_IMPROVEMENT_ENABLED=false SWITCH_SELF_IMPROVEMENT_ECONOMY_MODEL=
 voice_states
 run_state no-master-key SWITCH_LV_SECRET_MASTER_KEY=
+run_state auth-writes SWITCH_NONE=
+# Swift's run asks a Go peer on its database, Go's run a Swift peer on its own.
+RUN_STATE_ALSO="swift2-switched go2-switched" \
+  RUN_STATE_FLAGS="--swift-peer http://localhost:18087 --go-peer http://localhost:18086" \
+  run_state cross SWITCH_SWIFT2_DB=parity_go_switched SWITCH_GO2_DB=parity_swift_switched
+"${COMPOSE[@]}" stop swift2-switched go2-switched >/dev/null 2>&1 || true
 "${COMPOSE[@]}" up -d --build --force-recreate llmstub
 for _ in $(seq 1 60); do
   curl -fsS "http://localhost:18085/health" >/dev/null 2>&1 && break

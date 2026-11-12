@@ -188,3 +188,19 @@ func TestLoadKeysErrors(t *testing.T) {
 	_, err := LoadKeys(config.Config{})
 	require.Error(t, err)
 }
+
+// JWTKeyCollection.getSigner falls back to the default signer (the first key
+// added) when the token's kid is unknown, so Swift accepts such a token signed
+// with the active key. Go must too (parity/scenarios/app/02-me.yaml).
+func TestUnknownKidFallsBackToActiveKey(t *testing.T) {
+	ks := Keyset{keys: []Key{{Kid: "active", Secret: []byte("a")}, {Kid: "old", Secret: []byte("b")}}}
+	for kid, want := range map[string]string{"": "active", "active": "active", "old": "old", "nope": "active"} {
+		key, ok := ks.lookup(kid)
+		if !ok || key.Kid != want {
+			t.Fatalf("lookup(%q) = %q, %v; want %q", kid, key.Kid, ok, want)
+		}
+	}
+	if _, ok := (Keyset{}).lookup("nope"); ok {
+		t.Fatal("empty keyset must verify nothing")
+	}
+}

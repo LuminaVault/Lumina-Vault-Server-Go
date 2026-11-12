@@ -1,0 +1,22 @@
+# Successful POST /v1/auth/register (AuthService.register, createUser, issueTokens). The new
+# user's id, bcrypt salt and tokens are random, so this state has databases of its own and
+# the bodies ignore them; status, the other keys and the session's use are compared.
+module: auth
+steps:
+  - name: register
+    request: {method: POST, path: /v1/auth/register, headers: {X-Forwarded-For: 198.51.110.1}, json: {email: Writes-New@Parity.test, username: "  Writes-New ", password: parity-writes-pass-1}}
+    capture: {token: "$.accessToken", refresh: "$.refreshToken"}
+    ignore: ["$.userId", "$.accessToken", "$.refreshToken"]
+  - {name: me with the new token, request: {method: GET, path: /v1/auth/me, headers: {Authorization: "Bearer {{token}}"}}, ignore: ["$.userId"]}
+  - {name: billing starts a trial, request: {method: GET, path: /v1/auth/me/billing, headers: {Authorization: "Bearer {{token}}"}}, ignore: ["$.tierExpiresAt"]}
+  - {name: same email again, request: {method: POST, path: /v1/auth/register, headers: {X-Forwarded-For: 198.51.110.1}, json: {email: writes-new@parity.test, username: other-name, password: parity-writes-pass-1}}}
+  - {name: same username again, request: {method: POST, path: /v1/auth/register, headers: {X-Forwarded-For: 198.51.110.1}, json: {email: writes-other@parity.test, username: WRITES-NEW, password: parity-writes-pass-1}}}
+  - {name: login with the new password, request: {method: POST, path: /v1/auth/login, headers: {X-Forwarded-For: 198.51.110.2}, json: {email: writes-new@parity.test, password: parity-writes-pass-1}}, ignore: ["$.userId", "$.accessToken", "$.refreshToken"]}
+  - name: refresh rotates
+    request: {method: POST, path: /v1/auth/refresh, headers: {X-Forwarded-For: 198.51.110.3}, json: {refreshToken: "{{refresh}}"}}
+    capture: {refresh2: "$.refreshToken"}
+    ignore: ["$.userId", "$.accessToken", "$.refreshToken"]
+  - {name: the old refresh is spent, request: {method: POST, path: /v1/auth/refresh, headers: {X-Forwarded-For: 198.51.110.3}, json: {refreshToken: "{{refresh}}"}}}
+  - {name: logout, request: {method: POST, path: /v1/auth/logout, json: {refreshToken: "{{refresh2}}"}}}
+  - {name: the logged out refresh is dead, request: {method: POST, path: /v1/auth/refresh, headers: {X-Forwarded-For: 198.51.110.3}, json: {refreshToken: "{{refresh2}}"}}}
+  - {name: the access token outlives logout, request: {method: GET, path: /v1/auth/me, headers: {Authorization: "Bearer {{token}}"}}, ignore: ["$.userId"]}

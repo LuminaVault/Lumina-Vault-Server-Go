@@ -226,3 +226,10 @@ func isUnreserved(c byte) bool {
 func isHex(c byte) bool {
 	return c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F'
 }
+
+// Lowercased is Swift's String.lowercased(): each scalar's full lowercase
+// mapping, with no context. Go's strings.ToLower uses the simple mapping, which
+// differs only for U+0130 (Swift writes "i" plus U+0307).
+func Lowercased(s string) string {
+	return strings.ToLower(strings.ReplaceAll(s, "İ", "i̇"))
+}

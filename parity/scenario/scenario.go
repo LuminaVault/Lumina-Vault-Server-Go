@@ -33,6 +33,11 @@ type Step struct {
 	Capture  map[string]string `yaml:"capture"`  // var → JSON path into the response
 	Snapshot []string          `yaml:"snapshot"` // tables compared after the step
 	Ignore   []string          `yaml:"ignore"`
+	// On is "peer" to send the request to the target's peer: a server of the
+	// other kind on the same database (Target.Peer), for the cross-server
+	// session scenarios (wave-6-8-plan "How sessions survive the cutover").
+	// With no peer configured the step goes to the target itself.
+	On string `yaml:"on"`
 	// Headers lists response headers to compare, besides Content-Type.
 	Headers []string `yaml:"headers"`
 	// Binary compares the response body by size and sha256 rather than as text
@@ -164,6 +169,9 @@ func (sc Scenario) validate() error {
 }
 
 func (st Step) validate() error {
+	if st.On != "" && st.On != "peer" {
+		return fmt.Errorf("on must be empty or peer, not %q", st.On)
+	}
 	if st.Stream && len(st.Capture) > 0 {
 		return errors.New("a stream step has no body to capture from")
 	}

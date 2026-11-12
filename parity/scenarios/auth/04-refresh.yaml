@@ -1,0 +1,23 @@
+# POST /v1/auth/refresh and /logout on seeded refresh tokens (parity/seed/auth.sql): rotation
+# revokes, then issues; expired and revoked tokens are 401; logout is unlimited and silent for
+# an unknown token.
+module: auth
+steps:
+  - name: refresh seeded token
+    request: {method: POST, path: /v1/auth/refresh, headers: {X-Forwarded-For: 198.51.103.1}, json: {refreshToken: parity-refresh-seeded-ok-000000000000000000}}
+    capture: {r2: "$.refreshToken", t2: "$.accessToken"}
+    ignore: ["$.accessToken", "$.refreshToken"]
+  - {name: rotated token is revoked, request: {method: POST, path: /v1/auth/refresh, headers: {X-Forwarded-For: 198.51.103.1}, json: {refreshToken: parity-refresh-seeded-ok-000000000000000000}}}
+  - {name: expired token, request: {method: POST, path: /v1/auth/refresh, headers: {X-Forwarded-For: 198.51.103.1}, json: {refreshToken: parity-refresh-seeded-expired-00000000000000}}}
+  - {name: revoked token, request: {method: POST, path: /v1/auth/refresh, headers: {X-Forwarded-For: 198.51.103.1}, json: {refreshToken: parity-refresh-seeded-revoked-00000000000000}}}
+  - {name: unknown token, request: {method: POST, path: /v1/auth/refresh, headers: {X-Forwarded-For: 198.51.103.1}, json: {refreshToken: ""}}}
+  - {name: new access token works, request: {method: GET, path: /v1/auth/me, headers: {Authorization: "Bearer {{t2}}"}}}
+  - name: refresh the new token
+    request: {method: POST, path: /v1/auth/refresh, headers: {X-Forwarded-For: 198.51.103.2}, json: {refreshToken: "{{r2}}"}}
+    capture: {r3: "$.refreshToken"}
+    ignore: ["$.accessToken", "$.refreshToken"]
+  - {name: logout, request: {method: POST, path: /v1/auth/logout, json: {refreshToken: "{{r3}}"}}}
+  - {name: logged out token, request: {method: POST, path: /v1/auth/refresh, headers: {X-Forwarded-For: 198.51.103.2}, json: {refreshToken: "{{r3}}"}}}
+  - {name: logout again, request: {method: POST, path: /v1/auth/logout, json: {refreshToken: "{{r3}}"}}}
+  - {name: logout unknown, request: {method: POST, path: /v1/auth/logout, json: {refreshToken: never-issued}}}
+  - {name: logout with a bearer still needs the body, as: auth_me, request: {method: POST, path: /v1/auth/logout, json: {}}}

@@ -1,6 +1,10 @@
 package auth
 
-import "golang.org/x/crypto/bcrypt"
+import (
+	"bytes"
+
+	"golang.org/x/crypto/bcrypt"
+)
 
 // PasswordCost is BcryptPasswordHasher's default cost.
 const PasswordCost = 12
@@ -10,8 +14,13 @@ const PasswordCost = 12
 // longer password instead, so both sides cut it here to hash what Swift hashes.
 const bcryptMaxBytes = 72
 
+// C bcrypt also reads the password with strlen, so it stops at the first NUL;
+// Go must cut there too or a password containing \x00 checks differently.
 func bcryptKey(password string) []byte {
 	b := []byte(password)
+	if i := bytes.IndexByte(b, 0); i >= 0 {
+		b = b[:i]
+	}
 	if len(b) > bcryptMaxBytes {
 		b = b[:bcryptMaxBytes]
 	}

@@ -1,0 +1,22 @@
+# Email verification (HER-87): /v1/auth/email/confirm on seeded codes (222222), and
+# /email/send-verify, which is silent for unknown and already verified emails. auth-verifylock
+# is driven to its 30-minute lock; confirmEmailByIP is 10 per 5 minutes, so it gets two IPs.
+module: auth
+steps:
+  - {name: confirm unknown, request: {method: POST, path: /v1/auth/email/confirm, headers: {X-Forwarded-For: 198.51.105.1}, json: {email: nobody@parity.test, code: "222222"}}}
+  - {name: confirm with no code issued, request: {method: POST, path: /v1/auth/email/confirm, headers: {X-Forwarded-For: 198.51.105.1}, json: {email: auth-login@parity.test, code: "222222"}}}
+  - {name: confirm wrong code, request: {method: POST, path: /v1/auth/email/confirm, headers: {X-Forwarded-For: 198.51.105.1}, json: {email: auth-verify@parity.test, code: "000000"}}}
+  - {name: confirm right code, request: {method: POST, path: /v1/auth/email/confirm, headers: {X-Forwarded-For: 198.51.105.1}, json: {email: AUTH-VERIFY@parity.test, code: "222222"}}}
+  - {name: confirm again any code, request: {method: POST, path: /v1/auth/email/confirm, headers: {X-Forwarded-For: 198.51.105.1}, json: {email: auth-verify@parity.test, code: nope}}}
+  - {name: send verify verified, request: {method: POST, path: /v1/auth/email/send-verify, headers: {X-Forwarded-For: 198.51.105.2}, json: {email: auth-verify@parity.test}}}
+  - {name: send verify unknown, request: {method: POST, path: /v1/auth/email/send-verify, headers: {X-Forwarded-For: 198.51.105.2}, json: {email: nobody@parity.test}}}
+  - {name: send verify unverified, request: {method: POST, path: /v1/auth/email/send-verify, headers: {X-Forwarded-For: 198.51.105.2}, json: {email: auth-login@parity.test}}}
+  - {name: random code now hides nothing, request: {method: POST, path: /v1/auth/email/confirm, headers: {X-Forwarded-For: 198.51.105.2}, json: {email: auth-login@parity.test, code: "222222"}}}
+  - {name: lock 1, request: {method: POST, path: /v1/auth/email/confirm, headers: {X-Forwarded-For: 198.51.105.3}, json: {email: auth-verifylock@parity.test, code: "000000"}}}
+  - {name: lock 2, request: {method: POST, path: /v1/auth/email/confirm, headers: {X-Forwarded-For: 198.51.105.3}, json: {email: auth-verifylock@parity.test, code: "000000"}}}
+  - {name: lock 3, request: {method: POST, path: /v1/auth/email/confirm, headers: {X-Forwarded-For: 198.51.105.3}, json: {email: auth-verifylock@parity.test, code: "000000"}}}
+  - {name: lock 4, request: {method: POST, path: /v1/auth/email/confirm, headers: {X-Forwarded-For: 198.51.105.3}, json: {email: auth-verifylock@parity.test, code: "000000"}}}
+  - {name: lock 5 locks, request: {method: POST, path: /v1/auth/email/confirm, headers: {X-Forwarded-For: 198.51.105.3}, json: {email: auth-verifylock@parity.test, code: "000000"}}}
+  - {name: right code while locked, request: {method: POST, path: /v1/auth/email/confirm, headers: {X-Forwarded-For: 198.51.105.4}, json: {email: auth-verifylock@parity.test, code: "222222"}}}
+  - {name: send verify while locked, request: {method: POST, path: /v1/auth/email/send-verify, headers: {X-Forwarded-For: 198.51.105.4}, json: {email: auth-verifylock@parity.test}}}
+  - {name: new code row is not locked, request: {method: POST, path: /v1/auth/email/confirm, headers: {X-Forwarded-For: 198.51.105.4}, json: {email: auth-verifylock@parity.test, code: "222222"}}}
