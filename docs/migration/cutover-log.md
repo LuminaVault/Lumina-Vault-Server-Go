@@ -2283,3 +2283,32 @@ served by Go but flip only with chat, in one infra commit (B12, decisions.md D-6
   (a gateway-only BYO tenant on the LLM stub).
 - `modules.yaml` keeps `hermes` at `swift`: its prefixes include `/v1/hermes/runs` (6C).
 
+## Status audit 2026-11-12: the seven `swift` modules
+
+Each route of the module (`docs/migration/routes.json`, longest prefix in `modules.yaml`) was checked for a Go
+registration under `internal/` and `cmd/App/`, and for a request in `parity/scenarios*`. CI run 43201493535 on
+`main` (f8b4624, after #85, #86, #87) passes `parity`.
+
+- **app → `parity`.** All 10 routes are served by Go: `/`, `/health`, AASA and the kb-compile 308s
+  (`internal/httpserver`), `/health/deep` (#83), `/v1/auth/me` and `/me/privacy` (`authroutes`, #85), `/me/billing`
+  and `/me/usage` (`billing`, 7A). Covered by `scenarios/app` 01-02, with `/me/billing` and `/me/usage` in
+  `scenarios/billing` and `scenarios/auth`. No `heldPaths` or `flipsWith`.
+- **auth → `parity`.** All 28 routes are served by `authroutes` (8A #85, 8B #86) and `webauthnroutes` (8C #87), and
+  each has requests in `scenarios/auth` 01-09. No `heldPaths` or `flipsWith`. The owner's TestFlight check of the X
+  and Google/Apple success paths (8B) comes after the flip; it is not a parity gap.
+- **hermes stays `swift`.** All 33 routes are ported (6A capabilities in `settings`, 6B mirror, 6C runs), but
+  `POST /v1/hermes/mirror/jobs/install-compile` and `POST /v1/hermes/mirror/jobs/{id}/resume` have no parity
+  scenario. Closes with steps for both in `parity/scenarios/hermes-mirror`. 6C still flips only with chat (B12).
+- **skills-cron stays `swift`.** None of the 7 `/v1/me/hermes/cron*` routes is registered in Go:
+  `CronBridgeService` (DockerExec, container manager) has no port, and there are no scenarios.
+- **dashboard stays `swift`.** All 16 routes are ported and covered, but `cronJobs` on `GET /v1/dashboard/home` is
+  always `[]` in Go (`internal/modules/dashboard/dashboard.go:125`). Closes with the cron bridge port, or with the O8
+  check (Swift's production answer is always `[]`) recorded here.
+- **reminders stays `swift`.** Routes ported and covered, but the `/v1/reminders/detect` hold (batch 5-3b) is not
+  released: `cmd/App/main.go:236` passes a nil transport, so the classifier fails closed. Closes with O9 (classifier
+  through `internal/llm`) and the hold removed.
+- **community stays `swift`.** Routes ported and covered, but the `/v1/admin/community` hold (batch 5-3b) is not
+  released: `cmd/App/main.go:289` passes a nil moderator (`FilterOnly`), and the daily run has no LLM. Closes with
+  moderation and the daily post wired through `internal/llm`, or the owner accepting the hold and the moderation
+  delay.
+
