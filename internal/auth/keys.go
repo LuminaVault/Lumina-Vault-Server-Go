@@ -60,21 +60,20 @@ func (k Keyset) Active() Key {
 	return k.keys[0]
 }
 
-// lookup picks the verifying key: the matching kid when the token names one,
-// the active key when it does not. An unknown kid verifies nothing.
+// lookup picks the verifying key, as JWTKeyCollection.getSigner does: the
+// matching kid when the token names a known one, otherwise the default signer,
+// which is the first key added (the active one). Swift weakness, kept: a token
+// naming an unknown kid is still verified with the active key, not refused.
 func (k Keyset) lookup(kid string) (Key, bool) {
 	if len(k.keys) == 0 {
 		return Key{}, false
 	}
-	if kid == "" {
-		return k.keys[0], true
-	}
 	for _, key := range k.keys {
-		if key.Kid == kid {
+		if kid != "" && key.Kid == kid {
 			return key, true
 		}
 	}
-	return Key{}, false
+	return k.keys[0], true
 }
 
 func parseSecrets(csv string) ([]Key, error) {
