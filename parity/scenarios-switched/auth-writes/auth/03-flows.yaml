@@ -1,0 +1,39 @@
+# Wave 8B sign-ins that create or link an account (upsertOAuthUser steps 2 and 3). A new
+# account's id, placeholder username (oauth-<8 hex>), random password hash and tokens are
+# random, so this state has databases of its own and the bodies ignore them. Codes are the
+# fixed 424242 (phone) and 313131 (magic link).
+module: auth
+steps:
+  # A new number: a new account with a placeholder email, a trial and no verified email.
+  - {name: phone start new number, request: {method: POST, path: /v1/auth/phone/start, headers: {X-Forwarded-For: 198.51.112.1}, json: {phone: "+15550002002"}}, ignore: ["$.challengeId", "$.expiresAt"]}
+  - name: phone verify creates the account
+    request: {method: POST, path: /v1/auth/phone/verify, json: {phone: "+15550002002", code: "424242"}}
+    capture: {phone_token: "$.accessToken"}
+    ignore: ["$.userId", "$.accessToken", "$.refreshToken"]
+  - {name: phone account me, request: {method: GET, path: /v1/auth/me, headers: {Authorization: "Bearer {{phone_token}}"}}, ignore: ["$.userId", "$.username"]}
+  - {name: phone account billing starts a trial, request: {method: GET, path: /v1/auth/me/billing, headers: {Authorization: "Bearer {{phone_token}}"}}, ignore: ["$.tierExpiresAt"]}
+  - {name: phone start again, request: {method: POST, path: /v1/auth/phone/start, headers: {X-Forwarded-For: 198.51.112.2}, json: {phone: "+15550002002"}}, ignore: ["$.challengeId", "$.expiresAt"]}
+  - name: the second sign-in is the same account
+    request: {method: POST, path: /v1/auth/phone/verify, json: {phone: "+15550002002", code: "424242"}}
+    capture: {phone_token2: "$.accessToken"}
+    ignore: ["$.userId", "$.accessToken", "$.refreshToken"]
+  - {name: same account me, request: {method: GET, path: /v1/auth/me, headers: {Authorization: "Bearer {{phone_token2}}"}}, ignore: ["$.userId", "$.username"]}
+  # A new address: a new account whose email is the address.
+  - {name: magic start new address, request: {method: POST, path: /v1/auth/email/start, headers: {X-Forwarded-For: 198.51.112.3}, json: {email: Magic-New@Parity.test}}, ignore: ["$.challengeId", "$.expiresAt"]}
+  - name: magic verify creates the account
+    request: {method: POST, path: /v1/auth/email/verify, json: {email: magic-new@parity.test, code: "313131"}}
+    capture: {magic_token: "$.accessToken"}
+    ignore: ["$.userId", "$.accessToken", "$.refreshToken"]
+  - {name: magic account me, request: {method: GET, path: /v1/auth/me, headers: {Authorization: "Bearer {{magic_token}}"}}, ignore: ["$.userId", "$.username"]}
+  # An address with a password account: the identity is linked to it (Swift links by email).
+  - {name: magic start existing account, request: {method: POST, path: /v1/auth/email/start, headers: {X-Forwarded-For: 198.51.112.4}, json: {email: auth-2b@parity.test}}, ignore: ["$.challengeId", "$.expiresAt"]}
+  - {name: magic verify links the password account, request: {method: POST, path: /v1/auth/email/verify, json: {email: auth-2b@parity.test, code: "313131"}}, ignore: ["$.accessToken", "$.refreshToken"]}
+  - {name: the password still logs in, request: {method: POST, path: /v1/auth/login, headers: {X-Forwarded-For: 198.51.112.5}, json: {email: auth-2b@parity.test, password: parity-login-pass-2}}, ignore: ["$.accessToken", "$.refreshToken"]}
+  # A phone number whose placeholder email already belongs to someone is linked to them too.
+  - {name: phone start for the login account, request: {method: POST, path: /v1/auth/phone/start, headers: {X-Forwarded-For: 198.51.112.6}, json: {phone: "+15550003003"}}, ignore: ["$.challengeId", "$.expiresAt"]}
+  - {name: the login account registers that placeholder, request: {method: POST, path: /v1/auth/register, headers: {X-Forwarded-For: 198.51.112.7}, json: {email: 15550003003@phone.luminavault.local, username: phone-squatter, password: parity-writes-pass-1}}, ignore: ["$.userId", "$.accessToken", "$.refreshToken"]}
+  - name: phone verify signs in to the squatter
+    request: {method: POST, path: /v1/auth/phone/verify, json: {phone: "+15550003003", code: "424242"}}
+    capture: {squat_token: "$.accessToken"}
+    ignore: ["$.userId", "$.accessToken", "$.refreshToken"]
+  - {name: squatter me, request: {method: GET, path: /v1/auth/me, headers: {Authorization: "Bearer {{squat_token}}"}}, ignore: ["$.userId"]}

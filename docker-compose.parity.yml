@@ -29,6 +29,11 @@ x-no-external: &no-external
   - "api-atlas.nomic.ai:127.0.0.1"
   - "app.photon.codes:127.0.0.1"
   - "spectrum.photon.codes:127.0.0.1"
+  # Sign-in providers (auth, 8B): the Google and Apple JWKS, X's /2/users/me and Twilio.
+  - "www.googleapis.com:127.0.0.1"
+  - "appleid.apple.com:127.0.0.1"
+  - "api.x.com:127.0.0.1"
+  - "api.twilio.com:127.0.0.1"
 
 x-common-env: &common-env
   POSTGRES_HOST: pg
@@ -96,6 +101,11 @@ x-common-env: &common-env
   # Sessions (auth, 8A): issueTokens stamps these on every session. Only parity/seed/auth.sql's
   # users are listed, so no other scenario's user changes.
   BILLING_TIER_OVERRIDE_EMAILS: "auth-founder@parity.test=pro,auth-ultimate@parity.test=pro,auth-x-mfa@parity.test"
+  # Sign-in flows (auth, 8B): Google is configured and its JWKS unreachable (no-external), Apple
+  # is not; phone and magic-link codes are fixed so a scenario can verify. SMS_KIND stays logging.
+  OAUTH_GOOGLE_CLIENT_ID: parity-google-client
+  PHONE_FIXED_OTP: "424242"
+  MAGIC_FIXED_OTP: "313131"
   # Passkeys (auth, 8C): off by default in both servers, so every route would be a 404.
   # Two origins, as production has, so the multi-origin path runs.
   WEBAUTHN_ENABLED: "TRUE"

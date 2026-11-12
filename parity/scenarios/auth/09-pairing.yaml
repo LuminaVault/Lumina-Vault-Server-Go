@@ -1,0 +1,37 @@
+# PairingController (QR-from-mobile web sign-in): start, poll, approve. The pairing id and
+# code are random, so they are captured and the start body ignored. auth_pair approves; the
+# minted tokens are random. Approving writes a refresh token and nothing else. start shares
+# registerByIP's bucket, so the limit steps use their own address.
+module: auth
+steps:
+  - name: start
+    request: {method: POST, path: /v1/auth/pairing/start, headers: {X-Forwarded-For: 198.51.131.1}, raw: "ignored, not even json"}
+    capture: {pid: "$.pairingId", code: "$.code"}
+    ignore: ["$.pairingId", "$.code", "$.expiresAt"]
+  - {name: poll pending, request: {method: GET, path: "/v1/auth/pairing/{{pid}}"}}
+  - {name: approve without a token, request: {method: POST, path: "/v1/auth/pairing/{{pid}}/approve", json: {code: "{{code}}"}}}
+  - {name: approve missing code, as: auth_pair, request: {method: POST, path: "/v1/auth/pairing/{{pid}}/approve", json: {}}}
+  - {name: approve wrong code, as: auth_pair, request: {method: POST, path: "/v1/auth/pairing/{{pid}}/approve", json: {code: not-a-code}}}
+  - {name: still pending, request: {method: GET, path: "/v1/auth/pairing/{{pid}}"}}
+  - {name: approve, as: auth_pair, request: {method: POST, path: "/v1/auth/pairing/{{pid}}/approve", json: {code: "{{code}}"}}}
+  - name: poll approved
+    request: {method: GET, path: "/v1/auth/pairing/{{pid}}"}
+    capture: {browser_token: "$.accessToken"}
+    ignore: ["$.accessToken", "$.refreshToken"]
+  - {name: poll again hands the tokens out again, request: {method: GET, path: "/v1/auth/pairing/{{pid}}"}, ignore: ["$.accessToken", "$.refreshToken"]}
+  - {name: the browser token is the approving account, request: {method: GET, path: /v1/auth/me, headers: {Authorization: "Bearer {{browser_token}}"}}}
+  - {name: approve twice, as: auth_pair, request: {method: POST, path: "/v1/auth/pairing/{{pid}}/approve", json: {code: "{{code}}"}}}
+  - {name: unknown id, request: {method: GET, path: /v1/auth/pairing/00000000-0000-4000-8000-000000000000}}
+  - {name: unknown id approve, as: auth_pair, request: {method: POST, path: /v1/auth/pairing/00000000-0000-4000-8000-000000000000/approve, json: {code: "123456"}}}
+  - {name: unknown id approve bad body, as: auth_pair, request: {method: POST, path: /v1/auth/pairing/nope/approve, raw: "{"}}
+  - {name: get on start, request: {method: GET, path: /v1/auth/pairing/start}}
+  - {name: approve a pairing called start, as: auth_pair, request: {method: POST, path: /v1/auth/pairing/start/approve, json: {code: "123456"}}}
+  - {name: put on a pairing, request: {method: PUT, path: /v1/auth/pairing/start}}
+  # registerByIP: five a minute, shared with /v1/auth/register.
+  - {name: limit start 1, request: {method: POST, path: /v1/auth/pairing/start, headers: {X-Forwarded-For: 198.51.131.2}}, ignore: ["$.pairingId", "$.code", "$.expiresAt"]}
+  - {name: limit start 2, request: {method: POST, path: /v1/auth/pairing/start, headers: {X-Forwarded-For: 198.51.131.2}}, ignore: ["$.pairingId", "$.code", "$.expiresAt"]}
+  - {name: limit start 3, request: {method: POST, path: /v1/auth/pairing/start, headers: {X-Forwarded-For: 198.51.131.2}}, ignore: ["$.pairingId", "$.code", "$.expiresAt"]}
+  - {name: limit register 4, request: {method: POST, path: /v1/auth/register, headers: {X-Forwarded-For: 198.51.131.2}, json: {}}}
+  - {name: limit start 5, request: {method: POST, path: /v1/auth/pairing/start, headers: {X-Forwarded-For: 198.51.131.2}}, ignore: ["$.pairingId", "$.code", "$.expiresAt"]}
+  - {name: limit start 6 is limited, request: {method: POST, path: /v1/auth/pairing/start, headers: {X-Forwarded-For: 198.51.131.2}}}
+  - {name: limit register 7 is limited too, request: {method: POST, path: /v1/auth/register, headers: {X-Forwarded-For: 198.51.131.2}, json: {}}}
