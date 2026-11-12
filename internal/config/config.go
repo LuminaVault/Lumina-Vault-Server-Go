@@ -113,6 +113,20 @@ type Config struct {
 	VisionEmbedStubSourceWidth     int     `env:"VISION_EMBED_STUB_SOURCE_WIDTH" envDefault:"768"`
 	VisionEmbedStubSourceHeight    int     `env:"VISION_EMBED_STUB_SOURCE_HEIGHT" envDefault:"768"`
 
+	// Sign-in flows (auth, wave 8B). A provider is mounted only when its client id
+	// holds at least one comma-separated audience. SMS_KIND is "logging" or
+	// "twilio". PHONE_FIXED_OTP and MAGIC_FIXED_OTP pin the code for tests; Swift
+	// weakness, kept: set in production they let anyone sign in as any number or
+	// address.
+	OAuthAppleClientID  string `env:"OAUTH_APPLE_CLIENT_ID"`
+	OAuthGoogleClientID string `env:"OAUTH_GOOGLE_CLIENT_ID"`
+	SMSKind             string `env:"SMS_KIND" envDefault:"logging"`
+	TwilioAccountSID    string `env:"TWILIO_ACCOUNT_SID"`
+	TwilioAuthToken     string `env:"TWILIO_AUTH_TOKEN"`
+	TwilioFromNumber    string `env:"TWILIO_FROM_NUMBER"`
+	PhoneFixedOTP       string `env:"PHONE_FIXED_OTP"`
+	MagicFixedOTP       string `env:"MAGIC_FIXED_OTP"`
+
 	// Team invitations (teams module): makeTeamInvitationSender's inputs.
 	EmailKind         string `env:"EMAIL_KIND" envDefault:"logging"`
 	EmailResendAPIKey string `env:"EMAIL_RESEND_API_KEY"`

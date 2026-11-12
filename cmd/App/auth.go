@@ -38,7 +38,36 @@ func authService(pool *pgxpool.Pool, cfg config.Config, keys auth.Keyset, paths 
 	})
 }
 
-// authModule is wave 8A: the password-session routes and /v1/auth/me, /me/privacy.
-func authModule(pool *pgxpool.Pool, service *authservice.Service, limits *ratelimit.Store, analytics *posthog.Client) httpserver.Module {
-	return authroutes.New(pool, authroutes.Options{Service: service, Limits: limits, Analytics: analytics})
+// authModule is waves 8A and 8B: the password-session routes, /v1/auth/me and
+// /me/privacy, then OAuth, X, phone, magic link and pairing as App+build.swift
+// wires them. Phone and magic link share one pre-auth challenge store.
+func authModule(pool *pgxpool.Pool, cfg config.Config, service *authservice.Service, limits *ratelimit.Store, analytics *posthog.Client) httpserver.Module {
+	providers := map[string]authservice.OAuthProvider{}
+	if aud := authservice.ParseOAuthAudiences(cfg.OAuthAppleClientID); len(aud) > 0 {
+		providers["apple"] = authservice.NewAppleProvider(aud, "", nil)
+	}
+	if aud := authservice.ParseOAuthAudiences(cfg.OAuthGoogleClientID); len(aud) > 0 {
+		providers["google"] = authservice.NewGoogleProvider(aud, "", nil)
+	}
+	fixed := func(code string) authservice.CodeGenerator {
+		if code == "" {
+			return authservice.DefaultCodeGenerator{}
+		}
+		return authservice.FixedCodeGenerator{Code: code}
+	}
+	return authroutes.New(pool, authroutes.Options{
+		Service: service, Limits: limits, Analytics: analytics,
+		OAuthProviders: providers,
+		XClient:        authservice.NewXClient(slog.Default().With("label", "lv.auth.x")),
+		SMS: authservice.NewSMSSender(authservice.SMSConfig{
+			Kind: cfg.SMSKind, AccountSID: cfg.TwilioAccountSID, AuthToken: cfg.TwilioAuthToken, FromNumber: cfg.TwilioFromNumber,
+		}, slog.Default().With("label", "lv.sms")),
+		MagicSender: authservice.NewSender(authservice.SenderConfig{
+			Kind: cfg.EmailKind, APIKey: cfg.EmailResendAPIKey, FromAddress: cfg.EmailFromAddress, ReplyTo: cfg.EmailReplyTo,
+		}, slog.Default().With("label", "lv.auth.magic")),
+		Challenges:   authservice.NewPreAuthChallengeStore(authservice.PreAuthLifetime, authservice.PreAuthMaxAttempts),
+		PhoneCodes:   fixed(cfg.PhoneFixedOTP),
+		MagicCodes:   fixed(cfg.MagicFixedOTP),
+		PairingCodes: authservice.DefaultCodeGenerator{},
+	})
 }

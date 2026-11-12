@@ -6,14 +6,15 @@
 // internal/authservice.
 //
 // Each limited route gets its own per-IP policy, as AuthController mounts a
-// fresh group per route; logout has none. The OAuth, X, phone, magic-link and
-// pairing routes are 8B, WebAuthn 8C.
+// fresh group per route; logout has none. Wave 8B adds the OAuth, X, phone,
+// magic-link and pairing routes (flows.go, pairing.go). WebAuthn is 8C.
 //
 // Not ported: RouteTelemetry.observe("auth.*"), Swift's per-route timer, as in
 // the other modules.
 package authroutes
 
 import (
+	"log/slog"
 	"lumina/internal/authservice"
 	"lumina/internal/httpserver"
 	"lumina/internal/ids"
@@ -21,6 +22,7 @@ import (
 	"lumina/internal/wire"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/labstack/echo/v5"
@@ -32,15 +34,50 @@ type Options struct {
 	Limits  *ratelimit.Store // the process-wide store
 	// Analytics receives user_registered and user_logged_in. Nil sends nothing.
 	Analytics authservice.Analytics
+
+	// 8B. OAuthProviders is keyed by provider name ("apple", "google"); a
+	// provider with no configured audience is absent. Nil XClient is
+	// DefaultXAPIClient, nil SMS the logging sender, nil MagicSender the logging
+	// email sender, nil Challenges a fresh store, nil code generators random.
+	OAuthProviders map[string]authservice.OAuthProvider
+	XClient        authservice.XClient
+	SMS            authservice.SMSSender
+	MagicSender    authservice.Sender
+	Challenges     *authservice.PreAuthChallengeStore
+	PhoneCodes     authservice.CodeGenerator
+	MagicCodes     authservice.CodeGenerator
+	PairingCodes   authservice.CodeGenerator
+	Now            func() time.Time
 }
 
 type Module struct {
-	pool *pgxpool.Pool
-	opt  Options
+	pool     *pgxpool.Pool
+	opt      Options
+	pairings *pairingStore
 }
 
 func New(pool *pgxpool.Pool, opt Options) *Module {
-	return &Module{pool: pool, opt: opt}
+	if opt.XClient == nil {
+		opt.XClient = authservice.NewXClient(slog.Default().With("label", "lv.auth.x"))
+	}
+	if opt.SMS == nil {
+		opt.SMS = authservice.LoggingSMSSender{Log: slog.Default().With("label", "lv.sms")}
+	}
+	if opt.MagicSender == nil {
+		opt.MagicSender = authservice.LoggingSender{Log: slog.Default().With("label", "lv.auth.magic")}
+	}
+	if opt.Challenges == nil {
+		opt.Challenges = authservice.NewPreAuthChallengeStore(authservice.PreAuthLifetime, authservice.PreAuthMaxAttempts)
+	}
+	for _, g := range []*authservice.CodeGenerator{&opt.PhoneCodes, &opt.MagicCodes, &opt.PairingCodes} {
+		if *g == nil {
+			*g = authservice.DefaultCodeGenerator{}
+		}
+	}
+	if opt.Now == nil {
+		opt.Now = time.Now
+	}
+	return &Module{pool: pool, opt: opt, pairings: newPairingStore(opt.Now)}
 }
 
 // Register mounts AuthController's routes, then App+build's meGroup
@@ -60,6 +97,22 @@ func (m *Module) Register(r httpserver.Router, authMW echo.MiddlewareFunc) {
 	r.POST("/v1/auth/email/send-verify", m.sendVerification, ip(ratelimit.SendVerifyByIP))
 	r.POST("/v1/auth/email/confirm", m.confirmEmail, ip(ratelimit.ConfirmEmailByIP))
 	r.POST("/v1/auth/logout", m.logout)
+	r.POST("/v1/auth/oauth/:provider/exchange", m.oauthExchange)
+
+	// PhoneAuthController and EmailMagicLinkController: start has a per-minute
+	// and a daily limit, stacked in that order; verify has none.
+	r.POST("/v1/auth/phone/start", m.phoneStart, ip(ratelimit.PhoneStartByIPPerMinute), ip(ratelimit.PhoneStartByIPDaily))
+	r.POST("/v1/auth/phone/verify", m.phoneVerify)
+	r.POST("/v1/auth/email/start", m.magicStart, ip(ratelimit.EmailMagicStartByIPPerMinute), ip(ratelimit.EmailMagicStartByIPDaily))
+	r.POST("/v1/auth/email/verify", m.magicVerify)
+	// XOAuthController. A literal segment wins over :provider in both routers.
+	r.POST("/v1/auth/oauth/x/exchange", m.xExchange)
+
+	// PairingController: start shares registerByIP's bucket (same policy, same
+	// key); approve is behind the JWT authenticator.
+	r.POST("/v1/auth/pairing/start", m.pairingStart, ip(ratelimit.RegisterByIP))
+	r.GET("/v1/auth/pairing/:pairingId", m.pairingPoll)
+	r.POST("/v1/auth/pairing/:pairingId/approve", m.pairingApprove, authMW)
 
 	r.GET("/v1/auth/me", m.me, authMW)
 	r.PUT("/v1/auth/me/privacy", m.updatePrivacy, authMW)
