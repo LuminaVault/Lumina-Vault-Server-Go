@@ -2312,3 +2312,25 @@ registration under `internal/` and `cmd/App/`, and for a request in `parity/scen
   moderation and the daily post wired through `internal/llm`, or the owner accepting the hold and the moderation
   delay.
 
+
+## Status audit 2026-11-12 (later): the last four `swift` modules → `parity`
+
+Every gap named in the audit above is closed on `main`, and CI `parity` passes on each merge.
+
+- **hermes → `parity`.** #90 adds parity steps for `POST /v1/hermes/mirror/jobs/install-compile` and
+  `POST /v1/hermes/mirror/jobs/{id}/resume` (the compile job id is random, so the response ignores `$.jobID` and
+  `parity_hm_state` snapshots only its length). 6C still flips only with chat (B12). #95 wires the
+  connect-time nudge from `PUT /v1/settings/hermes` to `HermesMirrorRefreshWorker`.
+- **skills-cron → `parity`** in #94: `CronBridgeService` and its 7 routes in `internal/modules/skillscron`, with
+  `scenarios/skills-cron/01-routes.yaml`.
+- **dashboard → `parity`.** #94 fills `cronJobs` on `GET /v1/dashboard/home` from the cron bridge (first 5, `[]` on
+  any error, as `CronBridgePreview`).
+- **reminders → `parity`.** #91 hands the classifier the routed transport (`reminders.RoutedTransport` over
+  `agent.stack.Transport`) and drops the `/v1/reminders/detect` hold.
+- **community → `parity`.** Moderation and the daily post already ran on `internal/llm` through
+  `community.UseModel` (`cmd/App/jobs_j2.go`); #91 drops the `/v1/admin/community` hold.
+
+Still held: `/v1/me/recap/period` (me). It is released in the same infra change that names the themes job in
+`LV_GO_JOBS`, so the claim and the worker run in one process.
+
+Swift test coverage: #92 and #93 port the last 35 files; `swift-test-coverage.py` reports 332 of 332 cited, 0 waived.
