@@ -1,4 +1,4 @@
-.PHONY: help build test lint fmt vuln check backup-image backup-drill
+.PHONY: help build test lint fmt vuln check backup-image backup-drill bruno-regen
 
 help: ## Show targets
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -67,3 +67,6 @@ backup-image: ## Build the encrypted backup sidecar image (pg_dump + age + rclon
 
 backup-drill: ## Backup→restore round-trip with an ephemeral age key and local rclone remote
 	./scripts/backup-drill.sh
+
+bruno-regen: ## Regenerate the LuminaVaultCollection Bruno collection from api/openapi.yaml
+	./scripts/generate-bruno.sh
