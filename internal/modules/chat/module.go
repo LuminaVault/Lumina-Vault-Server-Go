@@ -19,6 +19,7 @@ import (
 	"lumina/internal/llm"
 	"lumina/internal/memorystore"
 	"lumina/internal/modules/memoryagent"
+	"lumina/internal/modules/quickassistant"
 	"lumina/internal/onboardlatch"
 	"lumina/internal/posthog"
 	"lumina/internal/ratelimit"
@@ -86,6 +87,18 @@ type Options struct {
 	// FixLocalPrepare stores the prepared execution. Off, prepare is Swift's bare 500
 	// (see errPrepareSave), and so tools, commit and cancel never find one.
 	FixLocalPrepare bool
+
+	// QuickAssistant is QuickAssistantRuntime: nil unless QUICK_ASSISTANT_ENABLED
+	// is on and its table exists. Nil, a stream body's quickAssistant is never
+	// read and chat is exactly what it was before Quick Assistant.
+	QuickAssistant *QuickAssistant
+}
+
+// QuickAssistant is what a Quick Assistant turn runs on: the tool loop and the
+// services its tools use. A turn's BYOK pin reads Options.Preferences.
+type QuickAssistant struct {
+	Service *quickassistant.Service
+	Deps    quickassistant.Deps
 }
 
 // Module is the chat routes.
@@ -97,6 +110,9 @@ type Module struct {
 	tier        func(*echo.Context) (string, bool)
 	now         func() time.Time
 	log         *slog.Logger
+	// afterTurn runs when a stream's turn has finished, persistence included.
+	// Tests use it to wait for a turn whose client went away.
+	afterTurn func()
 }
 
 // New builds the module.

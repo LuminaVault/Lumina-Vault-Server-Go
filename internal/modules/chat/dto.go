@@ -154,6 +154,10 @@ type streamRequest struct {
 	MultiModel  *multiModel   `json:"multiModel,omitempty"`
 	AgentMode   *agentMode    `json:"agentMode,omitempty"`
 	Attachments *[]Attachment `json:"attachments,omitempty"`
+	// QuickAssistant is QuickAssistantContextDTO, kept raw: it is decoded only
+	// when Quick Assistant is on, so with it off any value is ignored, as
+	// Swift production ignores a key it does not know.
+	QuickAssistant json.RawMessage `json:"quickAssistant,omitempty"`
 }
 
 // HitDTO is QueryHitDTO, shared with /v1/query/stream.
