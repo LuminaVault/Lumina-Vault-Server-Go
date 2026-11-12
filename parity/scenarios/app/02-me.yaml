@@ -1,0 +1,29 @@
+# GET /v1/auth/me and PUT /v1/auth/me/privacy (meHandler, updatePrivacyHandler in
+# App+build.swift, wave 8A). auth_me's email holds a "/", which Foundation writes as "\/".
+# The fixed tokens below are signed with the parity key (JWT_HMAC_SECRETS, kid "parity") for
+# auth_me and expire in 2100: one good, one with an unknown kid, one with no kid, one scoped
+# to audio (refused by JWTAuthenticator), one expired.
+module: app
+steps:
+  - {name: me no token, request: {method: GET, path: /v1/auth/me}}
+  - {name: me bad token, request: {method: GET, path: /v1/auth/me, headers: {Authorization: "Bearer not.a.jwt"}}}
+  - {name: me, as: auth_me, request: {method: GET, path: /v1/auth/me}}
+  - {name: me fixed token, request: {method: GET, path: /v1/auth/me, headers: {Authorization: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InBhcml0eSJ9.eyJzdWIiOiJBMDcwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwQUIiLCJleHAiOjQxMDI0NDQ4MDAsImlhdCI6MTc2NzIyNTYwMCwianRpIjoiMDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAxIn0.KjbcfOshaL7CT6MNSQK_ol3a5nWIAvyiwYZJvW8UALg"}}}
+  - {name: me unknown kid, request: {method: GET, path: /v1/auth/me, headers: {Authorization: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6Im5vcGUifQ.eyJzdWIiOiJBMDcwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwQUIiLCJleHAiOjQxMDI0NDQ4MDAsImlhdCI6MTc2NzIyNTYwMCwianRpIjoiMDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAxIn0.FGE05mTKNrkh6l-HVZUWZhjQXpSBrIDLwBhRjUbchfY"}}}
+  - {name: me no kid, request: {method: GET, path: /v1/auth/me, headers: {Authorization: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJBMDcwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwQUIiLCJleHAiOjQxMDI0NDQ4MDAsImlhdCI6MTc2NzIyNTYwMCwianRpIjoiMDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAxIn0.TBJDLOrlC2OcSTy5LO_OaTEHMRZEg1z7FDi-VrBAZBA"}}}
+  - {name: me scoped token, request: {method: GET, path: /v1/auth/me, headers: {Authorization: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InBhcml0eSJ9.eyJzdWIiOiJBMDcwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwQUIiLCJleHAiOjQxMDI0NDQ4MDAsImlhdCI6MTc2NzIyNTYwMCwianRpIjoiMDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAyIiwic2NwIjoiYXVkaW8ifQ.-9TUN973uxuoOx6zZIy-tiXaT4-1ME-O1QBdnexAAjo"}}}
+  - {name: me expired token, request: {method: GET, path: /v1/auth/me, headers: {Authorization: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InBhcml0eSJ9.eyJzdWIiOiJBMDcwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwQUIiLCJleHAiOjE2MDAwMDAwMDAsImlhdCI6MTU5OTk5NjQwMCwianRpIjoiMDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAzIn0.BC_tgAzGMcHQjRM1phw4konnpyrsU8AOTMbGaplVcNA"}}}
+  - {name: privacy no token bad body, request: {method: PUT, path: /v1/auth/me/privacy, raw: "nope"}}
+  - {name: privacy one field, as: auth_me, request: {method: PUT, path: /v1/auth/me/privacy, json: {privacyNoCNOrigin: true}}}
+  - {name: privacy several and a null, as: auth_me, request: {method: PUT, path: /v1/auth/me/privacy, raw: "{\"contextRouting\":true,\"autoSaveLinks\":false,\"mnemosyneEnabled\":null}"}}
+  - {name: privacy empty object, as: auth_me, request: {method: PUT, path: /v1/auth/me/privacy, json: {}}}
+  - {name: privacy unknown keys ignored, as: auth_me, request: {method: PUT, path: /v1/auth/me/privacy, json: {isAdmin: true, mnemosyneEnabled: false}}}
+  - {name: privacy wrong type, as: auth_me, request: {method: PUT, path: /v1/auth/me/privacy, json: {contextRouting: "yes"}}}
+  - {name: privacy number for bool, as: auth_me, request: {method: PUT, path: /v1/auth/me/privacy, json: {autoSaveLinks: 1}}}
+  - {name: privacy not json, as: auth_me, request: {method: PUT, path: /v1/auth/me/privacy, raw: "nope"}}
+  - {name: privacy array, as: auth_me, request: {method: PUT, path: /v1/auth/me/privacy, raw: "[]"}}
+  - {name: privacy null, as: auth_me, request: {method: PUT, path: /v1/auth/me/privacy, raw: "null"}}
+  - {name: privacy reset, as: auth_me, request: {method: PUT, path: /v1/auth/me/privacy, json: {privacyNoCNOrigin: false, contextRouting: false, autoSaveLinks: true, mnemosyneEnabled: true}}}
+  - {name: me after, as: auth_me, request: {method: GET, path: /v1/auth/me}}
+  - {name: post on me, as: auth_me, request: {method: POST, path: /v1/auth/me, json: {}}}
+  - {name: get on privacy, as: auth_me, request: {method: GET, path: /v1/auth/me/privacy}}

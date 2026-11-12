@@ -1,0 +1,37 @@
+# AuthController's refusals that write nothing (wave 8A): AuthError bodies and Hummingbird's
+# decode errors. Each step has its own X-Forwarded-For, so no per-IP bucket (registerByIP is
+# 5 a minute) fills. Registrations that succeed write a random bcrypt salt into users, which
+# other modules snapshot, so they run in the switched state auth-writes.
+module: auth
+steps:
+  - {name: register weak password, request: {method: POST, path: /v1/auth/register, headers: {X-Forwarded-For: 198.51.100.1}, json: {email: new1@parity.test, username: new-one, password: elevenchars}}}
+  - {name: register weak password before username, request: {method: POST, path: /v1/auth/register, headers: {X-Forwarded-For: 198.51.100.2}, json: {email: new1@parity.test, username: "!", password: short}}}
+  - {name: register twelve characters of flags, request: {method: POST, path: /v1/auth/register, headers: {X-Forwarded-For: 198.51.100.3}, json: {email: new1@parity.test, username: "no", password: "🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹"}}}
+  - {name: register eleven characters of flags, request: {method: POST, path: /v1/auth/register, headers: {X-Forwarded-For: 198.51.100.4}, json: {email: new1@parity.test, username: new-one, password: "🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹🇵🇹"}}}
+  - {name: register reserved username, request: {method: POST, path: /v1/auth/register, headers: {X-Forwarded-For: 198.51.100.5}, json: {email: new1@parity.test, username: " Admin\n", password: parity-login-pass-1}}}
+  - {name: register underscore, request: {method: POST, path: /v1/auth/register, headers: {X-Forwarded-For: 198.51.100.6}, json: {email: new1@parity.test, username: under_score, password: parity-login-pass-1}}}
+  - {name: register leading dash, request: {method: POST, path: /v1/auth/register, headers: {X-Forwarded-For: 198.51.100.7}, json: {email: new1@parity.test, username: -lead, password: parity-login-pass-1}}}
+  - {name: register 32 chars, request: {method: POST, path: /v1/auth/register, headers: {X-Forwarded-For: 198.51.100.8}, json: {email: new1@parity.test, username: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, password: parity-login-pass-1}}}
+  - {name: register dotted I, request: {method: POST, path: /v1/auth/register, headers: {X-Forwarded-For: 198.51.100.9}, json: {email: new1@parity.test, username: "İlker", password: parity-login-pass-1}}}
+  - {name: register existing email any case, request: {method: POST, path: /v1/auth/register, headers: {X-Forwarded-For: 198.51.100.10}, json: {email: AUTH-LOGIN@parity.test, username: brand-new, password: parity-login-pass-1}}}
+  - {name: register existing username padded, request: {method: POST, path: /v1/auth/register, headers: {X-Forwarded-For: 198.51.100.11}, json: {email: brand-new@parity.test, username: "  Auth-Login ", password: parity-login-pass-1}}}
+  - {name: register missing username, request: {method: POST, path: /v1/auth/register, headers: {X-Forwarded-For: 198.51.100.12}, json: {email: new1@parity.test, password: parity-login-pass-1}}}
+  - {name: register null email, request: {method: POST, path: /v1/auth/register, headers: {X-Forwarded-For: 198.51.100.13}, raw: "{\"email\":null,\"username\":\"x\",\"password\":\"y\"}"}}
+  - {name: register number password, request: {method: POST, path: /v1/auth/register, headers: {X-Forwarded-For: 198.51.100.14}, raw: "{\"email\":\"a@b.c\",\"username\":\"xyz\",\"password\":123456789012}"}}
+  - {name: register not json, request: {method: POST, path: /v1/auth/register, headers: {X-Forwarded-For: 198.51.100.15}, raw: "not json"}}
+  - {name: register empty body, request: {method: POST, path: /v1/auth/register, headers: {X-Forwarded-For: 198.51.100.16}, raw: ""}}
+  - {name: register array, request: {method: POST, path: /v1/auth/register, headers: {X-Forwarded-For: 198.51.100.17}, raw: "[]"}}
+  - {name: login missing password, request: {method: POST, path: /v1/auth/login, headers: {X-Forwarded-For: 198.51.100.18}, json: {email: auth-login@parity.test}}}
+  - {name: login mfaCode wrong type, request: {method: POST, path: /v1/auth/login, headers: {X-Forwarded-For: 198.51.100.19}, raw: "{\"email\":\"auth-login@parity.test\",\"password\":\"x\",\"mfaCode\":7}"}}
+  - {name: refresh missing key, request: {method: POST, path: /v1/auth/refresh, headers: {X-Forwarded-For: 198.51.100.20}, json: {token: x}}}
+  - {name: logout not json, request: {method: POST, path: /v1/auth/logout, headers: {X-Forwarded-For: 198.51.100.21}, raw: "{"}}
+  - {name: mfa verify bad uuid, request: {method: POST, path: /v1/auth/mfa/verify, headers: {X-Forwarded-For: 198.51.100.22}, json: {challengeId: not-a-uuid, code: "1"}}}
+  - {name: mfa verify number id, request: {method: POST, path: /v1/auth/mfa/verify, headers: {X-Forwarded-For: 198.51.100.23}, raw: "{\"challengeId\":7,\"code\":\"1\"}"}}
+  - {name: mfa resend missing email, request: {method: POST, path: /v1/auth/mfa/resend, headers: {X-Forwarded-For: 198.51.100.24}, json: {}}}
+  - {name: forgot missing email, request: {method: POST, path: /v1/auth/forgot-password, headers: {X-Forwarded-For: 198.51.100.25}, json: {}}}
+  - {name: resend reset not json, request: {method: POST, path: /v1/auth/resend-reset, headers: {X-Forwarded-For: 198.51.100.26}, raw: "nope"}}
+  - {name: reset missing new password, request: {method: POST, path: /v1/auth/reset-password, headers: {X-Forwarded-For: 198.51.100.27}, json: {email: a@b.c, code: "1"}}}
+  - {name: send verify null, request: {method: POST, path: /v1/auth/email/send-verify, headers: {X-Forwarded-For: 198.51.100.28}, raw: "null"}}
+  - {name: confirm missing code, request: {method: POST, path: /v1/auth/email/confirm, headers: {X-Forwarded-For: 198.51.100.29}, json: {email: a@b.c}}}
+  - {name: get on login, request: {method: GET, path: /v1/auth/login, headers: {X-Forwarded-For: 198.51.100.30}}}
+  - {name: unknown auth path, request: {method: POST, path: /v1/auth/nope, headers: {X-Forwarded-For: 198.51.100.31}, json: {}}}

@@ -2182,3 +2182,31 @@ served by Go but flip only with chat, in one infra commit (B12, decisions.md D-6
   they would rewrite later modules' fixtures, and correlate's failure lines carry transport error text. Unit and DB
   tests cover them.
 - Flip: B5 (Isis) in the same infra PR, and with or after `billing`, whose module serves `/v1/admin/users` (flip-blockers.md, admin).
+
+## auth (wave 8, 8A): sessions and /v1/auth/me*
+
+### Progress 2026-11-12 (no route flips)
+
+- `internal/authservice` ports AuthService's session half: register, login (5 failures lock for 15 min), MFA
+  (email challenge, 5 min, burnt at 5 failures), forgot/resend/reset (15 min codes, row lock after 5 failures for
+  30 min, all refresh tokens revoked on success), email verification (24 h codes), refresh and logout on P9's store.
+  `EmailOTPSender`: `logging` (default) and `resend` (`EMAIL_KIND`, `EMAIL_RESEND_API_KEY`, `EMAIL_FROM_ADDRESS`,
+  `EMAIL_REPLY_TO`). `internal/modules/authroutes` mounts the 11 routes under `/v1/auth` with P10's per-IP policies
+  (logout unlimited), and `GET /v1/auth/me`, `PUT /v1/auth/me/privacy` (`/me/billing` and `/me/usage` were 7A).
+- **8A TODO (issueTokens): done.** Every session issued by register, login, MFA verify, refresh and reset applies the
+  `BILLING_TIER_OVERRIDE_EMAILS` allowlist (raise only, never over `ultimate`), sends `$set is_internal`, and carries
+  `hpid` only for a `ready` Hermes profile. 8B/8C reuse `authservice.IssueTokens`.
+- Swift tests: `AuthFlow` 14, `EmailVerification` 7, `HermesProvisioningLifecycle` 1, `ResendEmailOTPSender` 5
+  (httptest stub), `PrivacyToggle` 3, `UsernamePolicy` 6. Swift rules beyond them pinned in `lockout_test.go`; wire
+  bytes and key order in `authroutes/module_test.go`.
+- Parity: `scenarios/auth` 01-07 with `seed/auth.sql`, `scenarios/app/02-me.yaml`; switched states `auth-writes`
+  (successful register and reset, random salts) and `cross`: the harness's new `on: peer` steps send a request to a
+  server of the other kind on the same database (`--swift-peer`, `--go-peer`; `go2-switched` in compose), so register,
+  refresh, login, logout, reset and MFA are each started on one server and finished on the other, both directions.
+- Kept Swift weaknesses (security fixes wait for the archive): login timing oracle and 423 before the password check,
+  lockout counter not reset after expiry, read-then-write failure counters, `mfa/resend` keyed by email alone (its
+  401 enumerates accounts and the new challenge id is never returned), register 409s enumerate, reset/verify locks
+  per code row (a new code clears them), non-constant-time code compares, confirm 204 for verified vs 401 unknown,
+  the logging sender writes codes to logs, reset leaves access tokens valid, refresh rotation without reuse detection.
+- Left: `auth` stays `swift` until 8B (OAuth, X, phone, magic link, pairing) and 8C (WebAuthn); `app` until
+  `/health/deep`.

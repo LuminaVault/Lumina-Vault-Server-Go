@@ -1,0 +1,27 @@
+# AuthController mounts each limited route in its own group (P10's per-IP policies), keyed by
+# the first X-Forwarded-For piece. registerByIP is 5 a minute: the sixth answers 429 before the
+# body is read. login has its own bucket, and logout none. Retry-After counts down, so only its
+# presence shows in the status and body.
+module: auth
+steps:
+  - {name: register 1, request: {method: POST, path: /v1/auth/register, headers: {X-Forwarded-For: "198.51.106.1, 10.0.0.1"}, json: {}}}
+  - {name: register 2, request: {method: POST, path: /v1/auth/register, headers: {X-Forwarded-For: "198.51.106.1, 10.0.0.2"}, json: {}}}
+  - {name: register 3, request: {method: POST, path: /v1/auth/register, headers: {X-Forwarded-For: 198.51.106.1}, json: {}}}
+  - {name: register 4, request: {method: POST, path: /v1/auth/register, headers: {X-Forwarded-For: 198.51.106.1}, json: {}}}
+  - {name: register 5, request: {method: POST, path: /v1/auth/register, headers: {X-Forwarded-For: 198.51.106.1}, json: {}}}
+  - {name: register 6 is limited, request: {method: POST, path: /v1/auth/register, headers: {X-Forwarded-For: 198.51.106.1}, raw: "not json"}}
+  - {name: another IP is not, request: {method: POST, path: /v1/auth/register, headers: {X-Forwarded-For: 198.51.106.2}, json: {}}}
+  - {name: login has its own bucket, request: {method: POST, path: /v1/auth/login, headers: {X-Forwarded-For: 198.51.106.1}, json: {}}}
+  - {name: logout 1, request: {method: POST, path: /v1/auth/logout, headers: {X-Forwarded-For: 198.51.106.3}, json: {refreshToken: x}}}
+  - {name: logout 2, request: {method: POST, path: /v1/auth/logout, headers: {X-Forwarded-For: 198.51.106.3}, json: {refreshToken: x}}}
+  - {name: logout 3, request: {method: POST, path: /v1/auth/logout, headers: {X-Forwarded-For: 198.51.106.3}, json: {refreshToken: x}}}
+  - {name: logout 4, request: {method: POST, path: /v1/auth/logout, headers: {X-Forwarded-For: 198.51.106.3}, json: {refreshToken: x}}}
+  - {name: logout 5, request: {method: POST, path: /v1/auth/logout, headers: {X-Forwarded-For: 198.51.106.3}, json: {refreshToken: x}}}
+  - {name: logout 6, request: {method: POST, path: /v1/auth/logout, headers: {X-Forwarded-For: 198.51.106.3}, json: {refreshToken: x}}}
+  - {name: forgot 1, request: {method: POST, path: /v1/auth/forgot-password, headers: {X-Forwarded-For: 198.51.106.4}, json: {email: nobody@parity.test}}}
+  - {name: forgot 2, request: {method: POST, path: /v1/auth/forgot-password, headers: {X-Forwarded-For: 198.51.106.4}, json: {email: nobody@parity.test}}}
+  - {name: forgot 3, request: {method: POST, path: /v1/auth/forgot-password, headers: {X-Forwarded-For: 198.51.106.4}, json: {email: nobody@parity.test}}}
+  - {name: forgot 4, request: {method: POST, path: /v1/auth/forgot-password, headers: {X-Forwarded-For: 198.51.106.4}, json: {email: nobody@parity.test}}}
+  - {name: forgot 5, request: {method: POST, path: /v1/auth/forgot-password, headers: {X-Forwarded-For: 198.51.106.4}, json: {email: nobody@parity.test}}}
+  - {name: forgot 6 is limited, request: {method: POST, path: /v1/auth/forgot-password, headers: {X-Forwarded-For: 198.51.106.4}, json: {email: nobody@parity.test}}}
+  - {name: resend reset has its own bucket, request: {method: POST, path: /v1/auth/resend-reset, headers: {X-Forwarded-For: 198.51.106.4}, json: {email: nobody@parity.test}}}

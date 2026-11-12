@@ -93,6 +93,9 @@ x-common-env: &common-env
   METRICS_SECRET: parity-metrics-secret
   # RevenueCat webhook (billing). Empty in the switched state "unconfigured".
   REVENUECAT_WEBHOOK_SECRET: parity-rc-secret
+  # Sessions (auth, 8A): issueTokens stamps these on every session. Only parity/seed/auth.sql's
+  # users are listed, so no other scenario's user changes.
+  BILLING_TIER_OVERRIDE_EMAILS: "auth-founder@parity.test=pro,auth-ultimate@parity.test=pro,auth-x-mfa@parity.test"
   # Marketplace: the stub also answers as the plugin runner.
   PLUGIN_RUNNER_URL: http://feeds:8080
   PLUGIN_RUNNER_TOKEN: parity-runner-token
@@ -226,6 +229,19 @@ services:
       HERMES_GATEWAY_URL: ${SWITCH_HERMES_GATEWAY_URL:-http://127.0.0.1:9}
       CAPTURE_AUTO_FILE_ENABLED: ${SWITCH_CAPTURE_AUTO_FILE_ENABLED:-false}
     ports: ["18086:8080"]
+    depends_on: { pg: { condition: service_healthy }, feeds: { condition: service_started } }
+    profiles: [switched]
+
+  # A second Go: the Swift run's peer in state "cross" (sessions across the cutover),
+  # on parity_swift_switched while swift2-switched serves parity_go_switched.
+  go2-switched:
+    image: lvparity-go
+    pull_policy: never
+    extra_hosts: *no-external
+    environment:
+      <<: *common-env
+      POSTGRES_DATABASE: ${SWITCH_GO2_DB:-parity_go2_switched}
+    ports: ["18087:8080"]
     depends_on: { pg: { condition: service_healthy }, feeds: { condition: service_started } }
     profiles: [switched]
 

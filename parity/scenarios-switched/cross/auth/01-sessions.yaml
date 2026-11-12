@@ -1,0 +1,68 @@
+# Sessions survive the cutover (wave-6-8-plan): a session started on one server works on
+# the other, over the same database and the same JWT keys. Steps marked "on: peer" go to a
+# server of the other kind on the target's database: in the Swift run, a Go peer
+# (go2-switched on parity_swift_switched); in the Go run, a Swift peer (swift2-switched on
+# parity_go_switched). The two transcripts compared, both directions are proven at once.
+module: auth
+steps:
+  # Register on one, use it on the other.
+  - name: register on target
+    request: {method: POST, path: /v1/auth/register, headers: {X-Forwarded-For: 198.51.120.1}, json: {email: cross-new@parity.test, username: cross-new, password: parity-cross-pass-1}}
+    capture: {token: "$.accessToken", refresh: "$.refreshToken"}
+    ignore: ["$.userId", "$.accessToken", "$.refreshToken"]
+  - {name: me on peer, on: peer, request: {method: GET, path: /v1/auth/me, headers: {Authorization: "Bearer {{token}}"}}, ignore: ["$.userId"]}
+  - {name: billing on peer, on: peer, request: {method: GET, path: /v1/auth/me/billing, headers: {Authorization: "Bearer {{token}}"}}, ignore: ["$.tierExpiresAt"]}
+  # Refresh alternates between the two.
+  - name: refresh on peer
+    on: peer
+    request: {method: POST, path: /v1/auth/refresh, headers: {X-Forwarded-For: 198.51.120.2}, json: {refreshToken: "{{refresh}}"}}
+    capture: {token2: "$.accessToken", refresh2: "$.refreshToken"}
+    ignore: ["$.userId", "$.accessToken", "$.refreshToken"]
+  - {name: me on target with the peer token, request: {method: GET, path: /v1/auth/me, headers: {Authorization: "Bearer {{token2}}"}}, ignore: ["$.userId"]}
+  - {name: the first refresh is spent on target, request: {method: POST, path: /v1/auth/refresh, headers: {X-Forwarded-For: 198.51.120.2}, json: {refreshToken: "{{refresh}}"}}}
+  - name: refresh on target
+    request: {method: POST, path: /v1/auth/refresh, headers: {X-Forwarded-For: 198.51.120.2}, json: {refreshToken: "{{refresh2}}"}}
+    capture: {token3: "$.accessToken", refresh3: "$.refreshToken"}
+    ignore: ["$.userId", "$.accessToken", "$.refreshToken"]
+  - {name: me on peer with the target token, on: peer, request: {method: GET, path: /v1/auth/me, headers: {Authorization: "Bearer {{token3}}"}}, ignore: ["$.userId"]}
+  - {name: the second refresh is spent on peer, on: peer, request: {method: POST, path: /v1/auth/refresh, headers: {X-Forwarded-For: 198.51.120.2}, json: {refreshToken: "{{refresh2}}"}}}
+  # The hash the target wrote verifies on the peer.
+  - name: login on peer with the target's hash
+    on: peer
+    request: {method: POST, path: /v1/auth/login, headers: {X-Forwarded-For: 198.51.120.3}, json: {email: cross-new@parity.test, password: parity-cross-pass-1}}
+    ignore: ["$.userId", "$.accessToken", "$.refreshToken"]
+  - {name: wrong password on peer, on: peer, request: {method: POST, path: /v1/auth/login, headers: {X-Forwarded-For: 198.51.120.3}, json: {email: cross-new@parity.test, password: parity-cross-pass-2}}}
+  # Logout on the peer kills the refresh on the target.
+  - {name: logout on peer, on: peer, request: {method: POST, path: /v1/auth/logout, json: {refreshToken: "{{refresh3}}"}}}
+  - {name: the logged out refresh on target, request: {method: POST, path: /v1/auth/refresh, headers: {X-Forwarded-For: 198.51.120.2}, json: {refreshToken: "{{refresh3}}"}}}
+  # Reset on the target: the peer sees the revoked refresh and the new hash.
+  - name: x-reset logs in on peer
+    on: peer
+    request: {method: POST, path: /v1/auth/login, headers: {X-Forwarded-For: 198.51.120.4}, json: {email: auth-x-reset@parity.test, password: parity-login-pass-1}}
+    capture: {xrefresh: "$.refreshToken"}
+    ignore: ["$.accessToken", "$.refreshToken"]
+  - {name: reset on target, request: {method: POST, path: /v1/auth/reset-password, headers: {X-Forwarded-For: 198.51.120.5}, json: {email: auth-x-reset@parity.test, code: "111111", newPassword: parity-cross-reset-1}}, ignore: ["$.accessToken", "$.refreshToken"]}
+  - {name: the peer refresh is revoked, on: peer, request: {method: POST, path: /v1/auth/refresh, headers: {X-Forwarded-For: 198.51.120.4}, json: {refreshToken: "{{xrefresh}}"}}}
+  - {name: old password on peer, on: peer, request: {method: POST, path: /v1/auth/login, headers: {X-Forwarded-For: 198.51.120.4}, json: {email: auth-x-reset@parity.test, password: parity-login-pass-1}}}
+  - {name: new password on peer, on: peer, request: {method: POST, path: /v1/auth/login, headers: {X-Forwarded-For: 198.51.120.4}, json: {email: auth-x-reset@parity.test, password: parity-cross-reset-1}}, ignore: ["$.accessToken", "$.refreshToken"]}
+  - {name: the spent code on peer, on: peer, request: {method: POST, path: /v1/auth/reset-password, headers: {X-Forwarded-For: 198.51.120.5}, json: {email: auth-x-reset@parity.test, code: "111111", newPassword: parity-cross-reset-2}}}
+  # MFA: a challenge started on one is answered on the other.
+  - name: mfa login on target
+    request: {method: POST, path: /v1/auth/login, headers: {X-Forwarded-For: 198.51.120.6, mfa-auth-v1: "true"}, json: {email: cross-new@parity.test, password: parity-cross-pass-1}}
+    capture: {challenge: "$.mfaChallengeId"}
+    ignore: ["$.mfaChallengeId"]
+  - {name: wrong code on peer, on: peer, request: {method: POST, path: /v1/auth/mfa/verify, headers: {X-Forwarded-For: 198.51.120.7}, json: {challengeId: "{{challenge}}", code: "000000"}}}
+  - name: seeded challenge verified on peer, which stamps the allowlisted override
+    on: peer
+    request: {method: POST, path: /v1/auth/mfa/verify, headers: {X-Forwarded-For: 198.51.120.7}, json: {challengeId: A07300B2-0000-4000-8000-0000000000B2, code: "333333"}}
+    capture: {mfatoken: "$.accessToken"}
+    ignore: ["$.accessToken", "$.refreshToken"]
+  - {name: the consumed challenge on target, request: {method: POST, path: /v1/auth/mfa/verify, headers: {X-Forwarded-For: 198.51.120.7}, json: {challengeId: A07300B2-0000-4000-8000-0000000000B2, code: "333333"}}}
+  - {name: the override reads back on target, request: {method: GET, path: /v1/auth/me/billing, headers: {Authorization: "Bearer {{mfatoken}}"}}}
+  # Tokens neither server takes.
+  - {name: unknown kid on target, request: {method: GET, path: /v1/auth/me, headers: {Authorization: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6Im5vcGUifQ.eyJzdWIiOiJBMDcwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwQUIiLCJleHAiOjQxMDI0NDQ4MDAsImlhdCI6MTc2NzIyNTYwMCwianRpIjoiMDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAxIn0.FGE05mTKNrkh6l-HVZUWZhjQXpSBrIDLwBhRjUbchfY"}}}
+  - {name: unknown kid on peer, on: peer, request: {method: GET, path: /v1/auth/me, headers: {Authorization: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6Im5vcGUifQ.eyJzdWIiOiJBMDcwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwQUIiLCJleHAiOjQxMDI0NDQ4MDAsImlhdCI6MTc2NzIyNTYwMCwianRpIjoiMDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAxIn0.FGE05mTKNrkh6l-HVZUWZhjQXpSBrIDLwBhRjUbchfY"}}}
+  - {name: no kid on target, request: {method: GET, path: /v1/auth/me, headers: {Authorization: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJBMDcwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwQUIiLCJleHAiOjQxMDI0NDQ4MDAsImlhdCI6MTc2NzIyNTYwMCwianRpIjoiMDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAxIn0.TBJDLOrlC2OcSTy5LO_OaTEHMRZEg1z7FDi-VrBAZBA"}}}
+  - {name: no kid on peer, on: peer, request: {method: GET, path: /v1/auth/me, headers: {Authorization: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJBMDcwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwQUIiLCJleHAiOjQxMDI0NDQ4MDAsImlhdCI6MTc2NzIyNTYwMCwianRpIjoiMDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAxIn0.TBJDLOrlC2OcSTy5LO_OaTEHMRZEg1z7FDi-VrBAZBA"}}}
+  - {name: scoped token on target, request: {method: GET, path: /v1/auth/me, headers: {Authorization: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InBhcml0eSJ9.eyJzdWIiOiJBMDcwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwQUIiLCJleHAiOjQxMDI0NDQ4MDAsImlhdCI6MTc2NzIyNTYwMCwianRpIjoiMDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAyIiwic2NwIjoiYXVkaW8ifQ.-9TUN973uxuoOx6zZIy-tiXaT4-1ME-O1QBdnexAAjo"}}}
+  - {name: scoped token on peer, on: peer, request: {method: GET, path: /v1/auth/me, headers: {Authorization: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InBhcml0eSJ9.eyJzdWIiOiJBMDcwMDAwMC0wMDAwLTQwMDAtODAwMC0wMDAwMDAwMDAwQUIiLCJleHAiOjQxMDI0NDQ4MDAsImlhdCI6MTc2NzIyNTYwMCwianRpIjoiMDAwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAyIiwic2NwIjoiYXVkaW8ifQ.-9TUN973uxuoOx6zZIy-tiXaT4-1ME-O1QBdnexAAjo"}}}

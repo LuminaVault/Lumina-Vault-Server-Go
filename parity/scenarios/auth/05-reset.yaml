@@ -1,0 +1,16 @@
+# Forgot, resend and reset (AuthService.resetPassword) without a successful reset, which
+# writes a random bcrypt salt into users: that runs in the switched state auth-writes. Forgot
+# and resend answer 202 for any email (EMAIL_KIND=logging here, so nothing is sent).
+module: auth
+steps:
+  - {name: forgot unknown, request: {method: POST, path: /v1/auth/forgot-password, headers: {X-Forwarded-For: 198.51.104.1}, json: {email: nobody@parity.test}}}
+  - {name: forgot known, request: {method: POST, path: /v1/auth/forgot-password, headers: {X-Forwarded-For: 198.51.104.1}, json: {email: Auth-2b@parity.test}}}
+  - {name: resend unknown, request: {method: POST, path: /v1/auth/resend-reset, headers: {X-Forwarded-For: 198.51.104.1}, json: {email: nobody@parity.test}}}
+  - {name: resend known, request: {method: POST, path: /v1/auth/resend-reset, headers: {X-Forwarded-For: 198.51.104.1}, json: {email: auth-2b@parity.test}}}
+  - {name: reset weak password first, request: {method: POST, path: /v1/auth/reset-password, headers: {X-Forwarded-For: 198.51.104.2}, json: {email: nobody@parity.test, code: "111111", newPassword: short}}}
+  - {name: reset unknown email, request: {method: POST, path: /v1/auth/reset-password, headers: {X-Forwarded-For: 198.51.104.2}, json: {email: nobody@parity.test, code: "111111", newPassword: parity-new-pass-1}}}
+  - {name: reset with no code issued, request: {method: POST, path: /v1/auth/reset-password, headers: {X-Forwarded-For: 198.51.104.2}, json: {email: auth-locked@parity.test, code: "111111", newPassword: parity-new-pass-1}}}
+  - {name: reset locked row, request: {method: POST, path: /v1/auth/reset-password, headers: {X-Forwarded-For: 198.51.104.2}, json: {email: auth-resetlock@parity.test, code: "111111", newPassword: parity-new-pass-1}}}
+  - {name: reset expired row, request: {method: POST, path: /v1/auth/reset-password, headers: {X-Forwarded-For: 198.51.104.2}, json: {email: auth-resetexp@parity.test, code: "111111", newPassword: parity-new-pass-1}}}
+  - {name: reset wrong code, request: {method: POST, path: /v1/auth/reset-password, headers: {X-Forwarded-For: 198.51.104.3}, json: {email: auth-reset@parity.test, code: "000000", newPassword: parity-new-pass-1}}}
+  - {name: reset newer random code hides the seeded one, request: {method: POST, path: /v1/auth/reset-password, headers: {X-Forwarded-For: 198.51.104.3}, json: {email: auth-2b@parity.test, code: "111111", newPassword: parity-new-pass-1}}}

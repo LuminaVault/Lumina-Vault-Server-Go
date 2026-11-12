@@ -1,0 +1,15 @@
+# Successful POST /v1/auth/reset-password on auth-reset's seeded code (111111): the code is
+# spent, every refresh token is revoked, the old password stops working and the new one logs
+# in. The access token minted before the reset keeps working (Swift does not revoke it).
+module: auth
+steps:
+  - name: login before the reset
+    request: {method: POST, path: /v1/auth/login, headers: {X-Forwarded-For: 198.51.111.1}, json: {email: auth-reset@parity.test, password: parity-login-pass-1}}
+    capture: {token: "$.accessToken", refresh: "$.refreshToken"}
+    ignore: ["$.accessToken", "$.refreshToken"]
+  - {name: reset, request: {method: POST, path: /v1/auth/reset-password, headers: {X-Forwarded-For: 198.51.111.2}, json: {email: Auth-Reset@parity.test, code: "111111", newPassword: parity-reset-new-pass-1}}, ignore: ["$.accessToken", "$.refreshToken"]}
+  - {name: the code is spent, request: {method: POST, path: /v1/auth/reset-password, headers: {X-Forwarded-For: 198.51.111.2}, json: {email: auth-reset@parity.test, code: "111111", newPassword: parity-reset-new-pass-2}}}
+  - {name: the old refresh is revoked, request: {method: POST, path: /v1/auth/refresh, headers: {X-Forwarded-For: 198.51.111.3}, json: {refreshToken: "{{refresh}}"}}}
+  - {name: the old password fails, request: {method: POST, path: /v1/auth/login, headers: {X-Forwarded-For: 198.51.111.4}, json: {email: auth-reset@parity.test, password: parity-login-pass-1}}}
+  - {name: the new password logs in, request: {method: POST, path: /v1/auth/login, headers: {X-Forwarded-For: 198.51.111.4}, json: {email: auth-reset@parity.test, password: parity-reset-new-pass-1}}, ignore: ["$.accessToken", "$.refreshToken"]}
+  - {name: the old access token still reads me, request: {method: GET, path: /v1/auth/me, headers: {Authorization: "Bearer {{token}}"}}}

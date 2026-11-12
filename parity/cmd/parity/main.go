@@ -1,7 +1,7 @@
 // Command parity runs parity scenarios against the Swift and Go servers.
 //
 //	parity compare --swift URL --swift-db DSN --go URL --go-db DSN --scenarios DIR [--module M] [--save-swift-transcripts DIR]
-//	               [--swift-files docker:CONTAINER:ROOT|dir:ROOT --go-files ...]
+//	               [--swift-files docker:CONTAINER:ROOT|dir:ROOT --go-files ...] [--swift-peer URL --go-peer URL]
 //	parity smoke   --target URL --token JWT --transcripts DIR --scenarios DIR --module M
 //
 // compare exits 1 on any difference. A self-test is compare with --go pointing
@@ -55,6 +55,8 @@ func compare(args []string) error {
 	goDB := fs.String("go-db", "", "Go database DSN")
 	swiftFiles := fs.String("swift-files", "", "Swift vault root, docker:CONTAINER:ROOT or dir:ROOT (needed by steps with `files`)")
 	goFiles := fs.String("go-files", "", "Go vault root, same form")
+	swiftPeer := fs.String("swift-peer", "", "a Go server on the Swift database, for `on: peer` steps (state cross)")
+	goPeer := fs.String("go-peer", "", "a Swift server on the Go database, for `on: peer` steps")
 	secrets := fs.String("jwt-secrets", "parity:parity-secret-parity-secret-0000", "JWT_HMAC_SECRETS shared by both servers")
 	users := fs.String("users", "parity/seed/users.yaml", "fixture users")
 	dir := fs.String("scenarios", "parity/scenarios", "scenario root")
@@ -79,6 +81,7 @@ func compare(args []string) error {
 	if err != nil {
 		return err
 	}
+	swiftT.Peer, goT.Peer = *swiftPeer, *goPeer
 	scenarios, err := loadAll(*dir, *module)
 	if err != nil {
 		return err
