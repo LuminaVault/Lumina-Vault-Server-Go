@@ -223,6 +223,20 @@ func TestService(t *testing.T) {
 		require.Len(t, sender.sent, 1, "achievements ignore the opt-out table")
 	})
 
+	// CronPushTests: "notifyCron delivers with cron category and skill subtitle".
+	t.Run("cron push carries the cron category and the skill as subtitle", func(t *testing.T) {
+		tenant := newTenant(t)
+		addToken(t, tenant, unique("cron"), nil)
+		sender := &stubSender{}
+		require.NoError(t, NewWithSender(pool, "com.luminavault.test", sender).NotifyCron(ctx, tenant, "pattern-detector", "ran"))
+		require.Len(t, sender.sent, 1)
+		m := sender.sent[0].Message
+		require.Equal(t, CategoryCron, m.Category)
+		require.Equal(t, "pattern-detector", *m.Subtitle)
+		require.Equal(t, "Scheduled job ran", m.Title)
+		require.Equal(t, "ran", m.Body)
+	})
+
 	t.Run("a lookup failure is returned", func(t *testing.T) {
 		closed, err := pgxpool.New(ctx, pool.Config().ConnString())
 		require.NoError(t, err)

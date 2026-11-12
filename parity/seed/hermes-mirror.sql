@@ -44,7 +44,7 @@ INSERT INTO hermes_job_runs (id, tenant_id, hermes_job_id, hermes_run_key, statu
 -- The rows without their random ids or clock columns.
 CREATE VIEW parity_hm_state AS
   SELECT tenant_id, last_status, last_error, skills_count, jobs_count, vault_files_count, vault_path, vault_state,
-         sessions_imported, compile_job_id, last_sync_at IS NOT NULL AS synced
+         sessions_imported, length(compile_job_id) AS compile_job_id_length, last_sync_at IS NOT NULL AS synced
     FROM hermes_mirror_state
    WHERE tenant_id IN ('4e770000-0000-4000-8000-0000000000a1', '4e770000-0000-4000-8000-0000000000c3',
                        '4e770000-0000-4000-8000-0000000000d4', '4e770000-0000-4000-8000-0000000000e5');

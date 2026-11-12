@@ -47,9 +47,7 @@ func TestWaveFiveHolds(t *testing.T) {
 	for _, c := range []struct{ module, path, route, batch string }{
 		{"kb-compile", "/v1/memory-compile", "/v1/memory-compile", "batch 5-4"},
 		{"apple", "/v1/devices/command", "/v1/devices/command/{id}/result", "batch 5-4"},
-		{"reminders", "/v1/reminders/detect", "/v1/reminders/detect", "batch 5-3b"},
 		{"me", "/v1/me/recap/period", "/v1/me/recap/period", "batch 5-3b"},
-		{"community", "/v1/admin/community", "/v1/admin/community/daily/run", "batch 5-3b"},
 	} {
 		mod := m.Modules[c.module]
 		var held *HeldPath
@@ -68,6 +66,10 @@ func TestWaveFiveHolds(t *testing.T) {
 	require.False(t, m.Modules["me"].holds("/v1/me/recap"))
 	require.False(t, m.Modules["community"].holds("/v1/community/posts"))
 	require.False(t, m.Modules["apple"].holds("/v1/devices/commands/pending"))
+
+	// Batch 5-3b released these once they ran on internal/llm.
+	require.False(t, m.Modules["reminders"].holds("/v1/reminders/detect"))
+	require.False(t, m.Modules["community"].holds("/v1/admin/community/daily/run"))
 }
 
 func routeList(routes []Route) []string {
