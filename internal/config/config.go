@@ -301,6 +301,9 @@ type Config struct {
 	// lowercased() == "true"; it mounts /v1/memory/local-sync.
 	HybridExecutionEnabled   string  `env:"HYBRID_EXECUTION_ENABLED" envDefault:"true"`
 	MemoryRelatedMaxDistance float64 `env:"MEMORY_RELATED_MAX_DISTANCE" envDefault:"0.45"`
+	// MemoryKeepGateEnabled is memory.keepGate.enabled: "true" (any case) runs the
+	// keep judge before MemoryIndexWorker stores a reply.
+	MemoryKeepGateEnabled string `env:"MEMORY_KEEP_GATE_ENABLED" envDefault:"false"`
 
 	// Chat (wave 5C). LocalExecutionToolBrokerEnabled is localExecution.toolBroker.enabled
 	// and AutoSaveLinksEnabled autoSaveLinks.enabled, both read with lowercased() == "true".

@@ -262,8 +262,8 @@ type EnqueueOutputParams struct {
 	Model                 *string
 }
 
-// EnqueueOutput is enqueueOutput: an assistant answer for MemoryIndexWorker, which
-// stays in Swift. A second answer for the same source is dropped.
+// EnqueueOutput is enqueueOutput: an assistant answer for MemoryIndexWorker
+// (internal/workers/memoryindex.go). A second answer for the same source is dropped.
 func (r *Repository) EnqueueOutput(ctx context.Context, p EnqueueOutputParams) error {
 	_, err := r.pool.Exec(ctx, `
 		INSERT INTO memory_index_jobs
