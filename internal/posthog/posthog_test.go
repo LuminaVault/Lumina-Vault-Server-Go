@@ -87,14 +87,14 @@ func (c *Client) pending() int {
 	return len(c.queue)
 }
 
-// Swift "capture URL is derived from the host".
+// PostHogHTTPClientTests: "capture URL is derived from the host".
 func TestCaptureURL(t *testing.T) {
 	require.Equal(t, "https://eu.i.posthog.com/capture", captureURL("https://eu.i.posthog.com"))
 	require.Equal(t, "https://eu.i.posthog.com/capture", captureURL("https://eu.i.posthog.com/"))
 	require.Equal(t, "https://ph.example.com/capture", captureURL(" https://ph.example.com/capture "))
 }
 
-// Swift "flush posts one batch with api_key, distinct_id, timestamp and $lib".
+// PostHogHTTPClientTests: "flush posts one batch with api_key, distinct_id, timestamp and $lib".
 func TestFlushPostsOneBatch(t *testing.T) {
 	s := newStub(t, http.StatusOK)
 	c := New("phc_test", s.URL, Options{})
@@ -144,7 +144,7 @@ func TestWireBytesMatchSwift(t *testing.T) {
 		`"inserted_count":2,"skipped_count":0},"timestamp":"2026-11-04T09:11:12.345Z"}]}`, string(body))
 }
 
-// Swift "flush splits the queue into maxBatchSize posts".
+// PostHogHTTPClientTests: "flush splits the queue into maxBatchSize posts".
 func TestFlushSplitsIntoBatches(t *testing.T) {
 	s := newStub(t, http.StatusOK)
 	c := New("phc_test", s.URL, Options{MaxBatchSize: 3})
@@ -163,7 +163,7 @@ func TestFlushSplitsIntoBatches(t *testing.T) {
 	require.Zero(t, c.pending())
 }
 
-// Swift "queue is bounded and overflow drops new events".
+// PostHogHTTPClientTests: "queue is bounded and overflow drops new events".
 func TestQueueIsBounded(t *testing.T) {
 	s := newStub(t, http.StatusOK)
 	c := New("phc_test", s.URL, Options{MaxBatchSize: 2, MaxQueueDepth: 2})
@@ -175,7 +175,7 @@ func TestQueueIsBounded(t *testing.T) {
 	require.Equal(t, []string{"kept_1", "kept_2"}, s.eventNames(t))
 }
 
-// Swift "transport failures drop the batch without throwing".
+// PostHogHTTPClientTests: "transport failures drop the batch without throwing".
 func TestTransportFailureDropsBatch(t *testing.T) {
 	s := newStub(t, http.StatusOK)
 	url := s.URL
@@ -197,7 +197,7 @@ func TestRejectedBatchIsNotRetried(t *testing.T) {
 	require.Zero(t, c.pending())
 }
 
-// Swift "run flushes on cancellation".
+// PostHogHTTPClientTests: "run flushes on cancellation".
 func TestRunFlushesOnCancellation(t *testing.T) {
 	s := newStub(t, http.StatusOK)
 	c := New("phc_test", s.URL, Options{FlushInterval: time.Hour})
@@ -223,7 +223,7 @@ func TestRunFlushesOnTimer(t *testing.T) {
 	require.Equal(t, []string{"ticked"}, s.eventNames(t))
 }
 
-// Swift "factory returns nil when the token or host is absent".
+// PostHogHTTPClientTests: "factory returns nil when the token or host is absent".
 func TestNewNeedsTokenAndHost(t *testing.T) {
 	require.Nil(t, New("", "https://ph.example.com", Options{}))
 	require.Nil(t, New("   ", "https://ph.example.com", Options{}))
@@ -234,8 +234,9 @@ func TestNewNeedsTokenAndHost(t *testing.T) {
 	require.Equal(t, "phc_x", c.apiKey, "the token is trimmed before it reaches the wire")
 }
 
-// Swift "PostHogAnalytics is a no-op without an installed sink": here, a nil
-// client, which is what an unset token produces.
+// PostHogHTTPClientTests: "PostHogAnalytics is a no-op without an installed sink
+// and forwards with one". Go has no global sink: the "no sink" is a nil client,
+// which is what an unset token produces, and a configured client forwards.
 func TestNilClientDoesNothing(t *testing.T) {
 	var c *Client
 	require.NotPanics(t, func() {
@@ -243,6 +244,13 @@ func TestNilClientDoesNothing(t *testing.T) {
 		c.Flush(context.Background())
 		c.Run(context.Background())
 	})
+
+	s := newStub(t, http.StatusOK)
+	sink := New("phc_test", s.URL, Options{})
+	sink.Capture("forwarded", "u", map[string]any{"has_space": false})
+	require.Equal(t, 1, sink.pending())
+	sink.Flush(context.Background())
+	require.Equal(t, []string{"forwarded"}, s.eventNames(t))
 }
 
 // Capture must not wait on PostHog: with a stub that never answers, it still
@@ -293,7 +301,7 @@ func TestCaptureCopiesProps(t *testing.T) {
 	require.Equal(t, "luminavault-server", p["$lib"])
 }
 
-// Swift "JSONValue bridges loosely typed property values".
+// PostHogHTTPClientTests: "JSONValue bridges loosely typed property values".
 func TestJSONValue(t *testing.T) {
 	require.Equal(t, "s", jsonValue("s"))
 	require.Equal(t, 3, jsonValue(3))

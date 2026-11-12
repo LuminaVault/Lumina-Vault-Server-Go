@@ -1,13 +1,47 @@
 package main
 
 import (
+	"context"
+	"fmt"
+	"log/slog"
 	"lumina/internal/auth"
 	"lumina/internal/hermescontainers"
 	"lumina/internal/httpserver"
+	"lumina/internal/jobs"
 	"lumina/internal/modules/integrations"
 	"lumina/internal/modules/megateways"
 	"strings"
+	"time"
 )
+
+// containerReaperJob is HermesContainerReaperService: evictIdle every quarter of
+// the idle TTL (at least a minute), built in the SecretBox branch and not in the
+// test environment, as App+build.swift does. A failed pass is logged and the next
+// tick retries. Swift sleeps a full interval before its first pass; here the
+// first pass comes at a random point within the first interval.
+func (a *agent) containerReaperJob() []jobs.Job {
+	if a.containers == nil || a.cfg.LVEnvironment == "test" {
+		return nil
+	}
+	containers := a.containers
+	interval := time.Duration(hermescontainers.ReaperIntervalSeconds(a.cfg.HermesPerTenantIdleTTLSeconds)) * time.Second
+	log := slog.Default().With("label", "lv.hermes-tenant.reaper")
+	return []jobs.Job{{
+		Name:     "HermesContainerReaperService",
+		Schedule: jobs.Every(interval, interval),
+		Run: func(ctx context.Context) error {
+			evicted, err := containers.EvictIdle(ctx)
+			if err != nil {
+				log.Warn(fmt.Sprintf("hermes.container.reaper error %v", err))
+				return err
+			}
+			if evicted > 0 {
+				log.Info(fmt.Sprintf("hermes.container.reaper evicted=%d", evicted))
+			}
+			return nil
+		},
+	}}
+}
 
 // containerModules is /v1/me/hermes-gateways, /v1/gateways/photon/inbound (6D)
 // and /v1/integrations/{xai,nous} (6E). Swift builds all of them in the SecretBox
@@ -37,6 +71,7 @@ func (a *agent) containerModules(keys auth.Keyset) []httpserver.Module {
 		},
 		Audio: auth.AudioTokens{Keys: keys, Pool: a.pool},
 	}
+	a.containers = containers
 	// Swift builds the sidecar client only with both a URL and a token.
 	var sidecar megateways.SidecarClient
 	if cfg.PhotonSidecarURL != "" && cfg.PhotonSidecarToken != "" {

@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
+	"github.com/pressly/goose/v3/lock"
 )
 
 //go:embed sql
@@ -54,9 +55,18 @@ const (
 // ErrFluentManaged is returned by Up on a database Fluent still owns.
 var ErrFluentManaged = errors.New("refusing: database is Fluent-managed; run with --adopt-fluent during decommission")
 
+// provider serializes concurrent runs on a Postgres session advisory lock, as
+// Swift's M00_EnableExtensions does with pg_advisory_xact_lock (HER-335):
+// CREATE EXTENSION IF NOT EXISTS is not race-free, and two runs that both see
+// the baseline missing would collide on pg_extension_name_index. A waiter
+// probes the lock every second, for up to five minutes.
 func provider(pool *pgxpool.Pool, fsys fs.FS) (*goose.Provider, *sql.DB, error) {
+	locker, err := lock.NewPostgresSessionLocker(lock.WithLockTimeout(1, 300))
+	if err != nil {
+		return nil, nil, err
+	}
 	db := stdlib.OpenDBFromPool(pool)
-	p, err := goose.NewProvider(goose.DialectPostgres, db, fsys)
+	p, err := goose.NewProvider(goose.DialectPostgres, db, fsys, goose.WithSessionLocker(locker))
 	if err != nil {
 		_ = db.Close()
 		return nil, nil, err
