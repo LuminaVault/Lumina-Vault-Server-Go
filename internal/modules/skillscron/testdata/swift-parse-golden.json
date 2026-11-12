@@ -1,0 +1,70 @@
+[
+  {
+    "input" : "{\"jobs\":[{\"id\":\"a\",\"name\":\"Digest\",\"schedule\":\"0 9 * * *\",\"deliver\":\"telegram\",\"last_run\":\"2026-01-01T09:00:00Z\",\"enabled\":true}]}",
+    "jobs" : "[{\"deliver\":\"telegram\",\"id\":\"a\",\"lastRun\":\"2026-01-01T09:00:00Z\",\"mode\":\"agent\",\"name\":\"Digest\",\"schedule\":\"0 9 * * *\",\"status\":\"active\"}]"
+  },
+  {
+    "input" : "[{\"id\":\"b\",\"schedule\":{\"kind\":\"cron\",\"expr\":\"0 9 * * 1-5\",\"display\":\"weekdays 9\"},\"schedule_display\":\"0 9 * * 1-5\",\"last_run_at\":\"2026-09-01T03:00:00Z\",\"last_status\":\"ok\",\"enabled\":false,\"no_agent\":true}]",
+    "jobs" : "[{\"id\":\"b\",\"lastRun\":\"2026-09-01T03:00:00Z (ok)\",\"mode\":\"script\",\"schedule\":\"0 9 * * 1-5\",\"status\":\"paused\"}]"
+  },
+  {
+    "input" : "[{\"id\":\"c\",\"schedule\":{\"kind\":\"cron\",\"expr\":\"0 3 * * *\"},\"last_run_at\":\"2026-09-01\",\"state\":\"scheduled\"}]",
+    "jobs" : "[{\"id\":\"c\",\"lastRun\":\"2026-09-01\",\"mode\":\"agent\",\"schedule\":\"0 3 * * *\",\"status\":\"scheduled\"}]"
+  },
+  {
+    "input" : "[{\"id\":\"d\",\"schedule\":{\"kind\":\"cron\"},\"last_run\":{\"at\":\"2026-01-02\",\"status\":\"error\"},\"status\":\"running\"}]",
+    "jobs" : "[{\"id\":\"d\",\"lastRun\":\"2026-01-02\",\"mode\":\"agent\",\"status\":\"running\"}]"
+  },
+  {
+    "input" : "[{\"id\":\"e\",\"last_run\":{\"status\":\"error\"},\"state\":\"paused\",\"status\":\"x\",\"enabled\":true,\"no_agent\":false}]",
+    "jobs" : "[{\"id\":\"e\",\"lastRun\":\"error\",\"mode\":\"agent\",\"status\":\"paused\"}]"
+  },
+  {
+    "input" : "[{\"id\":\"f\",\"last_run\":{},\"enabled\":0,\"no_agent\":1,\"name\":7,\"schedule\":5}]",
+    "jobs" : "[{\"id\":\"f\",\"mode\":\"script\",\"status\":\"paused\"}]"
+  },
+  {
+    "input" : "[{\"id\":\"g\",\"enabled\":1,\"no_agent\":\"true\",\"deliver\":null,\"schedule\":null}]",
+    "jobs" : "[{\"id\":\"g\",\"mode\":\"agent\",\"status\":\"active\"}]"
+  },
+  {
+    "input" : "[{\"id\":7},{\"name\":\"no id\"},{\"id\":\"\"}]",
+    "jobs" : "[{\"id\":\"\",\"mode\":\"agent\",\"status\":\"active\"}]"
+  },
+  {
+    "input" : "[{\"id\":\"h\"},\"string\"]",
+    "jobs" : "[]"
+  },
+  {
+    "input" : "{\"jobs\":{\"id\":\"x\"}}",
+    "jobs" : "[]"
+  },
+  {
+    "input" : "{\"jobs\":[{\"id\":\"i\",\"last_run_at\":\"t\",\"last_status\":null}]}",
+    "jobs" : "[{\"id\":\"i\",\"lastRun\":\"t\",\"mode\":\"agent\",\"status\":\"active\"}]"
+  },
+  {
+    "input" : "{\"other\":[]}",
+    "jobs" : "[]"
+  },
+  {
+    "input" : "not json",
+    "jobs" : "[]"
+  },
+  {
+    "input" : "",
+    "jobs" : "[]"
+  },
+  {
+    "input" : "[]",
+    "jobs" : "[]"
+  },
+  {
+    "input" : "[{\"id\":\"j\",\"schedule_display\":null,\"schedule\":\"*/5 * * * *\"}]",
+    "jobs" : "[{\"id\":\"j\",\"mode\":\"agent\",\"schedule\":\"*/5 * * * *\",\"status\":\"active\"}]"
+  },
+  {
+    "input" : "[{\"id\":\"k\",\"enabled\":false,\"state\":\"active\"}]",
+    "jobs" : "[{\"id\":\"k\",\"mode\":\"agent\",\"status\":\"paused\"}]"
+  }
+]

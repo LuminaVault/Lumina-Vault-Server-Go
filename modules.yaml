@@ -335,7 +335,7 @@ modules:
   skills-cron:
     wave: 6
     swiftDir: Sources/App/Skills
-    status: swift
+    status: parity
     prefixes: [/v1/me/hermes/cron]
     jobs: []
   admin:

@@ -1,0 +1,58 @@
+# /v1/me/hermes/cron (CronBridgeController). Neither server has docker or a reachable
+# Hermes dashboard (parity/seed/skills-cron.sql), so these cover the paths that need
+# neither: the no-source 404s, the managed-only 404s, validation, the deterministic
+# NL preview (its LLM fallback is unroutable here, so it answers 422), the SSRF
+# refusals, and the failed docker spawn's empty 500.
+module: skills-cron
+steps:
+  - {name: list without a token, request: {method: GET, path: /v1/me/hermes/cron}}
+  - {name: create without a token, request: {method: POST, path: /v1/me/hermes/cron, json: {schedule: "0 9 * * *"}}}
+  - {name: preview without a token, request: {method: POST, path: /v1/me/hermes/cron/preview, json: {text: "every day at 9am"}}}
+  - {name: config without a token, request: {method: PUT, path: /v1/me/hermes/cron/config, json: {dashboardUrl: "https://203.0.113.9", dashboardToken: t}}}
+  - {name: pause without a token, request: {method: POST, path: /v1/me/hermes/cron/j1/pause}}
+  - {name: resume without a token, request: {method: POST, path: /v1/me/hermes/cron/j1/resume}}
+  - {name: delete without a token, request: {method: DELETE, path: /v1/me/hermes/cron/j1}}
+
+  - {name: list with no source, as: cr_amy, request: {method: GET, path: /v1/me/hermes/cron}}
+  - {name: create with no source, as: cr_amy, request: {method: POST, path: /v1/me/hermes/cron, json: {schedule: "0 9 * * *", prompt: Digest}}}
+  - {name: pause with no container, as: cr_amy, request: {method: POST, path: /v1/me/hermes/cron/j1/pause}}
+  - {name: resume with no container, as: cr_amy, request: {method: POST, path: /v1/me/hermes/cron/j1/resume}}
+  - {name: delete with no container, as: cr_amy, request: {method: DELETE, path: /v1/me/hermes/cron/j1}}
+  - {name: blank schedule, as: cr_amy, request: {method: POST, path: /v1/me/hermes/cron, json: {schedule: "  "}}}
+  - {name: empty schedule, as: cr_amy, request: {method: POST, path: /v1/me/hermes/cron, json: {schedule: ""}}}
+  - {name: missing schedule, as: cr_amy, request: {method: POST, path: /v1/me/hermes/cron, json: {prompt: Digest}}}
+  - {name: schedule of the wrong type, as: cr_amy, request: {method: POST, path: /v1/me/hermes/cron, json: {schedule: 5}}}
+  - {name: create with an empty body, as: cr_amy, request: {method: POST, path: /v1/me/hermes/cron}}
+
+  - {name: a handle that will not open lists as no source, as: cr_bad, request: {method: GET, path: /v1/me/hermes/cron}}
+  - {name: a handle that will not open fails pause, as: cr_bad, request: {method: POST, path: /v1/me/hermes/cron/j1/pause}}
+  - {name: managed list without docker, as: cr_mia, request: {method: GET, path: /v1/me/hermes/cron}}
+  - {name: managed create without docker, as: cr_mia, request: {method: POST, path: /v1/me/hermes/cron, json: {schedule: "0 9 * * *", name: Digest, skills: [web]}}}
+  - {name: managed pause without docker, as: cr_mia, request: {method: POST, path: /v1/me/hermes/cron/j1/pause}}
+  - {name: managed delete without docker, as: cr_mia, request: {method: DELETE, path: /v1/me/hermes/cron/j1}}
+  - {name: byo list on a refused URL, as: cr_byo, request: {method: GET, path: /v1/me/hermes/cron}}
+  - {name: byo create on a refused URL, as: cr_byo, request: {method: POST, path: /v1/me/hermes/cron, json: {schedule: "0 9 * * *"}}}
+  - {name: byo pause is managed-only, as: cr_byo, request: {method: POST, path: /v1/me/hermes/cron/j1/pause}}
+
+  - {name: preview every 15 minutes, as: cr_amy, request: {method: POST, path: /v1/me/hermes/cron/preview, json: {text: "Every 15 minutes check the status page"}}}
+  - {name: preview every 2 hours, as: cr_amy, request: {method: POST, path: /v1/me/hermes/cron/preview, json: {text: "every 2 hours scrape prices to Discord"}}}
+  - {name: preview hourly, as: cr_amy, request: {method: POST, path: /v1/me/hermes/cron/preview, json: {text: "hourly digest on Slack"}}}
+  - {name: preview weekdays, as: cr_amy, request: {method: POST, path: /v1/me/hermes/cron/preview, json: {text: "Every weekday at 7:30am send me AI news on Telegram"}}}
+  - {name: preview weekend, as: cr_amy, request: {method: POST, path: /v1/me/hermes/cron/preview, json: {text: "weekends at 10pm remind me to tidy up"}}}
+  - {name: preview a weekday name, as: cr_amy, request: {method: POST, path: /v1/me/hermes/cron/preview, json: {text: "every friday at 17:45 email me a recap"}}}
+  - {name: preview weekly, as: cr_amy, request: {method: POST, path: /v1/me/hermes/cron/preview, json: {text: "weekly report via signal"}}}
+  - {name: preview every morning, as: cr_amy, request: {method: POST, path: /v1/me/hermes/cron/preview, json: {text: "every morning weather forecast"}}}
+  - {name: preview a bare time, as: cr_amy, request: {method: POST, path: /v1/me/hermes/cron/preview, json: {text: "at 23 ship the build 42"}}}
+  - {name: preview midnight, as: cr_amy, request: {method: POST, path: /v1/me/hermes/cron/preview, json: {text: "daily backup at 12am"}}}
+  - {name: preview unicode text, as: cr_amy, request: {method: POST, path: /v1/me/hermes/cron/preview, json: {text: "ßtraße café news daily"}}}
+  - {name: preview not a schedule, as: cr_amy, request: {method: POST, path: /v1/me/hermes/cron/preview, json: {text: "what is the capital of France"}}}
+  - {name: preview of every 0 minutes, as: cr_amy, request: {method: POST, path: /v1/me/hermes/cron/preview, json: {text: "every 0 minutes"}}}
+  - {name: preview without text, as: cr_amy, request: {method: POST, path: /v1/me/hermes/cron/preview, json: {}}}
+  - {name: preview with snake case, as: cr_amy, request: {method: POST, path: /v1/me/hermes/cron/preview, json: {Text: "daily"}}}
+
+  - {name: config on plain http, as: cr_cfg, request: {method: PUT, path: /v1/me/hermes/cron/config, json: {dashboardUrl: "http://203.0.113.9", dashboardToken: t}}}
+  - {name: config on a private address, as: cr_cfg, request: {method: PUT, path: /v1/me/hermes/cron/config, json: {dashboardUrl: "https://10.0.0.1", dashboardToken: t}}}
+  - {name: config on loopback, as: cr_cfg, request: {method: PUT, path: /v1/me/hermes/cron/config, json: {dashboardUrl: "https://127.0.0.1:9119", dashboardToken: t}}}
+  - {name: config without a token, as: cr_cfg, request: {method: PUT, path: /v1/me/hermes/cron/config, json: {dashboardUrl: "https://203.0.113.9"}}}
+  - {name: config in snake case, as: cr_cfg, request: {method: PUT, path: /v1/me/hermes/cron/config, json: {dashboard_url: "https://203.0.113.9", dashboard_token: t}}}
+  - {name: config untouched, as: cr_cfg, request: {method: GET, path: /v1/me/hermes/cron}, snapshot: [parity_cr_config]}

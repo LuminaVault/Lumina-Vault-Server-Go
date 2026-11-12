@@ -120,12 +120,9 @@ func (m *Module) profile(c *echo.Context) error {
 	})
 }
 
-// home is DashboardController.home.
-//
-// Gap: Swift fills cronJobs through CronBridgeService (docker exec into a
-// managed tenant's Hermes container, or the BYO Hermes dashboard API), and
-// answers [] when the tenant has neither or the call fails. Go always answers
-// that disabled path until the Hermes modules move (wave 6).
+// home is DashboardController.home. cronJobs comes from the cron bridge
+// (skills-cron) when one is wired, capped at five, and is [] without one or on
+// any error, as in Swift.
 func (m *Module) home(c *echo.Context) error {
 	ctx, tenant := requestContext(c), auth.UserID(c)
 	now := time.Now()
@@ -147,9 +144,10 @@ func (m *Module) home(c *echo.Context) error {
 		StreakDays:      p.streak,
 		PowerLevel:      achievements.PowerLevel(xp),
 		PowerXP:         xp,
-		CronJobs:        []CronJobDTO{},
+		CronJobs:        m.cronJobs(ctx, tenant),
 		Period:          period,
 	}
+	out.CronJobsCount = len(out.CronJobs)
 
 	counts := []struct {
 		dst *int
