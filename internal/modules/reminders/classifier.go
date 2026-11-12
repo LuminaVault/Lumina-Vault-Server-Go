@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"lumina/internal/llm"
 	"lumina/internal/wire"
 	"strings"
 	"time"
@@ -13,6 +14,18 @@ import (
 // uses: an OpenAI-shaped chat-completions request in, the raw response out.
 type ChatTransport interface {
 	ChatCompletions(ctx context.Context, payload []byte, sessionKey string) ([]byte, error)
+}
+
+// RoutedTransport adapts llm.ChatTransport (RoutedLLMTransport) to the
+// classifier's slice of it: the response body without the routing headers.
+type RoutedTransport struct{ LLM llm.ChatTransport }
+
+func (t RoutedTransport) ChatCompletions(ctx context.Context, payload []byte, sessionKey string) ([]byte, error) {
+	metadata, err := t.LLM.ChatCompletions(ctx, payload, sessionKey, "")
+	if err != nil {
+		return nil, err
+	}
+	return metadata.Data, nil
 }
 
 // ErrTransportUnavailable is what UnavailableTransport returns.

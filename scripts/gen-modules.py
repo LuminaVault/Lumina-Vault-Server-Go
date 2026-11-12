@@ -103,9 +103,10 @@ SPLIT_PATHS = {
 MIN_PREFIX_ELEMENTS = {"LLMAdmin": 3}
 # Routes a module leaves on Swift when it flips: path, reason, and the group that
 # releases them. A held route is out of its module's G1 and in the releasing
-# group's. "batch" means wave-5-plan.md, "Flip order and what flips together". The
-# owner decision on /v1/admin/community is still open (flip-blockers.md); batch
-# 5-3b adds or releases that hold accordingly.
+# group's. "batch" means wave-5-plan.md, "Flip order and what flips together".
+# Batch 5-3b released /v1/reminders/detect and /v1/admin/community once both ran
+# on internal/llm (the routed transport); /v1/me/recap/period waits for the
+# themes job to move to Go with it.
 HELD = {
     "Memory": [(
         "/v1/memory/search",
@@ -122,19 +123,9 @@ HELD = {
         "DeviceCommandBroker's continuations live in the server's memory: a result reaching another server resumes nothing",
         "batch 5-4",
     )],
-    "Reminders": [(
-        "/v1/reminders/detect",
-        "ReminderIntentClassifier needs the LLM; Go's UnavailableTransport would answer isReminder false",
-        "batch 5-3b",
-    )],
     "Me": [(
         "/v1/me/recap/period",
         "the claim and the themes worker share a process: on Go the row is claimed and nothing generates it",
-        "batch 5-3b",
-    )],
-    "Community": [(
-        "/v1/admin/community",
-        "the daily run needs the LLM: on Go it can only record failed attempts, and three cost that day's post",
         "batch 5-3b",
     )],
 }
