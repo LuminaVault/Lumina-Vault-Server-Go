@@ -9,6 +9,7 @@ import (
 	"lumina/internal/diskguard"
 	"lumina/internal/embedding"
 	"lumina/internal/entitlement"
+	"lumina/internal/hermesprofile"
 	"lumina/internal/hermesresolve"
 	"lumina/internal/hermesruns"
 	"lumina/internal/httpserver"
@@ -78,6 +79,8 @@ type agent struct {
 	// mcp is /v1/mcp's tool service, set by mcpModule(); Quick Assistant's vault
 	// tools run through the same instance (Decision 1).
 	mcp *mcp.Service
+	// gatewayProbe is shared with /health/deep (set by main).
+	gatewayProbe *hermesprofile.GatewayProbe
 }
 
 func newAgent(ctx context.Context, pool *pgxpool.Pool, cfg config.Config, box *secretbox.Box, paths vaultpaths.Paths, identify echo.MiddlewareFunc,
