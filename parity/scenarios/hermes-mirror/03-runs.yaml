@@ -11,4 +11,4 @@ steps:
   - {name: pause a job the home does not have, as: hm_cy, request: {method: POST, path: /v1/hermes/mirror/jobs/digest/pause}}
   - {name: runs unchanged, as: hm_cy, request: {method: GET, path: /v1/hermes/mirror/jobs/digest/runs}}
   - {name: resume a job the home does not have, as: hm_cy, request: {method: POST, path: /v1/hermes/mirror/jobs/digest/resume}}
-  - {name: install the compile job, as: hm_cy, request: {method: POST, path: /v1/hermes/mirror/jobs/install-compile}, snapshot: [parity_hm_jobs]}
+  - {name: install the compile job, as: hm_cy, request: {method: POST, path: /v1/hermes/mirror/jobs/install-compile}, ignore: ["$.jobID"], snapshot: [parity_hm_jobs]}
