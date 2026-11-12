@@ -51,3 +51,15 @@ INSERT INTO refresh_tokens (id, tenant_id, token_hash, expires_at, revoked_at, c
   ('a0740000-0000-4000-8000-000000000001', 'a0700000-0000-4000-8000-0000000000ad', '9859a36fb2ff27c271f8c73a9f3b9163bb1763c27d7d06bafe800f0824ff1896', '2100-01-01T00:00:00Z', NULL, '2026-01-01T00:00:00Z'),
   ('a0740000-0000-4000-8000-000000000002', 'a0700000-0000-4000-8000-0000000000ad', 'd7d6403ead6be1efe9bf5cea7d7cff04bd43cf9b0b9cc3bf3f6c2bc9780c60f4', '2020-01-01T00:00:00Z', NULL, '2020-01-01T00:00:00Z'),
   ('a0740000-0000-4000-8000-000000000003', 'a0700000-0000-4000-8000-0000000000ad', '4f6888055da4a009d99a9500cc247df0d5fbf6153728bcf28ecd24f41cdae569', '2100-01-01T00:00:00Z', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+
+-- Wave 8B sign-in flows (parity/scenarios/auth/08-flows.yaml, 09-pairing.yaml): a phone
+-- account and a magic-link account with their identities, so a verify signs in to a known
+-- user and writes nothing but a refresh token; and the account that approves pairings.
+INSERT INTO users (id, email, password_hash, is_verified, username, tier, tier_override, lockout_until, failed_login_attempts, created_at, updated_at) VALUES
+  ('a0700000-0000-4000-8000-0000000000c1', '15550001001@phone.luminavault.local', '$2a$12$Z3ZN5TnI9JPreL0bsr9age1.CVv1eYC2qRhVjCt81y9IaNTo3gNla', false, 'oauth-c1c1c1c1', 'trial', 'none', NULL, 0, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
+  ('a0700000-0000-4000-8000-0000000000c2', 'auth-magic@parity.test',              '$2a$12$Z3ZN5TnI9JPreL0bsr9age1.CVv1eYC2qRhVjCt81y9IaNTo3gNla', true,  'auth-magic',     'trial', 'none', NULL, 0, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
+  ('a0700000-0000-4000-8000-0000000000c3', 'auth-pair@parity.test',               '$2a$12$Z3ZN5TnI9JPreL0bsr9age1.CVv1eYC2qRhVjCt81y9IaNTo3gNla', true,  'auth-pair',      'trial', 'none', NULL, 0, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+
+INSERT INTO oauth_identities (id, tenant_id, provider, provider_user_id, email, email_verified, created_at) VALUES
+  ('a0750000-0000-4000-8000-0000000000c1', 'a0700000-0000-4000-8000-0000000000c1', 'phone',            '+15550001001',           '15550001001@phone.luminavault.local', false, '2026-01-01T00:00:00Z'),
+  ('a0750000-0000-4000-8000-0000000000c2', 'a0700000-0000-4000-8000-0000000000c2', 'email_magic_link', 'auth-magic@parity.test', 'auth-magic@parity.test',              true,  '2026-01-01T00:00:00Z');

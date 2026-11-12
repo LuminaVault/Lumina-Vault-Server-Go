@@ -2211,6 +2211,40 @@ served by Go but flip only with chat, in one infra commit (B12, decisions.md D-6
 - Left: `auth` stays `swift` until 8B (OAuth, X, phone, magic link, pairing) and 8C (WebAuthn). With `/health/deep`
   (#83) and these `/v1/auth/me*` handlers every `app` route is in Go; its status is left to the flip.
 
+## auth (wave 8, 8B): OAuth, X, phone, magic link, pairing
+
+### Progress 2026-11-12 (no route flips)
+
+- `internal/modules/authroutes` mounts the nine 8B routes beside 8A's: `POST /v1/auth/oauth/{provider}/exchange`
+  (Apple and Google id_tokens, unlimited), `POST /v1/auth/oauth/x/exchange` (the literal wins over `:provider`, as in
+  Hummingbird's trie), `/phone/start` and `/email/start` (3 a minute and 10 a day per IP, stacked), `/phone/verify`
+  and `/email/verify` (no limit), `POST /pairing/start` (registerByIP, the same bucket as `/register`),
+  `GET /pairing/{id}` and `POST /pairing/{id}/approve` (JWT). Start and finish routes are one module and flip together.
+- `internal/authservice`: `UpsertOAuthUser` (identity, then link by email, then a new user with a placeholder
+  username, trial, vault, identity, Hermes ensureSoft; finished with `context.WithoutCancel`), `ExchangeOAuth`, the
+  Google and Apple verifiers over a 12-hour JWKS cache (golang-jwt; claims decoded as JWTKit's Codable payloads, exp
+  checked without leeway, nbf/iat ignored), the X client, the SMS senders (`SMS_KIND` logging or twilio,
+  `TWILIO_*`) and `PreAuthChallengeStore` (5 minutes, 5 attempts, keyed by destination). Pairing records live in a
+  process-memory TTL map (decisions.md D-ratelimit-memory). New config: `OAUTH_APPLE_CLIENT_ID`,
+  `OAUTH_GOOGLE_CLIENT_ID`, `SMS_KIND`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`,
+  `PHONE_FIXED_OTP`, `MAGIC_FIXED_OTP`.
+- Swift tests (52): `GoogleOAuthProvider` 12, `XOAuth` 10, `PreAuthChallengeStore` 10 (its two E.164 cases in
+  `authroutes/flows_test.go`), `SMSSender` 5, `PhoneAuthFlow` 5, `EmailMagicLinkFlow` 5, `PairingFlow` 5. JWKS, X and
+  Twilio are httptest stubs; no real key or paid API is called.
+- Parity: `scenarios/auth/08-flows.yaml` and `09-pairing.yaml` (seeded phone and magic-link identities and the
+  approving `auth_pair` in `seed/auth.sql`); `scenarios-switched/auth-writes/auth/03-flows.yaml` for sign-ins that
+  create or link accounts. Compose adds Google's client id (its JWKS host, Apple's, `api.x.com` and `api.twilio.com`
+  are no-external) and fixed phone/magic codes, so success through Google, Apple or X is unit-tested only.
+- Deviation: Twilio's form body is in a fixed order (Swift's comes from a Dictionary, in random order).
+- Kept Swift weaknesses: upsert links by email whatever `emailVerified` or the provider says (an unverified X email
+  or a phone placeholder someone registered signs in to that account); phone and magic start send to any number or
+  address; the logging SMS and email senders write codes to logs; `PHONE_FIXED_OTP`/`MAGIC_FIXED_OTP` in production
+  let anyone in; challenges keyed by destination alone, never pruned when abandoned, compared with `==`; the pairing
+  id is the only secret on an unauthenticated, unlimited poll that returns the tokens on every poll until expiry;
+  approve has no attempt limit and compares the code with `==`; concurrent approves can both mint; the JWKS is not
+  refetched for an unknown kid, and its HTTP status is not checked.
+- Left: 8C (WebAuthn). The X and Google/Apple success paths need an owner check on a TestFlight build after the flip.
+
 ## hermes mirror (wave 6, 6B + P2)
 
 ### G0 entry: met 2026-11-11

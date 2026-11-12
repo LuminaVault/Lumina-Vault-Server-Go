@@ -465,6 +465,16 @@ func TestPairingWire(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, v.do(http.MethodGet, "/v1/auth/pairing/"+strings.ToLower(s.PairingID), "", nil).code)
 
 	reg := v.register("pair-wire-"+suffix()+"@test.luminavault", "pair-wire-"+suffix())
+	// POST on start/approve backtracks to :pairingId in both routers.
+	r = v.do(http.MethodPost, "/v1/auth/pairing/start/approve", `{"code":"123456"}`, bearer(reg.AccessToken))
+	assert.Equal(t, http.StatusNotFound, r.code)
+	assert.Equal(t, errorBody("pairing expired or unknown"), r.body)
+	r = v.do(http.MethodPut, "/v1/auth/pairing/start", "", nil)
+	assert.Equal(t, http.StatusNotFound, r.code)
+	assert.Empty(t, r.body)
+	r = v.do(http.MethodGet, "/v1/auth/oauth/google/exchange", "", nil)
+	assert.Equal(t, http.StatusNotFound, r.code)
+	assert.Empty(t, r.body)
 	bad := v.do(http.MethodPost, "/v1/auth/pairing/unknown/approve", `{}`, bearer(reg.AccessToken))
 	assert.Equal(t, http.StatusBadRequest, bad.code, "the body is decoded before the lookup")
 
