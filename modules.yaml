@@ -59,8 +59,6 @@ modules:
     prefixes: [/v1/reminders/detect]
     exactPaths: [/v1/reminders]
     sharedPrefixes: [/v1/reminders]
-    heldPaths:
-      - {path: /v1/reminders/detect, reason: "ReminderIntentClassifier needs the LLM; Go's UnavailableTransport would answer isReminder false", releasedBy: "batch 5-3b"}
     flipsWith: [apple]
     jobs: []
   sessions:
@@ -93,9 +91,6 @@ modules:
     swiftDir: Sources/App/Community
     status: swift
     prefixes: [/v1/admin/community, /v1/community]
-    exactPaths: [/v1/admin/community/daily/run]
-    heldPaths:
-      - {path: /v1/admin/community, reason: "the daily run needs the LLM: on Go it can only record failed attempts, and three cost that day's post", releasedBy: "batch 5-3b"}
     jobs: []
   dashboard:
     wave: 3
