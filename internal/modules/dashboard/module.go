@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/labstack/echo/v5"
@@ -25,6 +26,27 @@ type Module struct {
 	q        *db.Queries
 	vaults   *vaultaccess.Service
 	identify echo.MiddlewareFunc
+	// cron is DashboardCronPreviewing; nil answers no cron jobs.
+	cron CronPreview
+}
+
+// CronPreview is DashboardCronPreviewing: a tenant's Hermes cron jobs for the
+// home screen, never failing (no jobs on any error).
+type CronPreview func(ctx context.Context, tenant uuid.UUID) []CronJobDTO
+
+// cronPreviewLimit is DashboardController.cronPreviewLimit.
+const cronPreviewLimit = 5
+
+// UseCronPreview wires the cron bridge's preview. Swift passes it to the
+// controller only when CronBridgeService exists; call before the server starts.
+func (m *Module) UseCronPreview(preview CronPreview) { m.cron = preview }
+
+func (m *Module) cronJobs(ctx context.Context, tenant uuid.UUID) []CronJobDTO {
+	if m.cron == nil {
+		return []CronJobDTO{}
+	}
+	jobs := nonNil(m.cron(ctx, tenant))
+	return jobs[:min(len(jobs), cronPreviewLimit)]
 }
 
 // New builds the module. identify is auth.Identify: the analytics routes that

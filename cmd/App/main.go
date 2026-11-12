@@ -220,6 +220,9 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 			themes = &me.ThemesWorker{Pool: pool, Model: cfg.HermesDefaultModel, Logger: slog.Default().With("label", "lv.me.recap")}
 		}
 		meModule := me.New(pool, identify, limits, me.Options{RecapThemesEnabled: cfg.RecapThemesEnabled, Themes: themes})
+		// The cron bridge (skills-cron) fills /v1/dashboard/home's cronJobs; it is
+		// built with the agent below.
+		dashboardModule := dashboard.New(pool, identify)
 		// One achievements inbox per process, and MeTodayCache is its one real subscriber.
 		// The sink stops after the HTTP server, so a request finishing in graceful shutdown
 		// can still enqueue.
@@ -247,7 +250,7 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 				ReplyTo: cfg.EmailReplyTo, BaseURL: cfg.TeamInviteBaseURL,
 			}, slog.Default().With("module", "teams"))),
 			meModule,
-			dashboard.New(pool, identify),
+			dashboardModule,
 			ingestion.New(pool, identify, limits, paths,
 				diskguard.New(cfg.VaultRootPath, cfg.StorageMinFreeBytes, cfg.StorageMinFreeRatio, diskguard.Options{}),
 				ingestion.QuotaFromConfig(cfg)),
@@ -364,6 +367,10 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		deps.Modules = append(deps.Modules, agent.skillsModule(deviceRPC))
 		if m := agent.pluginsModule(); m != nil { // nil without LV_SECRET_MASTER_KEY, as in Swift
 			deps.Modules = append(deps.Modules, m)
+		}
+		if m := agent.skillsCronModule(); m != nil { // nil without LV_SECRET_MASTER_KEY, as in Swift
+			deps.Modules = append(deps.Modules, m)
+			dashboardModule.UseCronPreview(dashboardCronPreview(m.Service()))
 		}
 		if m := agent.hermesRunsModule(); m != nil {
 			deps.Modules = append(deps.Modules, m)

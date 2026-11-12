@@ -7,6 +7,7 @@ import (
 	"lumina/internal/cronexpr"
 	"lumina/internal/ids"
 	"lumina/internal/jobauthor"
+	"lumina/internal/llm"
 	"lumina/internal/swiftstr"
 	"lumina/internal/wire"
 	"net/http"
@@ -63,15 +64,21 @@ type classifierRequest struct {
 	Stream      bool                `json:"stream"`
 }
 
-// classify is JobIntentClassifier.classify: one completion through the routed
-// transport, failing closed to {"isJob": false}.
+// classify is JobIntentClassifier.classify on the module's transport and model.
 func (m *Module) classify(ctx context.Context, text string, tenant uuid.UUID) JobProposalDTO {
+	return Classify(ctx, m.opt.Transport, m.opt.DefaultModel, text, tenant)
+}
+
+// Classify is JobIntentClassifier.classify: one completion through the routed
+// transport, failing closed to {"isJob": false}. The cron bridge's preview
+// (skills-cron) uses it as its LLM fallback.
+func Classify(ctx context.Context, transport llm.ChatTransport, model, text string, tenant uuid.UUID) JobProposalDTO {
 	notJob := JobProposalDTO{IsJob: false}
-	if m.opt.Transport == nil {
+	if transport == nil {
 		return notJob
 	}
 	payload, err := json.Marshal(classifierRequest{
-		Model: m.opt.DefaultModel,
+		Model: model,
 		Messages: []classifierMessage{
 			{Role: "system", Content: classifierSystem},
 			{Role: "user", Content: text},
@@ -81,7 +88,7 @@ func (m *Module) classify(ctx context.Context, text string, tenant uuid.UUID) Jo
 	if err != nil {
 		return notJob
 	}
-	meta, err := m.opt.Transport.ChatCompletions(ctx, payload, ids.Upper(tenant), "")
+	meta, err := transport.ChatCompletions(ctx, payload, ids.Upper(tenant), "")
 	if err != nil {
 		return notJob
 	}

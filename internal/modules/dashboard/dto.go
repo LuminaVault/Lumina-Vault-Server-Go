@@ -95,10 +95,14 @@ type PeriodMix struct {
 	Chats    int `json:"chats"`
 }
 
-// CronJobDTO is LuminaVaultShared DashboardCronJobDTO. Never populated yet: see
-// the cron gap on Module.home.
+// CronJobDTO is LuminaVaultShared DashboardCronJobDTO: one Hermes cron job in
+// the home preview (see Module.UseCronPreview). nil fields are left out.
 type CronJobDTO struct {
-	ID string `json:"id"`
+	ID       string  `json:"id"`
+	Name     *string `json:"name,omitempty"`
+	Schedule *string `json:"schedule,omitempty"`
+	LastRun  *string `json:"lastRun,omitempty"`
+	Status   *string `json:"status,omitempty"`
 }
 
 type GraphPreviewNodeDTO struct {

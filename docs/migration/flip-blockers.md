@@ -58,7 +58,7 @@ Fixes that later remove the held routes and gaps (Go only unless stated; no modu
 | `internal/posthog` | Lost server-side analytics events | wave-4-plan.md P4 |
 | `internal/llm` | Holds on `/v1/reminders/detect`, `/v1/me/recap/period`, `/v1/admin/community`; moderation delay | wave-4-plan.md P6 |
 | `/v1/ws` plus broker, with MCP and Skills | Hold on `/v1/devices/command` | End of wave 5 |
-| Cron bridge | Hold on `/v1/dashboard/home` | Wave 6 |
+| Cron bridge | Hold on `/v1/dashboard/home` | Wave 6: ported as `skills-cron` (`internal/modules/skillscron`), which also fills the preview |
 
 ## Module by module
 
@@ -171,7 +171,8 @@ Fixes that later remove the held routes and gaps (Go only unless stated; no modu
 ### dashboard: specific routes stay on Swift
 
 - **Real today?** One route. `cronJobs` on `GET /v1/dashboard/home` comes from `CronBridgeService` (`docker exec` or a BYO
-  dashboard). Go answers `[]`, which parity can't see. `AnalyticsMaintenanceService` and `SynthesisWorker` staying in Swift
+  dashboard). Go answered `[]` until `skills-cron` was ported; it now fills the preview from the same bridge, so the hold
+  can go when `skills-cron` flips with `dashboard`. `AnalyticsMaintenanceService` and `SynthesisWorker` staying in Swift
   block nothing (`SYNTHESIS_WORKER_ENABLED` isn't set in production).
 - **Smallest fix.** Merge `go-migration/wave-3-dashboard`, whose code isn't on `main`, and hold `/v1/dashboard/home` on
   Swift. Alternatively flip it too, and accept an empty cron preview for tenants with cron jobs. Holding has no gap, so hold.

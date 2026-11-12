@@ -45,6 +45,7 @@ type env struct {
 	t    *testing.T
 	e    *echo.Echo
 	pool *pgxpool.Pool
+	mod  *dashboard.Module
 }
 
 // TestModule runs every case on its own database, cloned from one migrated and
@@ -90,6 +91,7 @@ func TestModule(t *testing.T) {
 		{"SeededProfileAndPowerLevel", testSeededProfileAndPowerLevel},
 		{"SeededHome", testSeededHome},
 		{"HomeModelDisclosure", testHomeModelDisclosure},
+		{"HomeCronPreview", testHomeCronPreview},
 		{"HomeCockpitSwallowsInt32Overflow", testHomeCockpitSwallowsInt32Overflow},
 		{"ActivityFeed", testActivityFeed},
 		{"Tasks", testTasks},
@@ -113,11 +115,12 @@ func TestModule(t *testing.T) {
 			require.NoError(t, err)
 			t.Cleanup(pool.Close)
 			users := auth.PGUsers(pool)
+			mod := dashboard.New(pool, auth.Identify(keys, users))
 			e := httpserver.New(config.Config{}, httpserver.Deps{
 				Auth:    auth.Middleware(keys, users),
-				Modules: []httpserver.Module{dashboard.New(pool, auth.Identify(keys, users))},
+				Modules: []httpserver.Module{mod},
 			})
-			c.run(t, env{t: t, e: e, pool: pool})
+			c.run(t, env{t: t, e: e, pool: pool, mod: mod})
 		})
 	}
 }
@@ -781,4 +784,30 @@ func testResponsesConformToSpec(t *testing.T, v env) {
 		out.SetBodyBytes(r.body)
 		require.NoError(t, openapi3filter.ValidateResponse(ctx, out), "%s %s: %s", c.method, c.path, r.body)
 	}
+}
+
+// testHomeCronPreview: DashboardController.cronPreview takes the first five jobs
+// of the wired preview (CronBridgePreview in Swift), and cronJobsCount counts
+// them; nil fields are left out. Without a preview the list is [] (FreshHome).
+func testHomeCronPreview(t *testing.T, v env) {
+	name, schedule := "Digest", "0 9 * * *"
+	v.mod.UseCronPreview(func(_ context.Context, tenant uuid.UUID) []dashboard.CronJobDTO {
+		require.Equal(t, ann, tenant)
+		jobs := []dashboard.CronJobDTO{{ID: "j0", Name: &name, Schedule: &schedule}}
+		for i := 1; i < 7; i++ {
+			jobs = append(jobs, dashboard.CronJobDTO{ID: fmt.Sprintf("j%d", i)})
+		}
+		return jobs
+	})
+	home := v.get(ann, "/v1/dashboard/home")
+	require.Equal(t, 5, num(t, home, "cronJobsCount"))
+	jobs := home["cronJobs"].([]any)
+	require.Len(t, jobs, 5)
+	require.Equal(t, map[string]any{"id": "j0", "name": "Digest", "schedule": "0 9 * * *"}, jobs[0])
+	require.Equal(t, map[string]any{"id": "j4"}, jobs[4])
+
+	v.mod.UseCronPreview(func(context.Context, uuid.UUID) []dashboard.CronJobDTO { return nil })
+	home = v.get(ann, "/v1/dashboard/home")
+	require.Equal(t, 0, num(t, home, "cronJobsCount"))
+	require.Equal(t, []any{}, home["cronJobs"])
 }
