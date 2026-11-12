@@ -568,3 +568,18 @@ func TestShutdownGivesUpOnAJobThatIgnoresCancellation(t *testing.T) {
 	require.Len(t, lines, 1)
 	assert.Equal(t, "1m0s", lines[0]["timeout"])
 }
+
+// LV_GO_JOBS=* runs every registered job and is not an unknown name.
+func TestWildcardEnablesEveryRegisteredJob(t *testing.T) {
+	registered := []Job{
+		{Name: "A", Schedule: Every(time.Minute, 0), Run: func(context.Context) error { return nil }},
+		{Name: "B", Schedule: Every(time.Minute, 0), Run: func(context.Context) error { return nil }},
+	}
+	cfg := config.Config{LVGoJobs: []string{config.AllJobs}}
+	require.True(t, cfg.JobEnabled("anything"))
+	_, err := New(cfg, registered, Options{})
+	require.NoError(t, err)
+
+	_, err = New(config.Config{LVGoJobs: []string{"*", "Typo"}}, registered, Options{})
+	require.ErrorContains(t, err, `unknown job "Typo"`)
+}

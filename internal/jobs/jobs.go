@@ -166,7 +166,7 @@ func New(cfg config.Config, registered []Job, opts Options) (*Runner, error) {
 		}
 	}
 	for _, name := range cfg.LVGoJobs {
-		if !slices.Contains(known, name) {
+		if name != config.AllJobs && !slices.Contains(known, name) {
 			slices.Sort(known)
 			return nil, fmt.Errorf("jobs: LV_GO_JOBS names unknown job %q (registered: [%s])", name, strings.Join(known, ", "))
 		}

@@ -156,3 +156,13 @@ by Go *instead of* Swift):
 These don't need a flag: `DiskSpaceMonitorService`, the three provider registries,
 `MeTodayCache`, the OTel exporters and the Fluent driver. None of them touches
 shared work.
+
+## Moving every job at once (2026-11-12)
+
+Every Swift job in the tables above now has a Go port. The in-process feeds (`AchievementsWorker`,
+`RetrievalTelemetryWorker`, `MemoryHitCountUpdateQueue`, `MeTodayCache`) are written by Go inline.
+Swift has no per-job off switch, so the jobs move in one step: `LV_GO_JOBS=*` on `api-go-*` and
+Swift's `api-*` at 0 replicas, in the same infra commit. `*` runs every job the Go process registers.
+Registration mirrors Swift's start conditions (secret box, Google credentials, `COMMUNITY_ENABLED`,
+`LV_ENVIRONMENT != test`, …), so `*` is the set Swift ran in that environment, with no list to
+keep in sync. Do it on staging first. A name next to `*` is still checked, so a typo fails boot.
