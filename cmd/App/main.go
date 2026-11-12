@@ -378,7 +378,11 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		deps.Modules = append(deps.Modules, agent.mcpModule(deviceRPC))
 		deps.Modules = append(deps.Modules, agent.routerModules()...)
 		deps.Modules = append(deps.Modules, agent.chatModules(links, enrichment, analytics)...)
-		deps.Modules = append(deps.Modules, agent.skillsModule(deviceRPC))
+		skillsMod := agent.skillsModule(deviceRPC)
+		deps.Modules = append(deps.Modules, skillsMod)
+		if cfg.LVEnvironment != "test" { // CronScheduler: Fluent on, not test, as App+build.swift
+			registered = append(registered, skillsMod.CronJob(slog.Default().With("label", "lv.skills")))
+		}
 		if m := agent.pluginsModule(); m != nil { // nil without LV_SECRET_MASTER_KEY, as in Swift
 			deps.Modules = append(deps.Modules, m)
 		}

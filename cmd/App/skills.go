@@ -5,7 +5,6 @@ import (
 	"lumina/internal/devicerpc"
 	"lumina/internal/devicetools"
 	"lumina/internal/entitlement"
-	"lumina/internal/httpserver"
 	"lumina/internal/modules/calendar"
 	"lumina/internal/secretbox"
 	"lumina/internal/skills"
@@ -28,7 +27,7 @@ func (a *agent) skillCatalog() *skills.Catalog {
 // /v1/jobs. The runner's device tools reach the phone through this process's
 // broker, so skills flips with /v1/ws (flip-blockers.md, the ws bundle).
 // Run after modules(), which builds the kb-compile route /kb-compile uses.
-func (a *agent) skillsModule(broker *devicerpc.Broker) httpserver.Module {
+func (a *agent) skillsModule(broker *devicerpc.Broker) *skillsroute.Module {
 	cfg := a.cfg
 	push := apns.New(a.pool, apns.Config{
 		Enabled: cfg.APNSEnabled, BundleID: cfg.APNSBundleID, TeamID: cfg.APNSTeamID, KeyID: cfg.APNSKeyID,

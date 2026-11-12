@@ -111,13 +111,16 @@ type runResult struct {
 	startedAt, endedAt time.Time
 }
 
-// runUser is what the controller already loaded for the caller.
+// runUser is what the controller already loaded for the caller. trigger is
+// SkillTrigger's description in the agent prompt: "" is .manual, the HTTP routes'
+// trigger; CronScheduler passes "cron".
 type runUser struct {
 	tenant                   uuid.UUID
 	tier, override, username string
+	trigger                  string
 }
 
-// Run is SkillRunner.run with trigger .manual, the only trigger the HTTP routes use.
+// Run is SkillRunner.run. The trigger is user.trigger, .manual when empty.
 func (r *Runner) Run(ctx context.Context, mf skills.Manifest, user runUser, input *string, arguments map[string]string) (runResult, error) {
 	started := r.now()
 	runID := uuid.New()
@@ -146,7 +149,7 @@ func (r *Runner) Run(ctx context.Context, mf skills.Manifest, user runUser, inpu
 		v.CerberusScope = scope
 	})
 
-	summary, blocks, err := r.runAgent(routed, mf, tenant, input, arguments, &res)
+	summary, blocks, err := r.runAgent(routed, mf, tenant, user.trigger, input, arguments, &res)
 	if err == nil {
 		err = r.dispatchOutputs(ctx, mf, tenant, user.username, summary)
 	}
@@ -254,7 +257,10 @@ var (
 
 func strPtr(s string) *string { return &s }
 
-func (r *Runner) runAgent(ctx context.Context, mf skills.Manifest, tenant uuid.UUID, input *string, arguments map[string]string, res *runResult) (string, *[]luminaBlock, error) {
+func (r *Runner) runAgent(ctx context.Context, mf skills.Manifest, tenant uuid.UUID, trigger string, input *string, arguments map[string]string, res *runResult) (string, *[]luminaBlock, error) {
+	if trigger == "" {
+		trigger = "manual"
+	}
 	allowed := map[string]bool{}
 	for _, t := range mf.AllowedTools {
 		allowed[t] = true
@@ -267,7 +273,7 @@ func (r *Runner) runAgent(ctx context.Context, mf skills.Manifest, tenant uuid.U
 	}
 	conversation := []agentMessage{
 		{Role: "system", Content: strPtr(fmt.Sprintf(agentSystemPrompt, mf.Name))},
-		{Role: "user", Content: strPtr("Trigger: manual\n" + inputDescription(input, arguments) + "\n\nSkill body:\n" + mf.Body)},
+		{Role: "user", Content: strPtr("Trigger: " + trigger + "\n" + inputDescription(input, arguments) + "\n\nSkill body:\n" + mf.Body)},
 	}
 	for range 6 {
 		payload, err := json.Marshal(agentRequest{
