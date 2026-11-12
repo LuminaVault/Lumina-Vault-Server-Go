@@ -27,14 +27,18 @@ type Worker struct {
 	PerTenantBudget time.Duration
 	Log             *slog.Logger
 
-	mu      sync.Mutex
-	pending []uuid.UUID
+	mu       sync.Mutex
+	pending  []uuid.UUID
+	lastPass time.Time
+	now      func() time.Time
 }
 
 // Swift's defaults.
 const (
-	WorkerTickInterval    = 900 * time.Second
-	WorkerMaxJitter       = 30 * time.Second
+	WorkerTickInterval = 900 * time.Second
+	WorkerMaxJitter    = 30 * time.Second
+	// WorkerNudgeSlice is how often the idle loop looks for a nudged tenant.
+	WorkerNudgeSlice      = 5 * time.Second
 	defaultWorkerPageSize = 100
 	defaultMaxConcurrent  = 4
 	defaultTenantBudget   = 60 * time.Second
@@ -93,6 +97,28 @@ func (w *Worker) takePending() []uuid.UUID {
 	out := w.pending
 	w.pending = nil
 	return out
+}
+
+// Poll is one nudgeSlice of Swift's wait: it runs a full turn (nudged tenants,
+// then a tick) when a tenant was nudged or a tick interval has passed since the
+// last turn, and otherwise returns at once. The job calls it every
+// WorkerNudgeSlice, so a saved gateway is refreshed within seconds.
+func (w *Worker) Poll(ctx context.Context) error {
+	w.mu.Lock()
+	clock := w.now
+	if clock == nil {
+		clock = time.Now
+	}
+	due := len(w.pending) > 0 || w.lastPass.IsZero() || clock().Sub(w.lastPass) >= WorkerTickInterval
+	w.mu.Unlock()
+	if !due {
+		return nil
+	}
+	err := w.Run(ctx)
+	w.mu.Lock()
+	w.lastPass = clock()
+	w.mu.Unlock()
+	return err
 }
 
 // Run is one turn of Swift's run loop: the nudged tenants first, then a tick.

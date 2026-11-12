@@ -1,7 +1,7 @@
 // Package hermesmirror is HermesMirrorService: every skill, cron job, KB vault
 // file and past session on the tenant's Hermes, mirrored into LuminaVault.
-// HermesMirrorRefreshWorker stays on Swift (O4); this package serves the
-// routes only.
+// The routes and HermesMirrorRefreshWorker (worker.go) both live here; the
+// worker runs only when LV_GO_JOBS names it.
 package hermesmirror
 
 import (
