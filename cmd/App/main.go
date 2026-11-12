@@ -356,12 +356,13 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		if workflows.Enabled(cfg.CerberusStudioEnabled) {
 			wf := workflowsModule(pool, cfg, box, identify, limits)
 			deps.Modules = append(deps.Modules, wf)
-			// WorkflowScheduler and WorkflowMaintenanceService, as App+build.swift
+			// WorkflowScheduler, WorkflowMaintenanceService and LegacyJobWorkflowMigrator, as App+build.swift
 			// registers them: Fluent on, not the test environment.
 			if cfg.LVEnvironment != "test" {
 				registered = append(registered,
 					wf.SchedulerJob(slog.Default().With("label", "lv.workflows.scheduler")),
-					wf.MaintenanceJob(slog.Default().With("label", "lv.workflows.maintenance")))
+					wf.MaintenanceJob(slog.Default().With("label", "lv.workflows.maintenance")),
+					wf.LegacyMigratorJob(agent.skillCatalog(), slog.Default().With("label", "lv.workflows.legacy-migrator")))
 			}
 		}
 		deps.Modules = append(deps.Modules, agent.modules(links, enrichment)...)
