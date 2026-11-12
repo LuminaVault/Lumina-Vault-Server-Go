@@ -2,10 +2,9 @@ package webauthnroutes
 
 import (
 	"encoding/json"
-	"reflect"
-
 	"lumina/internal/passkey"
 	"lumina/internal/wire"
+	"reflect"
 )
 
 // The credential bodies are swift-webauthn's Decodable implementations, fields in

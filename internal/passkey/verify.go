@@ -11,9 +11,8 @@ import (
 	"encoding/binary"
 	"errors"
 	"hash"
-	"math/big"
-
 	"lumina/internal/wire"
+	"math/big"
 
 	"github.com/fxamacker/cbor/v2"
 	"github.com/go-webauthn/webauthn/protocol"

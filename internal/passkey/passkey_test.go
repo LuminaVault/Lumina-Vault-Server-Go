@@ -10,13 +10,12 @@ import (
 	"crypto/sha512"
 	"encoding/base64"
 	"encoding/binary"
-	"strings"
-	"testing"
-	"time"
-
 	"lumina/internal/passkey"
 	"lumina/internal/passkey/passkeytest"
 	"lumina/internal/wire"
+	"strings"
+	"testing"
+	"time"
 
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/protocol/webauthncbor"
@@ -223,7 +222,9 @@ func TestVerifyRegistration(t *testing.T) {
 		{"client data missing origin", "clientDataJSON", func(_ *passkeytest.Authenticator, r *passkey.RegistrationResponse) {
 			r.ClientDataJSON = []byte(`{"type":"webauthn.create","challenge":"x"}`)
 		}},
-		{"attestation object not cbor", "invalidAttestationObject", func(_ *passkeytest.Authenticator, r *passkey.RegistrationResponse) { r.AttestationObject = []byte{0xff} }},
+		{"attestation object not cbor", "invalidAttestationObject", func(_ *passkeytest.Authenticator, r *passkey.RegistrationResponse) {
+			r.AttestationObject = []byte{0xff}
+		}},
 		{"assert ceremony", "ceremonyTypeDoesNotMatch", func(a *passkeytest.Authenticator, r *passkey.RegistrationResponse) {
 			r.ClientDataJSON = a.ClientData(protocol.AssertCeremony, passkey.URLEncode(challenge))
 		}},

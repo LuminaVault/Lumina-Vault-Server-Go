@@ -15,9 +15,7 @@ package webauthnroutes
 import (
 	"context"
 	"errors"
-	"net/http"
-	"time"
-
+	"lumina/internal/auth"
 	"lumina/internal/authservice"
 	"lumina/internal/httpserver"
 	"lumina/internal/ids"
@@ -25,8 +23,8 @@ import (
 	"lumina/internal/ratelimit"
 	"lumina/internal/swiftstr"
 	"lumina/internal/wire"
-
-	"lumina/internal/auth"
+	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -338,8 +336,8 @@ func (m *Module) listCredentials(c *echo.Context) error {
 	out := credentialList{Credentials: []credentialSummary{}}
 	for rows.Next() {
 		var (
-			s                  credentialSummary
-			created, updated   *time.Time
+			s                credentialSummary
+			created, updated *time.Time
 		)
 		if err := rows.Scan(&s.ID, &created, &updated); err != nil {
 			return err

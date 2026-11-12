@@ -13,12 +13,12 @@ import (
 
 // CreationOptions is PublicKeyCredentialCreationOptions.
 type CreationOptions struct {
-	Challenge        string       `json:"challenge"`
-	User             UserEntity   `json:"user"`
-	RP               RPEntity     `json:"rp"`
-	PubKeyCredParams []CredParam  `json:"pubKeyCredParams"`
-	Timeout          int64        `json:"timeout"`
-	Attestation      string       `json:"attestation"`
+	Challenge        string      `json:"challenge"`
+	User             UserEntity  `json:"user"`
+	RP               RPEntity    `json:"rp"`
+	PubKeyCredParams []CredParam `json:"pubKeyCredParams"`
+	Timeout          int64       `json:"timeout"`
+	Attestation      string      `json:"attestation"`
 }
 
 // UserEntity is PublicKeyCredentialUserEntity; ID is base64url.

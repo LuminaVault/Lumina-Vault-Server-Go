@@ -83,8 +83,8 @@ func (a *Authenticator) authDataHead(flags protocol.AuthenticatorFlags) []byte {
 // RegistrationAuthData is authenticator data with the AT flag and the attested credential.
 func (a *Authenticator) RegistrationAuthData(publicKey []byte) []byte {
 	out := a.authDataHead(a.Flags | protocol.FlagAttestedCredentialData)
-	out = append(out, make([]byte, 16)...) // AAGUID: zeros, as passkey providers send
-	out = binary.BigEndian.AppendUint16(out, uint16(len(a.CredentialID)))
+	out = append(out, make([]byte, 16)...)                                // AAGUID: zeros, as passkey providers send
+	out = binary.BigEndian.AppendUint16(out, uint16(len(a.CredentialID))) //nolint:gosec // test ids are short
 	out = append(out, a.CredentialID...)
 	return append(out, publicKey...)
 }

@@ -18,9 +18,8 @@ package passkey
 
 import (
 	"encoding/base64"
-	"strings"
-
 	"lumina/internal/swiftstr"
+	"strings"
 )
 
 // ParseOrigins is WebAuthnService.parseOrigins: comma separated, each entry trimmed of

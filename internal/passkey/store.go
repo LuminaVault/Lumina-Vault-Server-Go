@@ -1,10 +1,9 @@
 package passkey
 
 import (
+	"lumina/internal/ids"
 	"sync"
 	"time"
-
-	"lumina/internal/ids"
 
 	"github.com/google/uuid"
 )
