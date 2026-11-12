@@ -1,0 +1,16 @@
+# The mirror for a gateway-only BYO tenant on the LLM stub: reads go over the
+# gateway's api_server routes, filesystem work and the webhook need a dashboard.
+module: hermes-mirror
+steps:
+  - {name: status over the gateway, as: hm_dee, request: {method: GET, path: /v1/hermes/mirror/status}}
+  - name: sync skills and artifacts
+    as: hm_dee
+    request: {method: POST, path: /v1/hermes/mirror/sync, json: {scope: [skills, artifacts]}}
+    snapshot: [parity_hm_state, parity_hm_skills, parity_hm_artifacts]
+  - {name: mirrored skills, as: hm_dee, request: {method: GET, path: /v1/hermes/mirror/skills}}
+  - {name: jobs the stub does not serve, as: hm_dee, request: {method: GET, path: /v1/hermes/mirror/jobs}}
+  - {name: artifacts from the stub session, as: hm_dee, request: {method: GET, path: /v1/hermes/artifacts}}
+  - {name: vault create needs a dashboard, as: hm_dee, request: {method: POST, path: /v1/hermes/mirror/vault/create}}
+  - {name: webhook rotate needs admin config, as: hm_dee, request: {method: POST, path: /v1/hermes/mirror/webhook}}
+  - {name: workspace needs a dashboard, as: hm_dee, request: {method: GET, path: "/v1/hermes/workspace/files?path=/repo"}}
+  - {name: status after, as: hm_dee, request: {method: GET, path: /v1/hermes/mirror/status}, snapshot: [parity_hm_state]}
