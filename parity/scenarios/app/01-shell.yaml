@@ -10,3 +10,5 @@ steps:
   - {name: legacy compile with a bearer, as: alice, request: {method: POST, path: /v1/kb-compile, json: {}}, headers: [Location]}
   - {name: legacy pending, request: {method: GET, path: /v1/kb-compile/pending}, headers: [Location]}
   - {name: legacy compile wrong method, request: {method: GET, path: /v1/kb-compile}}
+# Deep health: the parity gateway (127.0.0.1:9) is down on both servers, so 503 degraded.
+  - {name: deep health, request: {method: GET, path: /health/deep}}

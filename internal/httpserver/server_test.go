@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"lumina/internal/config"
@@ -241,6 +242,40 @@ func TestLegacyCompileAliasRedirects(t *testing.T) {
 		rec := do(t, newTestServer(), httptest.NewRequest(tc.method, tc.path, nil))
 		if rec.Code != http.StatusPermanentRedirect || rec.Header().Get("Location") != tc.to {
 			t.Fatalf("%s %s: %d %q", tc.method, tc.path, rec.Code, rec.Header().Get("Location"))
+		}
+	}
+}
+
+func TestDeepHealth(t *testing.T) {
+	ms := 12
+	for _, tc := range []struct {
+		name   string
+		probe  func(context.Context) (bool, *int)
+		status int
+		body   string
+	}{
+		{
+			name:   "reachable",
+			probe:  func(context.Context) (bool, *int) { return true, &ms },
+			status: http.StatusOK,
+			body:   `{"status":"ok","hermes":{"reachable":true,"latencyMs":12}}`,
+		},
+		{
+			name:   "unreachable",
+			probe:  func(context.Context) (bool, *int) { return false, nil },
+			status: http.StatusServiceUnavailable,
+			body:   `{"status":"degraded","hermes":{"reachable":false,"latencyMs":null}}`,
+		},
+		{
+			name:   "no probe",
+			status: http.StatusServiceUnavailable,
+			body:   `{"status":"degraded","hermes":{"reachable":false,"latencyMs":null}}`,
+		},
+	} {
+		e := New(prodCfg, Deps{Auth: denyAll, DeepHealth: tc.probe})
+		rec := do(t, e, httptest.NewRequest(http.MethodGet, "/health/deep", nil))
+		if rec.Code != tc.status || rec.Body.String() != tc.body || rec.Header().Get("Content-Type") != "application/json" {
+			t.Fatalf("%s: %d %q %q", tc.name, rec.Code, rec.Body.String(), rec.Header().Get("Content-Type"))
 		}
 	}
 }
