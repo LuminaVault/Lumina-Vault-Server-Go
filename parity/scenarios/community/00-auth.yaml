@@ -2,6 +2,7 @@
 # Anonymous steps send their own X-Forwarded-For so each batch gets an "ip:"
 # bucket (communityWriteByUser is 10/min).
 module: community
+smoke: true
 steps:
   - {"name": "me no token", "request": {"method": "GET", "path": "/v1/community/me", "headers": {"X-Forwarded-For": "10.76.0.1"}}}
   - {"name": "threads no token", "request": {"method": "GET", "path": "/v1/community/posts", "headers": {"X-Forwarded-For": "10.76.0.1"}}}
