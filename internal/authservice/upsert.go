@@ -5,11 +5,11 @@ import (
 	"errors"
 	"lumina/internal/auth"
 	"lumina/internal/swiftstr"
+	"lumina/internal/wire"
 	"net/http"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"lumina/internal/wire"
 )
 
 // placeholderAttempts is uniquePlaceholderUsername's maxAttempts.

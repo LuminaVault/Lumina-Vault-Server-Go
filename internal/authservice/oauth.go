@@ -175,7 +175,9 @@ func parseJWKS(body []byte) (*jwkSet, error) {
 	return set, nil
 }
 
-func b64(s string) ([]byte, error) { return base64.RawURLEncoding.DecodeString(strings.TrimRight(s, "=")) }
+func b64(s string) ([]byte, error) {
+	return base64.RawURLEncoding.DecodeString(strings.TrimRight(s, "="))
+}
 
 func (r rawJWK) parse() (jwk, error) {
 	switch r.KTY {
@@ -215,7 +217,19 @@ func (r rawJWK) parse() (jwk, error) {
 		if errX != nil || errY != nil {
 			return jwk{}, errors.New("jwks: bad EC point")
 		}
-		return jwk{alg: alg, key: &ecdsa.PublicKey{Curve: curve, X: new(big.Int).SetBytes(x), Y: new(big.Int).SetBytes(y)}}, nil
+		size := (curve.Params().BitSize + 7) / 8
+		if len(x) > size || len(y) > size {
+			return jwk{}, errors.New("jwks: bad EC point")
+		}
+		point := make([]byte, 1+2*size)
+		point[0] = 4
+		copy(point[1+size-len(x):], x)
+		copy(point[1+2*size-len(y):], y)
+		pub, err := ecdsa.ParseUncompressedPublicKey(curve, point)
+		if err != nil {
+			return jwk{}, fmt.Errorf("jwks: bad EC point: %w", err)
+		}
+		return jwk{alg: alg, key: pub}, nil
 	case "OKP":
 		x, err := b64(r.X)
 		if r.Crv != "Ed25519" || err != nil || len(x) != ed25519.PublicKeySize {

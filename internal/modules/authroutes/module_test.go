@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -66,11 +67,16 @@ type env struct {
 	t         *testing.T
 	srv       http.Handler
 	analytics *events
+	pool      *pgxpool.Pool
 }
 
 // setup serves the 8A routes on a fresh database with fixed codes and senders
 // that send nothing.
-func setup(t *testing.T) env {
+func setup(t *testing.T) env { t.Helper(); return setupWith(t, nil) }
+
+// setupWith lets a test set the 8B collaborators (stub providers, X, SMS,
+// fixed codes) before the module is built.
+func setupWith(t *testing.T, configure func(*authroutes.Options)) env {
 	t.Helper()
 	pool := dbtest.Postgres(t)
 	require.NoError(t, migrations.Up(context.Background(), pool, migrations.SQL()))
@@ -84,9 +90,13 @@ func setup(t *testing.T) env {
 		ResetCodes: authservice.FixedCodeGenerator{Code: "654321"}, VerifyCodes: authservice.FixedCodeGenerator{Code: "789012"},
 		PasswordCost: 4,
 	})
-	module := authroutes.New(pool, authroutes.Options{Service: svc, Limits: ratelimit.NewStore(), Analytics: analytics})
+	opt := authroutes.Options{Service: svc, Limits: ratelimit.NewStore(), Analytics: analytics}
+	if configure != nil {
+		configure(&opt)
+	}
+	module := authroutes.New(pool, opt)
 	e := httpserver.New(config.Config{}, httpserver.Deps{Auth: auth.Middleware(keys, auth.PGUsers(pool)), Modules: []httpserver.Module{module}})
-	return env{t: t, srv: e, analytics: analytics}
+	return env{t: t, srv: e, analytics: analytics, pool: pool}
 }
 
 type resp struct {
