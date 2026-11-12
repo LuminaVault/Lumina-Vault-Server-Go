@@ -96,6 +96,12 @@ x-common-env: &common-env
   # Sessions (auth, 8A): issueTokens stamps these on every session. Only parity/seed/auth.sql's
   # users are listed, so no other scenario's user changes.
   BILLING_TIER_OVERRIDE_EMAILS: "auth-founder@parity.test=pro,auth-ultimate@parity.test=pro,auth-x-mfa@parity.test"
+  # Passkeys (auth, 8C): off by default in both servers, so every route would be a 404.
+  # Two origins, as production has, so the multi-origin path runs.
+  WEBAUTHN_ENABLED: "TRUE"
+  WEBAUTHN_RELYING_PARTY_ID: parity.test
+  WEBAUTHN_RELYING_PARTY_NAME: LuminaVault Parity
+  WEBAUTHN_RELYING_PARTY_ORIGIN: "https://app.parity.test, https://parity.test,"
   # Marketplace: the stub also answers as the plugin runner.
   PLUGIN_RUNNER_URL: http://feeds:8080
   PLUGIN_RUNNER_TOKEN: parity-runner-token

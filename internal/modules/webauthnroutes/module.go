@@ -358,8 +358,9 @@ func (m *Module) listCredentials(c *echo.Context) error {
 	return writeJSON(c, out)
 }
 
-// deleteCredential is 204 whether or not a row matched. Swift: an id holding "/" (most
-// padded standard-base64 ids are "/"-free, but not all) cannot be named in the path.
+// deleteCredential is 204 whether or not a row matched. The parameter is the raw path
+// segment, percent escapes and all, as Hummingbird's router passes it. Swift: an id
+// holding "/" (standard base64 can) cannot be named in the path, escaped or not.
 func (m *Module) deleteCredential(c *echo.Context) error {
 	id, ok := auth.Identity(c)
 	if !ok {

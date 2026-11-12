@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -586,6 +587,31 @@ func TestWire(t *testing.T) {
 		assert.Equal(t, http.StatusNoContent, v.do(http.MethodDelete, "/v1/auth/webauthn/credentials/"+id, "", other.token).code)
 		assert.Len(t, v.rows(owner.id), 1)
 	})
+}
+
+// Hummingbird routes on the raw path and hands the parameter over undecoded, so a
+// percent-encoded id names nothing, and an id holding "/" cannot be named at all.
+func TestDeletePathIsRaw(t *testing.T) {
+	v := setup(t, setupOpts{})
+	u := v.makeUser()
+	for _, id := range []string{"++8+AQID", "+/+/AQID", "%41%41"} {
+		_, err := v.pool.Exec(context.Background(), `INSERT INTO webauthn_credentials (id, tenant_id, credential_id, public_key, sign_count, created_at, updated_at)
+			VALUES ($1, $2, $3, '\x00', 0, now(), now())`, uuid.New(), uuid.MustParse(u.id), id)
+		require.NoError(t, err)
+	}
+	ids := func() []string {
+		got := credentialIDs(t, v.do(http.MethodGet, "/v1/auth/webauthn/credentials", "", u.token).body)
+		sort.Strings(got)
+		return got
+	}
+	assert.Equal(t, http.StatusNoContent, v.do(http.MethodDelete, "/v1/auth/webauthn/credentials/%2B%2B8%2BAQID", "", u.token).code)
+	assert.Equal(t, http.StatusNoContent, v.do(http.MethodDelete, "/v1/auth/webauthn/credentials/+%2F+%2FAQID", "", u.token).code)
+	assert.Equal(t, http.StatusNotFound, v.do(http.MethodDelete, "/v1/auth/webauthn/credentials/+/+/AQID", "", u.token).code)
+	assert.Equal(t, []string{"%41%41", "++8+AQID", "+/+/AQID"}, ids())
+	// The raw text is what matches.
+	assert.Equal(t, http.StatusNoContent, v.do(http.MethodDelete, "/v1/auth/webauthn/credentials/%41%41", "", u.token).code)
+	assert.Equal(t, http.StatusNoContent, v.do(http.MethodDelete, "/v1/auth/webauthn/credentials/++8+AQID", "", u.token).code)
+	assert.Equal(t, []string{"+/+/AQID"}, ids())
 }
 
 // With the feature off nothing is mounted; on but without an RP id or origin, the
