@@ -1,0 +1,64 @@
+# Passkeys (WebAuthnService, wave 8C), with WEBAUTHN_* set in docker-compose.parity.yml and the
+# rows in parity/seed/webauthn.sql. Challenges are random and every finish has to sign one, so no
+# ceremony can succeed here; Go's tests run them whole (internal/modules/webauthnroutes). This
+# compares the options' shape (challenge ignored), every refusal, the order checks run in, the
+# bare 500 a failed verification is, credential listing and deletion, including the ids Swift
+# stores in padded standard base64 and the path decoding of the delete route.
+module: auth
+steps:
+  # Sign-in options: the same bytes for every username but the challenge (anti-enumeration).
+  - {name: authenticate options unknown user, request: {method: POST, path: /v1/auth/webauthn/authenticate/options, headers: {X-Forwarded-For: 198.51.108.1}, json: {username: ghost-user}}, ignore: ["$.options.challenge"]}
+  - {name: authenticate begin known user, request: {method: POST, path: /v1/auth/webauthn/authenticate/begin, headers: {X-Forwarded-For: 198.51.108.2}, json: {username: wa-ann}}, ignore: ["$.options.challenge"]}
+  - {name: authenticate begin extra keys ignored, request: {method: POST, path: /v1/auth/webauthn/authenticate/begin, headers: {X-Forwarded-For: 198.51.108.3}, json: {username: wa-ann-2, displayName: x}}, ignore: ["$.options.challenge"]}
+  - {name: authenticate begin missing username, request: {method: POST, path: /v1/auth/webauthn/authenticate/begin, headers: {X-Forwarded-For: 198.51.108.4}, json: {}}}
+  - {name: authenticate begin number username, request: {method: POST, path: /v1/auth/webauthn/authenticate/begin, headers: {X-Forwarded-For: 198.51.108.5}, raw: "{\"username\":5}"}}
+  - {name: authenticate begin not json, request: {method: POST, path: /v1/auth/webauthn/authenticate/begin, headers: {X-Forwarded-For: 198.51.108.6}, raw: "nope"}}
+  - {name: authenticate begin with get, request: {method: GET, path: /v1/auth/webauthn/authenticate/begin, headers: {X-Forwarded-For: 198.51.108.7}}}
+
+  # Sign-in finish: challenge first, then the user, then the credential row, then verification.
+  - {name: finish without a challenge, request: {method: POST, path: /v1/auth/webauthn/authenticate/finish, headers: {X-Forwarded-For: 198.51.108.10}, json: {username: never-began, credential: {id: "++++AQID", rawId: AA, type: public-key, response: {clientDataJSON: e30, authenticatorData: AA, signature: AA}}}}}
+  - {name: begin for a ghost, request: {method: POST, path: /v1/auth/webauthn/authenticate/begin, headers: {X-Forwarded-For: 198.51.108.11}, json: {username: ghost-finish}}, ignore: ["$.options.challenge"]}
+  - {name: finish for a ghost is 401, request: {method: POST, path: /v1/auth/webauthn/authenticate/finish, headers: {X-Forwarded-For: 198.51.108.12}, json: {username: ghost-finish, credential: {id: "++++AQID", rawId: AA, type: public-key, response: {clientDataJSON: e30, authenticatorData: AA, signature: AA}}}}}
+  - {name: finish unknown credential is the same 401, request: {method: POST, path: /v1/auth/webauthn/authenticate/finish, headers: {X-Forwarded-For: 198.51.108.13}, json: {username: wa-ann, credential: {id: not-registered, rawId: AA, type: public-key, response: {clientDataJSON: e30, authenticatorData: AA, signature: AA}}}}}
+  - {name: finish with the base64url spelling is not found, request: {method: POST, path: /v1/auth/webauthn/authenticate/finish, headers: {X-Forwarded-For: 198.51.108.14}, json: {username: wa-ann, credential: {id: "----AQID", rawId: "----AQID", type: public-key, response: {clientDataJSON: e30, authenticatorData: AA, signature: AA}}}}}
+  - {name: finish another case of the username has no challenge, request: {method: POST, path: /v1/auth/webauthn/authenticate/finish, headers: {X-Forwarded-For: 198.51.108.15}, json: {username: WA-ANN, credential: {id: "++++AQID", rawId: AA, type: public-key, response: {clientDataJSON: e30, authenticatorData: AA, signature: AA}}}}}
+  - name: finish a stored credential that does not verify is a bare 500
+    request: {method: POST, path: /v1/auth/webauthn/authenticate/finish, headers: {X-Forwarded-For: 198.51.108.16}, json: {username: wa-ann, credential: {id: "++++AQID", rawId: AA, type: public-key, response: {clientDataJSON: e30, authenticatorData: AA, signature: AA}}}}
+    snapshot: [webauthn_credentials]
+  - {name: the challenge survives a failed finish, request: {method: POST, path: /v1/auth/webauthn/authenticate/finish, headers: {X-Forwarded-For: 198.51.108.17}, json: {username: wa-ann, credential: {id: "AAAAAAAAAAAAAAAAAAAAAAAAAAA=", rawId: AA, type: password, response: {clientDataJSON: e30, authenticatorData: AA, signature: AA, userHandle: AA}, authenticatorAttachment: platform}}}}
+  - {name: finish bad rawId, request: {method: POST, path: /v1/auth/webauthn/authenticate/finish, headers: {X-Forwarded-For: 198.51.108.18}, json: {username: wa-ann, credential: {id: x, rawId: "*", type: public-key, response: {}}}}}
+  - {name: finish bad userHandle, request: {method: POST, path: /v1/auth/webauthn/authenticate/finish, headers: {X-Forwarded-For: 198.51.108.19}, json: {username: wa-ann, credential: {id: x, rawId: AA, type: public-key, response: {clientDataJSON: e30, authenticatorData: AA, signature: AA, userHandle: "!"}}}}}
+  - {name: finish missing type, request: {method: POST, path: /v1/auth/webauthn/authenticate/finish, headers: {X-Forwarded-For: 198.51.108.20}, json: {username: wa-ann, credential: {id: x, rawId: AA, response: {clientDataJSON: e30, authenticatorData: AA, signature: AA}}}}}
+  - {name: finish signature number, request: {method: POST, path: /v1/auth/webauthn/authenticate/finish, headers: {X-Forwarded-For: 198.51.108.21}, json: {username: wa-ann, credential: {id: x, rawId: AA, type: public-key, response: {clientDataJSON: e30, authenticatorData: AA, signature: 5}}}}}
+
+  # Enrolment: identity before the body, the claim before the challenge.
+  - {name: register begin without a bearer, request: {method: POST, path: /v1/auth/webauthn/register/begin, json: {username: wa-ann}}}
+  - {name: register options without a bearer and a bad body, request: {method: POST, path: /v1/auth/webauthn/register/options, raw: "{\"not-a-field\":123}"}}
+  - {name: register finish without a bearer, request: {method: POST, path: /v1/auth/webauthn/register/finish, json: {username: wa-ann}}}
+  - {name: register begin naming another user, as: wa_cy, request: {method: POST, path: /v1/auth/webauthn/register/begin, json: {username: wa-ann}}}
+  - {name: register begin own name padded and upper, as: wa_cy, request: {method: POST, path: /v1/auth/webauthn/register/begin, json: {username: " WA-CY\n", displayName: "Cy/Phone"}}, ignore: ["$.options.challenge"]}
+  - {name: register options blank username, as: wa_cy, request: {method: POST, path: /v1/auth/webauthn/register/options, json: {username: ""}}, ignore: ["$.options.challenge"]}
+  - {name: register begin missing username, as: wa_cy, request: {method: POST, path: /v1/auth/webauthn/register/begin, json: {displayName: x}}}
+  - {name: register begin number display name, as: wa_cy, request: {method: POST, path: /v1/auth/webauthn/register/begin, raw: "{\"username\":\"\",\"displayName\":5}"}}
+  - {name: register finish without a challenge, as: wa_ben, request: {method: POST, path: /v1/auth/webauthn/register/finish, json: {username: "", credentialCreationData: {id: a, type: public-key, rawId: AA, response: {clientDataJSON: e30, attestationObject: oA}}}}}
+  - {name: register finish naming another user, as: wa_cy, request: {method: POST, path: /v1/auth/webauthn/register/finish, json: {username: wa-ann, credentialCreationData: {id: a, type: public-key, rawId: AA, response: {clientDataJSON: e30, attestationObject: oA}}}}}
+  - {name: register finish bad rawId, as: wa_cy, request: {method: POST, path: /v1/auth/webauthn/register/finish, json: {username: "", credentialCreationData: {id: a, type: public-key, rawId: "*", response: {clientDataJSON: e30, attestationObject: oA}}}}}
+  - {name: register finish bad attestationObject, as: wa_cy, request: {method: POST, path: /v1/auth/webauthn/register/finish, json: {username: "", credentialCreationData: {id: a, type: public-key, rawId: AA, response: {clientDataJSON: e30, attestationObject: "%"}}}}}
+  - {name: register finish missing response, as: wa_cy, request: {method: POST, path: /v1/auth/webauthn/register/finish, json: {username: "", credentialCreationData: {id: a, type: public-key, rawId: AA}}}}
+  - name: register finish that does not verify is a bare 500
+    as: wa_cy
+    request: {method: POST, path: /v1/auth/webauthn/register/finish, json: {username: "", credentialCreationData: {id: a, type: public-key, rawId: AA, response: {clientDataJSON: e30, attestationObject: oA}}}}
+    snapshot: [webauthn_credentials]
+
+  # Management: the caller's rows, as stored; delete is 204 whatever it matched.
+  - {name: list without a bearer, request: {method: GET, path: /v1/auth/webauthn/credentials}}
+  - {name: list two credentials, as: wa_ann, request: {method: GET, path: /v1/auth/webauthn/credentials}}
+  - {name: list with a null updated_at, as: wa_ben, request: {method: GET, path: /v1/auth/webauthn/credentials}}
+  - {name: list none, as: wa_cy, request: {method: GET, path: /v1/auth/webauthn/credentials}}
+  - {name: delete without a bearer, request: {method: DELETE, path: /v1/auth/webauthn/credentials/AAAA}}
+  - {name: delete another user's credential, as: wa_ann, request: {method: DELETE, path: /v1/auth/webauthn/credentials/Y3JlZGVudGlhbC1pZC0yNC1ieXRlcyEh}, snapshot: [webauthn_credentials]}
+  - {name: delete own credential, as: wa_ben, request: {method: DELETE, path: /v1/auth/webauthn/credentials/Y3JlZGVudGlhbC1pZC0yNC1ieXRlcyEh}, snapshot: [webauthn_credentials]}
+  - {name: delete a percent-encoded id, as: wa_ben, request: {method: DELETE, path: /v1/auth/webauthn/credentials/%2B%2B8%2BAQID}, snapshot: [webauthn_credentials]}
+  - {name: delete an id with a slash, as: wa_ben, request: {method: DELETE, path: /v1/auth/webauthn/credentials/+/+/AQID}, snapshot: [webauthn_credentials]}
+  - {name: delete an id with an encoded slash, as: wa_ben, request: {method: DELETE, path: /v1/auth/webauthn/credentials/+%2F+%2FAQID}, snapshot: [webauthn_credentials]}
+  - {name: list after deletes, as: wa_ben, request: {method: GET, path: /v1/auth/webauthn/credentials}}

@@ -190,6 +190,15 @@ type Config struct {
 	BillingColdStoragePath    string `env:"BILLING_COLD_STORAGE_PATH"`
 	LapseDryRun               bool   `env:"LV_LAPSE_DRY_RUN" envDefault:"true"`
 
+	// Wave 8C passkeys (WebAuthnService). Enabled is a string: Swift turns it on only
+	// when it lowercases to "true". The origin is a comma-separated list
+	// (passkey.ParseOrigins). Changing the RP id or an origin strands every
+	// registered passkey.
+	WebAuthnEnabled            string `env:"WEBAUTHN_ENABLED" envDefault:"false"`
+	WebAuthnRelyingPartyID     string `env:"WEBAUTHN_RELYING_PARTY_ID"`
+	WebAuthnRelyingPartyName   string `env:"WEBAUTHN_RELYING_PARTY_NAME" envDefault:"LuminaVault"`
+	WebAuthnRelyingPartyOrigin string `env:"WEBAUTHN_RELYING_PARTY_ORIGIN"`
+
 	// Job J1 (internal/workers). AccountDeletionPurgeAfterDays is
 	// account.deletion.purgeAfterDays, the recovery window before DeletedDataPurgeService
 	// erases a deleted account's folders. RetrievalLeakReportSurfaceInsight is
