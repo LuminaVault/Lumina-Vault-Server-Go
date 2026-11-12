@@ -51,6 +51,11 @@ func TestJ1JobsAgainstPostgres(t *testing.T) {
 		// Tests/AppTests/Telemetry/SpaceTopologyTests.swift (memorystore.SpaceTopology).
 		"SpaceTopologySortsAndResolvesSlug": testSpaceTopologySorts,
 		"SpaceTopologyIsTenantScoped":       testSpaceTopologyScoped,
+		// MemoryIndexWorker (W5 job port). Swift has no test of the worker itself.
+		"MemoryIndexStoresAnswer":        testMemoryIndexStoresAnswer,
+		"MemoryIndexSkipsExistingMemory": testMemoryIndexSkipsExistingMemory,
+		"MemoryIndexRetriesOnFailure":    testMemoryIndexRetriesOnFailure,
+		"MemoryIndexKeepGate":            testMemoryIndexKeepGate,
 		// Go only: the rest of the jobs' database effects.
 		"GraphLayoutPersistsCoordinates":     testGraphLayoutPersists,
 		"AnalyticsMaintenanceDeletesExpired": testAnalyticsMaintenance,
