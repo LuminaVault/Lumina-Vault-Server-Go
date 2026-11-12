@@ -26,3 +26,13 @@ func TestBcryptGolden(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 12, cost)
 }
+
+// C bcrypt reads the password with strlen, so HummingbirdBcrypt ignores
+// everything from the first NUL; Go must hash and verify the same prefix.
+func TestBcryptStopsAtNUL(t *testing.T) {
+	h, err := HashPassword("abc\x00ignored-tail", 4)
+	require.NoError(t, err)
+	require.True(t, VerifyPassword("abc", h))
+	require.True(t, VerifyPassword("abc\x00other", h))
+	require.False(t, VerifyPassword("abcd", h))
+}

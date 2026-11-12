@@ -21,6 +21,22 @@ func TestAuthFlow(t *testing.T) {
 	pool := newPool(t)
 	ctx := context.Background()
 
+	t.Run("register finishes every write after the client leaves", func(t *testing.T) {
+		// Hummingbird runs the handler to the end; a cancelled request context
+		// must not leave a user without a trial expiry or a personal vault.
+		h := build(t, pool, harness{})
+		gone, cancel := context.WithCancel(ctx)
+		cancel()
+		email := randomEmail("auth")
+		_, err := h.svc.Register(gone, email, randomUsername("auth"), password)
+		require.NoError(t, err)
+		var trialSet, vaults int
+		require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM users WHERE email = $1 AND tier_expires_at IS NOT NULL`, email).Scan(&trialSet))
+		require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM vaults v JOIN users u ON v.personal_owner_user_id = u.id WHERE u.email = $1`, email).Scan(&vaults))
+		assert.Equal(t, 1, trialSet)
+		assert.Equal(t, 1, vaults)
+	})
+
 	t.Run("register happy path creates user and hermes profile", func(t *testing.T) {
 		h := build(t, pool, harness{})
 		email, username := randomEmail("auth"), randomUsername("auth")

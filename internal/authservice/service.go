@@ -209,6 +209,10 @@ func (s *Service) EnsureSoft(ctx context.Context, u *User) {
 // already registered" and "username already taken" let anyone probe which
 // accounts exist; only registerByIP limits it.
 func (s *Service) Register(ctx context.Context, email, rawUsername, password string) (*AuthResponse, error) {
+	// Hummingbird runs a handler to the end after the client leaves; Go cancels
+	// the request context, which would abort pgx mid-sequence and leave a user
+	// with no trial expiry or no personal vault. Finish the writes as Swift does.
+	ctx = context.WithoutCancel(ctx)
 	if swiftstr.CharacterCount(password) < minPasswordLength {
 		return nil, ErrWeakPassword
 	}
@@ -415,6 +419,9 @@ func (s *Service) failOTP(ctx context.Context, table string, r *otpRow, maxFailu
 // starts a fresh five attempts; the hashes are compared with ==; and an unknown
 // email gives the same 401 as a wrong code only after skipping the work.
 func (s *Service) ResetPassword(ctx context.Context, email, code, newPassword string) (*AuthResponse, error) {
+	// As Register: the code is marked used before the bcrypt hash, so a client
+	// that leaves mid-request must not strand the reset half done.
+	ctx = context.WithoutCancel(ctx)
 	if swiftstr.CharacterCount(newPassword) < minPasswordLength {
 		return nil, ErrWeakPassword
 	}
