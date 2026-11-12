@@ -29,23 +29,24 @@ func (a *agent) mcpModule(broker *devicerpc.Broker) httpserver.Module {
 	if base == "" {
 		base = cfg.IngestionPublicBaseURL
 	}
+	a.mcp = mcp.NewService(mcp.ServiceDeps{
+		Pool: a.pool, Paths: a.paths,
+		Status:     vaultindex.New(a.pool, vaultfiles.NewStore(a.pool, a.paths), links),
+		Links:      links,
+		Hybrid:     chunkindex.NewHybrid(a.memories, chunks),
+		Embeddings: a.embeddings,
+		Backfill:   chunkindex.NewBackfiller(a.pool, a.paths, indexer),
+		Indexer:    indexer,
+		Memories:   a.memories,
+		Personal:   devicetools.New(a.pool, broker, devicerpc.NewQueue(a.pool, push)),
+		Soul:       soul.New(a.paths, cfg.HermesDataRoot),
+	})
 	return mcp.New(mcp.Options{
-		Identify:    a.identify,
-		Limits:      a.limits,
-		VaultAccess: vaultaccess.New(a.pool),
-		Connections: mcp.NewConnections(a.pool),
-		Service: mcp.NewService(mcp.ServiceDeps{
-			Pool: a.pool, Paths: a.paths,
-			Status:     vaultindex.New(a.pool, vaultfiles.NewStore(a.pool, a.paths), links),
-			Links:      links,
-			Hybrid:     chunkindex.NewHybrid(a.memories, chunks),
-			Embeddings: a.embeddings,
-			Backfill:   chunkindex.NewBackfiller(a.pool, a.paths, indexer),
-			Indexer:    indexer,
-			Memories:   a.memories,
-			Personal:   devicetools.New(a.pool, broker, devicerpc.NewQueue(a.pool, push)),
-			Soul:       soul.New(a.paths, cfg.HermesDataRoot),
-		}),
+		Identify:      a.identify,
+		Limits:        a.limits,
+		VaultAccess:   vaultaccess.New(a.pool),
+		Connections:   mcp.NewConnections(a.pool),
+		Service:       a.mcp,
 		PublicBaseURL: base,
 	})
 }

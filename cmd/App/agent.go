@@ -20,6 +20,7 @@ import (
 	"lumina/internal/modules/imports"
 	"lumina/internal/modules/kbcompile"
 	"lumina/internal/modules/knowledge"
+	"lumina/internal/modules/mcp"
 	"lumina/internal/modules/me"
 	"lumina/internal/modules/memoryagent"
 	"lumina/internal/modules/spaces"
@@ -78,6 +79,9 @@ type agent struct {
 	// runs is the one HermesRunsService (6C), shared by chat and /v1/hermes/runs;
 	// nil without the endpoint resolver.
 	runs *hermesruns.Service
+	// mcp is /v1/mcp's tool service, set by mcpModule(); Quick Assistant's vault
+	// tools run through the same instance (Decision 1).
+	mcp *mcp.Service
 	// gatewayProbe is shared with /health/deep (set by main).
 	gatewayProbe *hermesprofile.GatewayProbe
 }

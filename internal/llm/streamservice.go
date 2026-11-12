@@ -319,6 +319,12 @@ func (s *RoutedStreamService) ChatStream(ctx context.Context, sessionKey, sessio
 			}
 			return false
 		}
+		// A caller that already picked binds its decision, so this turn does not
+		// pick again and claim a second free-lane grant.
+		if decided := RoutingValues(ctx).PreDecidedRoute; decided != nil {
+			s.streamDecided(ctx, sessionKey, sessionID, req, *decided, forward, fail)
+			return
+		}
 		if RoutingValues(ctx).ParallelStrategy != "" {
 			model := req.Model
 			if model == "" {
@@ -354,21 +360,7 @@ func (s *RoutedStreamService) ChatStream(ctx context.Context, sessionKey, sessio
 			return
 		}
 		if plan.freeLane != nil {
-			if err := plan.freeLane.Cerberus.PreflightError(); err != nil {
-				fail(err)
-				return
-			}
-			routed, ok := s.Transport.(DecidedStreamTransport)
-			if !ok || routed == nil {
-				fail(ErrFreeLaneUnroutable())
-				return
-			}
-			payload, err := makeOpenAIPayload(plan.freeLane.Primary.ModelID, req)
-			if err != nil {
-				fail(err)
-				return
-			}
-			forward(routed.ChatStreamDecided(ctx, payload, sessionKey, sessionID, *plan.freeLane))
+			s.streamDecided(ctx, sessionKey, sessionID, req, *plan.freeLane, forward, fail)
 			return
 		}
 		started := time.Now()
@@ -395,6 +387,28 @@ func (s *RoutedStreamService) ChatStream(ctx context.Context, sessionKey, sessio
 		}
 		s.complete(ctx, plan.route, outputCharacters, int(time.Since(started).Milliseconds()))
 	}
+}
+
+// streamDecided is streamFreeLane: it runs a decision already made, preflight
+// first, and fails closed when the transport cannot execute decisions.
+func (s *RoutedStreamService) streamDecided(ctx context.Context, sessionKey, sessionID string, req ChatRequest, d Decision, forward func(Stream) bool, fail func(error)) {
+	if c := d.Cerberus; c != nil {
+		if err := c.PreflightError(); err != nil {
+			fail(err)
+			return
+		}
+	}
+	routed, ok := s.Transport.(DecidedStreamTransport)
+	if !ok || routed == nil {
+		fail(ErrFreeLaneUnroutable())
+		return
+	}
+	payload, err := makeOpenAIPayload(d.Primary.ModelID, req)
+	if err != nil {
+		fail(err)
+		return
+	}
+	forward(routed.ChatStreamDecided(ctx, payload, sessionKey, sessionID, d))
 }
 
 type managedAutoRoute struct {

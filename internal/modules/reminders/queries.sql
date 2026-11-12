@@ -27,3 +27,11 @@ RETURNING id, tenant_id, title, body, fire_at, recurrence_cron, fired_at, create
 
 -- name: DeleteReminder :exec
 DELETE FROM reminders WHERE id = $1 AND tenant_id = $2;
+
+-- name: UpcomingReminders :many
+-- The Quick Assistant's app_reminders_list: not yet fired, soonest first.
+SELECT id, tenant_id, title, body, fire_at, recurrence_cron, fired_at, created_at
+FROM reminders
+WHERE tenant_id = $1 AND fired_at IS NULL
+ORDER BY fire_at ASC
+LIMIT $2;

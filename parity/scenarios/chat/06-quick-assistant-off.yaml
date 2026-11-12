@@ -1,0 +1,37 @@
+# Quick Assistant with QUICK_ASSISTANT_ENABLED off (the default, and Swift
+# production): a stream body carrying `quickAssistant` in any shape is answered
+# exactly as one without it, and the confirm/cancel routes do not exist.
+# The stream steps copy 02-errors' empty-attachment step, which reaches the
+# free lane (no providers here); frames are compared parsed.
+module: chat
+steps:
+  - name: stream with a quick assistant context
+    as: chat_ben
+    stream: true
+    frames: 5
+    framesTimeout: 15s
+    request: {method: POST, path: /v1/conversations/C4A70000-0000-4000-8000-0000000001B1/messages/stream, json: {content: "", attachments: [{kind: text, name: a, text: " "}], quickAssistant: {currentTab: home, timeZone: America/Santiago}}}
+    snapshot: [conversation_messages]
+  - name: stream with a null quick assistant
+    as: chat_ben
+    stream: true
+    frames: 5
+    framesTimeout: 15s
+    request: {method: POST, path: /v1/conversations/C4A70000-0000-4000-8000-0000000001B1/messages/stream, json: {content: "", attachments: [{kind: text, name: a, text: " "}], quickAssistant: null}}
+    snapshot: [conversation_messages]
+  - name: stream with a string quick assistant
+    as: chat_ben
+    stream: true
+    frames: 5
+    framesTimeout: 15s
+    request: {method: POST, path: /v1/conversations/C4A70000-0000-4000-8000-0000000001B1/messages/stream, json: {content: "", attachments: [{kind: text, name: a, text: " "}], quickAssistant: "x"}}
+    snapshot: [conversation_messages]
+  - name: stream with a wrongly typed quick assistant
+    as: chat_ben
+    stream: true
+    frames: 5
+    framesTimeout: 15s
+    request: {method: POST, path: /v1/conversations/C4A70000-0000-4000-8000-0000000001B1/messages/stream, json: {content: "", attachments: [{kind: text, name: a, text: " "}], quickAssistant: {currentTab: 1}}}
+    snapshot: [conversation_messages]
+  - {name: confirm is not mounted, as: chat_ben, request: {method: POST, path: /v1/assistant/actions/C4A70000-0000-4000-8000-00000000FFFF/confirm}}
+  - {name: cancel is not mounted, as: chat_ben, request: {method: POST, path: /v1/assistant/actions/C4A70000-0000-4000-8000-00000000FFFF/cancel}}

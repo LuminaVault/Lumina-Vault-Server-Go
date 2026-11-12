@@ -139,6 +139,49 @@ func (q *Queries) ListReminders(ctx context.Context, arg ListRemindersParams) ([
 	return items, nil
 }
 
+const upcomingReminders = `-- name: UpcomingReminders :many
+SELECT id, tenant_id, title, body, fire_at, recurrence_cron, fired_at, created_at
+FROM reminders
+WHERE tenant_id = $1 AND fired_at IS NULL
+ORDER BY fire_at ASC
+LIMIT $2
+`
+
+type UpcomingRemindersParams struct {
+	TenantID uuid.UUID
+	Limit    int32
+}
+
+// The Quick Assistant's app_reminders_list: not yet fired, soonest first.
+func (q *Queries) UpcomingReminders(ctx context.Context, arg UpcomingRemindersParams) ([]Reminder, error) {
+	rows, err := q.db.Query(ctx, upcomingReminders, arg.TenantID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Reminder
+	for rows.Next() {
+		var i Reminder
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.Title,
+			&i.Body,
+			&i.FireAt,
+			&i.RecurrenceCron,
+			&i.FiredAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateReminder = `-- name: UpdateReminder :one
 UPDATE reminders
 SET title = $3, body = $4, fire_at = $5, recurrence_cron = $6, fired_at = $7
