@@ -205,6 +205,17 @@ func (s *Service) NotifyDigest(ctx context.Context, tenant uuid.UUID, username, 
 	})
 }
 
+// NotifyCron is notifyCron: the push Swift's CronScheduler sends after a
+// scheduled skill with an apns_category runs successfully.
+func (s *Service) NotifyCron(ctx context.Context, tenant uuid.UUID, skillName, body string) error {
+	return s.Notify(ctx, tenant, Message{
+		Title:    "Scheduled job ran",
+		Subtitle: &skillName,
+		Body:     body,
+		Category: CategoryCron,
+	})
+}
+
 // Notify pushes to every device token of tenant, each under its own app's topic.
 // It returns an error only for the opt-out and token lookups: a failed device is
 // logged and the rest still get theirs. A dead token's row is deleted.

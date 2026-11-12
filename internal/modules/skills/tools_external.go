@@ -129,14 +129,12 @@ type forecastDay struct {
 	code          *int
 }
 
+// openMeteoURL is OpenMeteoClient.url: URLComponents keeps the query items in
+// order and leaves the comma unescaped, so the URL is built as Swift sends it.
+// Every value is digits, a sign, a dot or a fixed word: nothing needs escaping.
 func openMeteoURL(lat, lng float64) string {
-	q := url.Values{}
-	q.Set("latitude", fmt.Sprintf("%.4f", lat))
-	q.Set("longitude", fmt.Sprintf("%.4f", lng))
-	q.Set("daily", "precipitation_sum,weathercode")
-	q.Set("forecast_days", "7")
-	q.Set("timezone", "auto")
-	return openMeteoEndpoint + "?" + q.Encode()
+	return fmt.Sprintf("%s?latitude=%.4f&longitude=%.4f&daily=precipitation_sum,weathercode&forecast_days=7&timezone=auto",
+		openMeteoEndpoint, lat, lng)
 }
 
 func getJSON(ctx context.Context, client *http.Client, rawURL string, headers map[string]string) (int, []byte, error) {
