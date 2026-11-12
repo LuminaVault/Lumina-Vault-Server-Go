@@ -106,6 +106,12 @@ x-common-env: &common-env
   OAUTH_GOOGLE_CLIENT_ID: parity-google-client
   PHONE_FIXED_OTP: "424242"
   MAGIC_FIXED_OTP: "313131"
+  # Passkeys (auth, 8C): off by default in both servers, so every route would be a 404.
+  # Two origins, as production has, so the multi-origin path runs.
+  WEBAUTHN_ENABLED: "TRUE"
+  WEBAUTHN_RELYING_PARTY_ID: parity.test
+  WEBAUTHN_RELYING_PARTY_NAME: LuminaVault Parity
+  WEBAUTHN_RELYING_PARTY_ORIGIN: "https://app.parity.test, https://parity.test,"
   # Marketplace: the stub also answers as the plugin runner.
   PLUGIN_RUNNER_URL: http://feeds:8080
   PLUGIN_RUNNER_TOKEN: parity-runner-token

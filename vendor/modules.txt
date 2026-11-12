@@ -72,6 +72,9 @@ github.com/exaring/otelpgx
 # github.com/felixge/httpsnoop v1.1.0
 ## explicit; go 1.25
 github.com/felixge/httpsnoop
+# github.com/fxamacker/cbor/v2 v2.9.4
+## explicit; go 1.20
+github.com/fxamacker/cbor/v2
 # github.com/getkin/kin-openapi v0.142.0
 ## explicit; go 1.25
 github.com/getkin/kin-openapi/openapi3
@@ -95,12 +98,35 @@ github.com/go-ole/go-ole/oleutil
 ## explicit; go 1.26.0
 github.com/go-openapi/jsonpointer
 github.com/go-openapi/jsonpointer/jsonname
+# github.com/go-viper/mapstructure/v2 v2.5.0
+## explicit; go 1.18
+github.com/go-viper/mapstructure/v2
+github.com/go-viper/mapstructure/v2/internal/errors
+# github.com/go-webauthn/webauthn v0.18.2
+## explicit; go 1.26.0
+github.com/go-webauthn/webauthn/metadata
+github.com/go-webauthn/webauthn/protocol
+github.com/go-webauthn/webauthn/protocol/webauthncbor
+github.com/go-webauthn/webauthn/protocol/webauthncose
+# github.com/go-webauthn/x v0.3.1
+## explicit; go 1.26.0
+github.com/go-webauthn/x/crypto/secp256k1
+github.com/go-webauthn/x/crypto/secp256k1/ecdsa
+github.com/go-webauthn/x/encoding/asn1
+github.com/go-webauthn/x/revoke
 # github.com/golang-jwt/jwt/v4 v4.5.2
 ## explicit; go 1.16
 github.com/golang-jwt/jwt/v4
 # github.com/golang-jwt/jwt/v5 v5.3.1
 ## explicit; go 1.21
 github.com/golang-jwt/jwt/v5
+# github.com/google/go-tpm v0.9.8
+## explicit; go 1.22
+github.com/google/go-tpm/legacy/tpm2
+github.com/google/go-tpm/tpm2
+github.com/google/go-tpm/tpm2/transport
+github.com/google/go-tpm/tpmutil
+github.com/google/go-tpm/tpmutil/tbs
 # github.com/google/uuid v1.6.0
 ## explicit
 github.com/google/uuid
@@ -240,6 +266,9 @@ github.com/pgvector/pgvector-go
 # github.com/pgvector/pgvector-go/pgx v0.4.1
 ## explicit; go 1.25.0
 github.com/pgvector/pgvector-go/pgx
+# github.com/philhofer/fwd v1.2.0
+## explicit; go 1.20
+github.com/philhofer/fwd
 # github.com/power-devops/perfstat v0.0.0-20260916203055-22a1a467d9f0
 ## explicit; go 1.14
 github.com/power-devops/perfstat
@@ -311,6 +340,9 @@ github.com/testcontainers/testcontainers-go/wait
 # github.com/testcontainers/testcontainers-go/modules/postgres v0.45.0
 ## explicit; go 1.26.0
 github.com/testcontainers/testcontainers-go/modules/postgres
+# github.com/tinylib/msgp v1.6.4
+## explicit; go 1.24
+github.com/tinylib/msgp/msgp
 # github.com/tklauser/go-sysconf v0.4.0
 ## explicit; go 1.25.0
 github.com/tklauser/go-sysconf
@@ -441,6 +473,7 @@ golang.org/x/crypto/curve25519
 golang.org/x/crypto/hkdf
 golang.org/x/crypto/internal/alias
 golang.org/x/crypto/internal/poly1305
+golang.org/x/crypto/ocsp
 golang.org/x/crypto/ssh
 golang.org/x/crypto/ssh/internal/bcrypt_pbkdf
 # golang.org/x/mod v0.42.0
