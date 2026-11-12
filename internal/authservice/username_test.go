@@ -1,10 +1,9 @@
 package authservice_test
 
 import (
+	"lumina/internal/authservice"
 	"strings"
 	"testing"
-
-	"lumina/internal/authservice"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

@@ -1,10 +1,9 @@
 package authservice
 
 import (
+	"lumina/internal/swiftstr"
 	"regexp"
 	"strings"
-
-	"lumina/internal/swiftstr"
 
 	"github.com/google/uuid"
 )

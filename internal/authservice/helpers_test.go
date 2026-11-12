@@ -3,17 +3,16 @@ package authservice_test
 import (
 	"context"
 	"errors"
-	"strings"
-	"sync"
-	"testing"
-	"time"
-
 	"lumina/internal/auth"
 	"lumina/internal/authservice"
 	"lumina/internal/dbtest"
 	"lumina/internal/hermesprofile"
 	"lumina/internal/migrations"
 	"lumina/internal/vaultpaths"
+	"strings"
+	"sync"
+	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"

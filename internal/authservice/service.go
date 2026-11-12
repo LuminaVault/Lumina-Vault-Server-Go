@@ -5,13 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"time"
-
 	"lumina/internal/auth"
 	"lumina/internal/hermesprofile"
 	"lumina/internal/ids"
 	"lumina/internal/swiftstr"
 	"lumina/internal/wire"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"

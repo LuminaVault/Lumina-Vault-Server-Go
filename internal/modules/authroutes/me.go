@@ -1,10 +1,9 @@
 package authroutes
 
 import (
-	"time"
-
 	"lumina/internal/auth"
 	"lumina/internal/wire"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v5"

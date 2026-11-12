@@ -14,14 +14,13 @@
 package authroutes
 
 import (
-	"net/http"
-	"strings"
-
 	"lumina/internal/authservice"
 	"lumina/internal/httpserver"
 	"lumina/internal/ids"
 	"lumina/internal/ratelimit"
 	"lumina/internal/wire"
+	"net/http"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/labstack/echo/v5"
