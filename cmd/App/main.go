@@ -392,13 +392,6 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		if cfg.LVEnvironment != "test" { // CronScheduler: Fluent on, not test, as App+build.swift
 			registered = append(registered, skillsMod.CronJob(slog.Default().With("label", "lv.skills")))
 		}
-		if cfg.LVEnvironment != "test" { // MultimodalIngestionWorker: Fluent on, not test, as App+build.swift
-			job, err := agent.ingestionWorkerJob(ingestionMod, links, memories)
-			if err != nil {
-				return err
-			}
-			registered = append(registered, job)
-		}
 		if wf != nil && cfg.LVEnvironment != "test" { // WorkflowEngine: the studio block's worker, as App+build.swift
 			registered = append(registered, agent.workflowEngineJob(wf, skillsMod, memories))
 		}
