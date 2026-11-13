@@ -1,0 +1,60 @@
+# Publishes the customized Hermes image (baked Mnemosyne MCP + kb skills)
+# to GHCR so the k3s cluster can pull it. The VPS compose stack builds this
+# locally as luminavault-hermes:local (Makefile hermes-image); k8s cannot.
+#
+# Moved from LuminaVaultServer (archived after the Go cutover, 2026-11-13). The
+# skills are internal/bundled/hermesskills, byte-identical to the Swift tree they
+# replace. Pushing ghcr.io/luminavault/hermes from this repo needs the package's
+# "Manage Actions access" to list Lumina-Vault-Server-Go with write.
+name: Hermes Image
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - docker/hermes.Dockerfile
+      - docker/hermes-cont-init.sh
+      - internal/bundled/hermesskills/**
+      - .github/workflows/hermes-image.yml
+  workflow_dispatch: {}
+
+env:
+  IMAGE: ghcr.io/luminavault/hermes
+
+jobs:
+  build:
+    name: Build & Push Hermes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/hermes.Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ github.sha }}
+            ${{ env.IMAGE }}:latest
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          platforms: linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
