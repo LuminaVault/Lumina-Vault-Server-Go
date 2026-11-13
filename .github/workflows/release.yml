@@ -58,6 +58,10 @@ jobs:
     name: Bump api-go staging tag in LuminaVaultInfra
     runs-on: ubuntu-latest
     needs: build
+    # One bump at a time: two runs racing can still interleave their pushes.
+    concurrency:
+      group: bump-api-go-staging
+      cancel-in-progress: false
     permissions:
       contents: read
     steps:
@@ -78,23 +82,45 @@ jobs:
         working-directory: infra
         env:
           TAG: ${{ needs.build.outputs.tag }}
+          GH_TOKEN: ${{ github.token }}
+          GO_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           if [ ! -f "$STAGING_VALUES" ]; then
             echo "::notice::${STAGING_VALUES} does not exist yet (Phase 3 Task 3.2); skipping bump"
             exit 0
           fi
-          current="$(yq '.image.tag' "$STAGING_VALUES")"
-          if [ "$current" = "$TAG" ]; then
-            echo "staging already at ${TAG}"
-            exit 0
-          fi
+          # Never move staging backwards. CI runs for two main commits can finish
+          # out of order, and a last-writer-wins bump then rewinds staging to the
+          # older image (2026-11-12: cf7fb73 replaced 261f359 and crash-looped
+          # api-go-staging on LV_GO_JOBS=*). Bump only when TAG is ahead of what
+          # staging runs; a tag the compare API can't place (e.g. a manual
+          # dispatch from a branch) is bumped as before.
+          should_bump() {
+            current="$(yq '.image.tag' "$STAGING_VALUES")"
+            if [ "$current" = "$TAG" ]; then
+              echo "staging already at ${TAG}"
+              return 1
+            fi
+            status="$(gh api "repos/${GO_REPO}/compare/${TAG}...${current}" --jq .status 2>/dev/null || echo unknown)"
+            if [ "$status" = "ahead" ]; then
+              echo "::notice::staging runs ${current}, which is newer than ${TAG}; not bumping backwards"
+              return 1
+            fi
+            return 0
+          }
+          should_bump || exit 0
           yq -i ".image.tag = \"${TAG}\"" "$STAGING_VALUES"
           git config user.name "lumina-ci"
           git config user.email "ci@luminavault.fyi"
           git add "$STAGING_VALUES"
           git commit -m "api-go staging → ${TAG:0:12} (Lumina-Vault-Server-Go@${TAG})"
           git push origin HEAD:main || {
-            git pull --rebase origin main
+            git reset -q --hard HEAD~1
+            git pull -q --rebase origin main
+            should_bump || exit 0
+            yq -i ".image.tag = \"${TAG}\"" "$STAGING_VALUES"
+            git add "$STAGING_VALUES"
+            git commit -m "api-go staging → ${TAG:0:12} (Lumina-Vault-Server-Go@${TAG})"
             git push origin HEAD:main
           }
