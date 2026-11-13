@@ -693,6 +693,8 @@ port."
 - `FixDashboard` stays off for the same reason: it is a deliberate difference, not a port.
 - Order now: 5C chat first, then the rest of the port.
 - The other answers above stand.
+- **Lifted 2026-11-13**: LuminaVaultServer is archived. The queued fixes and their order are in
+  `docs/post-archive-backlog.md`.
 
 ## D-6de-waivers: no waivers for 6D/6E; `docker/photon-sidecar` retired
 
