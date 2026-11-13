@@ -16,7 +16,9 @@ env:
   REGISTRY: ghcr.io
   IMAGE_REPOSITORY: ghcr.io/luminavault/luminavaultserver-go
   INFRA_REPO: LuminaVault/LuminaVaultInfra
-  STAGING_VALUES: apps/api-go/values-staging.yaml
+  # Space-separated. apps/api/values-staging.yaml is bumped only while it runs
+  # the Go image (see the bump step).
+  STAGING_VALUES: apps/api-go/values-staging.yaml apps/api/values-staging.yaml
 
 jobs:
   build:
@@ -58,6 +60,10 @@ jobs:
     name: Bump api-go staging tag in LuminaVaultInfra
     runs-on: ubuntu-latest
     needs: build
+    # One bump at a time: two runs racing can still interleave their pushes.
+    concurrency:
+      group: bump-api-go-staging
+      cancel-in-progress: false
     permissions:
       contents: read
     steps:
@@ -78,23 +84,61 @@ jobs:
         working-directory: infra
         env:
           TAG: ${{ needs.build.outputs.tag }}
+          GH_TOKEN: ${{ github.token }}
+          GO_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          if [ ! -f "$STAGING_VALUES" ]; then
-            echo "::notice::${STAGING_VALUES} does not exist yet (Phase 3 Task 3.2); skipping bump"
-            exit 0
-          fi
-          current="$(yq '.image.tag' "$STAGING_VALUES")"
-          if [ "$current" = "$TAG" ]; then
-            echo "staging already at ${TAG}"
-            exit 0
-          fi
-          yq -i ".image.tag = \"${TAG}\"" "$STAGING_VALUES"
+          # Never move staging backwards. CI runs for two main commits can finish
+          # out of order, and a last-writer-wins bump then rewinds staging to the
+          # older image (2026-11-12: cf7fb73 replaced 261f359 and crash-looped
+          # api-go-staging on LV_GO_JOBS=*). Bump only when TAG is ahead of what
+          # staging runs; a tag the compare API can't place (e.g. a manual
+          # dispatch from a branch) is bumped as before.
+          #
+          # Each file in STAGING_VALUES is bumped only while it runs the Go image
+          # (D5 step 2): apps/api/values-staging.yaml joins once the api-staging
+          # release swaps to Go (D1 step 7), and a Go SHA is never written onto
+          # the Swift repository.
+          files_to_bump() {
+            for f in $STAGING_VALUES; do
+              [ -f "$f" ] || { echo "::notice::${f} does not exist; skipping" >&2; continue; }
+              repo="$(yq '.image.repository // ""' "$f")"
+              if [ -n "$repo" ] && [ "$repo" != "$IMAGE_REPOSITORY" ]; then
+                echo "::notice::${f} runs ${repo}, not ${IMAGE_REPOSITORY}; skipping" >&2
+                continue
+              fi
+              if [ -z "$repo" ] && [ "$f" != "apps/api-go/values-staging.yaml" ]; then
+                echo "::notice::${f} sets no image.repository; skipping" >&2
+                continue
+              fi
+              current="$(yq '.image.tag' "$f")"
+              if [ "$current" = "$TAG" ]; then
+                echo "${f} already at ${TAG}" >&2
+                continue
+              fi
+              status="$(gh api "repos/${GO_REPO}/compare/${TAG}...${current}" --jq .status 2>/dev/null || echo unknown)"
+              if [ "$status" = "ahead" ]; then
+                echo "::notice::${f} runs ${current}, which is newer than ${TAG}; not bumping backwards" >&2
+                continue
+              fi
+              echo "$f"
+            done
+          }
+          bump() {
+            files="$(files_to_bump)"
+            [ -n "$files" ] || return 1
+            for f in $files; do
+              yq -i ".image.tag = \"${TAG}\"" "$f"
+              git add "$f"
+            done
+            git commit -m "api-go staging → ${TAG:0:12} (Lumina-Vault-Server-Go@${TAG})"
+          }
           git config user.name "lumina-ci"
           git config user.email "ci@luminavault.fyi"
-          git add "$STAGING_VALUES"
-          git commit -m "api-go staging → ${TAG:0:12} (Lumina-Vault-Server-Go@${TAG})"
+          bump || exit 0
           git push origin HEAD:main || {
-            git pull --rebase origin main
+            git reset -q --hard HEAD~1
+            git pull -q --rebase origin main
+            bump || exit 0
             git push origin HEAD:main
           }

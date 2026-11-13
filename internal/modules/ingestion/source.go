@@ -28,9 +28,8 @@ func sourceTokenHash(token string) string {
 
 // SupportsContentType is MultimodalIngestionService.supports: contentType is
 // accepted when a pattern equals it or, for "type/*", when it starts with
-// "type/", ignoring case. The worker that checks a source against the connected
-// Hermes' ingestionSupportedMimeTypes still runs on Swift (jobs_j1.go); this is
-// the check it will use when it moves.
+// "type/", ignoring case. The worker checks a source against the connected
+// Hermes' ingestionSupportedMimeTypes with it.
 func SupportsContentType(contentType string, patterns []string) bool {
 	value := swiftstr.Lowercased(contentType)
 	for _, pattern := range patterns {

@@ -1145,6 +1145,13 @@ Beyond the pilot gate (D-wave2-early):
     `MultimodalIngestionCapabilityTests` (3) and `HermesIngestionTransportTests` (2).
 - `INGESTION_PUBLIC_BASE_URL`: Go doesn't read it. Only the worker builds source URLs from it. It
   keeps pointing at the API host, so Hermes reaches Go through the ingress after the flip.
+- 2026-11-12: the worker is ported (`internal/modules/ingestion/worker.go`, `processor.go`), with
+  "expired worker lease is recovered" and Go-only tests for each `process(item:)` branch (save, retry
+  then block, the three capability gates, the BYO token URL, dedup reuse, URL capture, cancellation,
+  abandoned-upload expiry). The capability and transport tests had already been ported with their
+  packages. Go now reads `INGESTION_PUBLIC_BASE_URL`, and as in Swift a malformed or non-HTTPS one
+  (outside `dev`) stops boot. The job is `MultimodalIngestionWorker`; it runs only when `LV_GO_JOBS`
+  names it, and Swift's copy must be off before it is.
 
 ### G1 parity: met 2026-11-05
 

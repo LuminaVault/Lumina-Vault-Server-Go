@@ -1,13 +1,13 @@
 // Package ingestion serves /v1/ingestions and /v1/ingestion-sources: the routes of
-// LuminaVaultServer Sources/App/Ingestion (MultimodalIngestionController and the
-// request half of MultimodalIngestionService). The worker stays in Swift. These
-// routes only enqueue rows and write chunks; capability checks, LLM calls, link
-// capture and push all happen in the worker's processNext, which claims the same
-// rows with SKIP LOCKED and reads the same volume.
+// LuminaVaultServer Sources/App/Ingestion (MultimodalIngestionController and
+// MultimodalIngestionService), and the MultimodalIngestionWorker job (worker.go).
+// The routes only enqueue rows and write chunks; capability checks, LLM calls, link
+// capture and push all happen in the worker's processNext, which claims rows with
+// SKIP LOCKED, so it can run on either server while the other's copy is off.
 //
-// INGESTION_PUBLIC_BASE_URL isn't read here. The worker uses it to build the
-// /v1/ingestion-sources/<token> URL it hands to BYO Hermes, and it keeps pointing
-// at the API host, so Hermes reaches this route through the ingress once it flips.
+// The worker builds the /v1/ingestion-sources/<token> URL it hands to BYO Hermes
+// from INGESTION_PUBLIC_BASE_URL, which points at the API host, so Hermes reaches
+// the source route through the ingress whichever server serves it.
 package ingestion
 
 //go:generate sh -c "cd ../../.. && go tool oapi-codegen -config internal/modules/ingestion/oapi-codegen.yaml api/openapi.yaml"
@@ -68,6 +68,7 @@ var (
 // X-Vault-ID is a 400 before the missing token is a 401. The source route has no
 // middleware at all: its token is the only gate.
 type Module struct {
+	pool     *pgxpool.Pool
 	q        *db.Queries
 	access   *vaultaccess.Service
 	files    *vaultfiles.Store
@@ -82,6 +83,7 @@ type Module struct {
 // New builds the module. disk is the process's one guard on the vault root.
 func New(pool *pgxpool.Pool, identify echo.MiddlewareFunc, limits *ratelimit.Store, paths vaultpaths.Paths, disk *diskguard.Guard, quota Quota) *Module {
 	return &Module{
+		pool:     pool,
 		q:        db.New(pool),
 		access:   vaultaccess.New(pool),
 		files:    vaultfiles.NewStore(pool, paths),

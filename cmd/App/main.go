@@ -234,6 +234,9 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		// Migrated modules (modules.yaml status ≥ parity). Traffic only reaches
 		// them through the api ingress.extraPaths that name them.
 		remindersModule := reminders.New(pool, nil, cfg.HermesDefaultModel) // routed transport set once the agent exists
+		ingestionMod := ingestion.New(pool, identify, limits, paths,
+			diskguard.New(cfg.VaultRootPath, cfg.StorageMinFreeBytes, cfg.StorageMinFreeRatio, diskguard.Options{}),
+			ingestion.QuotaFromConfig(cfg))
 		deps.Modules = []httpserver.Module{
 			projects.New(pool),
 			kanban.New(pool, identify, limits, paths),
@@ -251,9 +254,7 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 			}, slog.Default().With("module", "teams"))),
 			meModule,
 			dashboardModule,
-			ingestion.New(pool, identify, limits, paths,
-				diskguard.New(cfg.VaultRootPath, cfg.StorageMinFreeBytes, cfg.StorageMinFreeRatio, diskguard.Options{}),
-				ingestion.QuotaFromConfig(cfg)),
+			ingestionMod,
 		}
 		// Wave 3: account, onboarding, health. Health ingest sits behind the
 		// billing gate; the BYO-key exemption needs the SecretBox (nil without
