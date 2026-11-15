@@ -413,9 +413,9 @@ func (m *Module) read(c *echo.Context) error {
 	return c.Blob(http.StatusOK, row.ContentType, data)
 }
 
-// delete is VaultController.delete: the file is renamed and the row removed. A
-// failed rename is logged and doesn't stop the delete, since the row is what the
-// user sees.
+// delete is VaultController.delete: the file moves to the trash (vault_trash
+// records it for restore) and the row is removed. A failed move is logged and
+// doesn't stop the delete, since the row is what the user sees.
 func (m *Module) delete(c *echo.Context) error {
 	a, err := m.access.Resolve(c, vaultaccess.Write)
 	if err != nil {
@@ -427,13 +427,17 @@ func (m *Module) delete(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
+	actor, err := requireIdentity(c)
+	if err != nil {
+		return err
+	}
 	rawRoot := m.paths.Raw(tenant)
 	target, err := vaultfiles.ResolveInside(rawRoot, safe)
 	if err != nil {
 		return err
 	}
-	if err := vaultfiles.SoftDeleteFile(rawRoot, target, safe, m.now()); err != nil {
-		slog.ErrorContext(ctx, "vault soft-delete rename failed", "tenant", ids.Upper(tenant), "path", safe, "error", err)
+	if _, err := m.store.Trash(ctx, rawRoot, target, row, &actor, m.now()); err != nil {
+		slog.ErrorContext(ctx, "vault delete: move to trash failed", "tenant", ids.Upper(tenant), "path", safe, "error", err)
 	}
 	// Before the row: the foreign key would only set the memory's source to NULL.
 	// Swift ignores a failure here (try?).
@@ -444,10 +448,6 @@ func (m *Module) delete(c *echo.Context) error {
 		return err
 	}
 	slog.InfoContext(ctx, "vault delete", "tenant", ids.Upper(tenant), "path", safe)
-	actor, err := requireIdentity(c)
-	if err != nil {
-		return err
-	}
 	m.analytics.Capture("vault_file_deleted", ids.Upper(actor), nil)
 	return c.NoContent(http.StatusNoContent)
 }

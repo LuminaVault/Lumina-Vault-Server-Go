@@ -69,7 +69,7 @@ steps:
     request: {method: DELETE, path: /v1/vault/files/inbox/doc.md}
     snapshot: [vault_files]
     files: [vault_rw]
-    filesMask: ['_deleted_\d+_']
+    filesMask: ['_deleted_[^/]+']
   - name: read after delete
     as: vault_rw
     request: {method: GET, path: /v1/vault/files/inbox/doc.md}

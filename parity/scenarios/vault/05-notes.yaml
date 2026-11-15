@@ -46,7 +46,7 @@ steps:
     as: vault_note
     request: {method: DELETE, path: /v1/vault/files/inbox/n1.md}
     snapshot: [memories, vault_files]
-    filesMask: ['_deleted_\d+_']
+    filesMask: ['_deleted_[^/]+']
     files: [vault_note]
   - name: progress, after the sink has had time
     as: vault_note
