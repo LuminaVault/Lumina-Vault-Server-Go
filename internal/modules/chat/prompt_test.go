@@ -173,3 +173,54 @@ func TestLongSoulIsCappedAndSaysSo(t *testing.T) {
 	assert.Less(t, len(got), len(long))
 	assert.Equal(t, "short", capped("short", 10))
 }
+
+func TestLooksLikeAppAction(t *testing.T) {
+	yes := []string{
+		"create a space called Health",
+		"Please make a new space for recipes",
+		"can you add a space named Work?",
+		"I want to rename the Health space to Fitness",
+		"delete the recipes space",
+		"move the note about taxes to the Finance space",
+		"Move it to my inbox",
+		"change the icon of the health space",
+		"set the category of my Work space to career",
+		"correct the memory about my birthday, it is in May",
+		"delete that file",
+		"remove the note inbox/draft.md",
+		"list my spaces",
+		"show me my spaces",
+		"open the Health space",
+		"Remember that I am allergic to peanuts",
+		"forget what I said about the diet",
+		"ok now create two spaces: Travel and Food",
+	}
+	for _, s := range yes {
+		if !LooksLikeAppAction(s) {
+			t.Errorf("%q should be an app action", s)
+		}
+	}
+	no := []string{
+		"",
+		"hello",
+		"space",
+		"what is a space?",
+		"how many spaces do I have",
+		"create a python script that sorts a list",
+		"create a file called main.go",
+		"write a note about today",
+		"deploy the api",
+		"fix the bug in the login file",
+		"show me my notes about travel",
+		"summarise my notes on the space race",
+		"remember when we went to Paris?",
+		"forget it",
+		"tell me about the space I made last week",
+		"edit this paragraph to be shorter",
+	}
+	for _, s := range no {
+		if LooksLikeAppAction(s) {
+			t.Errorf("%q should not be an app action", s)
+		}
+	}
+}

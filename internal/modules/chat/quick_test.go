@@ -20,6 +20,8 @@ import (
 	"lumina/internal/modules/memoryagent"
 	"lumina/internal/modules/quickassistant"
 	"lumina/internal/modules/reminders"
+	"lumina/internal/modules/spaces"
+	"lumina/internal/modules/vault"
 	"lumina/internal/onboardlatch"
 	"lumina/internal/posthog"
 	"lumina/internal/ratelimit"
@@ -285,6 +287,8 @@ type qaOptions struct {
 	stream llm.StreamService
 	// service replaces the loop's service (the TheBuiltApp tests).
 	service *quickassistant.Service
+	// appActions turns CHAT_APP_ACTIONS_ENABLED on.
+	appActions bool
 }
 
 type qa struct {
@@ -365,6 +369,19 @@ func newQA(t *testing.T, pool *pgxpool.Pool, o qaOptions) *qa {
 			}
 		}
 		opts.QuickAssistant = &QuickAssistant{Service: service, Deps: qaDeps(t, pool, o.devices)}
+		if o.appActions {
+			deps := qaDeps(t, pool, o.devices)
+			appPaths := vaultpaths.Paths{Root: t.TempDir()}
+			deps.Spaces = spaces.New(pool, appPaths, nil)
+			deps.Files = vault.NewFiles(pool, appPaths)
+			opts.QuickAssistant.AppActions = &AppActions{
+				Service: &quickassistant.Service{
+					Transport: transport, Release: telemetry.Release,
+					Tools: quickassistant.Definitions(quickassistant.DefinitionOptions{DeviceWrites: o.devices != nil, AppActions: true}),
+				},
+				Deps: deps,
+			}
+		}
 	}
 	module := New(pool, opts)
 	turns := make(chan struct{}, 16)

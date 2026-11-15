@@ -6371,6 +6371,52 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/LocalMemorySyncResponse' }
 
+  # ───────────────────────── Assistant actions ──────────────────────────
+
+  /v1/assistant/actions/{id}/confirm:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Conversations]
+      operationId: assistantActionConfirm
+      x-lv-module: quickassistant
+      summary: Confirm an action the assistant asked the user about.
+      description: |
+        Carries out the action behind an `assistant_action` frame of kind
+        `needsConfirm` (a delete, or an overwrite with no undo). The action
+        expires at its `expiresAt`. Only the user who was asked can confirm.
+        The outcome is always `200`: read `status`. The same line is appended
+        to the conversation.
+      responses:
+        '200':
+          description: What happened to the action.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AssistantActionResolutionDTO' }
+        '404': { description: 'No such action for this user.' }
+
+  /v1/assistant/actions/{id}/cancel:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Conversations]
+      operationId: assistantActionCancel
+      x-lv-module: quickassistant
+      summary: Dismiss an action the assistant asked the user about.
+      responses:
+        '200':
+          description: What happened to the action.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AssistantActionResolutionDTO' }
+        '404': { description: 'No such action for this user.' }
+
   # ──────────────────────────────── Memos ───────────────────────────────
 
   /v1/memos:
@@ -15936,6 +15982,8 @@ components:
         - `parallel` — `ParallelStreamEventDTO` (multi-model candidate progress)
         - `link_saved` — `LinkSavedDTO` (HER-274 auto-saved chat link)
         - `hermes_run` — `ChatHermesRunRefDTO` (this turn escalated to an agent run)
+        - `assistant_action` — `AssistantActionDTO` (the assistant did, or
+          asks to do, something in the app)
 
         **`done` does not always mean the turn finished.** When `hermes_run`
         is emitted, the stream sends it and then `done` and closes; the
@@ -15947,10 +15995,17 @@ components:
         in `X-LV-Client-Caps`. Clients predating that capability abort the
         whole stream on an event type they do not know, so everyone else
         keeps the classic token stream.
+
+        `assistant_action` reaches a plain chat turn only for clients that
+        declared `chat.app_actions` in `X-LV-Client-Caps`, and only when the
+        message asks for an app change (a space, a note's place, a memory).
+        Such a turn is answered in one piece: its `token` frames arrive
+        together after the actions, there is no `follow_ups` frame, and it
+        never becomes a `hermes_run`.
       properties:
         type:
           type: string
-          enum: [source, token, summary, follow_ups, done, error, fallback, routing, usage, parallel, link_saved, hermes_run]
+          enum: [source, token, summary, follow_ups, done, error, fallback, routing, usage, parallel, link_saved, hermes_run, assistant_action]
         payload:
           description: Case-specific payload; absent for `done`.
         code:
@@ -16090,6 +16145,64 @@ components:
           type: integer
           description: Where to start reading the run's event feed. Normally 0.
         startedAt: { type: string, format: date-time }
+
+    AssistantActionDTO:
+      type: object
+      required: [id, kind, summary]
+      description: |
+        Payload of the `assistant_action` event: one thing the assistant did
+        or wants to do in the app.
+
+        - `done` — it happened. `resource` says what changed, so the client
+          can reload the screen that shows it.
+        - `needsConfirm` — nothing happened yet. Show `summary` with confirm
+          and cancel, and call `POST /v1/assistant/actions/{id}/confirm` or
+          `/cancel` before `expiresAt`. `resource` says what a confirm will
+          change.
+        - `needsPermission` — the app must ask for a device permission first.
+        - `openScreen` — navigate to `screen` (`memoryID` for `memory`,
+          `spaceID` for `space`).
+
+        Treat a `kind`, `screen` or resource value this client does not know
+        as nothing to do.
+      properties:
+        id: { type: string, format: uuid }
+        kind:
+          type: string
+          enum: [done, needsConfirm, needsPermission, openScreen]
+        summary: { type: string, description: One line to show the user. }
+        screen:
+          type: string
+          enum: [home, spaces, ai, brain, insights, settings, dataAccess, brief, learned, memory, space]
+        memoryID: { type: string, format: uuid }
+        spaceID: { type: string, format: uuid }
+        expiresAt: { type: string, format: date-time }
+        resource: { $ref: '#/components/schemas/AssistantResourceDTO' }
+
+    AssistantResourceDTO:
+      type: object
+      required: [kind, change]
+      description: What an assistant action changes.
+      properties:
+        kind:
+          type: string
+          enum: [space, vaultFile, memory]
+        id:
+          type: string
+          format: uuid
+          description: The space, file or memory, when it has one to name.
+        change:
+          type: string
+          enum: [created, updated, deleted, moved]
+
+    AssistantActionResolutionDTO:
+      type: object
+      required: [status, message]
+      properties:
+        status:
+          type: string
+          enum: [confirmed, cancelled, failed, expired, alreadyResolved]
+        message: { type: string, description: One line to show the user. }
 
     ChatAgentModeDTO:
       type: string

@@ -130,6 +130,21 @@ func DecideEscalation(content, mode string, hermesAvailable bool) bool {
 
 // LooksLikeAction is HermesEscalationPolicy.looksLikeAction.
 func LooksLikeAction(content string) bool {
+	words := lowerWords(content)
+	for len(words) > 0 && politePrefixes[words[0]] {
+		words = words[1:]
+	}
+	if len(words) == 0 {
+		return false
+	}
+	if len(words) > 1 && words[1] == "me" {
+		return false
+	}
+	return actionVerbs[words[0]]
+}
+
+// lowerWords splits content into lowercased runs of letters and apostrophes.
+func lowerWords(content string) []string {
 	var words []string
 	var cur strings.Builder
 	for _, ch := range swiftstr.Characters(strings.ToLower(content)) {
@@ -146,16 +161,75 @@ func LooksLikeAction(content string) bool {
 	if cur.Len() > 0 {
 		words = append(words, cur.String())
 	}
-	for len(words) > 0 && politePrefixes[words[0]] {
+	return words
+}
+
+// MARK: - App actions
+
+// appLeadIns are words that may come before the verb of a request.
+var appLeadIns = map[string]bool{
+	"please": true, "could": true, "can": true, "would": true, "you": true, "hey": true, "ok": true, "okay": true,
+	"i": true, "i'd": true, "want": true, "need": true, "like": true, "to": true, "let's": true, "lets": true,
+	"now": true, "then": true, "and": true, "also": true, "just": true, "go": true, "ahead": true,
+}
+
+var (
+	spaceNouns  = map[string]bool{"space": true, "spaces": true}
+	memoryNouns = map[string]bool{"memory": true, "memories": true}
+	placeNouns  = map[string]bool{"space": true, "spaces": true, "inbox": true}
+	fileNouns   = map[string]bool{"note": true, "notes": true, "file": true, "files": true}
+)
+
+// appVerbs maps the verb that opens a request to the nouns that make it an app
+// change. The lists are narrow on purpose: the tools cannot write a note or a
+// file, so "create a file" and "write a note" stay with ordinary chat and
+// Hermes, and "show me my notes" keeps streaming.
+var appVerbs = map[string][]map[string]bool{
+	"create": {spaceNouns}, "make": {spaceNouns}, "add": {spaceNouns}, "new": {spaceNouns}, "start": {spaceNouns},
+	"update": {spaceNouns, memoryNouns}, "change": {spaceNouns, memoryNouns}, "edit": {spaceNouns, memoryNouns},
+	"set": {spaceNouns, memoryNouns}, "correct": {memoryNouns}, "fix": {memoryNouns},
+	"rename": {spaceNouns}, "archive": {spaceNouns},
+	"delete": {placeNouns, fileNouns, memoryNouns}, "remove": {placeNouns, fileNouns, memoryNouns},
+	"move": {placeNouns, fileNouns}, "put": {placeNouns},
+	"list": {placeNouns}, "show": {placeNouns}, "open": {placeNouns},
+}
+
+// appNounWindow is how far past the verb the noun may be.
+const appNounWindow = 12
+
+// LooksLikeAppAction reports whether a chat message asks for a change the app
+// tools can make: a space, a note's place, or a memory. It is a word list, so
+// a miss leaves the turn as it was before, and a false hit costs live
+// streaming for that one reply.
+func LooksLikeAppAction(content string) bool {
+	words := lowerWords(content)
+	for len(words) > 0 && appLeadIns[words[0]] {
 		words = words[1:]
 	}
-	if len(words) == 0 {
+	if len(words) < 2 {
 		return false
 	}
-	if len(words) > 1 && words[1] == "me" {
+	verb, rest := words[0], words[1:]
+	// "Remember that I ..." and "Forget what I said about ..." are memory
+	// requests on their own. A question ("remember when we ...?") is not.
+	if verb == "remember" || verb == "forget" {
+		return len(rest) >= 2 && !strings.HasSuffix(strings.TrimSpace(content), "?")
+	}
+	nouns, ok := appVerbs[verb]
+	if !ok {
 		return false
 	}
-	return actionVerbs[words[0]]
+	if len(rest) > appNounWindow {
+		rest = rest[:appNounWindow]
+	}
+	for _, w := range rest {
+		for _, set := range nouns {
+			if set[w] {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // MARK: - ChatGrounding

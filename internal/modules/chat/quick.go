@@ -25,16 +25,24 @@ type quickInputs struct {
 	schedule *string
 	pref     *llm.Preference
 	turnLoc  *time.Location // nil when neither the device nor the account names a zone
+	// chat is a plain chat turn that asked for an app change, not a card turn.
+	chat bool
+	// appActions offers the space, file and memory_update tools.
+	appActions bool
 }
 
 // newQuickTurn assembles the loop's prompt and runner, as ConversationController
 // does before its stream task starts.
 func (m *Module) newQuickTurn(ctx context.Context, c quickassistant.Context, in quickInputs, t turn) *quickTurn {
 	qa := m.opts.QuickAssistant
+	service, deps := qa.Service, qa.Deps
+	if in.appActions {
+		service, deps = qa.AppActions.Service, qa.AppActions.Deps
+	}
 	spaceName := quickassistant.ActiveSpaceName(ctx, m.pool, t.vault, c)
 	// With no zone known, turnLoc is nil: System then shows a UTC clock and asks
 	// for an explicit offset, the shape the runner takes.
-	system := quickassistant.System(c, spaceName, m.now(), in.turnLoc)
+	system := quickassistant.SystemFor(quickassistant.SystemOptions{Chat: in.chat, AppActions: in.appActions}, c, spaceName, m.now(), in.turnLoc)
 	// As classic does: a BYOK user's pinned model, with no fallbacks. A pinned
 	// model that rejects tools fails round 1 and lands on classic. A provider
 	// with no Shared id, or a preference that could not be read, leaves the
@@ -51,11 +59,11 @@ func (m *Module) newQuickTurn(ctx context.Context, c quickassistant.Context, in 
 	prompt := BuildPrompt(in.prior, in.hits, in.schedule, soulExcerpt(m.opts.Soul, t.actor, t.user.Username), t.disclosure == llm.DisclosureHidden)
 	conv := t.conv.ID
 	return &quickTurn{
-		service:  qa.Service,
+		service:  service,
 		messages: quickassistant.AddingSystemText(system, prompt, true),
 		// A nil zone stays nil (ruling 80): chips and offset-less times then
 		// read as unknown rather than as UTC.
-		runner: quickassistant.NewRunner(qa.Deps, t.actor, t.vault, in.turnLoc, &conv, m.log),
+		runner: quickassistant.NewRunner(deps, t.actor, t.vault, in.turnLoc, &conv, m.log),
 		pinned: pinned,
 	}
 }

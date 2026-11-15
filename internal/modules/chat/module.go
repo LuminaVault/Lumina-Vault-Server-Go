@@ -99,6 +99,17 @@ type Options struct {
 type QuickAssistant struct {
 	Service *quickassistant.Service
 	Deps    quickassistant.Deps
+	// AppActions is nil unless CHAT_APP_ACTIONS_ENABLED is on. Set, a client
+	// that declares chat.app_actions gets the space, file and memory tools, in
+	// the card and on a plain chat turn that asks for an app change.
+	AppActions *AppActions
+}
+
+// AppActions is the loop and services of a turn that may change spaces, files
+// and memories.
+type AppActions struct {
+	Service *quickassistant.Service
+	Deps    quickassistant.Deps
 }
 
 // Module is the chat routes.
