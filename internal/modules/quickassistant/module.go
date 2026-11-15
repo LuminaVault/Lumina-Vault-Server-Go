@@ -31,6 +31,9 @@ const (
 	phoneSilent    = "Your iPhone didn't answer, so I can't tell whether the event was added. Check Calendar before trying again."
 	calendarFailed = "The event could not be added. Check Calendar before trying again."
 	memoryGone     = "That memory no longer exists, so nothing was forgotten."
+	memoryMissing  = "That memory no longer exists, so nothing was changed."
+	spaceGone      = "That space no longer exists, so nothing was deleted."
+	fileGone       = "That note no longer exists, so nothing was deleted."
 	genericFailure = "That didn't work, and nothing was changed."
 	cancelledLine  = "Cancelled. Nothing was changed."
 )
@@ -226,6 +229,12 @@ func (m *Module) authorizeAndExecute(ctx context.Context, action *ClaimedAction,
 		return m.createEvent(ctx, action.Args, user)
 	case "memory_forget":
 		return m.forgetMemory(ctx, action.Args, access.VaultID, user)
+	case "space_delete":
+		return m.deleteSpace(ctx, action.Args, access.VaultID, user)
+	case "file_delete":
+		return m.deleteFile(ctx, action.Args, access.VaultID, user)
+	case "memory_update":
+		return m.updateMemory(ctx, action.Args, access.VaultID, user)
 	default:
 		return false, genericFailure
 	}

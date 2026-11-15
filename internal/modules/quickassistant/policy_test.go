@@ -16,6 +16,9 @@ var (
 	runTools     = fields("search browse read recent memory_context health_query calendar_query app_reminders_list reminders_list memory_save app_reminder_create")
 	confirmTools = fields("calendar_create memory_forget")
 	clientTools  = fields("open_screen")
+	// The app-action tools (appactions.go), in the order they are offered.
+	appRunTools     = fields("space_list space_create space_update file_move")
+	appConfirmTools = fields("space_delete file_delete memory_update")
 	// MCPToolCatalog.all, in catalog order.
 	catalogNames = fields("status search browse read recent links context index memory_context memory_save memory_update memory_forget health_query calendar_query reminders_list calendar_create reminder_create")
 )
@@ -49,7 +52,13 @@ func TestPolicyTable(t *testing.T) {
 	for _, n := range clientTools {
 		require.Equal(t, Client, ActionFor(n), n)
 	}
-	for _, n := range fields("memory_update index reminder_create status links context nope") {
+	for _, n := range appRunTools {
+		require.Equal(t, Run, ActionFor(n), n)
+	}
+	for _, n := range appConfirmTools {
+		require.Equal(t, Confirm, ActionFor(n), n)
+	}
+	for _, n := range fields("index reminder_create status links context space_get file_create nope") {
 		require.Equal(t, Refused, ActionFor(n), n)
 	}
 }
@@ -60,7 +69,9 @@ func TestEveryCatalogToolIsClassifiedDeliberately(t *testing.T) {
 		switch {
 		case slices.Contains(runTools, n):
 			require.Equal(t, Run, ActionFor(n), n)
-		case slices.Contains(confirmTools, n):
+		case slices.Contains(confirmTools, n), slices.Contains(appConfirmTools, n):
+			// memory_update is a catalog tool the assistant offers only with
+			// the app-action tools, behind a card.
 			require.Equal(t, Confirm, ActionFor(n), n)
 		default:
 			require.Equal(t, Refused, ActionFor(n), n)
@@ -201,4 +212,29 @@ func TestOpenAITools(t *testing.T) {
 	require.NoError(t, err)
 	require.JSONEq(t, string(want), string(got))
 	require.Len(t, OpenAITools(defs), len(defs))
+}
+
+func TestChangesAppIsExactlyTheAppWrites(t *testing.T) {
+	for _, n := range fields("space_create space_update space_delete file_move file_delete memory_update") {
+		if !ChangesApp(n) {
+			t.Errorf("%s changes the app", n)
+		}
+		if !IsWrite(n) {
+			t.Errorf("%s is a write", n)
+		}
+	}
+	for _, n := range fields("space_list memory_save memory_forget search open_screen calendar_create nonsense") {
+		if ChangesApp(n) {
+			t.Errorf("%s does not change spaces, files or a memory's text", n)
+		}
+	}
+}
+
+func TestAReplyThatReportsAnAppChangeIsNotIndexed(t *testing.T) {
+	if (Reply{IsAnswer: true, RanAppAction: true}).Indexable() {
+		t.Error("a report of a change became a memory")
+	}
+	if !(Reply{IsAnswer: true}).Indexable() {
+		t.Error("an ordinary answer is no longer indexable")
+	}
 }

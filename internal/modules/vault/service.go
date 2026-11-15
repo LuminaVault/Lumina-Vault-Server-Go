@@ -35,6 +35,22 @@ func NewFiles(pool *pgxpool.Pool, paths vaultpaths.Paths) *Files {
 	}
 }
 
+// Find returns the row of the file at path, or the route's 404.
+func (f *Files) Find(ctx context.Context, vault uuid.UUID, path string) (*vaultfiles.VaultFile, error) {
+	safe, err := vaultfiles.SanitizePath(path)
+	if err != nil {
+		return nil, err
+	}
+	row, err := f.store.FindByPath(ctx, vault, safe)
+	if err != nil {
+		return nil, err
+	}
+	if row == nil {
+		return nil, errFileNotFound
+	}
+	return row, nil
+}
+
 // Move renames the file at path to newPath, both relative to the vault's raw
 // root, and returns its row.
 func (f *Files) Move(ctx context.Context, vault uuid.UUID, path, newPath string) (*vaultfiles.VaultFile, error) {

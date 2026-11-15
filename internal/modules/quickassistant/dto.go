@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"lumina/internal/modules/memoryagent"
 	"lumina/internal/wire"
+
+	"github.com/google/uuid"
 )
 
 // Context is QuickAssistantContextDTO: where the user is when they open the
@@ -55,6 +57,10 @@ const (
 	ScreenBrief      Screen = "brief"
 	ScreenLearned    Screen = "learned"
 	ScreenMemory     Screen = "memory"
+	// ScreenSpace is one space, named by Action.SpaceID. It is offered only
+	// with the app-action tools, so it is not in screens: a client that sends
+	// no chat.app_actions capability never receives it.
+	ScreenSpace Screen = "space"
 	// ScreenUnknown is the decoder's fallback, not a destination.
 	ScreenUnknown Screen = "unknown"
 )
@@ -65,9 +71,12 @@ var screens = []Screen{
 	ScreenSettings, ScreenDataAccess, ScreenBrief, ScreenLearned, ScreenMemory,
 }
 
+// appActionScreens are screens plus the ones the app-action tools add.
+var appActionScreens = append(append([]Screen{}, screens...), ScreenSpace)
+
 // ParseScreen reports whether s is a destination. "unknown" is not one.
 func ParseScreen(s string) (Screen, bool) {
-	for _, c := range screens {
+	for _, c := range appActionScreens {
 		if string(c) == s {
 			return c, true
 		}
@@ -89,14 +98,50 @@ func (s *Screen) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// Action is AssistantActionDTO. Screen, MemoryID and ExpiresAt are omitted when nil.
+// Action is AssistantActionDTO. Screen, MemoryID, SpaceID, ExpiresAt and
+// Resource are omitted when nil.
 type Action struct {
 	ID        wire.UUID  `json:"id"`
 	Kind      ActionKind `json:"kind"`
 	Summary   string     `json:"summary"`
 	Screen    *Screen    `json:"screen,omitempty"`
 	MemoryID  *wire.UUID `json:"memoryID,omitempty"`
+	SpaceID   *wire.UUID `json:"spaceID,omitempty"`
 	ExpiresAt *wire.Time `json:"expiresAt,omitempty"`
+	// Resource is what the action changes, so the app can refresh the screen
+	// that shows it. On a done chip the change has happened; on a confirm card
+	// it happens when the user confirms.
+	Resource *Resource `json:"resource,omitempty"`
+}
+
+// ResourceKind is AssistantResourceKindDTO.
+type ResourceKind string
+
+const (
+	ResourceSpace     ResourceKind = "space"
+	ResourceVaultFile ResourceKind = "vaultFile"
+	ResourceMemory    ResourceKind = "memory"
+)
+
+// ResourceChange is AssistantChangeDTO.
+type ResourceChange string
+
+const (
+	ChangeCreated ResourceChange = "created"
+	ChangeUpdated ResourceChange = "updated"
+	ChangeDeleted ResourceChange = "deleted"
+	ChangeMoved   ResourceChange = "moved"
+)
+
+// Resource is AssistantResourceDTO.
+type Resource struct {
+	Kind   ResourceKind   `json:"kind"`
+	ID     *wire.UUID     `json:"id,omitempty"`
+	Change ResourceChange `json:"change"`
+}
+
+func resource(kind ResourceKind, id uuid.UUID, change ResourceChange) *Resource {
+	return &Resource{Kind: kind, ID: &wire.UUID{UUID: id}, Change: change}
 }
 
 // Frame is the stream frame {"type":"assistant_action","payload":{...}}.

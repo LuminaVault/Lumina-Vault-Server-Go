@@ -109,6 +109,11 @@ func (r *Runner) proposeForget(ctx context.Context, args map[string]any) (ToolRe
 // propose stores a pending action and returns its card, at most three per
 // turn (ruling 27). Only the user's Confirm runs it.
 func (r *Runner) propose(ctx context.Context, tool string, vault uuid.UUID, args map[string]any, summary string) (ToolResult, error) {
+	return r.proposeChange(ctx, tool, vault, args, summary, nil)
+}
+
+// proposeChange is propose for a card that names what confirming it changes.
+func (r *Runner) proposeChange(ctx context.Context, tool string, vault uuid.UUID, args map[string]any, summary string, changes *Resource) (ToolResult, error) {
 	if r.ConversationID == nil {
 		return modelOnly(noConversation), nil
 	}
@@ -135,7 +140,7 @@ func (r *Runner) propose(ctx context.Context, tool string, vault uuid.UUID, args
 		ModelContent: proposalPending,
 		Action: &Action{
 			ID: wire.UUID{UUID: id}, Kind: KindNeedsConfirm, Summary: summary,
-			ExpiresAt: &wire.Time{Time: expiresAt},
+			ExpiresAt: &wire.Time{Time: expiresAt}, Resource: changes,
 		},
 	}, nil
 }
