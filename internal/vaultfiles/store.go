@@ -8,8 +8,6 @@ import (
 	"lumina/internal/vaultpaths"
 	"lumina/internal/wire"
 	"net/http"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -197,8 +195,8 @@ func (s *Store) UpdateContent(ctx context.Context, id uuid.UUID, sizeBytes int64
 }
 
 // DeleteRow removes the row for good. vault_files has no soft delete of its
-// own: the `_deleted_*` name is the only trace of a deleted file, and that's on
-// disk. Cascade the note's memory first, because the foreign key would only
+// own: Trash moves the file to a `_deleted_*` name and records it in
+// vault_trash first. Cascade the note's memory first, because the foreign key would only
 // set its source to NULL.
 func (s *Store) DeleteRow(ctx context.Context, id uuid.UUID) error {
 	_, err := s.pool.Exec(ctx, `DELETE FROM vault_files WHERE id = $1`, id)
@@ -292,28 +290,6 @@ func MoveDestination(path string, slug *string) (string, error) {
 		folder = *slug
 	}
 	return SanitizePath(folder + "/" + LastPathComponent(path))
-}
-
-// TrashPath is where a soft delete puts relative at time now:
-// <rawRoot>/_deleted_<unix seconds>_<path with "/" as "_">.
-func TrashPath(rawRoot, relative string, now time.Time) string {
-	flattened := strings.ReplaceAll(relative, "/", "_")
-	return appendingPath(rawRoot, "_deleted_"+strconv.FormatInt(now.Unix(), 10)+"_"+flattened)
-}
-
-// SoftDeleteFile renames target (from ResolveInside) to its TrashPath, if it
-// exists. It touches no row.
-//
-// Swift treats the error as best effort. VaultController.delete logs it and
-// TodosController.delete ignores it, and both then delete the row, so a failed
-// rename leaves a file with no row. Failure is real: moveItem doesn't overwrite,
-// so two deletes of one path in one second collide, and so do "a/b.md" and
-// "a_b.md"; a deep path can also make a name longer than the filesystem allows.
-func SoftDeleteFile(rawRoot, target, relative string, now time.Time) error {
-	if !fileExists(target) {
-		return nil
-	}
-	return moveItem(target, TrashPath(rawRoot, relative, now))
 }
 
 func decodeColumn(b []byte) (*Metadata, error) {

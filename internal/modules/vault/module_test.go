@@ -216,6 +216,13 @@ func TestVaultRoutes(t *testing.T) {
 			}
 		}
 		require.Equal(t, 1, deleted)
+		// ... and recorded for restore (backlog E3.1).
+		trash, err := v.module.store.ListTrash(context.Background(), u)
+		require.NoError(t, err)
+		require.Len(t, trash, 1)
+		require.Equal(t, path, trash[0].OriginalPath)
+		require.Equal(t, &u, trash[0].DeletedByUserID)
+		require.FileExists(t, filepath.Join(v.module.paths.Raw(u), trash[0].TrashName))
 	})
 
 	t.Run("move renames", func(t *testing.T) {
