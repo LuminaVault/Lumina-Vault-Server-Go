@@ -452,6 +452,10 @@ func TestFileDeleteWaitsForTheCardThenDeletes(t *testing.T) {
 	g := appRig(t)
 	w := newWorld(g, worldOptions{})
 	g.file(w.user, "inbox/old.md", time.Now())
+	// The note itself, so the delete has a file to move to the trash.
+	onDisk := filepath.Join(g.paths.Raw(w.user), "inbox", "old.md")
+	require.NoError(t, os.MkdirAll(filepath.Dir(onDisk), 0o755))
+	require.NoError(t, os.WriteFile(onDisk, []byte("x"), 0o600))
 	r := w.runner(w.user)
 
 	card := r.Run(context.Background(), "file_delete", map[string]any{"path": "inbox/old.md"})
@@ -468,6 +472,11 @@ func TestFileDeleteWaitsForTheCardThenDeletes(t *testing.T) {
 	require.Equal(t, StatusConfirmed, out.resolution.Status)
 	require.Equal(t, "Deleted the note “old.md”.", out.resolution.Message)
 	require.Empty(t, g.filePaths(w.user))
+	// In the trash, against the user who confirmed, so it can be restored.
+	require.Equal(t, 1, g.count(
+		`SELECT count(*) FROM vault_trash WHERE tenant_id = $1 AND original_path = 'inbox/old.md' AND deleted_by_user_id = $2`,
+		w.user, w.user))
+	require.NoFileExists(t, onDisk)
 }
 
 func TestFileDeleteOfAMissingOrForeignNoteMakesNoCard(t *testing.T) {

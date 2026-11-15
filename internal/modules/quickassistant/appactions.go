@@ -46,7 +46,7 @@ type SpaceService interface {
 type FileService interface {
 	Find(ctx context.Context, vault uuid.UUID, path string) (*vaultfiles.VaultFile, error)
 	Move(ctx context.Context, vault uuid.UUID, path, newPath string) (*vaultfiles.VaultFile, error)
-	Delete(ctx context.Context, vault uuid.UUID, path string) error
+	Delete(ctx context.Context, vault, actor uuid.UUID, path string) error
 }
 
 const (
@@ -463,7 +463,7 @@ func (m *Module) deleteFile(ctx context.Context, args map[string]any, vault, use
 	}
 	ctx, cancel := context.WithTimeout(ctx, m.forgetTimeout)
 	defer cancel()
-	if err := m.deps.Files.Delete(ctx, vault, path); err != nil {
+	if err := m.deps.Files.Delete(ctx, vault, user, path); err != nil {
 		if statusOf(err) == http.StatusNotFound {
 			return false, fileGone
 		}
