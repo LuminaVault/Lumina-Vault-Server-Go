@@ -83,6 +83,7 @@ type Module struct {
 	soul       *soul.Service
 	access     *vaultaccess.Service
 	store      *vaultfiles.Store
+	files      *Files
 	memories   *memorystore.Repository
 	links      *chunkindex.LinkRepository
 	paths      vaultpaths.Paths
@@ -106,14 +107,16 @@ func New(pool *pgxpool.Pool, opts Options) *Module {
 	}
 	store := vaultfiles.NewStore(pool, opts.Paths)
 	links := chunkindex.NewLinkRepository(pool)
+	memories := memorystore.New(pool, nil)
 	return &Module{
+		files:      &Files{store: store, memories: memories, paths: opts.Paths, now: time.Now},
 		pool:       pool,
 		q:          db.New(pool),
 		index:      vaultindex.New(pool, store, links),
 		soul:       soul.New(opts.Paths, opts.HermesDataRoot),
 		access:     vaultaccess.New(pool),
 		store:      store,
-		memories:   memorystore.New(pool, nil),
+		memories:   memories,
 		links:      links,
 		paths:      opts.Paths,
 		identify:   opts.Identify,

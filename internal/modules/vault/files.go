@@ -413,41 +413,23 @@ func (m *Module) read(c *echo.Context) error {
 	return c.Blob(http.StatusOK, row.ContentType, data)
 }
 
-// delete is VaultController.delete: the file moves to the trash (vault_trash
-// records it for restore) and the row is removed. A failed move is logged and
-// doesn't stop the delete, since the row is what the user sees.
+// delete is VaultController.delete. Files.Delete moves the file to the trash.
 func (m *Module) delete(c *echo.Context) error {
 	a, err := m.access.Resolve(c, vaultaccess.Write)
 	if err != nil {
 		return err
 	}
-	tenant := a.VaultID
-	ctx := c.Request().Context()
-	row, safe, err := m.rowAtCatchAll(c, a)
-	if err != nil {
-		return err
+	raw := catchAll(c)
+	if raw == "" {
+		return errMissingPath
 	}
 	actor, err := requireIdentity(c)
 	if err != nil {
 		return err
 	}
-	rawRoot := m.paths.Raw(tenant)
-	target, err := vaultfiles.ResolveInside(rawRoot, safe)
-	if err != nil {
+	if err := m.files.Delete(c.Request().Context(), a.VaultID, actor, raw); err != nil {
 		return err
 	}
-	if _, err := m.store.Trash(ctx, rawRoot, target, row, &actor, m.now()); err != nil {
-		slog.ErrorContext(ctx, "vault delete: move to trash failed", "tenant", ids.Upper(tenant), "path", safe, "error", err)
-	}
-	// Before the row: the foreign key would only set the memory's source to NULL.
-	// Swift ignores a failure here (try?).
-	if _, err := m.memories.DeleteBySourceVaultFileID(ctx, tenant, row.ID); err != nil {
-		slog.WarnContext(ctx, "vault delete: note memory not removed", "tenant", ids.Upper(tenant), "error", err)
-	}
-	if err := m.store.DeleteRow(ctx, row.ID); err != nil {
-		return err
-	}
-	slog.InfoContext(ctx, "vault delete", "tenant", ids.Upper(tenant), "path", safe)
 	m.analytics.Capture("vault_file_deleted", ids.Upper(actor), nil)
 	return c.NoContent(http.StatusNoContent)
 }
@@ -479,33 +461,13 @@ func (m *Module) move(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	tenant := a.VaultID
 	body, err := wire.Bind[moveRequest](c)
 	if err != nil {
 		return err
 	}
-	from, err := vaultfiles.SanitizePath(body.Path)
+	row, err := m.files.Move(c.Request().Context(), a.VaultID, body.Path, body.NewPath)
 	if err != nil {
 		return err
 	}
-	to, err := vaultfiles.SanitizePath(body.NewPath)
-	if err != nil {
-		return err
-	}
-	if from == to {
-		return wire.NewError(http.StatusBadRequest, "path and newPath are identical")
-	}
-	ctx := c.Request().Context()
-	row, err := m.store.FindByPath(ctx, tenant, from)
-	if err != nil {
-		return err
-	}
-	if row == nil {
-		return errFileNotFound
-	}
-	if err := m.store.MoveFile(ctx, row, to, tenant); err != nil {
-		return err
-	}
-	slog.InfoContext(ctx, "vault move", "tenant", ids.Upper(tenant), "from", from, "to", to)
 	return wire.JSON(c, http.StatusOK, toDTO(row))
 }
