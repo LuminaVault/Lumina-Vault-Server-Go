@@ -75,4 +75,4 @@ steps:
     request: {method: DELETE, path: /v1/vault/files/inbox/gone.md}
     snapshot: [vault_files, memory_chunks, memories, vault_links]
     files: [vault_move]
-    filesMask: ['_deleted_\d+_']
+    filesMask: ['_deleted_[^/]+']

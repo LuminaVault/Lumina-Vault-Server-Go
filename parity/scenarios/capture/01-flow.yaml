@@ -15,7 +15,7 @@ steps:
     waitEmpty: parity_capture_pending
     snapshot: [parity_capture_files, parity_capture_memories, parity_capture_contributions, parity_capture_onboarding, parity_capture_achievements]
     files: [capture_amy]
-    filesMask: &masks ['\d{4}-\d{2}-\d{2}-\d{6}', '-[0-9a-f]{8}\.md', '_deleted_\d+_']
+    filesMask: &masks ['\d{4}-\d{2}-\d{2}-\d{6}', '-[0-9a-f]{8}\.md', '_deleted_[^/]+']
 
   - name: the reading-time hook writes frontmatter
     as: capture_hal

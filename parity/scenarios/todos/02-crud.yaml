@@ -11,7 +11,7 @@ steps:
     headers: [Content-Type]
     snapshot: [parity_todo_files, parity_todo_memories]
     files: [todo_tia]
-    filesMask: &masks ['_deleted_\d+_']
+    filesMask: &masks ['_deleted_[^/]+']
   - name: create with a due date and a project, trimmed
     as: todo_tia
     request: {method: POST, path: /v1/todos, json: {title: " \n Call bank\t ", dueAt: "2026-12-01T10:00:00Z", projectID: 70D00000-0000-4000-8000-0000000001A1}}
