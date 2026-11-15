@@ -189,3 +189,11 @@ func TestTrashMissingFileRecordsNothing(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, list)
 }
+
+func TestRestoredPath(t *testing.T) {
+	require.Equal(t, "inbox/a.md", vaultfiles.RestoredPath("inbox/a.md", 0))
+	require.Equal(t, "inbox/a-restored.md", vaultfiles.RestoredPath("inbox/a.md", 1))
+	require.Equal(t, "inbox/a-restored-3.md", vaultfiles.RestoredPath("inbox/a.md", 3))
+	require.Equal(t, "notes-restored", vaultfiles.RestoredPath("notes", 1))
+	require.Equal(t, "d.x/.env-restored", vaultfiles.RestoredPath("d.x/.env", 1), "a leading dot is not an extension")
+}

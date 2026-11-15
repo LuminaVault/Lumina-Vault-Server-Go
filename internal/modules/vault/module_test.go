@@ -1056,6 +1056,7 @@ func TestResponsesConformToSpec(t *testing.T) {
 		{http.MethodGet, "/v1/vault/lint", nil, ""},
 		{http.MethodGet, "/v1/vault/context/" + hub.String(), nil, ""},
 		{http.MethodGet, "/v1/vault/links/" + hub.String(), nil, ""},
+		{http.MethodGet, "/v1/vault/trash", nil, ""},
 	} {
 		r := v.do(u, c.method, c.path, c.headers, []byte(c.body))
 		require.Equal(t, http.StatusOK, r.code, "%s %s: %s", c.method, c.path, r.body)

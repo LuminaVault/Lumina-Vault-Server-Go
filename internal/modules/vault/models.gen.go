@@ -472,6 +472,24 @@ type VaultStatusResponse struct {
 	Initialized bool `json:"initialized"`
 }
 
+// VaultTrashItem defines model for VaultTrashItem.
+type VaultTrashItem struct {
+	ContentType string    `json:"contentType"`
+	DeletedAt   wire.Time `json:"deletedAt"`
+	Id          wire.UUID `json:"id"`
+
+	// Path Where the file was before it was deleted.
+	Path      string     `json:"path"`
+	SizeBytes int64      `json:"sizeBytes"`
+	SpaceId   *wire.UUID `json:"spaceId,omitempty"`
+	Title     *string    `json:"title,omitempty"`
+}
+
+// VaultTrashListResponse defines model for VaultTrashListResponse.
+type VaultTrashListResponse struct {
+	Items []VaultTrashItem `json:"items"`
+}
+
 // VaultUploadResponse defines model for VaultUploadResponse.
 type VaultUploadResponse struct {
 	ContentType string `json:"contentType"`

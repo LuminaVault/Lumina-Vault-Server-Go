@@ -6797,6 +6797,87 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /v1/vault/trash:
+    get:
+      tags: [Vault]
+      operationId: vaultTrashList
+      x-lv-module: vault
+      summary: Deleted files that can still be restored
+      description: |
+        Every file a delete moved to the trash, newest first. Entries are
+        removed for good after the retention period (30 days by default).
+        Files deleted before the trash existed are not listed.
+      security: [{ bearerJWT: [] }]
+      responses:
+        '200':
+          description: The trash.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VaultTrashListResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /v1/vault/trash/{id}/restore:
+    post:
+      tags: [Vault]
+      operationId: vaultTrashRestore
+      x-lv-module: vault
+      summary: Restore a deleted file
+      description: |
+        Moves the file back to its original path, or to "name-restored.ext"
+        beside it when that path is taken, and recreates its index row and,
+        for a note, its recall memory. The Space follows the path's folder.
+      security: [{ bearerJWT: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: The restored file.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VaultFileDTO' }
+        '400':
+          description: Malformed id.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: No free name to restore to.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '410':
+          description: The file is no longer on disk; the entry is removed.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  /v1/vault/trash/{id}:
+    delete:
+      tags: [Vault]
+      operationId: vaultTrashDelete
+      x-lv-module: vault
+      summary: Delete a trashed file for good
+      security: [{ bearerJWT: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204': { description: Deleted. }
+        '400':
+          description: Malformed id.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /v1/vault/status:
     get:
       tags: [Vault]
@@ -16434,6 +16515,24 @@ components:
 
     # ── Vault ──
 
+    VaultTrashItem:
+      type: object
+      required: [id, path, contentType, sizeBytes, deletedAt]
+      properties:
+        id: { type: string, format: uuid }
+        path: { type: string, description: Where the file was before it was deleted. }
+        contentType: { type: string }
+        sizeBytes: { type: integer, format: int64 }
+        spaceId: { type: string, format: uuid }
+        title: { type: string }
+        deletedAt: { type: string, format: date-time }
+    VaultTrashListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/VaultTrashItem' }
     VaultFileDTO:
       type: object
       required: [id, path, contentType, sizeBytes]

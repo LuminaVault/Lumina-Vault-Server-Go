@@ -8,6 +8,8 @@ import (
 	"lumina/internal/jobs"
 	"lumina/internal/modules/calendar"
 	"lumina/internal/secretbox"
+	"lumina/internal/vaultfiles"
+	"lumina/internal/vaultpaths"
 	"lumina/internal/workers"
 	"strings"
 
@@ -24,6 +26,10 @@ func j1Jobs(pool *pgxpool.Pool, cfg config.Config, disk *diskguard.Guard) []jobs
 		workers.DiskSpaceMonitor(disk),
 		workers.NewDeletedDataPurge(workers.PurgeRoots(cfg.VaultRootPath, cfg.HermesDataRoot),
 			cfg.AccountDeletionPurgeAfterDays, slog.Default().With("label", "lv.account.purge")).Job(),
+		// Go-only (backlog E3.2): trashed vault files go after the same retention.
+		workers.NewVaultTrashPurge(vaultfiles.NewStore(pool, vaultpaths.Paths{Root: cfg.VaultRootPath}),
+			vaultpaths.Paths{Root: cfg.VaultRootPath}, cfg.AccountDeletionPurgeAfterDays,
+			slog.Default().With("label", "lv.vault.trashpurge")).Job(),
 	}
 	if cfg.LVEnvironment != "test" {
 		out = append(out,
