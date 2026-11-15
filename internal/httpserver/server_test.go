@@ -96,6 +96,21 @@ func TestCORSPreflightAllowedOrigin(t *testing.T) {
 	require.Empty(t, rec.Header().Get("Allow"))
 }
 
+// The web client's own headers must pass the preflight, or the browser never
+// sends the request (web capture and web chat were dead in production).
+func TestCORSPreflightAllowsWebClientHeaders(t *testing.T) {
+	req := httptest.NewRequest(http.MethodOptions, "/v1/test/protected", nil)
+	req.Header.Set("Origin", "https://app.luminavault.fyi")
+	req.Header.Set("Access-Control-Request-Method", "POST")
+	req.Header.Set("Access-Control-Request-Headers", "content-type,authorization,idempotency-key,x-vault-id,x-lv-client-caps")
+	rec := do(t, newTestServer(), req)
+	require.Less(t, rec.Code, 300)
+	allowed := strings.ToLower(rec.Header().Get("Access-Control-Allow-Headers"))
+	for _, h := range []string{"idempotency-key", "x-vault-id", "x-lv-client-caps"} {
+		require.Contains(t, allowed, h)
+	}
+}
+
 func TestOptionsWithOriginIsAlwaysAPreflight(t *testing.T) {
 	for _, path := range []string{"/v1/test/json", "/v1/does-not-exist"} {
 		req := httptest.NewRequest(http.MethodOptions, path, nil)

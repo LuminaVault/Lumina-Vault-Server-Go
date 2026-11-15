@@ -209,14 +209,24 @@ func allowedOrigins(origins []string) echo.MiddlewareFunc {
 
 // cors mirrors Swift: an empty origin list allows all origins without
 // credentials (dev only); otherwise only listed origins, with credentials.
+//
+// corsAllowHeaders is every request header the web client sends. A header
+// missing here fails the browser's preflight, and the request never leaves
+// the browser: Idempotency-Key broke web capture, X-LV-Client-Caps broke web
+// chat, and X-Vault-ID breaks every call once a vault is active.
 // Hummingbird treats every OPTIONS with an Origin as a preflight, while Echo
 // also wants Access-Control-Request-Method, so that header is filled in.
+var corsAllowHeaders = []string{
+	echo.HeaderContentType, echo.HeaderAuthorization,
+	"Idempotency-Key", "X-Vault-ID", "X-LV-Client-Caps",
+}
+
 func cors(origins []string) echo.MiddlewareFunc {
 	conf := middleware.CORSConfig{AllowOrigins: []string{"*"}}
 	if len(origins) > 0 {
 		conf = middleware.CORSConfig{
 			AllowOrigins:     origins,
-			AllowHeaders:     []string{echo.HeaderContentType, echo.HeaderAuthorization},
+			AllowHeaders:     corsAllowHeaders,
 			AllowMethods:     []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodOptions, http.MethodPatch},
 			AllowCredentials: true,
 			MaxAge:           600,
