@@ -158,6 +158,10 @@ func (m *Module) Register(r httpserver.Router, _ echo.MiddlewareFunc) {
 	r.GET("/v1/vault/context/:vaultFileID", m.context, m.identify)
 	r.GET("/v1/vault/links/:vaultFileID", m.documentLinks, m.identify)
 	r.GET("/v1/vault/lint", m.lint, m.identify)
+
+	r.GET(trashPath, m.listTrash, m.identify)
+	r.POST(trashPath+"/:id/restore", m.restoreTrash, m.identify, idem)
+	r.DELETE(trashPath+"/:id", m.deleteTrash, m.identify, idem)
 }
 
 func notFound(*echo.Context) error { return echo.ErrNotFound }

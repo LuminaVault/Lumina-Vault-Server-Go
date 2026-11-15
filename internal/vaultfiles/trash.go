@@ -2,7 +2,11 @@ package vaultfiles
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"lumina/internal/wire"
+	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -113,8 +117,141 @@ const trashColumns = `id, tenant_id, vault_file_id, space_id, original_path, tra
 
 // ListTrash returns the tenant's trash, newest first.
 func (s *Store) ListTrash(ctx context.Context, tenant uuid.UUID) ([]TrashEntry, error) {
-	rows, err := s.pool.Query(ctx, `SELECT `+trashColumns+` FROM vault_trash
-		WHERE tenant_id = $1 ORDER BY deleted_at DESC, id`, tenant)
+	return s.queryTrash(ctx, `WHERE tenant_id = $1 ORDER BY deleted_at DESC, id`, tenant)
+}
+
+// FindTrash returns the tenant's trash entry with id, or nil.
+func (s *Store) FindTrash(ctx context.Context, tenant, id uuid.UUID) (*TrashEntry, error) {
+	rows, err := s.queryTrash(ctx, `WHERE tenant_id = $1 AND id = $2`, tenant, id)
+	if err != nil || len(rows) == 0 {
+		return nil, err
+	}
+	return &rows[0], nil
+}
+
+// ExpiredTrash returns up to limit entries of any tenant deleted before cutoff,
+// oldest first, for the purge job.
+func (s *Store) ExpiredTrash(ctx context.Context, cutoff time.Time, limit int) ([]TrashEntry, error) {
+	return s.queryTrash(ctx, `WHERE deleted_at < $1 ORDER BY deleted_at, id LIMIT $2`, cutoff, limit)
+}
+
+// DeleteTrashRow removes a vault_trash row. A row that has gone is not an error.
+func (s *Store) DeleteTrashRow(ctx context.Context, id uuid.UUID) error {
+	_, err := s.pool.Exec(ctx, `DELETE FROM vault_trash WHERE id = $1`, id)
+	return err
+}
+
+// ErrTrashFileGone is Restore's answer when the trashed file is no longer on
+// disk, so there is nothing to bring back.
+var ErrTrashFileGone = errors.New("trashed file is gone")
+
+// RemoveTrashedFile deletes <rawRoot>/<name> for good. name must be a direct
+// child with the `_deleted_` prefix; a symlink is unlinked, never followed. A
+// missing file is not an error.
+func RemoveTrashedFile(rawRoot, name string) error {
+	if !strings.HasPrefix(name, "_deleted_") || strings.ContainsAny(name, `/\`) || name == "." || name == ".." {
+		return fmt.Errorf("not a trash name: %q", name)
+	}
+	err := os.Remove(appendingPath(rawRoot, name))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	return err
+}
+
+// restoreAttempts bounds the "-restored-N" names Restore tries.
+const restoreAttempts = 50
+
+// RestoredPath is the n-th name Restore tries for original: the path itself,
+// then "note-restored.md", then "note-restored-2.md" and so on. SanitizePath
+// allows no spaces or brackets, so the suffix is plain.
+func RestoredPath(original string, n int) string {
+	if n == 0 {
+		return original
+	}
+	dir, base := "", original
+	if i := strings.LastIndex(original, "/"); i >= 0 {
+		dir, base = original[:i+1], original[i+1:]
+	}
+	stem, ext := base, ""
+	if i := strings.LastIndex(base, "."); i > 0 {
+		stem, ext = base[:i], base[i:]
+	}
+	suffix := "-restored"
+	if n > 1 {
+		suffix = fmt.Sprintf("-restored-%d", n)
+	}
+	return dir + stem + suffix + ext
+}
+
+// Restore moves e's file back and recreates its vault_files row, then drops the
+// trash row. The file goes to its original path, or to the first free
+// RestoredPath when a file or row now holds it. The Space comes from the path's
+// folder, as on upload, so a Space deleted since then leaves the file unfiled.
+// The row is unprocessed, so the compile pipeline picks it up again.
+//
+// The caller rebuilds the note's memory: Restore touches only the file and rows.
+func (s *Store) Restore(ctx context.Context, rawRoot string, e *TrashEntry, actor uuid.UUID) (*VaultFile, error) {
+	src := appendingPath(rawRoot, e.TrashName)
+	if _, err := os.Lstat(src); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, ErrTrashFileGone
+		}
+		return nil, err
+	}
+	var path, target string
+	for n := range restoreAttempts {
+		candidate, err := SanitizePath(RestoredPath(e.OriginalPath, n))
+		if err != nil {
+			return nil, err
+		}
+		taken, err := s.FindByPath(ctx, e.TenantID, candidate)
+		if err != nil {
+			return nil, err
+		}
+		resolved, err := ResolveInside(rawRoot, candidate)
+		if err != nil {
+			return nil, err
+		}
+		if _, statErr := os.Lstat(resolved); taken == nil && errors.Is(statErr, os.ErrNotExist) {
+			path, target = candidate, resolved
+			break
+		}
+	}
+	if path == "" {
+		return nil, wire.NewError(http.StatusConflict, "no free name to restore to")
+	}
+	if err := createParent(target); err != nil {
+		return nil, err
+	}
+	if err := moveItem(src, target); err != nil {
+		return nil, err
+	}
+	spaceID, err := s.SpaceIDForPath(ctx, e.TenantID, path)
+	if err == nil {
+		var id uuid.UUID
+		id, err = s.Insert(ctx, UpsertParams{
+			TenantID: e.TenantID, SpaceID: spaceID, Path: path, ContentType: e.ContentType,
+			SizeBytes: e.SizeBytes, SHA256: e.SHA256, Metadata: e.Metadata,
+		})
+		if err == nil {
+			if err = s.StampActors(ctx, id, actor); err == nil {
+				if err = s.DeleteTrashRow(ctx, e.ID); err == nil {
+					return s.FindByID(ctx, e.TenantID, id)
+				}
+			}
+			// The row exists; the file is where it belongs. Report, don't undo.
+			return nil, err
+		}
+	}
+	if back := moveItem(target, src); back != nil {
+		return nil, errors.Join(err, back)
+	}
+	return nil, err
+}
+
+func (s *Store) queryTrash(ctx context.Context, tail string, args ...any) ([]TrashEntry, error) {
+	rows, err := s.pool.Query(ctx, `SELECT `+trashColumns+` FROM vault_trash `+tail, args...)
 	if err != nil {
 		return nil, err
 	}
