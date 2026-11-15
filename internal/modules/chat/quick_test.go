@@ -1492,11 +1492,16 @@ func TestARefusedToolNeverRunsEndToEnd(t *testing.T) {
 	assert.False(t, hasFrame(fs, "assistant_action"))
 	payloads := adapter.completionPayloads()
 	require.Len(t, payloads, 3)
-	const refusal = "That tool is not available. Do not try it again."
-	for _, p := range payloads[1:] {
-		_, lastTool := parts(t, p)
+	// memory_update exists only with the app-action tools, which this turn
+	// was not given, so the runner turns it away. reminder_create is in no
+	// policy at all, so the loop refuses it before the runner.
+	for i, want := range []string{
+		"This is not available yet. Tell the user you can't do it right now.",
+		"That tool is not available. Do not try it again.",
+	} {
+		_, lastTool := parts(t, payloads[i+1])
 		require.NotNil(t, lastTool)
-		assert.Equal(t, refusal, *lastTool)
+		assert.Equal(t, want, *lastTool)
 	}
 	var content string
 	require.NoError(t, pool.QueryRow(context.Background(), `SELECT content FROM memories WHERE id = $1`, memoryID).Scan(&content))

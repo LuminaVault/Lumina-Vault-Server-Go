@@ -373,7 +373,7 @@ func TestOpenScreenOpensOneSpace(t *testing.T) {
 	r := g.runner(me, me)
 	g.createdSpace(r, "Health")
 
-	result := r.Run(context.Background(), "open_screen", map[string]any{"screen": "space"})
+	result := r.Run(context.Background(), "open_screen", map[string]any{"screen": "space", "space": "health"})
 
 	require.NotNil(t, result.Action, result.ModelContent)
 	require.Equal(t, KindOpenScreen, result.Action.Kind)
