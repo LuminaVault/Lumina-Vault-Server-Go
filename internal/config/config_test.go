@@ -53,6 +53,8 @@ func TestConfigEnvNamesComeFromSwiftKeys(t *testing.T) {
 		"QUICK_ASSISTANT_ENABLED": true,
 		// Go-only: lets a chat turn run the app tools (internal/modules/chat/stream.go).
 		"CHAT_APP_ACTIONS_ENABLED": true,
+		// Go-only: vault history (backlog E4, internal/vaultgit).
+		"VAULT_GIT_ENABLED": true,
 		// TranscribeProviderRegistry.loadConfig builds these with key = "openai".
 		"TRANSCRIBE_RATECARD_OPENAI_MTOK_PER_SECOND":              true,
 		"TRANSCRIBE_RATECARD_OPENAI_IMPUTED_USD_PER_AUDIO_MINUTE": true,

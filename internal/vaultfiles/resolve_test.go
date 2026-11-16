@@ -110,65 +110,79 @@ func TestResolveInsideRefusesExistingPathThroughSymlink(t *testing.T) {
 	}
 }
 
-// SWIFT WEAKNESS 1, copied on purpose. Swift's doc comment says resolveInside
-// defends against symlink escape. Without a ".." the path is never looked at on
-// disk, so a symlink inside the vault reaches outside it. SanitizePath accepts
-// these paths too: they are clean. If both servers ever fix this, flip this test.
-func TestSwiftWeaknessSymlinkEscapeIsNotDetected(t *testing.T) {
-	_, raw := tree(t)
-	for _, relative := range []string{"link/secret.md", "rel/secret.md"} {
+// Fixed after the archive (Swift let these through): a symlink inside the vault
+// that points outside it is refused, whether it is a directory on the way or the
+// file itself. SanitizePath accepts these paths, so ResolveInside is the check.
+func TestResolveInsideRefusesSymlinkEscape(t *testing.T) {
+	root, raw := tree(t)
+	for _, relative := range []string{"link/secret.md", "rel/secret.md", "link/new.md", "rel/deeper/new.md"} {
 		clean, err := vaultfiles.SanitizePath(relative)
 		require.NoError(t, err)
-		target, err := vaultfiles.ResolveInside(raw, clean)
-		require.NoError(t, err, "Swift passes %s", relative)
-		body, err := os.ReadFile(target)
-		require.NoError(t, err)
-		require.Equal(t, "secret", string(body), "the file outside the vault is readable")
+		_, err = vaultfiles.ResolveInside(raw, clean)
+		requireWireError(t, err, http.StatusBadRequest, escapes)
+	}
+	_, err := vaultfiles.ResolveInside(raw, "link")
+	requireWireError(t, err, http.StatusBadRequest, escapes)
+	require.NoError(t, os.Symlink(filepath.Join(root, "outside", "secret.md"), filepath.Join(raw, "note.md")))
+	_, err = vaultfiles.ResolveInside(raw, "note.md")
+	requireWireError(t, err, http.StatusBadRequest, escapes)
+}
+
+// A symlink that stays inside the vault keeps working, directory or file.
+func TestResolveInsideAllowsSymlinkThatStaysInside(t *testing.T) {
+	_, raw := tree(t)
+	require.NoError(t, os.Symlink("real/a.md", filepath.Join(raw, "alias.md")))
+	for _, relative := range []string{"inner/a.md", "inner/new.md", "alias.md", "inner/../real/a.md"} {
+		got, err := vaultfiles.ResolveInside(raw, relative)
+		require.NoError(t, err, relative)
+		require.Equal(t, raw+"/"+relative, got)
 	}
 }
 
-// A symlink as the last component escapes the same way.
-func TestSwiftWeaknessSymlinkFileEscapeIsNotDetected(t *testing.T) {
+// Fixed after the archive: with a ".." through a symlink and a final file that
+// doesn't exist yet, Swift fell back to the lexical raw/nope.md and passed, and a
+// write landed outside the vault. The walk steps up from where the link really
+// goes, so it is refused.
+func TestResolveInsideRefusesDotDotThroughSymlinkToNewFile(t *testing.T) {
 	root, raw := tree(t)
-	require.NoError(t, os.Symlink(filepath.Join(root, "outside", "secret.md"), filepath.Join(raw, "note.md")))
-	target, err := vaultfiles.ResolveInside(raw, "note.md")
-	require.NoError(t, err)
-	body, err := os.ReadFile(target)
-	require.NoError(t, err)
-	require.Equal(t, "secret", string(body))
-}
+	for _, relative := range []string{"link/../nope.md", "rel/../nope.md", "link/../raw/real/a.md"} {
+		_, err := vaultfiles.ResolveInside(raw, relative)
+		requireWireError(t, err, http.StatusBadRequest, escapes)
+	}
+	require.NoFileExists(t, filepath.Join(root, "nope.md"))
 
-// SWIFT WEAKNESS 2, copied on purpose. With a ".." through a symlink, when the
-// final file doesn't exist yet: lstat fails, the check falls back to the lexical
-// raw/nope.md and passes, and the returned path still crosses the symlink. A
-// write lands outside the vault. It takes a caller that skips SanitizePath, and
-// every Swift caller that skips it passes a path it read back from a row.
-func TestSwiftWeaknessDotDotThroughSymlinkToNewFile(t *testing.T) {
-	root, raw := tree(t)
-	target, err := vaultfiles.ResolveInside(raw, "link/../nope.md")
-	require.NoError(t, err, "Swift passes this")
-	require.Equal(t, raw+"/link/../nope.md", target)
-	write(t, target, "escaped")
-	body, err := os.ReadFile(filepath.Join(root, "nope.md"))
-	require.NoError(t, err)
-	require.Equal(t, "escaped", string(body), "the write landed outside raw")
-
-	_, err = vaultfiles.SanitizePath("link/../nope.md")
+	_, err := vaultfiles.SanitizePath("link/../nope.md")
 	requireWireError(t, err, http.StatusBadRequest, "path contains illegal segment")
 }
 
-// Links that can't be followed make resolution fail, which is the same lexical
-// fallback as a missing file.
-func TestResolveInsideUnresolvableLinksFallBackToLexical(t *testing.T) {
+// Links that can't be followed are refused: a write through a dangling link
+// would create its target wherever it points.
+func TestResolveInsideRefusesUnresolvableLinks(t *testing.T) {
 	root, raw := tree(t)
 	require.NoError(t, os.Symlink("loop", filepath.Join(raw, "loop")))
 	require.NoError(t, os.Symlink(filepath.Join(root, "nowhere"), filepath.Join(raw, "dangling")))
-	for _, relative := range []string{"loop/../x.md", "dangling/../x.md"} {
+	for _, relative := range []string{"loop/../x.md", "dangling/../x.md", "dangling", "dangling/x.md", "loop/../../x.md"} {
 		_, err := vaultfiles.ResolveInside(raw, relative)
-		require.NoError(t, err, relative)
+		requireWireError(t, err, http.StatusBadRequest, escapes)
 	}
-	_, err := vaultfiles.ResolveInside(raw, "loop/../../x.md")
-	requireWireError(t, err, http.StatusBadRequest, escapes)
+}
+
+// ResolveEntryInside takes a symlink as the last component as the entry itself,
+// so a link that points outside, or nowhere, can still be deleted or moved. The
+// directories on the way are still checked.
+func TestResolveEntryInsideDoesNotFollowTheLastLink(t *testing.T) {
+	root, raw := tree(t)
+	require.NoError(t, os.Symlink(filepath.Join(root, "outside", "secret.md"), filepath.Join(raw, "note.md")))
+	require.NoError(t, os.Symlink(filepath.Join(root, "nowhere"), filepath.Join(raw, "dangling")))
+	for _, relative := range []string{"note.md", "dangling", "link"} {
+		got, err := vaultfiles.ResolveEntryInside(raw, relative)
+		require.NoError(t, err, relative)
+		require.Equal(t, raw+"/"+relative, got)
+	}
+	for _, relative := range []string{"link/secret.md", "rel/secret.md", "link/../sib.md", "../x.md"} {
+		_, err := vaultfiles.ResolveEntryInside(raw, relative)
+		requireWireError(t, err, http.StatusBadRequest, escapes)
+	}
 }
 
 // QUIRK: the root is standardized lexically and a target with ".." physically,

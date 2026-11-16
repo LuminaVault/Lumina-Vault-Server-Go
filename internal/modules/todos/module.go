@@ -279,7 +279,7 @@ func (m *Module) delete(c *echo.Context) error {
 	}
 	rawRoot := m.paths.Raw(tenant)
 	// row.Path comes from the database and isn't sanitized again, as in Swift.
-	if target, err := vaultfiles.ResolveInside(rawRoot, row.Path); err == nil {
+	if target, err := vaultfiles.ResolveEntryInside(rawRoot, row.Path); err == nil {
 		if _, err := m.store.Trash(ctx, rawRoot, target, row, &tenant, m.now()); err != nil {
 			slog.WarnContext(ctx, "todo move to trash failed", "tenant", ids.Upper(tenant), "error", err)
 		}
