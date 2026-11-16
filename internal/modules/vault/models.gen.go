@@ -314,14 +314,20 @@ type VaultCreateRequest = map[string]interface{}
 
 // VaultFileDTO defines model for VaultFileDTO.
 type VaultFileDTO struct {
-	ContentType string                `json:"contentType"`
-	CreatedAt   *wire.Time            `json:"createdAt,omitempty"`
-	Id          wire.UUID             `json:"id"`
-	Metadata    *VaultNoteMetadataDTO `json:"metadata,omitempty"`
-	Path        string                `json:"path"`
-	ProcessedAt *wire.Time            `json:"processedAt,omitempty"`
-	Sha256      *string               `json:"sha256,omitempty"`
-	SizeBytes   int                   `json:"sizeBytes"`
+	ContentType     string                `json:"contentType"`
+	CreatedAt       *wire.Time            `json:"createdAt,omitempty"`
+	CreatedByUserId *wire.UUID            `json:"createdByUserId,omitempty"`
+	Id              wire.UUID             `json:"id"`
+	Metadata        *VaultNoteMetadataDTO `json:"metadata,omitempty"`
+	Path            string                `json:"path"`
+	ProcessedAt     *wire.Time            `json:"processedAt,omitempty"`
+	Sha256          *string               `json:"sha256,omitempty"`
+	SizeBytes       int                   `json:"sizeBytes"`
+
+	// SpaceId The Space the file is filed in; absent when unfiled (in `inbox/`).
+	SpaceId         *wire.UUID `json:"spaceId,omitempty"`
+	UpdatedAt       *wire.Time `json:"updatedAt,omitempty"`
+	UpdatedByUserId *wire.UUID `json:"updatedByUserId,omitempty"`
 }
 
 // VaultFromTemplateRequest defines model for VaultFromTemplateRequest.

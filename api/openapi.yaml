@@ -16787,6 +16787,13 @@ components:
         sha256: { type: string }
         processedAt: { type: string, format: date-time }
         createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        spaceId:
+          type: string
+          format: uuid
+          description: The Space the file is filed in; absent when unfiled (in `inbox/`).
+        createdByUserId: { type: string, format: uuid }
+        updatedByUserId: { type: string, format: uuid }
         metadata: { $ref: '#/components/schemas/VaultNoteMetadataDTO' }
 
     # The note sidecar. Any markdown file can carry it; `isTodo` is what makes

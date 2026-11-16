@@ -37,8 +37,10 @@ var (
 	errMissingPath  = wire.NewError(http.StatusBadRequest, "missing path")
 )
 
-// fileDTO is LuminaVaultShared's VaultFileDTO. The spec's schema of that name is
-// stale (no spaceId, updatedAt or actor fields), so this isn't the generated type.
+// fileDTO is LuminaVaultShared's VaultFileDTO and matches the spec's schema of
+// that name. It stays hand-written to keep the wire form Swift sent: sha256 is
+// always present (the generated type omits an empty one) and metadata uses
+// noteMetadataDTO.
 type fileDTO struct {
 	ID              wire.UUID        `json:"id"`
 	Path            string           `json:"path"`
