@@ -289,6 +289,164 @@ func TestVaultBulkImportsAndSkipsUnchanged(t *testing.T) {
 	assert.Equal(t, result{Skipped: 2}, decode(v.do(user, http.MethodPost, "/v1/import/vault-bulk", body)))
 }
 
+type bulkFile struct {
+	Path      string  `json:"path"`
+	SavedPath *string `json:"savedPath"`
+	Status    string  `json:"status"`
+}
+
+type bulkResult struct {
+	SpaceSlug string     `json:"spaceSlug"`
+	Imported  int        `json:"imported"`
+	Skipped   int        `json:"skipped"`
+	Failed    int        `json:"failed"`
+	Files     []bulkFile `json:"files"`
+}
+
+func (v env) bulk(user uuid.UUID, body string) bulkResult {
+	v.t.Helper()
+	rec := v.do(user, http.MethodPost, "/v1/import/vault-bulk", body)
+	require.Equal(v.t, http.StatusOK, rec.Code, rec.Body.String())
+	var out bulkResult
+	require.NoError(v.t, json.Unmarshal(rec.Body.Bytes(), &out))
+	return out
+}
+
+func bulkBody(t *testing.T, space string, files map[string]string, order []string, onConflict string) string {
+	t.Helper()
+	type file struct {
+		Path    string `json:"path"`
+		Content string `json:"content"`
+	}
+	body := struct {
+		Space      string `json:"space"`
+		Files      []file `json:"files"`
+		OnConflict string `json:"onConflict,omitempty"`
+	}{Space: space, OnConflict: onConflict}
+	for _, p := range order {
+		body.Files = append(body.Files, file{Path: p, Content: files[p]})
+	}
+	raw, err := json.Marshal(body)
+	require.NoError(t, err)
+	return string(raw)
+}
+
+func (v env) linkState(tenant uuid.UUID, sourcePath, rawTarget string) string {
+	v.t.Helper()
+	var state string
+	require.NoError(v.t, v.pool.QueryRow(context.Background(), `
+		SELECT l.resolution_state FROM vault_links l
+		JOIN vault_files f ON f.id = l.source_vault_file_id
+		WHERE l.tenant_id = $1 AND f.path = $2 AND l.raw_target = $3`, tenant, sourcePath, rawTarget).Scan(&state))
+	return state
+}
+
+func savedPaths(files []bulkFile) map[string]string {
+	out := map[string]string{}
+	for _, f := range files {
+		saved := ""
+		if f.SavedPath != nil {
+			saved = *f.SavedPath
+		}
+		out[f.Path] = f.Status + " " + saved
+	}
+	return out
+}
+
+// An Obsidian vault as the web importer sends it: folders, a dot-folder, an
+// attachment, two names that slugify alike, and a link to a file later in the
+// batch.
+func TestVaultBulkReportsEveryObsidianFile(t *testing.T) {
+	v := setup(t)
+	user := v.user()
+	files := map[string]string{
+		"Lore/The Last Light.md":   "# The Last Light\n\nSee [[Factions]] and [[Lore/Appendix]] and [[Nowhere]].\n",
+		"Lore/the last light.md":   "a different note with the same slug",
+		".obsidian/workspace.json": "{}",
+		".obsidian/snippets/x.md":  "# hidden",
+		"Lore/.draft.md":           "# hidden dotfile",
+		"Attachments/map.png":      "binary",
+		"Board.canvas":             "{}",
+		"Empty.md":                 "  \n ",
+		"Factions.md":              "# Factions",
+		"README":                   "no extension reads as markdown",
+	}
+	order := []string{
+		"Lore/The Last Light.md", "Lore/the last light.md", ".obsidian/workspace.json",
+		".obsidian/snippets/x.md", "Lore/.draft.md", "Attachments/map.png", "Board.canvas",
+		"Empty.md", "Factions.md", "README",
+	}
+	out := v.bulk(user, bulkBody(t, "World", files, order, ""))
+
+	assert.Equal(t, "world", out.SpaceSlug)
+	require.Len(t, out.Files, len(order))
+	for n, f := range out.Files {
+		assert.Equal(t, order[n], f.Path, "results keep request order")
+	}
+	assert.Equal(t, map[string]string{
+		"Lore/The Last Light.md":   "imported world/lore/the-last-light.md",
+		"Lore/the last light.md":   "collision world/lore/the-last-light.md",
+		".obsidian/workspace.json": "hidden ",
+		".obsidian/snippets/x.md":  "hidden ",
+		"Lore/.draft.md":           "hidden ",
+		"Attachments/map.png":      "unsupported ",
+		"Board.canvas":             "unsupported ",
+		"Empty.md":                 "empty world/empty.md",
+		"Factions.md":              "imported world/factions.md",
+		"README":                   "imported world/readme.md",
+	}, savedPaths(out.Files))
+	assert.Equal(t, 3, out.Imported)
+	assert.Equal(t, 7, out.Skipped)
+	assert.Equal(t, 0, out.Failed)
+
+	data, err := os.ReadFile(filepath.Join(v.root, "tenants", ids.Upper(user), "raw", "world/lore/the-last-light.md"))
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "[[Factions]]", "the first of two colliding files is the one kept")
+
+	// [[Factions]] points at a file written after its source in the same batch:
+	// the batch's re-resolve upgrades it. [[Lore/Appendix]] waits for the next
+	// request, and [[Nowhere]] never gets a target.
+	assert.Equal(t, "resolved", v.linkState(user, "world/lore/the-last-light.md", "Factions"))
+	assert.Equal(t, "unresolved", v.linkState(user, "world/lore/the-last-light.md", "Lore/Appendix"))
+
+	second := v.bulk(user, bulkBody(t, "World", map[string]string{"Lore/Appendix.md": "# Appendix"}, []string{"Lore/Appendix.md"}, ""))
+	assert.Equal(t, 1, second.Imported)
+	assert.Equal(t, "resolved", v.linkState(user, "world/lore/the-last-light.md", "Lore/Appendix"),
+		"a link into a later batch resolves once that batch lands")
+	assert.Equal(t, "unresolved", v.linkState(user, "world/lore/the-last-light.md", "Nowhere"))
+}
+
+func TestVaultBulkOnConflict(t *testing.T) {
+	v := setup(t)
+	user := v.user()
+	order := []string{"Index.md"}
+	first := v.bulk(user, bulkBody(t, "Notes", map[string]string{"Index.md": "mine"}, order, ""))
+	assert.Equal(t, "imported", first.Files[0].Status)
+
+	read := func() string {
+		data, err := os.ReadFile(filepath.Join(v.root, "tenants", ids.Upper(user), "raw", "notes/index.md"))
+		require.NoError(t, err)
+		return string(data)
+	}
+
+	skip := v.bulk(user, bulkBody(t, "Notes", map[string]string{"Index.md": "theirs"}, order, "skip"))
+	assert.Equal(t, "exists", skip.Files[0].Status)
+	assert.Equal(t, 1, skip.Skipped)
+	assert.Equal(t, "mine", read(), "skip never replaces an existing note")
+
+	same := v.bulk(user, bulkBody(t, "Notes", map[string]string{"Index.md": "mine"}, order, "skip"))
+	assert.Equal(t, "unchanged", same.Files[0].Status, "identical bytes are unchanged, not a conflict")
+
+	over := v.bulk(user, bulkBody(t, "Notes", map[string]string{"Index.md": "theirs"}, order, "overwrite"))
+	assert.Equal(t, "updated", over.Files[0].Status)
+	assert.Equal(t, 1, over.Imported)
+	assert.Equal(t, "theirs", read())
+
+	bad := v.do(user, http.MethodPost, "/v1/import/vault-bulk", `{"space":"Notes","files":[{"path":"a.md","content":"a"}],"onConflict":"merge"}`)
+	assert.Equal(t, http.StatusBadRequest, bad.Code)
+	assert.Contains(t, bad.Body.String(), "invalid_on_conflict")
+}
+
 func TestRouteQuirks(t *testing.T) {
 	v := setup(t)
 	user := v.user()
@@ -322,6 +480,7 @@ func TestResponsesConformToSpec(t *testing.T) {
 	for _, c := range []struct{ method, path, body string }{
 		{http.MethodPost, "/v1/import/files", `{"sourceType":"documents","vaultFileIds":[]}`},
 		{http.MethodPost, "/v1/import/vault-bulk", `{"space":"Notes","files":[{"path":"a.md","content":"a"}]}`},
+		{http.MethodPost, "/v1/import/vault-bulk", `{"space":"Notes","onConflict":"skip","files":[{"path":"a.md","content":"b"},{"path":".obsidian/x.md","content":"x"},{"path":"img.png","content":"x"}]}`},
 		{http.MethodGet, "/v1/import/" + session, ""},
 		{http.MethodPost, "/v1/import/" + session + "/categorize", ""},
 		{http.MethodPost, "/v1/import/" + session + "/approve", `{}`},

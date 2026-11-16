@@ -6488,6 +6488,14 @@ paths:
             written. `*` means "the file must exist". Weak tags never match.
             Omit the header to overwrite unconditionally.
           schema: { type: string }
+        - in: header
+          name: If-None-Match
+          description: |
+            Create-only write: `*` refuses to replace a file that already
+            exists at the resolved path (412, nothing written). Used by
+            markdown import so an imported file never overwrites a note with
+            the same name. Any other value is ignored.
+          schema: { type: string }
       requestBody:
         required: true
         content:
@@ -6506,7 +6514,8 @@ paths:
         '412':
           description: >-
             `If-Match` was sent and the file changed since that version, or no
-            longer exists. Nothing was written; reload the file and save again.
+            longer exists; or `If-None-Match: *` was sent and the file already
+            exists. Nothing was written.
         '507': { $ref: '#/components/responses/InsufficientStorage' }
     get:
       tags: [Vault]
@@ -7288,6 +7297,16 @@ paths:
         (created if missing), deduplicated. At most 2000 files per request and
         a 96 MB body; large vaults import in batches. Also drivable directly,
         e.g. by a VPS push-sync script.
+
+        Paths keep their folders under the Space's slug, each segment
+        lowercased and slugified, always ending `.md`. Files under a
+        dot-folder (`.obsidian/`, `.trash/`) and files that are not `.md`,
+        `.markdown` or `.txt` are skipped. Two inputs that slugify to the same
+        path keep the first. `files` in the response says what happened to
+        each input. After the writes, unresolved `[[wikilinks]]` across the
+        vault are re-resolved, so links between files of different batches
+        connect; links also match the slugified names (`[[The Last Light]]`
+        finds `the-last-light.md`).
       requestBody:
         required: true
         content:
@@ -10874,16 +10893,52 @@ components:
           minItems: 1
           maxItems: 2000
           items: { $ref: '#/components/schemas/VaultBulkImportFile' }
+        onConflict:
+          type: string
+          enum: [overwrite, skip]
+          default: overwrite
+          description: |
+            What a file does to a different one already at its vault path.
+            `overwrite` (the default, for re-syncing a vault) replaces it;
+            `skip` leaves it and reports `exists`, so a first import never
+            replaces a note the user already has.
 
     VaultBulkImportResponse:
       type: object
-      required: [spaceID, spaceSlug, imported, skipped, failed]
+      required: [spaceID, spaceSlug, imported, skipped, failed, files]
       properties:
         spaceID: { type: string, format: uuid }
         spaceSlug: { type: string }
-        imported: { type: integer }
-        skipped: { type: integer }
+        imported: { type: integer, description: 'Files written (`imported` + `updated`).' }
+        skipped: { type: integer, description: 'Every status but `imported`, `updated` and `failed`.' }
         failed: { type: integer }
+        files:
+          type: array
+          description: One entry per input file, in request order.
+          items: { $ref: '#/components/schemas/VaultBulkImportFileResult' }
+
+    VaultBulkImportFileResult:
+      type: object
+      required: [path, status]
+      properties:
+        path: { type: string, description: "The input's path, as sent." }
+        savedPath:
+          type: string
+          description: |
+            The vault path the input maps to: where it was written, or for
+            `collision`, `exists` and `unchanged` the path already holding a
+            file. Absent for `hidden` and `unsupported`.
+        status:
+          type: string
+          enum: [imported, updated, unchanged, empty, hidden, unsupported, collision, exists, failed]
+          description: |
+            `imported` new file; `updated` replaced a different file
+            (`onConflict: overwrite`); `unchanged` same bytes already there;
+            `empty` whitespace only; `hidden` under a dot-folder or a
+            dotfile; `unsupported` not .md/.markdown/.txt; `collision`
+            slugifies to the path of an earlier input of this request;
+            `exists` a different file is there (`onConflict: skip`); `failed`
+            could not be written.
 
     # ── Kanban: promote (LuminaVaultShared CardPromoteRequest) ──
     CardPromoteRequest:
