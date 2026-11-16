@@ -549,6 +549,20 @@ func TestWhatATenantStoresCountsAgainstTheCeiling(t *testing.T) {
 	require.Equal(t, http.StatusOK, create(pam, "1073741824").code)
 }
 
+// A database Swift migrated (parity) has no vault_trash: the quota still works,
+// on vault files alone.
+func TestQuotaWithoutTheTrashTable(t *testing.T) {
+	v := setup(t, plentyOfDisk)
+	_, err := v.pool.Exec(context.Background(), `DROP TABLE vault_trash`)
+	require.NoError(t, err)
+	fay := uuid.MustParse("1A6E0000-0000-4000-8000-0000000000A4")
+	create := func(size string) resp {
+		return v.do(fay, http.MethodPost, "/v1/ingestions", `{"items":[{"kind":"file","fileName":"a.txt","contentType":"text/plain","sizeBytes":`+size+`}]}`)
+	}
+	require.Equal(t, http.StatusOK, create("824").code)
+	require.Equal(t, http.StatusRequestEntityTooLarge, create("825").code)
+}
+
 // Trashed files stay on disk until the purge, so they count too.
 func TestTrashCountsAgainstTheCeiling(t *testing.T) {
 	v := setup(t, plentyOfDisk)

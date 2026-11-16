@@ -2,10 +2,12 @@ package ingestion
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"lumina/internal/config"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // Limits is StorageQuotaService.Limits: what a tier may store, in bytes. nil is
@@ -74,13 +76,22 @@ func QuotaFromConfig(cfg config.Config) Quota {
 // COALESCE(SUM(size_bytes), 0), a numeric, as Int64 under try?, so it always read
 // 0 and only the new batch met the ceiling. Fixed after the archive (backlog
 // 1.3): the SUM is cast to bigint. Hand-written because vault_trash postdates the
-// schema snapshot sqlc reads.
+// schema snapshot sqlc reads. vault_trash is a Go-only goose table; a database
+// Swift migrated (parity) has none, and then trash counts as 0, as the trash code
+// itself tolerates.
 func (m *Module) usedBytes(ctx context.Context, tenant uuid.UUID) (int64, error) {
-	var used int64
-	err := m.pool.QueryRow(ctx, `SELECT
-		COALESCE((SELECT SUM(size_bytes) FROM vault_files WHERE tenant_id = $1), 0)::bigint +
-		COALESCE((SELECT SUM(size_bytes) FROM vault_trash WHERE tenant_id = $1), 0)::bigint`, tenant).Scan(&used)
-	return used, err
+	var files, trash int64
+	if err := m.pool.QueryRow(ctx, `SELECT COALESCE(SUM(size_bytes), 0)::bigint FROM vault_files WHERE tenant_id = $1`,
+		tenant).Scan(&files); err != nil {
+		return 0, err
+	}
+	err := m.pool.QueryRow(ctx, `SELECT COALESCE(SUM(size_bytes), 0)::bigint FROM vault_trash WHERE tenant_id = $1`,
+		tenant).Scan(&trash)
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "42P01" { // undefined_table
+		return files, nil
+	}
+	return files + trash, err
 }
 
 // quotaDenied is StorageQuotaService.check; it returns what the message needs.
