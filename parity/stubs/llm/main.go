@@ -27,6 +27,9 @@
 //	[[stub:reply:TEXT]]         reply with exactly TEXT (for example, JSON a
 //	                            structured-output route expects)
 //	[[stub:tool:NAME:ARGS]]     call tool NAME with the JSON text ARGS
+//	[[stub:tool-once:NAME:ARGS]] call tool NAME once: when a tool result follows
+//	                            the message, reply "stub tool done" instead, so
+//	                            a tool loop ends after the one call
 //	[[stub:error:STATUS]]       answer that HTTP status
 //	[[stub:echo]]               reply with the whole request body as canonical JSON
 //	                            (sorted keys), so a prompt, tool schema or sampling
@@ -61,7 +64,7 @@ const (
 	stubVersion  = "stub"
 )
 
-var directiveRe = regexp.MustCompile(`(?s)\[\[stub:(?:(echo)|(reply|tool|error|digest):(.*))\]\]`)
+var directiveRe = regexp.MustCompile(`(?s)\[\[stub:(?:(echo)|(reply|tool-once|tool|error|digest):(.*))\]\]`)
 
 type message struct {
 	Role    string          `json:"role"`
@@ -90,6 +93,31 @@ func (m message) text() string {
 	return strings.Join(texts, "\n")
 }
 
+// toolOnceReply is what follows the one call of a [[stub:tool-once]].
+const toolOnceReply = "stub tool done"
+
+// answeredByATool reports whether any of the messages is a tool result, in the
+// OpenAI shape (role "tool") or Anthropic's (a tool_result part).
+func answeredByATool(messages []message) bool {
+	for _, m := range messages {
+		if m.Role == "tool" {
+			return true
+		}
+		var parts []struct {
+			Type string `json:"type"`
+		}
+		if json.Unmarshal(m.Content, &parts) != nil {
+			continue
+		}
+		for _, p := range parts {
+			if p.Type == "tool_result" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 type answer struct {
 	text      string
 	toolName  string
@@ -114,6 +142,12 @@ func decideRequest(messages []message, body []byte) answer {
 		case "reply":
 			return answer{text: m[3]}
 		case "tool":
+			name, args, _ := strings.Cut(m[3], ":")
+			return answer{toolName: name, toolArgs: args}
+		case "tool-once":
+			if answeredByATool(messages[i+1:]) {
+				return answer{text: toolOnceReply}
+			}
 			name, args, _ := strings.Cut(m[3], ":")
 			return answer{toolName: name, toolArgs: args}
 		case "error":

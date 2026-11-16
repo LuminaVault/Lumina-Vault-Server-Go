@@ -75,13 +75,16 @@ type Reply struct {
 	// RanPersonalTool: a Health, Calendar or Reminders tool ran, so the reply
 	// can quote the caller's own data and must never become a shared memory.
 	RanPersonalTool bool
+	// RanAppAction: a tool that changes spaces, files or a memory was asked
+	// for, so the reply reports a change and is not worth remembering.
+	RanAppAction bool
 	// ShouldPersist is false only for a stopped turn with nothing done: nobody
 	// saw it, and there is nothing to keep a record of.
 	ShouldPersist bool
 }
 
 // Indexable reports whether the reply may be turned into a memory.
-func (r Reply) Indexable() bool { return r.IsAnswer && !r.RanPersonalTool }
+func (r Reply) Indexable() bool { return r.IsAnswer && !r.RanPersonalTool && !r.RanAppAction }
 
 // Outcome is QuickAssistantTurn. Reply nil means answer through the classic
 // path; PreDecided is then the free-lane decision this question already paid
@@ -156,6 +159,7 @@ type turn struct {
 	actionEmitted   bool
 	toolCallCount   int
 	ranPersonalTool bool
+	ranAppAction    bool
 	// finishedWrites is the first result of each write that took effect, so a
 	// repeat of the same call (a retry, or the model saying it twice) does not
 	// do it twice (ruling 19).
@@ -277,6 +281,7 @@ func (t *turn) runCall(index int, c wireToolCall) string {
 	}
 	t.toolCallCount++
 	t.ranPersonalTool = t.ranPersonalTool || TouchesPersonalData(name)
+	t.ranAppAction = t.ranAppAction || ChangesApp(name)
 	// A started tool runs to its result, as under Swift's cooperative
 	// cancellation: a disconnect must not abort a write half-way or let it
 	// commit without its chip. Cancellation is checked between calls instead.
@@ -310,6 +315,7 @@ func (t *turn) reply(text string, isAnswer bool, outcome string, rounds int, sho
 		IsAnswer:        isAnswer,
 		ToolCallCount:   t.toolCallCount,
 		RanPersonalTool: t.ranPersonalTool,
+		RanAppAction:    t.ranAppAction,
 		ShouldPersist:   shouldPersist,
 	}
 }

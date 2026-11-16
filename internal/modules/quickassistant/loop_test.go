@@ -774,12 +774,12 @@ func (c cancelOnRound) ChatCompletionsDecided(ctx context.Context, payload []byt
 }
 
 func TestRefusedToolIsNotRun(t *testing.T) {
-	tr := newTransport(paidDecision(1000), toolsStep(call("c1", "memory_update", `{"id":"x"}`)), textStep("I can't change that."))
+	tr := newTransport(paidDecision(1000), toolsStep(call("c1", "index", `{}`)), textStep("I can't do that."))
 	runner := &recordingRunner{}
 
 	reply := mustReply(t, newHarness(tr).answer(context.Background(), runner, nil))
 
-	if reply.Text != "I can't change that." || reply.ToolCallCount != 0 {
+	if reply.Text != "I can't do that." || reply.ToolCallCount != 0 {
 		t.Errorf("reply = %+v", reply)
 	}
 	if len(runner.names()) != 0 {
@@ -787,7 +787,7 @@ func TestRefusedToolIsNotRun(t *testing.T) {
 	}
 	tool := messagesIn(t, tr.sent()[1])
 	last := tool[len(tool)-1]
-	if last["role"] != "tool" || last["tool_call_id"] != "c1" || last["name"] != "memory_update" || last["content"] != "That tool is not available. Do not try it again." {
+	if last["role"] != "tool" || last["tool_call_id"] != "c1" || last["name"] != "index" || last["content"] != "That tool is not available. Do not try it again." {
 		t.Errorf("tool message = %v", last)
 	}
 }

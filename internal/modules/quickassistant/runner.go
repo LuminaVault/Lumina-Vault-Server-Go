@@ -68,6 +68,10 @@ type Deps struct {
 	// and a device read answers offline at once.
 	Devices DeviceRequester
 	Store   *Store
+	// Spaces and Files run the app-action tools (appactions.go). Both nil
+	// means those tools are not offered.
+	Spaces SpaceService
+	Files  FileService
 }
 
 // DeviceRequester sends one command to the tenant's phone and waits for its
@@ -229,7 +233,7 @@ func (r *Runner) state() *TurnState {
 func (r *Runner) dispatch(ctx context.Context, tool Tool, args map[string]any, personalRanBefore bool) (ToolResult, error) {
 	switch tool.Name {
 	case "open_screen":
-		return r.openScreen(args)
+		return r.openScreen(ctx, args)
 	case "memory_save":
 		return r.saveMemory(ctx, args, personalRanBefore)
 	case "app_reminder_create", "app_reminders_list":
@@ -238,6 +242,20 @@ func (r *Runner) dispatch(ctx context.Context, tool Tool, args map[string]any, p
 		return r.proposeEvent(ctx, args)
 	case "memory_forget":
 		return r.proposeForget(ctx, args)
+	case "space_list":
+		return r.listSpaces(ctx)
+	case "space_create":
+		return r.createSpace(ctx, args)
+	case "space_update":
+		return r.updateSpace(ctx, args)
+	case "space_delete":
+		return r.proposeSpaceDelete(ctx, args)
+	case "file_move":
+		return r.moveFile(ctx, args)
+	case "file_delete":
+		return r.proposeFileDelete(ctx, args)
+	case "memory_update":
+		return r.proposeMemoryUpdate(ctx, args)
 	}
 	if tool.Writes {
 		return modelOnly(notAvailable), nil
@@ -281,7 +299,7 @@ func (r *Runner) definition(name string) (Tool, bool) {
 }
 
 func (r *Runner) definitionOptions() DefinitionOptions {
-	return DefinitionOptions{DeviceWrites: r.Devices != nil}
+	return DefinitionOptions{DeviceWrites: r.Devices != nil, AppActions: r.Spaces != nil && r.Files != nil}
 }
 
 // unknownArgument is MCPToolGate.unknownArgument: the first argument, in
@@ -325,10 +343,8 @@ func (r *Runner) saveMemory(ctx context.Context, args map[string]any, personalRa
 	if vault != r.Actor {
 		return modelOnly(sharedVaultUnavailable), nil
 	}
-	if r.state().Writes() >= maxWritesPerTurn {
-		// Swift throws Refusal(message: tooManyWrites), so the model reads the
-		// prefix twice; kept verbatim.
-		return ToolResult{}, refuse(tooManyWrites)
+	if err := r.beginWrite(); err != nil {
+		return ToolResult{}, err
 	}
 	out, err := r.MCP.CallAsSession(ctx, "memory_save", args, vault, r.Actor)
 	if err != nil {
@@ -352,9 +368,21 @@ func (r *Runner) saveMemory(ctx context.Context, args map[string]any, personalRa
 	return content, nil
 }
 
+// beginWrite refuses a write once the turn has made maxWritesPerTurn (ruling
+// 23). Every tool that changes something at once calls it before the change
+// and noteWrite after it.
+func (r *Runner) beginWrite() error {
+	if r.state().Writes() >= maxWritesPerTurn {
+		// Swift throws Refusal(message: tooManyWrites), so the model reads the
+		// prefix twice; kept verbatim.
+		return refuse(tooManyWrites)
+	}
+	return nil
+}
+
 // MARK: - open_screen
 
-func (r *Runner) openScreen(args map[string]any) (ToolResult, error) {
+func (r *Runner) openScreen(ctx context.Context, args map[string]any) (ToolResult, error) {
 	raw, _ := args["screen"].(string)
 	screen, ok := ParseScreen(raw)
 	if !ok {
@@ -371,6 +399,9 @@ func (r *Runner) openScreen(args map[string]any) (ToolResult, error) {
 	}
 	if screen == ScreenMemory && memoryID == nil {
 		return ToolResult{}, refuse("memoryID is required to open a memory.")
+	}
+	if screen == ScreenSpace {
+		return r.openSpace(ctx, args)
 	}
 	label := screenLabel(screen)
 	action := &Action{

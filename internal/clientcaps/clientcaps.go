@@ -22,6 +22,13 @@ type Capability string
 // The server needs it before it may emit the chat run-pointer event.
 const ChatHermesRun Capability = "chat.hermes_run"
 
+// ChatAppActions says the client draws `assistant_action` frames on the main
+// chat stream and refreshes what they changed. The server needs it before a
+// plain chat turn may run app tools.
+const ChatAppActions Capability = "chat.app_actions"
+
+var known = map[Capability]bool{ChatHermesRun: true, ChatAppActions: true}
+
 // Capabilities is a parsed declaration. The zero value declares nothing.
 type Capabilities struct {
 	declared map[Capability]bool
@@ -39,7 +46,7 @@ func (c Capabilities) Supports(capability Capability) bool {
 func Parse(value string) Capabilities {
 	var caps Capabilities
 	for token := range strings.SplitSeq(value, ",") {
-		if capability := Capability(strings.ToLower(swiftstr.TrimWhitespaces(token))); capability == ChatHermesRun {
+		if capability := Capability(strings.ToLower(swiftstr.TrimWhitespaces(token))); known[capability] {
 			if caps.declared == nil {
 				caps.declared = map[Capability]bool{}
 			}

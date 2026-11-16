@@ -20,20 +20,27 @@ type Tool struct {
 type DefinitionOptions struct {
 	// DeviceWrites offers calendar_create, which needs a device that can answer.
 	DeviceWrites bool
+	// AppActions offers the tools that manage spaces, vault files and memory
+	// text (appactions.go), and lets open_screen open one space.
+	AppActions bool
 }
 
 // Definitions returns the tools to offer: the catalog tools the policy does not
 // refuse, in catalog order, then the assistant-only tools. calendar_create is
 // the loop's own version and appears only when o.DeviceWrites is set.
 func Definitions(o DefinitionOptions) []Tool {
-	out := make([]Tool, 0, len(catalogTools)+3)
+	out := make([]Tool, 0, len(catalogTools)+3+len(appActionTools))
 	for _, t := range catalogTools {
 		if t.Name == "calendar_create" && !o.DeviceWrites {
 			continue
 		}
 		out = append(out, t)
 	}
-	return append(out, appReminderCreate, appRemindersList, openScreen)
+	if !o.AppActions {
+		return append(out, appReminderCreate, appRemindersList, openScreen)
+	}
+	out = append(out, appReminderCreate, appRemindersList, openScreenWithSpace)
+	return append(out, appActionTools...)
 }
 
 // OpenAITools renders defs as an OpenAI-compatible tools array.

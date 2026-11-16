@@ -157,3 +157,20 @@ func TestToolResultsCanEndATurn(t *testing.T) {
 	require.Equal(t, http.StatusOK, status)
 	require.Contains(t, body, `"content":"done"`)
 }
+
+func TestToolOnceCallsTheToolThenEndsTheTurn(t *testing.T) {
+	s := server(t)
+	const directive = `[[stub:tool-once:space_create:{\"name\":\"Health\"}]]`
+	_, body := post(t, s.URL+"/v1/chat/completions", `{"model":"m","messages":[{"role":"user","content":"`+directive+`"}]}`)
+	if !strings.Contains(body, `"name":"space_create"`) || !strings.Contains(body, `"finish_reason":"tool_calls"`) {
+		t.Fatalf("first round = %s", body)
+	}
+	_, body = post(t, s.URL+"/v1/chat/completions", `{"model":"m","messages":[{"role":"user","content":"`+directive+`"},{"role":"assistant","content":null},{"role":"tool","content":"{\"slug\":\"health\"}"}]}`)
+	if !strings.Contains(body, "stub tool done") || strings.Contains(body, "tool_calls\"") {
+		t.Fatalf("second round = %s", body)
+	}
+	_, body = post(t, s.URL+"/v1/messages", `{"model":"m","max_tokens":10,"messages":[{"role":"user","content":"`+directive+`"},{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_stub_0001","content":"ok"}]}]}`)
+	if !strings.Contains(body, "stub tool done") || strings.Contains(body, `"tool_use"`) {
+		t.Fatalf("anthropic second round = %s", body)
+	}
+}

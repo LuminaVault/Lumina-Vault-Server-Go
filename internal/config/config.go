@@ -323,6 +323,10 @@ type Config struct {
 	// QuickAssistantEnabled is Go only: Swift has no switch, so this is how the
 	// Go port ships Quick Assistant dark. Read with strings.EqualFold(v, "true").
 	QuickAssistantEnabled string `env:"QUICK_ASSISTANT_ENABLED" envDefault:"false"`
+	// ChatAppActionsEnabled lets a plain chat turn that asks for an app change
+	// (make a space, move a note) run on the Quick Assistant tool loop. It needs
+	// QUICK_ASSISTANT_ENABLED too, and a client that declares chat.app_actions.
+	ChatAppActionsEnabled string `env:"CHAT_APP_ACTIONS_ENABLED" envDefault:"false"`
 
 	// Product analytics (posthog package). Off unless both are set, as in Swift.
 	PostHogProjectToken string `env:"POSTHOG_PROJECT_TOKEN"`

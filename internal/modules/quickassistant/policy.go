@@ -23,9 +23,12 @@ func ActionFor(name string) ToolAction {
 	switch name {
 	case "search", "browse", "read", "recent", "memory_context",
 		"health_query", "calendar_query", "app_reminders_list",
-		"reminders_list", "memory_save", "app_reminder_create":
+		"reminders_list", "memory_save", "app_reminder_create",
+		"space_list", "space_create", "space_update", "file_move":
 		return Run
-	case "calendar_create", "memory_forget":
+	// A delete, and an overwrite with no undo, wait for the user.
+	case "calendar_create", "memory_forget",
+		"space_delete", "file_delete", "memory_update":
 		return Confirm
 	case "open_screen":
 		return Client
@@ -52,7 +55,20 @@ func TouchesPersonalData(name string) bool { return personalDataTools[name] }
 // run twice.
 func IsWrite(name string) bool {
 	switch name {
-	case "memory_save", "memory_forget", "calendar_create", "app_reminder_create":
+	case "memory_save", "memory_forget", "calendar_create", "app_reminder_create",
+		"space_create", "space_update", "space_delete", "file_move", "file_delete", "memory_update":
+		return true
+	default:
+		return false
+	}
+}
+
+// ChangesApp reports whether the tool changes spaces, files or a memory's
+// text. A reply from a turn where one was asked for describes that change
+// ("Created the space Health"), which is not something to remember.
+func ChangesApp(name string) bool {
+	switch name {
+	case "space_create", "space_update", "space_delete", "file_move", "file_delete", "memory_update":
 		return true
 	default:
 		return false

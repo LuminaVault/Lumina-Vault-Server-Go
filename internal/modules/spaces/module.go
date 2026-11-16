@@ -71,20 +71,11 @@ func (m *Module) list(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	ctx := c.Request().Context()
-	rows, err := m.q.ListSpaces(ctx, a.VaultID)
+	spaces, err := m.List(c.Request().Context(), a.VaultID)
 	if err != nil {
 		return err
 	}
-	counts, err := m.noteCounts(ctx, a.VaultID, rows)
-	if err != nil {
-		return err
-	}
-	out := SpaceListResponse{Spaces: make([]SpaceDTO, 0, len(rows))}
-	for _, s := range rows {
-		out.Spaces = append(out.Spaces, toDTO(s, counts[s.ID]))
-	}
-	return wire.JSON(c, http.StatusOK, out)
+	return wire.JSON(c, http.StatusOK, SpaceListResponse{Spaces: spaces})
 }
 
 func (m *Module) get(c *echo.Context) error {
@@ -112,17 +103,15 @@ func (m *Module) create(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	ctx := c.Request().Context()
 	actor, _ := auth.Identity(c)
-	s, err := m.createSpace(ctx, a.VaultID, actor, body.Name, resolveSlug(body.Slug, body.Name),
-		body.Description, body.Color, body.Icon, body.Category)
+	dto, err := m.Create(c.Request().Context(), a.VaultID, actor, CreateInput{
+		Name: body.Name, Slug: body.Slug, Description: body.Description,
+		Color: body.Color, Icon: body.Icon, Category: body.Category,
+	})
 	if err != nil {
 		return err
 	}
-	if err := m.record(ctx, a.VaultID, actor, "space.created", s.ID, s.Name); err != nil {
-		return err
-	}
-	return wire.JSON(c, http.StatusOK, toDTO(s, 0))
+	return wire.JSON(c, http.StatusOK, dto)
 }
 
 // createSpace is SpacesService.create followed by the controller's second
@@ -187,35 +176,14 @@ func (m *Module) update(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	ctx := c.Request().Context()
-	s, n, err := m.load(ctx, a.VaultID, id)
-	if err != nil {
-		return err
-	}
-	if body.Name != nil {
-		name := trim(*body.Name)
-		if name == "" {
-			return errNameRequired
-		}
-		s.Name = name
-	}
-	s.Description = setOrClear(s.Description, body.Description)
-	s.Color = setOrClear(s.Color, body.Color)
-	s.Icon = setOrClear(s.Icon, body.Icon)
-	s.Category = setOrClear(s.Category, body.Category)
 	actor, _ := auth.Identity(c)
-	now := m.now()
-	s, err = m.q.UpdateSpace(ctx, db.UpdateSpaceParams{
-		TenantID: a.VaultID, ID: id, Name: s.Name, Description: s.Description, Color: s.Color,
-		Icon: s.Icon, Category: s.Category, NoteCount: int32(n), UpdatedByUserID: &actor, UpdatedAt: &now, //nolint:gosec // a row count
+	dto, err := m.Update(c.Request().Context(), a.VaultID, actor, id, UpdateInput{
+		Name: body.Name, Description: body.Description, Color: body.Color, Icon: body.Icon, Category: body.Category,
 	})
 	if err != nil {
 		return err
 	}
-	if err := m.record(ctx, a.VaultID, actor, "space.updated", id, s.Name); err != nil {
-		return err
-	}
-	return wire.JSON(c, http.StatusOK, toDTO(s, n))
+	return wire.JSON(c, http.StatusOK, dto)
 }
 
 func (m *Module) delete(c *echo.Context) error {
@@ -227,28 +195,8 @@ func (m *Module) delete(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	ctx := c.Request().Context()
-	s, _, err := m.load(ctx, a.VaultID, id)
-	if err != nil {
-		return err
-	}
-	// Soft-remove the folder so an accidental delete loses no notes.
-	folder := filepath.Join(m.paths.Raw(a.VaultID), s.Slug)
-	if _, err := os.Stat(folder); err == nil {
-		stamped := filepath.Join(m.paths.Raw(a.VaultID), fmt.Sprintf("_deleted_%d_%s", m.now().Unix(), s.Slug))
-		// FileManager.moveItem refuses an existing destination; rename(2) would replace an empty one.
-		if _, err := os.Lstat(stamped); err == nil {
-			return fmt.Errorf("spaces: %s already exists", stamped)
-		}
-		if err := os.Rename(folder, stamped); err != nil {
-			return err
-		}
-	}
-	if err := m.q.DeleteSpace(ctx, db.DeleteSpaceParams{TenantID: a.VaultID, ID: id}); err != nil {
-		return err
-	}
 	actor, _ := auth.Identity(c)
-	if err := m.record(ctx, a.VaultID, actor, "space.deleted", id, s.Name); err != nil {
+	if _, err := m.Delete(c.Request().Context(), a.VaultID, actor, id); err != nil {
 		return err
 	}
 	return c.NoContent(http.StatusNoContent)

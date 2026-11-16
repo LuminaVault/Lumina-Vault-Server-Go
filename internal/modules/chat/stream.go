@@ -264,14 +264,24 @@ func (m *Module) streamReply(c *echo.Context) error {
 		return err
 	}
 
+	caps := clientcaps.FromRequest(c.Request())
+	mode := ModeAuto
+	if body.AgentMode != nil {
+		mode = string(*body.AgentMode)
+	}
+	// App actions: the space, file and memory tools, only for a client that
+	// draws their frames (chat.app_actions). A plain chat turn runs the loop
+	// only when it asks for an app change, because the loop answers in one
+	// piece and ordinary chat should keep streaming. Forcing agent mode and a
+	// multi-model turn both keep what they asked for.
+	appCapable := m.opts.QuickAssistant != nil && m.opts.QuickAssistant.AppActions != nil && caps.Supports(clientcaps.ChatAppActions)
+	appAction := quick == nil && appCapable && mode != ModeForce && parallel == "" && LooksLikeAppAction(typed)
+
 	// Escalation, before any grounding work. Only for clients that can skip a frame
 	// type they don't know (chat.hermes_run). A Quick Assistant turn never
 	// escalates: it stays on this stream so its card can show what the loop does.
-	if quick == nil && m.opts.Runs != nil && clientcaps.FromRequest(c.Request()).Supports(clientcaps.ChatHermesRun) {
-		mode := ModeAuto
-		if body.AgentMode != nil {
-			mode = string(*body.AgentMode)
-		}
+	// Nor does an app change: Hermes cannot reach spaces or the vault.
+	if quick == nil && !appAction && m.opts.Runs != nil && caps.Supports(clientcaps.ChatHermesRun) {
 		if DecideEscalation(content, mode, true) {
 			if ref, ok := m.startAgentRun(base, c, actor, convID, content, ids.Upper(vault)); ok {
 				stream := sse.Produce(base, func(_ context.Context, yield func(StreamEvent) bool) error {
@@ -309,8 +319,13 @@ func (m *Module) streamReply(c *echo.Context) error {
 	// zone; classic chat keeps the account's, as before.
 	scheduleLoc := location(user.Timezone)
 	var turnLoc *time.Location
-	if quick != nil {
-		turnLoc = quickassistant.TurnLocation(quick.TimeZone, user.Timezone)
+	loop := quick != nil || appAction
+	if loop {
+		var deviceZone *string
+		if quick != nil {
+			deviceZone = quick.TimeZone
+		}
+		turnLoc = quickassistant.TurnLocation(deviceZone, user.Timezone)
 		scheduleLoc = turnLoc
 		if scheduleLoc == nil {
 			scheduleLoc = time.UTC
@@ -346,14 +361,20 @@ func (m *Module) streamReply(c *echo.Context) error {
 		sessionKey: ids.Upper(vault), sessionID: ids.Upper(convID), req: req, hits: hits,
 		disclosure: disclosure, parallel: parallel, content: content,
 	}
-	if quick != nil {
+	if loop {
 		// This prompt runs only when the loop could not, so it says actions are
 		// off and sets no temperature (Haiku 5.5 refuses one).
 		t.req.Messages = quickassistant.AddingSystemText(
 			quickassistant.ActionsUnavailable+"\n"+quickassistant.Clock(m.now(), scheduleLoc), t.req.Messages, false)
 		t.req.Temperature = nil
-		t.qa = m.newQuickTurn(base, *quick, quickInputs{
+		// A plain chat turn is always asked from the AI tab.
+		where := quickassistant.Context{CurrentTab: "think"}
+		if quick != nil {
+			where = *quick
+		}
+		t.qa = m.newQuickTurn(base, where, quickInputs{
 			prior: prior, hits: hits, schedule: schedule, pref: pref, turnLoc: turnLoc,
+			chat: quick == nil, appActions: appCapable,
 		}, t)
 	}
 	stream := sse.Produce(base, func(ctx context.Context, yield func(StreamEvent) bool) error {

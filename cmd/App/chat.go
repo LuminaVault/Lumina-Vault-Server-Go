@@ -17,6 +17,8 @@ import (
 	"lumina/internal/modules/memoryagent"
 	"lumina/internal/modules/quickassistant"
 	"lumina/internal/modules/reminders"
+	"lumina/internal/modules/spaces"
+	"lumina/internal/modules/vault"
 	"lumina/internal/onboardlatch"
 	"lumina/internal/posthog"
 	"lumina/internal/selfimprove"
@@ -149,6 +151,25 @@ func (a *agent) quickAssistant() (*chat.QuickAssistant, httpserver.Module) {
 		// Devices stays nil until the /v1/ws cutover (P5/5J): no calendar_create, no Apple mirror.
 		Devices: nil,
 	}
+	// plain is what a turn from a client that cannot draw app changes runs on.
+	plain := deps
+	// App actions: the same services with the space and file tools on. The
+	// confirm route gets them too, since it is what carries out a confirmed
+	// space or file delete. Off, no turn can make such a card.
+	var appActions *chat.AppActions
+	if strings.EqualFold(a.cfg.ChatAppActionsEnabled, "true") {
+		appDeps := deps
+		appDeps.Spaces = spaces.New(a.pool, a.paths, a.identify)
+		appDeps.Files = vault.NewFiles(a.pool, a.paths)
+		appActions = &chat.AppActions{
+			Service: &quickassistant.Service{
+				Transport: a.stack.Transport, Model: a.cfg.HermesDefaultModel, Release: a.stack.Telemetry.Release,
+				Tools: quickassistant.Definitions(quickassistant.DefinitionOptions{DeviceWrites: false, AppActions: true}),
+			},
+			Deps: appDeps,
+		}
+		deps = appDeps
+	}
 	routes, err := quickassistant.New(a.pool, deps, quickassistant.Options{
 		Identify: a.identify, Gate: a.gate(entitlement.MemoryQuery), Limits: a.limits,
 	})
@@ -161,6 +182,6 @@ func (a *agent) quickAssistant() (*chat.QuickAssistant, httpserver.Module) {
 			Transport: a.stack.Transport, Model: a.cfg.HermesDefaultModel, Release: a.stack.Telemetry.Release,
 			Tools: quickassistant.Definitions(quickassistant.DefinitionOptions{DeviceWrites: false}),
 		},
-		Deps: deps,
+		Deps: plain, AppActions: appActions,
 	}, routes
 }

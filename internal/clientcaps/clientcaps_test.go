@@ -61,3 +61,13 @@ func TestRepeatedHeaderLinesAreJoined(t *testing.T) {
 	r.Header.Add(clientcaps.HeaderName, "chat.hermes_run")
 	require.True(t, clientcaps.FromRequest(r).Supports(clientcaps.ChatHermesRun))
 }
+
+func TestAppActionsIsItsOwnCapability(t *testing.T) {
+	require.False(t, clientcaps.Parse("chat.hermes_run").Supports(clientcaps.ChatAppActions),
+		"a client that only skips unknown frames would not draw or refresh an app change")
+	both := clientcaps.Parse("chat.hermes_run, chat.app_actions")
+	require.True(t, both.Supports(clientcaps.ChatAppActions))
+	require.True(t, both.Supports(clientcaps.ChatHermesRun))
+	require.False(t, clientcaps.Parse("chat.app_actions").Supports(clientcaps.ChatHermesRun))
+	require.False(t, clientcaps.Parse("chat.app_action").Supports(clientcaps.ChatAppActions))
+}

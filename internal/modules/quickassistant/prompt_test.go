@@ -325,3 +325,42 @@ func TestAKnownUTCZoneKeepsTheOffsetLessText(t *testing.T) {
 		t.Errorf("prompt lost Swift's text for a known zone:\n%s", prompt)
 	}
 }
+
+func TestTheChatPromptOpensDifferentlyAndKeepsEveryGuardrail(t *testing.T) {
+	c := Context{CurrentTab: "think"}
+	card := System(c, nil, promptDate, zone(t, "America/Santiago"))
+	chat := SystemFor(SystemOptions{Chat: true}, c, nil, promptDate, zone(t, "America/Santiago"))
+
+	if !strings.HasPrefix(chat, chatIntro) || strings.Contains(chat, "small card") {
+		t.Errorf("chat prompt opens with %q", chat[:80])
+	}
+	if got, want := strings.TrimPrefix(chat, chatIntro), strings.TrimPrefix(card, cardIntro); got != want {
+		t.Errorf("after the opening the chat prompt differs from the card's:\n%s\n---\n%s", got, want)
+	}
+	if card != SystemFor(SystemOptions{}, c, nil, promptDate, zone(t, "America/Santiago")) {
+		t.Error("System is no longer SystemFor with no options")
+	}
+}
+
+func TestTheAppActionsGuideIsAddedOnlyWhenTheToolsAreOffered(t *testing.T) {
+	c := Context{CurrentTab: "home"}
+	without := SystemFor(SystemOptions{}, c, nil, promptDate, nil)
+	with := SystemFor(SystemOptions{AppActions: true}, c, nil, promptDate, nil)
+
+	if with != without+appActionsGuide {
+		t.Errorf("guide is not appended:\n%s", with)
+	}
+	for _, want := range []string{"space_list", "card to confirm", "Never say it is done."} {
+		if !strings.Contains(appActionsGuide, want) {
+			t.Errorf("guide lacks %q", want)
+		}
+	}
+	// Every tool the guide could send the model to exists.
+	names := map[string]bool{}
+	for _, tool := range Definitions(DefinitionOptions{AppActions: true}) {
+		names[tool.Name] = true
+	}
+	if !names["space_list"] {
+		t.Error("the guide names space_list, which is not offered")
+	}
+}

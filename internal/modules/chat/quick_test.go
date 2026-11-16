@@ -20,6 +20,8 @@ import (
 	"lumina/internal/modules/memoryagent"
 	"lumina/internal/modules/quickassistant"
 	"lumina/internal/modules/reminders"
+	"lumina/internal/modules/spaces"
+	"lumina/internal/modules/vault"
 	"lumina/internal/onboardlatch"
 	"lumina/internal/posthog"
 	"lumina/internal/ratelimit"
@@ -285,6 +287,8 @@ type qaOptions struct {
 	stream llm.StreamService
 	// service replaces the loop's service (the TheBuiltApp tests).
 	service *quickassistant.Service
+	// appActions turns CHAT_APP_ACTIONS_ENABLED on.
+	appActions bool
 }
 
 type qa struct {
@@ -365,6 +369,19 @@ func newQA(t *testing.T, pool *pgxpool.Pool, o qaOptions) *qa {
 			}
 		}
 		opts.QuickAssistant = &QuickAssistant{Service: service, Deps: qaDeps(t, pool, o.devices)}
+		if o.appActions {
+			deps := qaDeps(t, pool, o.devices)
+			appPaths := vaultpaths.Paths{Root: t.TempDir()}
+			deps.Spaces = spaces.New(pool, appPaths, nil)
+			deps.Files = vault.NewFiles(pool, appPaths)
+			opts.QuickAssistant.AppActions = &AppActions{
+				Service: &quickassistant.Service{
+					Transport: transport, Release: telemetry.Release,
+					Tools: quickassistant.Definitions(quickassistant.DefinitionOptions{DeviceWrites: o.devices != nil, AppActions: true}),
+				},
+				Deps: deps,
+			}
+		}
 	}
 	module := New(pool, opts)
 	turns := make(chan struct{}, 16)
@@ -1475,11 +1492,16 @@ func TestARefusedToolNeverRunsEndToEnd(t *testing.T) {
 	assert.False(t, hasFrame(fs, "assistant_action"))
 	payloads := adapter.completionPayloads()
 	require.Len(t, payloads, 3)
-	const refusal = "That tool is not available. Do not try it again."
-	for _, p := range payloads[1:] {
-		_, lastTool := parts(t, p)
+	// memory_update exists only with the app-action tools, which this turn
+	// was not given, so the runner turns it away. reminder_create is in no
+	// policy at all, so the loop refuses it before the runner.
+	for i, want := range []string{
+		"This is not available yet. Tell the user you can't do it right now.",
+		"That tool is not available. Do not try it again.",
+	} {
+		_, lastTool := parts(t, payloads[i+1])
 		require.NotNil(t, lastTool)
-		assert.Equal(t, refusal, *lastTool)
+		assert.Equal(t, want, *lastTool)
 	}
 	var content string
 	require.NoError(t, pool.QueryRow(context.Background(), `SELECT content FROM memories WHERE id = $1`, memoryID).Scan(&content))
