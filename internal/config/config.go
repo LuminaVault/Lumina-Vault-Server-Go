@@ -331,6 +331,9 @@ type Config struct {
 	// (make a space, move a note) run on the Quick Assistant tool loop. It needs
 	// QUICK_ASSISTANT_ENABLED too, and a client that declares chat.app_actions.
 	ChatAppActionsEnabled string `env:"CHAT_APP_ACTIONS_ENABLED" envDefault:"false"`
+	// VaultGitEnabled turns on per-tenant vault history (backlog E4,
+	// internal/vaultgit): the committer, VaultGitSweep and VaultGitGC.
+	VaultGitEnabled string `env:"VAULT_GIT_ENABLED" envDefault:"false"`
 
 	// Product analytics (posthog package). Off unless both are set, as in Swift.
 	PostHogProjectToken string `env:"POSTHOG_PROJECT_TOKEN"`

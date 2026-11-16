@@ -5,7 +5,7 @@ output: internal/modules/vault/models.gen.go
 generate:
   models: true
 output-options:
-  include-operation-ids: [vaultUpload, vaultList, vaultMove, vaultRead, vaultDelete, vaultExport, vaultCreate, vaultIndexStatus, vaultLint, vaultContext, vaultDocumentLinks, vaultStatus, vaultTrashList, vaultTrashRestore, vaultTrashDelete, vaultTemplatesSeed, vaultNoteFromTemplate, vaultDailyNote]
+  include-operation-ids: [vaultUpload, vaultList, vaultMove, vaultRead, vaultDelete, vaultExport, vaultCreate, vaultIndexStatus, vaultLint, vaultContext, vaultDocumentLinks, vaultStatus, vaultTrashList, vaultTrashRestore, vaultTrashDelete, vaultTemplatesSeed, vaultNoteFromTemplate, vaultDailyNote, vaultHistory, vaultVersion, vaultVersionRestore]
   type-mapping:
     string:
       formats:

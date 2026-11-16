@@ -330,6 +330,10 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		disk := diskguard.New(paths.Root, cfg.StorageMinFreeBytes, cfg.StorageMinFreeRatio, diskguard.Options{})
 		memories := memorystore.New(pool, nil)
 		registered = append(registered, j1Jobs(pool, cfg, disk)...)
+		// Backlog E4: vault history, off unless VAULT_GIT_ENABLED.
+		gitJobs, stopVaultGit := vaultGit(pool, cfg, paths, disk)
+		registered = append(registered, gitJobs...)
+		defer stopVaultGit()
 		// LapseArchiverService (7A): dry run unless LV_LAPSE_DRY_RUN=false; off unless LV_GO_JOBS names it.
 		registered = append(registered, (&workers.LapseArchiver{
 			Pool: pool, Paths: paths, ColdStorageRoot: cfg.ColdStoragePath(), DryRun: cfg.LapseDryRun,
