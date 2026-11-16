@@ -1,5 +1,8 @@
 # The 10 MiB upload limit: exactly the limit is stored, one byte over is a bare 413.
 module: vault
+# Go-only since the markdown import (2026-11-16): a markdown note upload is
+# titled from its first H1, else its file name, and Swift wrote no title.
+ignore: ['snapshot:vault_files.metadata.title']
 steps:
   - name: exactly the limit
     as: vault_big

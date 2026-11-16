@@ -1,6 +1,9 @@
 # PATCH /v1/memory/:id, with memory_chunks IDs compared: a corrected memory is chunked
 # with no file path, so its chunk IDs hash the seeded memory id and must match.
 module: memory
+# Go-only since the markdown import (2026-11-16): a markdown note upload is
+# titled from its first H1, else its file name, and Swift wrote no title.
+ignore: ['snapshot:vault_files.metadata.title']
 steps:
   - {name: "patch malformed", as: mem_wri, request: {method: PATCH, path: "/v1/memory/3E3A1000-0000-4000-8000-000000000001", raw: "{"}, snapshot: [memories]}
   - {name: "patch empty body", as: mem_wri, request: {method: PATCH, path: "/v1/memory/3E3A1000-0000-4000-8000-000000000001", raw: ""}, snapshot: [memories]}

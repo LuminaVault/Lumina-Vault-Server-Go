@@ -1,5 +1,10 @@
 # Move: bodies first, then a file with a memory, a chunk and a link that follow it.
 module: vault
+# Go-only since the markdown import (2026-11-16): a markdown note upload is
+# titled from its first H1, else its file name, and Swift wrote no title.
+# Go also chunks and indexes a note upload; inbox/real.md is the note
+# memory/03-patch uploads earlier in the run.
+ignore: ['snapshot:vault_files.metadata.title', 'snapshot:memory_chunks[source_path~^inbox/real\.md$]']
 steps:
   - name: no token
     request: {method: POST, path: /v1/vault/files/move, json: {path: inbox/chunky.md, newPath: x/y.md}}

@@ -1,5 +1,10 @@
 # POST /v1/memory/:id/review and DELETE /v1/memory/:id, after 03-patch in name order.
 module: memory
+# Go-only since the markdown import (2026-11-16): a markdown note upload is
+# titled from its first H1, else its file name, and Swift wrote no title.
+# Go also chunks and indexes a note upload: inbox/real.md is the note
+# memory/03-patch uploads.
+ignore: ['snapshot:vault_files.metadata.title', 'snapshot:memory_chunks[source_path~^inbox/real\.md$]']
 steps:
   - {name: "review malformed", as: mem_wri, request: {method: POST, path: "/v1/memory/3E3A1000-0000-4000-8000-00000000000e/review", raw: "{"}, snapshot: [memories]}
   - {name: "review array", as: mem_wri, request: {method: POST, path: "/v1/memory/3E3A1000-0000-4000-8000-00000000000e/review", raw: "[]"}, snapshot: [memories]}
