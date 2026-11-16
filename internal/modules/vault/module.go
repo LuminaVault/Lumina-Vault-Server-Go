@@ -97,6 +97,7 @@ type Module struct {
 	filing     func(tenant, file uuid.UUID)
 	maxFile    int64
 	now        func() time.Time
+	locks      pathLocks
 }
 
 func New(pool *pgxpool.Pool, opts Options) *Module {

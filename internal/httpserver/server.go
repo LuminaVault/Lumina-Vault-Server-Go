@@ -218,7 +218,7 @@ func allowedOrigins(origins []string) echo.MiddlewareFunc {
 // also wants Access-Control-Request-Method, so that header is filled in.
 var corsAllowHeaders = []string{
 	echo.HeaderContentType, echo.HeaderAuthorization,
-	"Idempotency-Key", "X-Vault-ID", "X-LV-Client-Caps",
+	"Idempotency-Key", "X-Vault-ID", "X-LV-Client-Caps", "If-Match",
 }
 
 func cors(origins []string) echo.MiddlewareFunc {

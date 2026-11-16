@@ -574,6 +574,14 @@ type VaultUploadParams struct {
 
 	// IdempotencyKey HER-39 — client-generated UUIDv4. Retrying a mutating request with the same key (within 24 h) replays the cached response instead of re-executing the handler. Reusing a key with a different request body returns 409. Tenant-scoped: the same key value across different tenants does not collide.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+
+	// IfMatch Conflict-safe save (backlog E5.1). The sha256 of the version the
+	// client edited, quoted or bare; several may be listed, comma
+	// separated. The file is replaced only when the bytes on disk still
+	// hash to one of them; otherwise the response is 412 and nothing is
+	// written. `*` means "the file must exist". Weak tags never match.
+	// Omit the header to overwrite unconditionally.
+	IfMatch *string `json:"If-Match,omitempty"`
 }
 
 // VaultMoveParams defines parameters for VaultMove.

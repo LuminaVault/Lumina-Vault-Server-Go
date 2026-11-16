@@ -6432,6 +6432,16 @@ paths:
             omitted value leaves the existing link intact.
           schema: { type: string, format: uuid }
         - $ref: '#/components/parameters/IdempotencyKey'
+        - in: header
+          name: If-Match
+          description: |
+            Conflict-safe save (backlog E5.1). The sha256 of the version the
+            client edited, quoted or bare; several may be listed, comma
+            separated. The file is replaced only when the bytes on disk still
+            hash to one of them; otherwise the response is 412 and nothing is
+            written. `*` means "the file must exist". Weak tags never match.
+            Omit the header to overwrite unconditionally.
+          schema: { type: string }
       requestBody:
         required: true
         content:
@@ -6447,6 +6457,10 @@ paths:
               schema: { $ref: '#/components/schemas/VaultUploadResponse' }
         '400':
           description: Malformed `path`, malformed `space_id`, cross-tenant space, empty body, or content-type mismatch.
+        '412':
+          description: >-
+            `If-Match` was sent and the file changed since that version, or no
+            longer exists. Nothing was written; reload the file and save again.
         '507': { $ref: '#/components/responses/InsufficientStorage' }
     get:
       tags: [Vault]
