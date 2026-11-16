@@ -725,6 +725,50 @@ func TestRollback(t *testing.T) {
 		require.Equal(t, http.StatusOK, rollback(tenant, run).code)
 		assert.NoDirExists(t, archive)
 	})
+	// Post-archive fix (backlog 1.2): Swift wrote <skills>/<name>/SKILL.md for
+	// any stored name, "../../raw/x" included, and removed any archivedPath.
+	t.Run("a name that isn't one path segment makes the snapshot unusable, before any write", func(t *testing.T) {
+		for _, name := range []string{"../escape", "a/b", "..", ".", ""} {
+			tenant := v.user()
+			run := v.runWithSnapshot(tenant, []snap{
+				{"name": "alpha", "markdown": "a", "state": "active"},
+				{"name": name, "markdown": "pwned", "state": "active"},
+			})
+			requireError(t, rollback(tenant, run), http.StatusConflict, "rollback_snapshot_unavailable")
+			assert.NoFileExists(t, v.skillPath(tenant, "alpha"), "nothing restored for %q", name)
+			assert.NoFileExists(t, filepath.Join(v.paths.TenantRoot(tenant), "escape", "SKILL.md"))
+		}
+	})
+	t.Run("a skill directory that is a symlink out of the tree is refused", func(t *testing.T) {
+		tenant := v.user()
+		outside := t.TempDir()
+		skills := filepath.Join(v.paths.TenantRoot(tenant), "skills")
+		require.NoError(t, os.MkdirAll(skills, 0o755))
+		require.NoError(t, os.Symlink(outside, filepath.Join(skills, "alpha")))
+		run := v.runWithSnapshot(tenant, []snap{{"name": "alpha", "markdown": "pwned", "state": "active"}})
+		requireError(t, rollback(tenant, run), http.StatusConflict, "rollback_snapshot_unavailable")
+		assert.NoFileExists(t, filepath.Join(outside, "SKILL.md"))
+	})
+	t.Run("only an entry under the tenant's skills/.archive is removed", func(t *testing.T) {
+		tenant, other := v.user(), v.user()
+		foreign := filepath.Join(v.paths.TenantRoot(other), "skills", ".archive", "alpha-run")
+		require.NoError(t, os.MkdirAll(foreign, 0o755))
+		elsewhere := t.TempDir()
+		own := filepath.Join(v.paths.TenantRoot(tenant), "skills", ".archive")
+		require.NoError(t, os.MkdirAll(own, 0o755))
+		run := v.runWithSnapshot(tenant, []snap{
+			{"name": "alpha", "markdown": "a", "state": "active", "archivedPath": foreign},
+			{"name": "beta", "markdown": "b", "state": "active", "archivedPath": elsewhere},
+			{"name": "gamma", "markdown": "c", "state": "active", "archivedPath": own + "/../../raw"},
+			{"name": "delta", "markdown": "d", "state": "active", "archivedPath": own},
+		})
+		require.NoError(t, os.MkdirAll(filepath.Join(v.paths.TenantRoot(tenant), "raw"), 0o755))
+		require.Equal(t, http.StatusOK, rollback(tenant, run).code)
+		assert.DirExists(t, foreign)
+		assert.DirExists(t, elsewhere)
+		assert.DirExists(t, filepath.Join(v.paths.TenantRoot(tenant), "raw"))
+		assert.DirExists(t, own)
+	})
 	// Post-archive fix (backlog 1.6): Swift's save() updated every row of the tenant.
 	t.Run("state: restoring a loaded row updates only that row", func(t *testing.T) {
 		tenant := v.user()
@@ -749,10 +793,13 @@ func TestRollback(t *testing.T) {
 	})
 	t.Run("a failure partway keeps what came first and leaves the status", func(t *testing.T) {
 		tenant := v.user()
-		v.writeSkill(tenant, "alpha", "x")
+		// A plain file where beta's directory would go: creating it fails.
+		skills := filepath.Join(v.paths.TenantRoot(tenant), "skills")
+		require.NoError(t, os.MkdirAll(skills, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(skills, "beta"), []byte("x"), 0o600))
 		run := v.runWithSnapshot(tenant, []snap{
 			{"name": "first", "markdown": "1", "state": "active"},
-			{"name": "alpha/SKILL.md/under-a-file", "markdown": "2", "state": "active"},
+			{"name": "beta", "markdown": "2", "state": "active"},
 		})
 		assert.Equal(t, http.StatusInternalServerError, rollback(tenant, run).code)
 		assert.FileExists(t, v.skillPath(tenant, "first"))
@@ -760,12 +807,12 @@ func TestRollback(t *testing.T) {
 		v.scalar(`SELECT status FROM self_improvement_runs WHERE id = $1`, &status, run)
 		assert.Equal(t, "succeeded", status)
 	})
-	t.Run("a name is not cleaned on the way to the filesystem, as in Swift", func(t *testing.T) {
+	t.Run("a name with a dot-dot segment is refused, not cleaned", func(t *testing.T) {
 		tenant := v.user()
 		run := v.runWithSnapshot(tenant, []snap{{"name": "no-such-dir/../escaped", "markdown": "x", "state": "active"}})
-		assert.Equal(t, http.StatusOK, rollback(tenant, run).code)
-		assert.DirExists(t, filepath.Join(v.paths.TenantRoot(tenant), "skills", "no-such-dir"))
-		assert.FileExists(t, v.skillPath(tenant, "escaped"))
+		requireError(t, rollback(tenant, run), http.StatusConflict, "rollback_snapshot_unavailable")
+		assert.NoDirExists(t, filepath.Join(v.paths.TenantRoot(tenant), "skills", "no-such-dir"))
+		assert.NoFileExists(t, v.skillPath(tenant, "escaped"))
 	})
 }
 

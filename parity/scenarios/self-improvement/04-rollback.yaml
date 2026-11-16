@@ -1,5 +1,10 @@
 # Rollback writes the skill files and curator state from the run's snapshot. The bodies are real
 # SKILL.md files, which 06-resources then finds through the catalog.
+#
+# Runs ...020, ...023 and ...024 (seeded) are not rolled back here. Their snapshot names hold "/"
+# or "..", which Swift wrote through and Go refuses with 409 rollback_snapshot_unavailable since
+# the post-archive path fix (backlog 1.2). TestRollback in internal/modules/selfimprovement covers
+# them. Without ...020, the archivedPath that ...021 names is already gone on both servers.
 module: self-improvement
 steps:
   - name: "no token"
@@ -81,11 +86,6 @@ steps:
     request: {method: POST, path: "/v1/me/improvement/runs/5e1f1000-0000-4000-8000-00000000001f/rollback"}
     snapshot: [self_improvement_runs, parity_si_skill_state]
     files: [si_skill]
-  - name: "a name can reach into .archive"
-    as: si_skill
-    request: {method: POST, path: "/v1/me/improvement/runs/5e1f1000-0000-4000-8000-000000000020/rollback"}
-    snapshot: [self_improvement_runs, parity_si_skill_state]
-    files: [si_skill]
   - name: "archivedPath is removed"
     as: si_skill
     request: {method: POST, path: "/v1/me/improvement/runs/5e1f1000-0000-4000-8000-000000000021/rollback"}
@@ -94,16 +94,6 @@ steps:
   - name: "a missing archivedPath is ignored"
     as: si_skill
     request: {method: POST, path: "/v1/me/improvement/runs/5e1f1000-0000-4000-8000-000000000022/rollback"}
-    snapshot: [self_improvement_runs, parity_si_skill_state]
-    files: [si_skill]
-  - name: "a failure partway keeps what came first and leaves the status"
-    as: si_skill
-    request: {method: POST, path: "/v1/me/improvement/runs/5e1f1000-0000-4000-8000-000000000023/rollback"}
-    snapshot: [self_improvement_runs, parity_si_skill_state]
-    files: [si_skill]
-  - name: "a name with .. is not checked or cleaned"
-    as: si_skill
-    request: {method: POST, path: "/v1/me/improvement/runs/5e1f1000-0000-4000-8000-000000000024/rollback"}
     snapshot: [self_improvement_runs, parity_si_skill_state]
     files: [si_skill]
   - name: "the resources it left"

@@ -368,28 +368,38 @@ func (w *Worker) lastActivity(ctx context.Context, tenant uuid.UUID, name string
 	if last != nil {
 		return *last, nil
 	}
-	if info, err := os.Stat(w.m.skillFile(tenant, name)); err == nil {
-		return info.ModTime(), nil
+	if file, err := w.m.skillFile(tenant, name); err == nil {
+		if info, err := os.Stat(file); err == nil {
+			return info.ModTime(), nil
+		}
 	}
 	return time.Now(), nil
 }
 
 func (w *Worker) snapshotOf(tenant uuid.UUID, name, state string) (snapshot, error) {
-	data, err := os.ReadFile(w.m.skillFile(tenant, name))
+	file, err := w.m.skillFile(tenant, name)
+	if err != nil {
+		return snapshot{}, err
+	}
+	data, err := os.ReadFile(file) //nolint:gosec // skillFile checks the name and resolves inside the skills tree
 	if err != nil {
 		return snapshot{}, err
 	}
 	text, ok := vaultfiles.DecodeUTF8(data)
 	if !ok {
-		return snapshot{}, fmt.Errorf("%s is not UTF-8", w.m.skillFile(tenant, name))
+		return snapshot{}, fmt.Errorf("%s is not UTF-8", file)
 	}
 	return snapshot{Name: name, Markdown: text, State: state}, nil
 }
 
 // archive moves the skill's directory to skills/.archive/<name>-<RUN-ID>.
 func (w *Worker) archive(tenant uuid.UUID, name string, run uuid.UUID) (string, error) {
-	source := filepath.Dir(w.m.skillFile(tenant, name))
-	target := filepath.Join(w.m.paths.TenantRoot(tenant), "skills", ".archive", name+"-"+ids.Upper(run))
+	file, err := w.m.skillFile(tenant, name)
+	if err != nil {
+		return "", err
+	}
+	source := filepath.Dir(file)
+	target := w.m.archiveRoot(tenant) + "/" + name + "-" + ids.Upper(run)
 	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil { //nolint:gosec // Foundation's createDirectory default, as Swift creates it
 		return "", err
 	}
@@ -656,7 +666,11 @@ func (w *Worker) consolidate(ctx context.Context, tenant uuid.UUID, candidates [
 ) (consolidation, error) {
 	var documents []string
 	for _, mf := range candidates {
-		data, err := os.ReadFile(w.m.skillFile(tenant, mf.Name))
+		file, err := w.m.skillFile(tenant, mf.Name)
+		if err != nil {
+			continue
+		}
+		data, err := os.ReadFile(file) //nolint:gosec // skillFile checks the name and resolves inside the skills tree
 		if err != nil {
 			continue
 		}
@@ -749,12 +763,17 @@ Never change schedules, add tools, edit jobs, or invent capabilities. Prefer kee
 			result.skipped++
 			continue
 		}
+		targetFile, err := w.m.skillFile(tenant, *targetName)
+		if err != nil {
+			result.skipped++
+			continue
+		}
 		snap, err := w.snapshotOf(tenant, target.Name, targetState.curatorState)
 		if err != nil {
 			return consolidation{}, err
 		}
 		*snapshots = append(*snapshots, snap)
-		if err := writeAtomic(w.m.skillFile(tenant, *targetName), []byte(*action.ReplacementMarkdown)); err != nil {
+		if err := writeAtomic(targetFile, []byte(*action.ReplacementMarkdown)); err != nil {
 			return consolidation{}, err
 		}
 		sha := selfimprove.SHA256(*action.ReplacementMarkdown)
