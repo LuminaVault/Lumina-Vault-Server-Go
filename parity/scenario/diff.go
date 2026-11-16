@@ -3,6 +3,7 @@ package scenario
 import (
 	"encoding/json"
 	"fmt"
+	"lumina/parity/normalize"
 	"reflect"
 	"sort"
 )
@@ -68,6 +69,24 @@ func Diff(swift, goT Transcript) []Difference {
 	return out
 }
 
+// onlyIgnored is true for an ignored value, or an object holding nothing else,
+// such as {"title": "<ignored>"} where Swift sends no object at all.
+func onlyIgnored(v any) bool {
+	if v == normalize.Ignored {
+		return true
+	}
+	m, ok := v.(map[string]any)
+	if !ok || len(m) == 0 {
+		return false
+	}
+	for _, e := range m {
+		if !onlyIgnored(e) {
+			return false
+		}
+	}
+	return true
+}
+
 // walk reports each leaf-level mismatch with its JSON path.
 func walk(path string, a, b any, report func(path string, a, b any)) {
 	am, aIsMap := a.(map[string]any)
@@ -84,6 +103,10 @@ func walk(path string, a, b any, report func(path string, a, b any)) {
 			av, aok := am[k]
 			bv, bok := bm[k]
 			switch {
+			// An ignored field only Go sends is one Go added on purpose: there is
+			// nothing to compare. Go leaving out an ignored field Swift sends is
+			// still a difference.
+			case !aok && onlyIgnored(bv):
 			case !aok:
 				report(path+"."+k, "<absent>", bv)
 			case !bok:

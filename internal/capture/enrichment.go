@@ -10,6 +10,7 @@ import (
 	"lumina/internal/embedding"
 	"lumina/internal/ids"
 	"lumina/internal/memorystore"
+	"lumina/internal/ssrfguard"
 	"lumina/internal/swiftstr"
 	"lumina/internal/vaultfiles"
 	"lumina/internal/vaultpaths"
@@ -45,12 +46,13 @@ type EnrichmentService struct {
 	enrichers  []Enricher
 }
 
-// NewEnrichmentService builds the service. A nil Client gets one that follows
-// redirects like URLSession and keeps no cookies.
+// NewEnrichmentService builds the service. A nil Client gets ssrfguard's strict
+// client: it follows redirects like URLSession, keeps no cookies, and refuses to
+// dial any private, loopback, link-local or tailnet address, on every hop.
 func NewEnrichmentService(o EnrichmentOptions) *EnrichmentService {
 	client := o.Client
 	if client == nil {
-		client = &http.Client{}
+		client = ssrfguard.Guard{}.Client(0)
 	}
 	enrichers := o.Enrichers
 	if enrichers == nil {

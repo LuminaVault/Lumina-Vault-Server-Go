@@ -7,6 +7,7 @@ import (
 	"lumina/internal/dbtest"
 	"lumina/internal/migrations"
 	"lumina/internal/secretbox"
+	"lumina/internal/ssrfguard"
 	"testing"
 	"time"
 
@@ -339,6 +340,56 @@ func TestStores(t *testing.T) {
 		got, err = unlinked.Credential(ctx, XAI, tenant)
 		require.NoError(t, err)
 		assert.Nil(t, got, "the marker carries no secret of its own")
+	})
+	t.Run("with a URL guard, a tenant base URL is checked on every call", func(t *testing.T) {
+		tenant := newUser()
+		insertPrimary(t, tenant, "custom", "apiKey", strPtr("sk"), strPtr("http://rebinds.example.com"), nil)
+		answer := "203.0.113.10"
+		store := NewCredentialStore(pool, box, nil)
+		store.SetURLGuard(ssrfguard.Guard{Resolver: func(context.Context, string) ([]string, error) {
+			return []string{answer}, nil
+		}})
+		got, err := store.Credential(ctx, Custom, tenant)
+		require.NoError(t, err)
+		require.NotNil(t, got)
+
+		// The candidate list is cached, the check is not: a name that now
+		// resolves to the metadata address is refused on the next call.
+		answer = "169.254.169.254"
+		got, err = store.Credential(ctx, Custom, tenant)
+		assert.Nil(t, got)
+		var refused BaseURLRefusedError
+		require.ErrorAs(t, err, &refused)
+		var rej *ssrfguard.Rejection
+		require.ErrorAs(t, err, &rej)
+		assert.Equal(t, ssrfguard.LinkLocal, rej.Kind)
+	})
+	t.Run("the URL guard leaves rows without a URL and the SuperGrok gateway alone", func(t *testing.T) {
+		plain, grok := newUser(), newUser()
+		insertPrimary(t, plain, "openai", "apiKey", strPtr("sk"), nil, nil)
+		insertPrimary(t, grok, "xai", "oauth", nil, nil, strPtr("SuperGrok"))
+		connected := time.Now()
+		store := NewCredentialStore(pool, box, func(context.Context, uuid.UUID) *ContainerHandle {
+			return &ContainerHandle{BaseURL: "http://10.42.0.7:8642", APIServerKey: "k", XAIConnectedAt: &connected}
+		})
+		store.SetURLGuard(ssrfguard.Guard{})
+		got, err := store.Credential(ctx, OpenAI, plain)
+		require.NoError(t, err)
+		require.NotNil(t, got)
+		got, err = store.Credential(ctx, XAI, grok)
+		require.NoError(t, err, "the gateway is in-cluster on purpose")
+		assert.Equal(t, "http://10.42.0.7:8642", got.BaseURL.String())
+	})
+	t.Run("a refused tenant URL fails a BYOK call closed", func(t *testing.T) {
+		tenant := newUser()
+		insertPrimary(t, tenant, "openai", "apiKey", strPtr("sk-tenant"), strPtr("http://127.0.0.1:9"), nil)
+		store := NewCredentialStore(pool, box, nil)
+		store.SetURLGuard(ssrfguard.Guard{})
+		creds, err := store.Credential(ctx, OpenAI, tenant)
+		assert.Nil(t, creds)
+		var rej *ssrfguard.Rejection
+		require.ErrorAs(t, err, &rej)
+		assert.Equal(t, ssrfguard.Loopback, rej.Kind)
 	})
 	t.Run("the store feeds an adapter end to end", func(t *testing.T) {
 		tenant := newUser()

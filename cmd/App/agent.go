@@ -100,9 +100,11 @@ func newAgent(ctx context.Context, pool *pgxpool.Pool, cfg config.Config, box *s
 	if err != nil {
 		gateway = nil
 	}
+	guard := byokGuard(cfg)
 	stack := llm.NewStack(llm.StackConfig{
 		Getenv: os.Getenv, Pool: pool, Box: box, HermesURL: gateway,
 		HermesAPIKey: cfg.HermesAPIKey, HermesDefaultModel: cfg.HermesDefaultModel,
+		BYOKGuard: &guard,
 	})
 	hits := memorystore.NewHitCountQueue(pool)
 	hitsCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))

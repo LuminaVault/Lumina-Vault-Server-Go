@@ -71,6 +71,18 @@ func checkIfMatch(header, target string) error {
 	return errPreconditionFailed
 }
 
+// checkAbsent is `If-None-Match: *`: 412 when the file already exists.
+func checkAbsent(target string) error {
+	_, err := os.Stat(target)
+	if err == nil {
+		return errPreconditionFailed
+	}
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	return err
+}
+
 // pathLocks serializes the check-and-write of one file, so two saves with the
 // same If-Match can't both pass the check. Locks are striped by tenant and
 // path: two files sharing a stripe only wait for each other, which is cheap.

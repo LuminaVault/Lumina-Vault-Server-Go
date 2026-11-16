@@ -1,5 +1,8 @@
 # Upload: every way in, then the row, the file and its mode.
 module: vault
+# Go-only since the markdown import (2026-11-16): a markdown note upload is
+# titled from its first H1, else its file name, and Swift wrote no title.
+ignore: ['snapshot:vault_files.metadata.title']
 steps:
   - name: no token
     request: {method: POST, path: "/v1/vault/files?path=a.md", raw: "x", headers: {Content-Type: text/markdown}}

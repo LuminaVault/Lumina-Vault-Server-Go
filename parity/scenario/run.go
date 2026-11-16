@@ -92,7 +92,10 @@ func Run(ctx context.Context, sc Scenario, t Target) (Transcript, error) {
 
 func runStep(ctx context.Context, sc Scenario, st Step, t Target, client *http.Client, norm *normalize.Normalizer, vars map[string]string) (StepResult, error) {
 	var res StepResult
-	ignore := append(append([]string{}, sc.Ignore...), st.Ignore...)
+	ignore, snapIgnore, err := splitIgnore(append(append([]string{}, sc.Ignore...), st.Ignore...))
+	if err != nil {
+		return res, err
+	}
 	reqCtx := ctx
 	if st.Frames > 0 {
 		timeout := st.FramesTimeout
@@ -187,8 +190,14 @@ func runStep(ctx context.Context, sc Scenario, st Step, t Target, client *http.C
 	if t.Snapshot != nil && len(st.Snapshot) > 0 {
 		res.Snapshots = map[string]any{}
 		for _, table := range st.Snapshot {
+			if snapIgnore.skips(table) {
+				continue
+			}
 			rows, err := t.Snapshot(ctx, table)
 			if err != nil {
+				return res, fmt.Errorf("snapshot %s: %w", table, err)
+			}
+			if rows, err = snapIgnore.strip(table, rows); err != nil {
 				return res, fmt.Errorf("snapshot %s: %w", table, err)
 			}
 			stableOrder(rows)
