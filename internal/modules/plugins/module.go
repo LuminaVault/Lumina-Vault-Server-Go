@@ -424,9 +424,9 @@ func (m *Module) upsertEnabled(ctx context.Context, tenant uuid.UUID, slug strin
 		RETURNING `+installColumns, uuid.New(), tenant, slug, sealed.Ciphertext, sealed.Nonce, now))
 }
 
-// setSkillEnabled is PluginService.setSkillEnabled. SkillsState's Fluent @ID is
-// tenant_id alone, so saving a loaded row updates every skills_state row of the
-// tenant. Kept from Swift (decisions.md D-security-after-archive).
+// setSkillEnabled is PluginService.setSkillEnabled. It updates only the skill's own
+// row; Swift's save() keyed it by Fluent's @ID, tenant_id alone, and so hit every
+// skills_state row of the tenant (fixed after the archive, backlog 1.6).
 func (m *Module) setSkillEnabled(ctx context.Context, tenant uuid.UUID, name string, enabled bool) error {
 	var exists bool
 	if err := m.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM skills_state
@@ -434,7 +434,8 @@ func (m *Module) setSkillEnabled(ctx context.Context, tenant uuid.UUID, name str
 		return err
 	}
 	if exists {
-		_, err := m.pool.Exec(ctx, `UPDATE skills_state SET enabled = $2 WHERE tenant_id = $1`, tenant, enabled)
+		_, err := m.pool.Exec(ctx, `UPDATE skills_state SET enabled = $3
+			WHERE tenant_id = $1 AND source = 'builtin' AND name = $2`, tenant, name, enabled)
 		return err
 	}
 	_, err := m.pool.Exec(ctx, `INSERT INTO skills_state (tenant_id, source, name, enabled, schedule_override,

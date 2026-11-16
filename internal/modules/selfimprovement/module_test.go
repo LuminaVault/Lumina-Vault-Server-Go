@@ -769,7 +769,8 @@ func TestRollback(t *testing.T) {
 		assert.DirExists(t, filepath.Join(v.paths.TenantRoot(tenant), "raw"))
 		assert.DirExists(t, own)
 	})
-	t.Run("state: Swift's save() on a loaded row updates every row of the tenant", func(t *testing.T) {
+	// Post-archive fix (backlog 1.6): Swift's save() updated every row of the tenant.
+	t.Run("state: restoring a loaded row updates only that row", func(t *testing.T) {
 		tenant := v.user()
 		other := v.user()
 		v.exec(`INSERT INTO skills_state (tenant_id, source, name, curator_state, curator_archived_at) VALUES
@@ -782,7 +783,10 @@ func TestRollback(t *testing.T) {
 
 		var updated int
 		v.scalar(`SELECT count(*) FROM skills_state WHERE tenant_id = $1 AND curator_state = 'active' AND curator_archived_at IS NULL`, &updated, tenant)
-		assert.Equal(t, 3, updated)
+		assert.Equal(t, 1, updated)
+		var alpha string
+		v.scalar(`SELECT curator_state FROM skills_state WHERE tenant_id = $1 AND name = 'alpha'`, &alpha, tenant)
+		assert.Equal(t, "active", alpha)
 		var state string
 		v.scalar(`SELECT curator_state FROM skills_state WHERE tenant_id = $1`, &state, other)
 		assert.Equal(t, "stale", state)
@@ -915,7 +919,8 @@ func TestResources(t *testing.T) {
 		v.scalar(`SELECT curator_pinned FROM skills_state WHERE tenant_id = $1 AND name = 'other'`, &pinned, owner)
 		assert.False(t, pinned)
 	})
-	t.Run("a loaded row: Swift's save() updates every row of the tenant", func(t *testing.T) {
+	// Post-archive fix (backlog 1.6): Swift's save() updated every row of the tenant.
+	t.Run("a loaded row: pinning updates only that row", func(t *testing.T) {
 		owner := v.user()
 		other := v.user()
 		v.writeSkill(owner, "fresh", "F")
@@ -930,7 +935,10 @@ func TestResources(t *testing.T) {
 
 		var pinned int
 		v.scalar(`SELECT count(*) FROM skills_state WHERE tenant_id = $1 AND curator_pinned`, &pinned, owner)
-		assert.Equal(t, 3, pinned)
+		assert.Equal(t, 1, pinned)
+		var fresh bool
+		v.scalar(`SELECT curator_pinned FROM skills_state WHERE tenant_id = $1 AND name = 'fresh'`, &fresh, owner)
+		assert.True(t, fresh)
 		v.scalar(`SELECT count(*) FROM skills_state WHERE tenant_id = $1 AND curator_pinned`, &pinned, other)
 		assert.Zero(t, pinned)
 	})

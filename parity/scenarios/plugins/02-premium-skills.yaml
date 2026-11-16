@@ -10,8 +10,10 @@ steps:
     request: {method: POST, path: /v1/plugins/installs, json: {pluginSlug: skill-daily-brief, config: {ignored: yes}}}
     capture: {sk: $.id}
     snapshot: [parity_pl_installs, parity_pl_skills]
-  - {name: install a second skill, as: pl_fox, request: {method: POST, path: /v1/plugins/installs, json: {pluginSlug: skill-pattern-detector, config: {}}}, capture: {sk2: $.id}, snapshot: [parity_pl_skills]}
+  # The first skill is disabled while it is pl_fox's only row: Swift's save() updated every row of the
+  # tenant, Go only its own since the post-archive fix (backlog 1.6, TestSkillInstallFlipsOnlyItsOwnRow).
   - {name: disable the first skill, as: pl_fox, request: {method: PATCH, path: "/v1/plugins/installs/{{sk}}", json: {status: disabled}}, snapshot: [parity_pl_installs, parity_pl_skills]}
+  - {name: install a second skill, as: pl_fox, request: {method: POST, path: /v1/plugins/installs, json: {pluginSlug: skill-pattern-detector, config: {}}}, capture: {sk2: $.id}, snapshot: [parity_pl_skills]}
   - {name: config on a skill is ignored, as: pl_fox, request: {method: PATCH, path: "/v1/plugins/installs/{{sk2}}", json: {config: {nope: x}}}, snapshot: [parity_pl_installs]}
   - {name: skill sync, as: pl_fox, request: {method: POST, path: "/v1/plugins/installs/{{sk2}}/sync"}}
   - {name: uninstall a skill, as: pl_fox, request: {method: DELETE, path: "/v1/plugins/installs/{{sk2}}"}, snapshot: [parity_pl_installs, parity_pl_skills]}

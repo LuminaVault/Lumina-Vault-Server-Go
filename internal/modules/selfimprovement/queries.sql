@@ -71,12 +71,11 @@ FROM skills_state WHERE tenant_id = $1 AND source = 'vault' AND name = $2 LIMIT 
 INSERT INTO skills_state (tenant_id, source, name, enabled, curator_pinned, curator_state)
 VALUES ($1, 'vault', $2, TRUE, $3, $4);
 
--- Not a typo. SkillsState's Fluent @ID is tenant_id alone, so Swift's save() on a
--- row it loaded updates every skills_state row the tenant has, whatever its name
--- or source.
--- name: SetTenantSkillsPinned :exec
-UPDATE skills_state SET curator_pinned = $2 WHERE tenant_id = $1;
+-- Only the skill's own row. Swift's save() keyed the update by Fluent's @ID, which
+-- for SkillsState is tenant_id alone, so it hit every row of the tenant; fixed after
+-- the archive (backlog 1.6).
+-- name: SetSkillPinned :exec
+UPDATE skills_state SET curator_pinned = $3 WHERE tenant_id = $1 AND source = 'vault' AND name = $2;
 
--- Also every row of the tenant, for the same reason.
--- name: SetTenantSkillsCuratorState :exec
-UPDATE skills_state SET curator_state = $2, curator_archived_at = NULL WHERE tenant_id = $1;
+-- name: SetSkillCuratorState :exec
+UPDATE skills_state SET curator_state = $3, curator_archived_at = NULL WHERE tenant_id = $1 AND source = 'vault' AND name = $2;

@@ -335,8 +335,9 @@ func (w *Worker) saveState(ctx context.Context, tenant uuid.UUID, s *skillState,
 		}
 		return err
 	}
+	// Only this skill's row; Swift's save() hit every row of the tenant (backlog 1.6).
 	sets := []string{}
-	args := []any{tenant}
+	args := []any{tenant, s.name}
 	add := func(column string, v any) {
 		args = append(args, v)
 		sets = append(sets, fmt.Sprintf("%s = $%d", column, len(args)))
@@ -353,7 +354,8 @@ func (w *Worker) saveState(ctx context.Context, tenant uuid.UUID, s *skillState,
 	if len(sets) == 0 {
 		return nil
 	}
-	_, err := w.m.pool.Exec(ctx, `UPDATE skills_state SET `+strings.Join(sets, ", ")+` WHERE tenant_id = $1`, args...)
+	_, err := w.m.pool.Exec(ctx, `UPDATE skills_state SET `+strings.Join(sets, ", ")+
+		` WHERE tenant_id = $1 AND source = 'vault' AND name = $2`, args...)
 	return err
 }
 

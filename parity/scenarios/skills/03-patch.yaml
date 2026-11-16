@@ -1,6 +1,8 @@
-# PATCH /v1/skills/{name}. A new state row is inserted; an existing one is saved by
-# Fluent keyed on tenant_id alone, so the change lands on every row of the tenant
-# (Swift's weakness, kept until the archive).
+# PATCH /v1/skills/{name}. A new state row is inserted; an existing one is updated.
+# Swift's Fluent save() keyed the update on tenant_id alone, so it landed on every row
+# of the tenant; Go updates only the skill's own row since the post-archive fix
+# (backlog 1.6). The update below runs while sk_hal has one row, so both agree;
+# testPatchOwnRow in internal/modules/skills covers several rows.
 module: skills
 steps:
   - {name: no token, request: {method: PATCH, path: /v1/skills/daily-brief, json: {enabled: false}}}
@@ -9,6 +11,6 @@ steps:
   - {name: bad category, as: sk_hal, request: {method: PATCH, path: /v1/skills/daily-brief, json: {apnsCategory: loud}}}
   - {name: wrong type, as: sk_hal, request: {method: PATCH, path: /v1/skills/daily-brief, json: {enabled: "no"}}}
   - {name: malformed, as: sk_hal, request: {method: PATCH, path: /v1/skills/daily-brief, raw: '{"enabled":'}}
-  - {name: create state, as: sk_hal, request: {method: PATCH, path: /v1/skills/daily-brief, json: {enabled: false, scheduleOverride: "0 7 * * *", apnsCategory: digest}}, snapshot: [skills_state]}
-  - {name: second row, as: sk_hal, request: {method: PATCH, path: /v1/skills/pattern-detector, json: {}}, snapshot: [skills_state]}
-  - {name: update spreads to all rows, as: sk_hal, request: {method: PATCH, path: /v1/skills/pattern-detector, json: {scheduleOverride: "", apnsCategory: runCompleted}}, snapshot: [skills_state]}
+  - {name: create state, as: sk_hal, request: {method: PATCH, path: /v1/skills/daily-brief, json: {enabled: false, scheduleOverride: "0 7 * * *", apnsCategory: digest}}, snapshot: [parity_sk_patch_state]}
+  - {name: update the existing row, as: sk_hal, request: {method: PATCH, path: /v1/skills/daily-brief, json: {scheduleOverride: "", apnsCategory: runCompleted}}, snapshot: [parity_sk_patch_state]}
+  - {name: second row, as: sk_hal, request: {method: PATCH, path: /v1/skills/pattern-detector, json: {}}, snapshot: [parity_sk_patch_state]}

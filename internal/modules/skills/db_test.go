@@ -191,6 +191,7 @@ func TestSkillsDB(t *testing.T) {
 	t.Run("WeatherForecastTool", func(t *testing.T) { testWeatherTool(t, v) })
 	t.Run("CronScheduler", func(t *testing.T) { testCronScheduler(t, v) })
 	t.Run("RunWorkflowSkill", func(t *testing.T) { testRunWorkflowSkill(t, v) })
+	t.Run("PatchUpdatesOnlyItsOwnRow", func(t *testing.T) { testPatchOwnRow(t, v) })
 }
 
 // MARK: - SkillRunCapGuardTests
@@ -431,6 +432,30 @@ func testJobOrigin(t *testing.T, v dbEnv) {
 		rec := createJob(t, v.user(), "Steal", chat)
 		require.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
 	})
+}
+
+// A PATCH on an existing row updates only that row (post-archive fix, backlog 1.6).
+// Swift's Fluent save() keyed it by tenant_id, so every skills_state row of the
+// tenant took the change.
+func testPatchOwnRow(t *testing.T, v dbEnv) {
+	ctx := context.Background()
+	u := v.user()
+	_, err := v.pool.Exec(ctx, `INSERT INTO skills_state (tenant_id, source, name, enabled) VALUES
+		($1, 'builtin', 'daily-brief', TRUE), ($1, 'builtin', 'weekly-review', TRUE), ($1, 'vault', 'mine', TRUE)`, u)
+	require.NoError(t, err)
+	e := skillsServer(v.pool, v.paths)
+	rec := call(t, e, u, http.MethodPatch, "/v1/skills/daily-brief", `{"enabled":false}`)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	var off []string
+	rows, err := v.pool.Query(ctx, `SELECT name FROM skills_state WHERE tenant_id = $1 AND NOT enabled ORDER BY name`, u)
+	require.NoError(t, err)
+	for rows.Next() {
+		var n string
+		require.NoError(t, rows.Scan(&n))
+		off = append(off, n)
+	}
+	rows.Close()
+	require.Equal(t, []string{"daily-brief"}, off)
 }
 
 // SkillsControllerTests: "unauthenticated request is rejected". No database: the

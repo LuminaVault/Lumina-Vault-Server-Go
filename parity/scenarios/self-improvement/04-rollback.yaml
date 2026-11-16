@@ -25,7 +25,7 @@ steps:
   - name: "another tenant's run is the same 409"
     as: si_skill
     request: {method: POST, path: "/v1/me/improvement/runs/5e1f1000-0000-4000-8000-00000000000f/rollback"}
-    snapshot: [self_improvement_runs, skills_state]
+    snapshot: [self_improvement_runs, parity_si_skill_state]
     files: [si_foe]
   - name: "wrong method"
     as: si_skill
@@ -69,32 +69,32 @@ steps:
   - name: "restores two skills, inserts their state, leaves the rest"
     as: si_skill
     request: {method: POST, path: "/v1/me/improvement/runs/5e1f1000-0000-4000-8000-00000000001d/rollback"}
-    snapshot: [self_improvement_runs, skills_state]
+    snapshot: [self_improvement_runs, parity_si_skill_state]
     files: [si_skill]
-  - name: "a matching afterSHA overwrites, and the update hits every row of the tenant"
+  - name: "a matching afterSHA overwrites"
     as: si_skill
     request: {method: POST, path: "/v1/me/improvement/runs/5e1f1000-0000-4000-8000-00000000001e/rollback"}
-    snapshot: [self_improvement_runs, skills_state]
+    snapshot: [self_improvement_runs, parity_si_skill_state]
     files: [si_skill]
   - name: "a run already rolled back can run again only if its hash still holds"
     as: si_skill
     request: {method: POST, path: "/v1/me/improvement/runs/5e1f1000-0000-4000-8000-00000000001e/rollback"}
-    snapshot: [self_improvement_runs, skills_state]
+    snapshot: [self_improvement_runs, parity_si_skill_state]
     files: [si_skill]
   - name: "one changed file stops the whole run before any write"
     as: si_skill
     request: {method: POST, path: "/v1/me/improvement/runs/5e1f1000-0000-4000-8000-00000000001f/rollback"}
-    snapshot: [self_improvement_runs, skills_state]
+    snapshot: [self_improvement_runs, parity_si_skill_state]
     files: [si_skill]
   - name: "archivedPath is removed"
     as: si_skill
     request: {method: POST, path: "/v1/me/improvement/runs/5e1f1000-0000-4000-8000-000000000021/rollback"}
-    snapshot: [self_improvement_runs, skills_state]
+    snapshot: [self_improvement_runs, parity_si_skill_state]
     files: [si_skill]
   - name: "a missing archivedPath is ignored"
     as: si_skill
     request: {method: POST, path: "/v1/me/improvement/runs/5e1f1000-0000-4000-8000-000000000022/rollback"}
-    snapshot: [self_improvement_runs, skills_state]
+    snapshot: [self_improvement_runs, parity_si_skill_state]
     files: [si_skill]
   - name: "the resources it left"
     as: si_skill
