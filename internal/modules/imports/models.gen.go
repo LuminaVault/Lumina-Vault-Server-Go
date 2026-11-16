@@ -125,6 +125,63 @@ func (e StructuredAPIErrorBodyCta) Valid() bool {
 	}
 }
 
+// Defines values for VaultBulkImportFileResultStatus.
+const (
+	Collision   VaultBulkImportFileResultStatus = "collision"
+	Empty       VaultBulkImportFileResultStatus = "empty"
+	Exists      VaultBulkImportFileResultStatus = "exists"
+	Failed      VaultBulkImportFileResultStatus = "failed"
+	Hidden      VaultBulkImportFileResultStatus = "hidden"
+	Imported    VaultBulkImportFileResultStatus = "imported"
+	Unchanged   VaultBulkImportFileResultStatus = "unchanged"
+	Unsupported VaultBulkImportFileResultStatus = "unsupported"
+	Updated     VaultBulkImportFileResultStatus = "updated"
+)
+
+// Valid indicates whether the value is a known member of the VaultBulkImportFileResultStatus enum.
+func (e VaultBulkImportFileResultStatus) Valid() bool {
+	switch e {
+	case Collision:
+		return true
+	case Empty:
+		return true
+	case Exists:
+		return true
+	case Failed:
+		return true
+	case Hidden:
+		return true
+	case Imported:
+		return true
+	case Unchanged:
+		return true
+	case Unsupported:
+		return true
+	case Updated:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for VaultBulkImportRequestOnConflict.
+const (
+	Overwrite VaultBulkImportRequestOnConflict = "overwrite"
+	Skip      VaultBulkImportRequestOnConflict = "skip"
+)
+
+// Valid indicates whether the value is a known member of the VaultBulkImportRequestOnConflict enum.
+func (e VaultBulkImportRequestOnConflict) Valid() bool {
+	switch e {
+	case Overwrite:
+		return true
+	case Skip:
+		return true
+	default:
+		return false
+	}
+}
+
 // ErrorEnvelope defines model for ErrorEnvelope.
 type ErrorEnvelope struct {
 	Error   string  `json:"error"`
@@ -243,18 +300,66 @@ type VaultBulkImportFile struct {
 	Path string `json:"path"`
 }
 
+// VaultBulkImportFileResult defines model for VaultBulkImportFileResult.
+type VaultBulkImportFileResult struct {
+	// Path The input's path, as sent.
+	Path string `json:"path"`
+
+	// SavedPath The vault path the input maps to: where it was written, or for
+	// `collision`, `exists` and `unchanged` the path already holding a
+	// file. Absent for `hidden` and `unsupported`.
+	SavedPath *string `json:"savedPath,omitempty"`
+
+	// Status `imported` new file; `updated` replaced a different file
+	// (`onConflict: overwrite`); `unchanged` same bytes already there;
+	// `empty` whitespace only; `hidden` under a dot-folder or a
+	// dotfile; `unsupported` not .md/.markdown/.txt; `collision`
+	// slugifies to the path of an earlier input of this request;
+	// `exists` a different file is there (`onConflict: skip`); `failed`
+	// could not be written.
+	Status VaultBulkImportFileResultStatus `json:"status"`
+}
+
+// VaultBulkImportFileResultStatus `imported` new file; `updated` replaced a different file
+// (`onConflict: overwrite`); `unchanged` same bytes already there;
+// `empty` whitespace only; `hidden` under a dot-folder or a
+// dotfile; `unsupported` not .md/.markdown/.txt; `collision`
+// slugifies to the path of an earlier input of this request;
+// `exists` a different file is there (`onConflict: skip`); `failed`
+// could not be written.
+type VaultBulkImportFileResultStatus string
+
 // VaultBulkImportRequest defines model for VaultBulkImportRequest.
 type VaultBulkImportRequest struct {
 	Files []VaultBulkImportFile `json:"files"`
+
+	// OnConflict What a file does to a different one already at its vault path.
+	// `overwrite` (the default, for re-syncing a vault) replaces it;
+	// `skip` leaves it and reports `exists`, so a first import never
+	// replaces a note the user already has.
+	OnConflict *VaultBulkImportRequestOnConflict `json:"onConflict,omitempty"`
 
 	// Space Target Space name (created if missing); must not be blank.
 	Space string `json:"space"`
 }
 
+// VaultBulkImportRequestOnConflict What a file does to a different one already at its vault path.
+// `overwrite` (the default, for re-syncing a vault) replaces it;
+// `skip` leaves it and reports `exists`, so a first import never
+// replaces a note the user already has.
+type VaultBulkImportRequestOnConflict string
+
 // VaultBulkImportResponse defines model for VaultBulkImportResponse.
 type VaultBulkImportResponse struct {
-	Failed    int       `json:"failed"`
-	Imported  int       `json:"imported"`
+	Failed int `json:"failed"`
+
+	// Files One entry per input file, in request order.
+	Files []VaultBulkImportFileResult `json:"files"`
+
+	// Imported Files written (`imported` + `updated`).
+	Imported int `json:"imported"`
+
+	// Skipped Every status but `imported`, `updated` and `failed`.
 	Skipped   int       `json:"skipped"`
 	SpaceID   wire.UUID `json:"spaceID"`
 	SpaceSlug string    `json:"spaceSlug"`

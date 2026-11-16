@@ -37,8 +37,9 @@ one is a deliberate change from Swift. Name each in `docs/migration/cutover-log.
 
 Found during the port, same batch:
 
-- **JWT unknown `kid`.** A token that names an unknown `kid` is verified with the active key (a JWTKit fallback that
-  Go matched in #85). Refuse unknown kids.
+- ~~**JWT unknown `kid`.** A token that names an unknown `kid` is verified with the active key (a JWTKit fallback that
+  Go matched in #85). Refuse unknown kids.~~ Done: see "JWT: an unknown `kid` is refused" in
+  `docs/migration/cutover-log.md`.
 - **xAI/Nous OAuth `complete`.** The body is read before any auth check, so a valid sessionID alone can finish a link.
 - **Auth weaknesses kept by 8A (#85).** These are listed in that PR body:
   - The login timing oracle, and the 423 sent before the password check.
@@ -50,8 +51,11 @@ Found during the port, same batch:
   - Refresh has no reuse detection and is not transactional.
 - **MCP `browse` `pathPrefix`.** The `path >= p AND path < p || U+FFFF` range matches nothing under en_US.utf8
   collation. Use `starts_with` or `COLLATE "C"`.
-- **`usage_meter`.** There is no unique `(tenant_id, day, model)` key, and metering is read-then-write, so concurrent
-  calls split rows. Add the key through an expand-only migration, then upsert.
+- ~~**`usage_meter`.** There is no unique `(tenant_id, day, model)` key, and metering is read-then-write, so concurrent
+  calls split rows. Add the key through an expand-only migration, then upsert.~~
+  Already true in Go: `usage_meter` has the primary key `(tenant_id, day, model)` (`schema-swift.sql`), and
+  `internal/usagemeter` writes with `INSERT … ON CONFLICT (tenant_id, day, model) DO UPDATE` (since wave 4,
+  `953181e`), so concurrent calls add to one row. Nothing to change.
 
 ### 2. Hermes upgrade for CVE-2026-10221
 

@@ -360,6 +360,8 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 				Sink:    sink,
 				Latches: onboardlatch.New(pool), Analytics: analytics,
 				CaptureFiling: agent.captureFiling(),
+				Indexer: chunkindex.NewIndexer(chunkindex.NewChunkRepository(pool), embeddings,
+					chunkindex.NewLinkRepository(pool)),
 			}),
 			todos.New(pool, paths, todos.Options{Disk: disk, Memories: memories, Embeddings: embeddings}),
 			captureModule(pool, cfg, box, limits, links, analytics),

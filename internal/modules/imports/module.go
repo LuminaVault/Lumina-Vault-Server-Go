@@ -231,8 +231,9 @@ func (m *Module) bulk(c *echo.Context) error {
 		return err
 	}
 	body, err := wire.Decode[struct {
-		Space string      `json:"space"`
-		Files []FileInput `json:"files"`
+		Space      string      `json:"space"`
+		Files      []FileInput `json:"files"`
+		OnConflict *string     `json:"onConflict"`
 	}](raw)
 	if err != nil {
 		return wire.NewError(http.StatusBadRequest, "invalid_body")
@@ -246,12 +247,28 @@ func (m *Module) bulk(c *echo.Context) error {
 	if len(body.Files) > maxBulkFiles {
 		return wire.NewError(http.StatusBadRequest, "too_many_files_max_"+strconv.Itoa(maxBulkFiles))
 	}
-	result, err := m.ingest.IngestBatch(c.Request().Context(), tenant, body.Space, body.Files)
+	opts := IngestOptions{OnConflict: OnConflictOverwrite}
+	if body.OnConflict != nil {
+		switch VaultBulkImportRequestOnConflict(*body.OnConflict) {
+		case Overwrite:
+		case Skip:
+			opts.OnConflict = OnConflictSkip
+		default:
+			return wire.NewError(http.StatusBadRequest, "invalid_on_conflict")
+		}
+	}
+	result, err := m.ingest.IngestBatchWith(c.Request().Context(), tenant, body.Space, body.Files, opts)
 	if err != nil {
 		return err
 	}
-	return wire.JSON(c, http.StatusOK, map[string]any{
-		"spaceID": ids.Upper(result.SpaceID), "spaceSlug": result.SpaceSlug,
-		"imported": result.Imported, "skipped": result.Skipped, "failed": result.Failed,
+	files := make([]VaultBulkImportFileResult, len(result.Files))
+	for n, f := range result.Files {
+		files[n] = VaultBulkImportFileResult{
+			Path: f.Path, SavedPath: f.SavedPath, Status: VaultBulkImportFileResultStatus(f.Status),
+		}
+	}
+	return wire.JSON(c, http.StatusOK, VaultBulkImportResponse{
+		SpaceID: wire.UUID{UUID: result.SpaceID}, SpaceSlug: result.SpaceSlug,
+		Imported: result.Imported, Skipped: result.Skipped, Failed: result.Failed, Files: files,
 	})
 }

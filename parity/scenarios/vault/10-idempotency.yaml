@@ -1,6 +1,9 @@
 # Upload, move and create sit behind the idempotency middleware; export, index and
 # lint don't. Over 32 MiB the middleware bypasses and the handler sees no body.
 module: vault
+# Go-only since the markdown import (2026-11-16): a markdown note upload is
+# titled from its first H1, else its file name, and Swift wrote no title.
+ignore: ['snapshot:vault_files.metadata.title']
 steps:
   - name: key with no token
     request: {method: POST, path: "/v1/vault/files?path=i.md", raw: "x", headers: {Content-Type: text/markdown, Idempotency-Key: 5a017000-0000-4000-8000-00000000a001}}
