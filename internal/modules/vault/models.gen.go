@@ -324,6 +324,18 @@ type VaultFileDTO struct {
 	SizeBytes   int                   `json:"sizeBytes"`
 }
 
+// VaultFromTemplateRequest defines model for VaultFromTemplateRequest.
+type VaultFromTemplateRequest struct {
+	SpaceId *wire.UUID `json:"spaceId,omitempty"`
+
+	// Template File name in `templates/`, e.g. `meeting.md`.
+	Template string `json:"template"`
+	Title    string `json:"title"`
+
+	// Tz IANA time zone. Defaults to UTC.
+	Tz *string `json:"tz,omitempty"`
+}
+
 // VaultIncomingLink defines model for VaultIncomingLink.
 type VaultIncomingLink struct {
 	RawTarget       string                           `json:"rawTarget"`
@@ -472,6 +484,13 @@ type VaultStatusResponse struct {
 	Initialized bool `json:"initialized"`
 }
 
+// VaultTemplatesSeedResponse defines model for VaultTemplatesSeedResponse.
+type VaultTemplatesSeedResponse struct {
+	// Created File names written by this call; empty when all existed.
+	Created []string  `json:"created"`
+	SpaceId wire.UUID `json:"spaceId"`
+}
+
 // VaultTrashItem defines model for VaultTrashItem.
 type VaultTrashItem struct {
 	ContentType string    `json:"contentType"`
@@ -535,6 +554,18 @@ type VaultContextParams struct {
 	SiblingLimit *int `form:"siblingLimit,omitempty" json:"siblingLimit,omitempty"`
 }
 
+// VaultDailyNoteParams defines parameters for VaultDailyNote.
+type VaultDailyNoteParams struct {
+	// Date YYYY-MM-DD. Defaults to today in `tz`.
+	Date *string `form:"date,omitempty" json:"date,omitempty"`
+
+	// Tz IANA time zone, e.g. `Europe/Lisbon`. Defaults to UTC.
+	Tz *string `form:"tz,omitempty" json:"tz,omitempty"`
+
+	// IdempotencyKey HER-39 — client-generated UUIDv4. Retrying a mutating request with the same key (within 24 h) replays the cached response instead of re-executing the handler. Reusing a key with a different request body returns 409. Tenant-scoped: the same key value across different tenants does not collide.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
 // VaultExportParams defines parameters for VaultExport.
 type VaultExportParams struct {
 	// Since Optional incremental cutoff.
@@ -596,8 +627,23 @@ type VaultDeleteParams struct {
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
+// VaultNoteFromTemplateParams defines parameters for VaultNoteFromTemplate.
+type VaultNoteFromTemplateParams struct {
+	// IdempotencyKey HER-39 — client-generated UUIDv4. Retrying a mutating request with the same key (within 24 h) replays the cached response instead of re-executing the handler. Reusing a key with a different request body returns 409. Tenant-scoped: the same key value across different tenants does not collide.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// VaultTemplatesSeedParams defines parameters for VaultTemplatesSeed.
+type VaultTemplatesSeedParams struct {
+	// IdempotencyKey HER-39 — client-generated UUIDv4. Retrying a mutating request with the same key (within 24 h) replays the cached response instead of re-executing the handler. Reusing a key with a different request body returns 409. Tenant-scoped: the same key value across different tenants does not collide.
+	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
 // VaultCreateJSONRequestBody defines body for VaultCreate for application/json ContentType.
 type VaultCreateJSONRequestBody = VaultCreateRequest
 
 // VaultMoveJSONRequestBody defines body for VaultMove for application/json ContentType.
 type VaultMoveJSONRequestBody = VaultMoveRequest
+
+// VaultNoteFromTemplateJSONRequestBody defines body for VaultNoteFromTemplate for application/json ContentType.
+type VaultNoteFromTemplateJSONRequestBody = VaultFromTemplateRequest

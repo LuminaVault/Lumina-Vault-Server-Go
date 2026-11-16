@@ -51,6 +51,7 @@ const (
 // SpaceSeeder is spaces.Module.SeedDefaults.
 type SpaceSeeder interface {
 	SeedDefaults(ctx context.Context, vault uuid.UUID) ([]string, error)
+	CreateSystemSpace(ctx context.Context, vault, actor uuid.UUID, name, slug, icon string) error
 }
 
 // Options are the module's dependencies. Everything but Paths may be left out by
@@ -163,6 +164,11 @@ func (m *Module) Register(r httpserver.Router, _ echo.MiddlewareFunc) {
 	r.GET(trashPath, m.listTrash, m.identify)
 	r.POST(trashPath+"/:id/restore", m.restoreTrash, m.identify, idem)
 	r.DELETE(trashPath+"/:id", m.deleteTrash, m.identify, idem)
+
+	// Backlog E6: templates and daily notes.
+	r.POST("/v1/vault/templates/seed", m.seedTemplates, m.identify, idem)
+	r.POST("/v1/vault/notes/from-template", m.noteFromTemplate, m.identify, idem)
+	r.POST("/v1/vault/daily", m.dailyNote, m.identify, idem)
 }
 
 func notFound(*echo.Context) error { return echo.ErrNotFound }

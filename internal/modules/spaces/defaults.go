@@ -44,3 +44,16 @@ func (m *Module) SeedDefaults(ctx context.Context, vault uuid.UUID) ([]string, e
 	}
 	return created, nil
 }
+
+// CreateSystemSpace creates a Space the server needs (backlog E6: Templates,
+// Daily) unless the vault already has one with that slug. A taken slug is
+// success: the caller looks the Space up by slug either way, which also covers
+// losing a race to another device creating it.
+func (m *Module) CreateSystemSpace(ctx context.Context, vault, actor uuid.UUID, name, slug, icon string) error {
+	category := slug
+	_, err := m.createSpace(ctx, vault, actor, name, slug, nil, nil, &icon, &category)
+	if errors.Is(err, errSlugTaken) {
+		return nil
+	}
+	return err
+}
