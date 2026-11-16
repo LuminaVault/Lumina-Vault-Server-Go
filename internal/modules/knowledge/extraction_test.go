@@ -190,3 +190,35 @@ func (s *adjudicationStub) ChatCompletions(_ context.Context, payload []byte, _,
 func (s *adjudicationStub) ChatStream(context.Context, []byte, string, string) llm.Stream {
 	return func(func(llm.Chunk, error) bool) {}
 }
+
+// A memory that repeats a statement yields two claims on one node. Linking that
+// node to itself broke knowledge_edges_check (from_node_id <> to_node_id) and
+// failed the job, about 1 run in 43 in production (post-archive fix).
+func TestExtractionRepeatedStatementMakesNoSelfEdge(t *testing.T) {
+	ctx := context.Background()
+	pool := dbtest.Postgres(t)
+	require.NoError(t, migrations.Up(ctx, pool, migrations.SQL()))
+	tenant := uuid.New()
+	_, err := pool.Exec(ctx, `INSERT INTO users (id, email, username, password_hash, created_at, updated_at) VALUES ($1, 'ks@test.luminavault', 'ks', 'stub', now(), now())`, tenant)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `INSERT INTO vaults (id, personal_owner_user_id, name, created_at, updated_at) VALUES ($1, $1, 'v', now(), now())`, tenant)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, `INSERT INTO memories (id, tenant_id, content, created_at, updated_at) VALUES ($1, $2, $3, now(), now())`,
+		uuid.New(), tenant, "Project Atlas is late. Project Atlas is late. Project Atlas needs a new owner.")
+	require.NoError(t, err)
+
+	w := &ExtractionWorker{Pool: pool, Transport: &adjudicationStub{}, Model: "test-model"}
+	n, err := w.Tick(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, n)
+
+	count := func(q string) int {
+		var c int
+		require.NoError(t, pool.QueryRow(ctx, q, tenant).Scan(&c))
+		return c
+	}
+	require.Equal(t, 1, count(`SELECT count(*) FROM knowledge_extraction_jobs WHERE tenant_id = $1 AND status = 'completed'`))
+	require.Zero(t, count(`SELECT count(*) FROM knowledge_edges WHERE tenant_id = $1 AND from_node_id = to_node_id`))
+	// The repeated claim still meets the other one through Project Atlas.
+	require.Equal(t, 1, count(`SELECT count(*) FROM knowledge_edges WHERE tenant_id = $1 AND predicate = 'related_to'`))
+}

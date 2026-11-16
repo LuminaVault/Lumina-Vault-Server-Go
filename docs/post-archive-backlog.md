@@ -77,7 +77,9 @@ Steps:
 4. Smoke production: run a chat completion and an ingestion through Hermes.
 5. Rollback is reverting the infra PR.
 
-### 3. Knowledge extraction self-edge
+### 3. ~~Knowledge extraction self-edge~~ Done
+
+See "Knowledge extraction skips a self-pair" in `docs/migration/cutover-log.md`.
 
 `KnowledgeExtractionWorker` fails about 1 run in 43 in production with a `knowledge_edges_check` violation (`from_node_id
 <> to_node_id`). In `inferWithinMemory` (`internal/modules/knowledge/extraction.go`), a memory that repeats a statement

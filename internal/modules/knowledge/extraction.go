@@ -350,6 +350,11 @@ func (w *ExtractionWorker) inferWithinMemory(ctx context.Context, claims []claim
 	for li := range claims {
 		for ri := li + 1; ri < len(claims); ri++ {
 			left, right := claims[li], claims[ri]
+			// A repeated statement is one node twice; knowledge_edges_check
+			// refuses a self-edge (Swift had the same gap; post-archive fix).
+			if left.id == right.id {
+				continue
+			}
 			if !slices.ContainsFunc(left.entities, func(e string) bool { return slices.Contains(right.entities, e) }) {
 				continue
 			}

@@ -2440,3 +2440,13 @@ Deliberate changes from Swift, made after the archive (`docs/post-archive-backlo
 - Not changed: operator-configured URLs (env base URLs, Hermes, whisper, the news feeds service) and the fixed
   third-party hosts (Resend, Twilio, PostHog, Jina, Open-Meteo, Google). The news ticker passes user feed URLs to the
   feeds service, which fetches them; that service is out of this repo.
+
+### Knowledge extraction skips a self-pair
+
+- `inferWithinMemory` pairs every two claims of a memory that share an entity. A memory that repeats a statement
+  yields two claims on one node, and linking that node to itself broke `knowledge_edges_check`
+  (`from_node_id <> to_node_id`), failing the job (about 1 run in 43 in production). Swift had the same gap. The pair
+  is now skipped; the cross-memory query already excluded it (`other_claim.id <> current_claim.id`).
+- Tests: `TestExtractionRepeatedStatementMakesNoSelfEdge` (`internal/modules/knowledge`), which fails with the
+  production error on the old code.
+
