@@ -2369,3 +2369,17 @@ stacked and merged by the owner in this order: #598, #599, #600.
 - community could not be exercised on staging (disabled there); CI parity covers it. The #599 body lets the owner drop
   its two entries.
 - `community/00-auth`, `skills-cron/01-routes` and `hermes/01-runs-errors` gained `smoke: true`.
+
+## Post-archive fixes
+
+Deliberate changes from Swift, made after the archive (`docs/post-archive-backlog.md`).
+
+### Share-sheet note survives enrichment (backlog 1.5)
+
+- Enrichment reads the file it is about to replace and appends its `## Note` section to the rendered page. Swift's
+  render dropped it, so the note a user typed in the share sheet was lost once enrichment finished.
+- In a placeholder the note is everything after the first `## Note` heading, so a note with its own heading line
+  survives whole. Production only enriches fresh placeholders (capture, import).
+- The note goes into the file only, not into the link's memory, which still comes from the page metadata.
+- Parity: `capture/01-flow` no longer captures with a non-empty note; Go tests cover it.
+
