@@ -2393,4 +2393,6 @@ Deliberate changes from Swift, made after the archive (`docs/post-archive-backlo
   worker uses the same check for manifest names and for the model's merge target, and skips a target it refuses.
 - The tests that pinned Swift's behaviour (`TestSwiftWeakness*` in `internal/vaultfiles/resolve_test.go`, the
   "name is not cleaned" rollback case) now test the fixed behaviour.
+- Parity: `self-improvement/04-rollback` no longer rolls back the seeded runs whose snapshot names hold "/" or ".."
+  (…020, …023, …024). Swift wrote through them; Go answers 409. `TestRollback` covers them.
 
