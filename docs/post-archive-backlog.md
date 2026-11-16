@@ -45,7 +45,8 @@ Found during the port, same batch:
 - **Auth weaknesses kept by 8A (#85).** These are listed in that PR body:
   - The login timing oracle, and the 423 sent before the password check.
   - The lockout counter is not reset after expiry, and failure counters are racy.
-  - `mfa/resend` enumerates accounts. Register 409s enumerate emails and usernames.
+  - ~~`mfa/resend` enumerates accounts.~~ Done (see "`mfa/resend` answers an unknown email like a known one" in
+    `docs/migration/cutover-log.md`). Register 409s enumerate emails and usernames: open, needs an owner decision.
   - Requesting a new code bypasses the per-row reset and verify locks.
   - Codes are compared in non-constant time, and the logging sender writes OTP codes to logs.
   - A password reset does not invalidate access tokens.

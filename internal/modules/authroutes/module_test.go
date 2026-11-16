@@ -317,8 +317,10 @@ func TestSessionRoutesWire(t *testing.T) {
 		assert.Equal(t, http.StatusAccepted, r.code)
 		assert.Empty(t, r.body)
 		assert.Empty(t, r.ct)
+		// An unknown email answers the same 202 (post-archive fix; Swift's 401 named it).
 		r = v.do(http.MethodPost, "/v1/auth/mfa/resend", `{"email":"nobody@test.luminavault"}`, nil)
-		assert.Equal(t, errorBody("invalid credentials"), r.body)
+		assert.Equal(t, http.StatusAccepted, r.code)
+		assert.Empty(t, r.body)
 	})
 
 	t.Run("refresh and logout", func(t *testing.T) {

@@ -330,18 +330,19 @@ func (s *Service) VerifyMFA(ctx context.Context, challengeID uuid.UUID, code str
 	return s.IssueTokens(ctx, u)
 }
 
-// ResendMFA is DefaultAuthService.resendMFA. Swift weaknesses, kept: it needs
-// only an email, so anyone can mail a code to any account (and an unknown email
-// answers 401, which tells the caller it has no account). It also issues a new
-// challenge whose id is never returned, so the client's challenge never
-// matches the resent code.
+// ResendMFA is DefaultAuthService.resendMFA. An unknown email answers like a
+// known one (202), as forgot-password does; Swift answered 401, which told the
+// caller the address had no account (fixed after the archive). Swift weaknesses,
+// kept: it needs only an email, so anyone can mail a code to any account, and it
+// issues a new challenge whose id is never returned, so the client's challenge
+// never matches the resent code.
 func (s *Service) ResendMFA(ctx context.Context, email string) error {
 	u, err := s.FindUserByEmail(ctx, email)
 	if err != nil {
 		return err
 	}
 	if u == nil {
-		return ErrInvalidCredentials
+		return nil
 	}
 	_, err = s.mfa.Issue(ctx, u, "login")
 	return err

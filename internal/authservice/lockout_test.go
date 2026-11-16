@@ -84,10 +84,14 @@ func TestAuthServiceSwiftRules(t *testing.T) {
 		assert.ErrorIs(t, err, authservice.ErrMFAInvalid)
 	})
 
-	t.Run("mfa resend: unknown email is 401, a known one gets a new challenge", func(t *testing.T) {
+	// Post-archive fix: Swift answered an unknown email 401, so the route told
+	// the caller which addresses have accounts.
+	t.Run("mfa resend: an unknown email answers like a known one, which gets a new challenge", func(t *testing.T) {
 		h := build(t, pool, harness{})
 		email := register(t, h)
-		assert.ErrorIs(t, h.svc.ResendMFA(ctx, "nobody-"+uuid.NewString()+"@test.luminavault"), authservice.ErrInvalidCredentials)
+		require.NoError(t, h.svc.ResendMFA(ctx, "nobody-"+uuid.NewString()+"@test.luminavault"))
+		code, _ := h.mfa.last()
+		assert.Empty(t, code, "nothing is sent for an unknown email")
 		require.NoError(t, h.svc.ResendMFA(ctx, email))
 		var n int
 		require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM mfa_challenges c JOIN users u ON u.id = c.tenant_id

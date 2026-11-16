@@ -2450,3 +2450,12 @@ Deliberate changes from Swift, made after the archive (`docs/post-archive-backlo
 - Tests: `TestExtractionRepeatedStatementMakesNoSelfEdge` (`internal/modules/knowledge`), which fails with the
   production error on the old code.
 
+### `mfa/resend` answers an unknown email like a known one
+
+- `POST /v1/auth/mfa/resend` with an email that has no account now answers 202 with nothing sent, as forgot-password
+  does. Swift answered 401 "invalid credentials", which told the caller which addresses have accounts.
+- Kept: a known email still gets a new challenge whose id is never returned, and anyone can trigger a mail to any
+  account (the route's IP limit bounds it).
+- Tests: `TestAuthServiceSwiftRules` "mfa resend: an unknown email answers like a known one…", `TestSessionRoutesWire`
+  (`internal/modules/authroutes`). Parity: `auth/03-mfa` "resend unknown" was removed.
+

@@ -16,4 +16,5 @@ steps:
   - {name: wrong code on the live challenge, request: {method: POST, path: /v1/auth/mfa/verify, headers: {X-Forwarded-For: 198.51.102.3}, json: {challengeId: "{{challenge}}", code: "000000"}}}
   - {name: empty code, request: {method: POST, path: /v1/auth/mfa/verify, headers: {X-Forwarded-For: 198.51.102.3}, json: {challengeId: "{{challenge}}", code: ""}}}
   - {name: resend known, request: {method: POST, path: /v1/auth/mfa/resend, headers: {X-Forwarded-For: 198.51.102.4}, json: {email: AUTH-MFA@parity.test}}}
-  - {name: resend unknown, request: {method: POST, path: /v1/auth/mfa/resend, headers: {X-Forwarded-For: 198.51.102.4}, json: {email: nobody@parity.test}}}
+  # No "resend unknown" step: Go answers 202 as for a known email since the post-archive fix, where
+  # Swift answered 401 (TestAuthServiceSwiftRules "mfa resend: an unknown email answers like a known one").
