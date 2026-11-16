@@ -2396,3 +2396,13 @@ Deliberate changes from Swift, made after the archive (`docs/post-archive-backlo
 - Parity: `self-improvement/04-rollback` no longer rolls back the seeded runs whose snapshot names hold "/" or ".."
   (…020, …023, …024). Swift wrote through them; Go answers 409. `TestRollback` covers them.
 
+### JWT: an unknown `kid` is refused
+
+- Swift's `JWTKeyCollection.getSigner` fell back to the default signer when a token named a `kid` no key had, so such a
+  token verified with the active key; #85 matched it. `Keyset.lookup` now refuses an unknown `kid` (401). A token with
+  no `kid` still verifies with the active key, and a retired key still listed in `JWT_HMAC_SECRETS` still verifies
+  tokens that name it.
+- Rollout: Go mints with the active `kid` only, and access tokens live one hour, so no live token names an unconfigured
+  `kid`. Swift-minted tokens expired days after the 2026-11-13 archive.
+- Tests: `TestUnknownKidIsRefused`, `TestTokenNamingAnUnknownKidRejected` (`internal/auth`). Parity: the unknown-kid
+  steps in `app/02-me` and `cross/auth/01-sessions` were removed.
