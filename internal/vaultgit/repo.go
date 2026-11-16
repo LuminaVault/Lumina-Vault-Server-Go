@@ -325,6 +325,18 @@ func (r *Repo) Blob(sha, path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rd.Close()
+	defer func() { _ = rd.Close() }()
 	return io.ReadAll(rd)
+}
+
+// Head is the newest commit's hash, or "" before the first commit.
+func (r *Repo) Head() (string, error) {
+	h, err := r.repo.Head()
+	if errors.Is(err, plumbing.ErrReferenceNotFound) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return h.Hash().String(), nil
 }

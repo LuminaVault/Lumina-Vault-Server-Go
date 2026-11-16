@@ -42,6 +42,10 @@ func TestInitCommitsExistingFilesOnMain(t *testing.T) {
 	_, err = r.Blob(head.Hash().String(), ".DS_Store")
 	require.ErrorIs(t, err, ErrNotFound)
 
+	headSHA, err := r.Head()
+	require.NoError(t, err)
+	require.Equal(t, head.Hash().String(), headSHA)
+
 	again, created, err := Init(root, DefaultMaxFileSize)
 	require.NoError(t, err)
 	require.False(t, created)
