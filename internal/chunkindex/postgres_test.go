@@ -47,6 +47,7 @@ func TestAgainstPostgres(t *testing.T) {
 		"ReplaceChunksCountMismatch":        testCountMismatch,
 		"IndexerWritesTheLinkGraph":         testIndexerLinks,
 		"ReresolveUpgradesAndBreaksLinks":   testReresolve,
+		"ReresolvePendingLeavesResolved":    testReresolvePending,
 		"LinkReadsAreTenantScoped":          testLinkTenancy,
 		"OrphansAndCounts":                  testOrphansAndCounts,
 	} {
@@ -549,6 +550,33 @@ func testReresolve(t *testing.T, pool *pgxpool.Pool) {
 	changed, err = links.Reresolve(ctx, tenant)
 	require.NoError(t, err)
 	assert.Equal(t, 1, changed, "deleting a target breaks its links")
+}
+
+// ReresolvePending upgrades links written before their target (a forward link in
+// an import, including one in Obsidian's spelling) and does not touch a link that
+// already resolved, which is what keeps it cheap on a large vault.
+func testReresolvePending(t *testing.T, pool *pgxpool.Pool) {
+	ctx := context.Background()
+	tenant := newTenant(t, pool)
+	insertVaultFile(t, pool, tenant, "notes/known.md")
+	source := insertVaultFile(t, pool, tenant, "notes/source.md")
+	links := NewLinkRepository(pool)
+	require.NoError(t, links.ReplaceLinks(ctx, tenant, source, nil,
+		ExtractWikilinks("[[known]] then [[The Last Light]] and [[nowhere]]")))
+	counts, err := links.Counts(ctx, tenant)
+	require.NoError(t, err)
+	assert.Equal(t, LinkCounts{Resolved: 1, Unresolved: 2}, counts)
+
+	insertVaultFile(t, pool, tenant, "notes/lore/the-last-light.md")
+	// A second "known" would make [[known]] ambiguous under a full Reresolve;
+	// the pending pass leaves resolved rows alone.
+	insertVaultFile(t, pool, tenant, "other/known.md")
+	changed, err := links.ReresolvePending(ctx, tenant)
+	require.NoError(t, err)
+	assert.Equal(t, 1, changed)
+	counts, err = links.Counts(ctx, tenant)
+	require.NoError(t, err)
+	assert.Equal(t, LinkCounts{Resolved: 2, Unresolved: 1}, counts)
 }
 
 func testLinkTenancy(t *testing.T, pool *pgxpool.Pool) {

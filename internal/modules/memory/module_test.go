@@ -964,6 +964,51 @@ func TestModelsAreHiddenFromManagedReaders(t *testing.T) {
 	require.NotNil(t, team.Provenance.CreatedBy.Model, "the reader's preference counts, not the vault's")
 }
 
+// Post-archive fix (backlog 1.4): Swift skipped the scrub on the graph, so a managed
+// reader saw origin models on its nodes.
+func TestGraphHidesModelsFromManagedReaders(t *testing.T) {
+	v := setup(t)
+	type node struct {
+		ID         string `json:"id"`
+		Provenance *struct {
+			CreatedBy *struct {
+				Model *struct {
+					Provider string `json:"provider"`
+				} `json:"model"`
+			} `json:"createdBy"`
+			Contributors []json.RawMessage `json:"contributors"`
+		} `json:"provenance"`
+	}
+	type graph struct {
+		Nodes []node `json:"nodes"`
+	}
+	models := func(user uuid.UUID) (named []string, contributors int, withProvenance int) {
+		r := v.do(user, http.MethodGet, "/v1/memory/graph?limit=100", "")
+		require.Equal(t, http.StatusOK, r.code, string(r.body))
+		var g graph
+		require.NoError(t, json.Unmarshal(r.body, &g))
+		for _, n := range g.Nodes {
+			if n.Provenance == nil {
+				continue
+			}
+			withProvenance++
+			contributors += len(n.Provenance.Contributors)
+			if n.Provenance.CreatedBy != nil && n.Provenance.CreatedBy.Model != nil {
+				named = append(named, n.Provenance.CreatedBy.Model.Provider)
+			}
+		}
+		return named, contributors, withProvenance
+	}
+
+	named, contributors, seen := models(gra)
+	require.Positive(t, seen, "the graph seed has nodes with provenance")
+	assert.Equal(t, []string{"mcp:codex"}, named, "a managed reader sees only the user's own agent connection, never the model")
+	assert.Zero(t, contributors)
+
+	named, _, _ = models(cat)
+	assert.Contains(t, named, "openrouter", "a BYOK reader still does")
+}
+
 func TestViewerCannotWriteAndBadVaultHeaderComesFirst(t *testing.T) {
 	v := setup(t)
 	const id = "/v1/memory/3E3A0000-0000-4000-8000-0000000000D1"

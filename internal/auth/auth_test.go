@@ -103,6 +103,18 @@ func TestValidSessionPasses(t *testing.T) {
 	require.Equal(t, user, seen)
 }
 
+// A token signed with the active secret but naming a kid no key has is refused;
+// the same token with no kid passes (post-archive fix).
+func TestTokenNamingAnUnknownKidRejected(t *testing.T) {
+	user := uuid.New()
+	keys := NewKeyset(Key{Kid: "a", Secret: []byte(secretA)})
+	code, _ := serve(t, keys, fakeUsers{user: true}, mint(t, "nope", secretA, session(user), jwt.SigningMethodHS256))
+	require.Equal(t, http.StatusUnauthorized, code)
+	code, seen := serve(t, keys, fakeUsers{user: true}, mint(t, "", secretA, session(user), jwt.SigningMethodHS256))
+	require.Equal(t, http.StatusOK, code)
+	require.Equal(t, user, seen)
+}
+
 func TestScopedTokenRejected(t *testing.T) {
 	user := uuid.New()
 	keys := NewKeyset(Key{Kid: "a", Secret: []byte(secretA)})
@@ -189,16 +201,19 @@ func TestLoadKeysErrors(t *testing.T) {
 	require.Error(t, err)
 }
 
-// JWTKeyCollection.getSigner falls back to the default signer (the first key
-// added) when the token's kid is unknown, so Swift accepts such a token signed
-// with the active key. Go must too (parity/scenarios/app/02-me.yaml).
-func TestUnknownKidFallsBackToActiveKey(t *testing.T) {
+// A token with no kid verifies with the active key; a known kid with its own key;
+// an unknown kid is refused (post-archive fix). Swift's JWTKeyCollection.getSigner
+// fell back to the default signer for an unknown kid.
+func TestUnknownKidIsRefused(t *testing.T) {
 	ks := Keyset{keys: []Key{{Kid: "active", Secret: []byte("a")}, {Kid: "old", Secret: []byte("b")}}}
-	for kid, want := range map[string]string{"": "active", "active": "active", "old": "old", "nope": "active"} {
+	for kid, want := range map[string]string{"": "active", "active": "active", "old": "old"} {
 		key, ok := ks.lookup(kid)
 		if !ok || key.Kid != want {
 			t.Fatalf("lookup(%q) = %q, %v; want %q", kid, key.Kid, ok, want)
 		}
+	}
+	if _, ok := ks.lookup("nope"); ok {
+		t.Fatal("an unknown kid must verify nothing")
 	}
 	if _, ok := (Keyset{}).lookup("nope"); ok {
 		t.Fatal("empty keyset must verify nothing")

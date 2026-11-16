@@ -14,9 +14,11 @@ import (
 	"lumina/internal/modules/llmrouter"
 	"lumina/internal/ratelimit"
 	"lumina/internal/secretbox"
+	"lumina/internal/ssrfguard"
 	"lumina/parity/scenario"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"net/url"
 	"os"
 	"strings"
@@ -125,6 +127,16 @@ type env struct {
 
 type options struct{ noBox, freeLane bool }
 
+// publicGuard resolves every name to a documentation address, so stub hosts
+// such as ollama.local pass the SSRF check; the test client then sends the
+// request to the local upstream. IP literals still go through the real checks.
+var publicGuard = ssrfguard.Guard{Resolver: func(_ context.Context, host string) ([]string, error) {
+	if ip, err := netip.ParseAddr(strings.Trim(host, "[]")); err == nil {
+		return []string{ip.String()}, nil
+	}
+	return []string{"203.0.113.10"}, nil
+}}
+
 func setup(t *testing.T, o ...options) env {
 	t.Helper()
 	ctx := context.Background()
@@ -154,7 +166,7 @@ func setup(t *testing.T, o ...options) env {
 	stack := llm.NewStack(llm.StackConfig{Getenv: func(k string) string { return vars[k] }, Pool: pool, Box: box, Client: client})
 	identify := auth.Identify(keys, auth.PGUsers(pool))
 	limits := ratelimit.NewStore()
-	m := New(pool, Options{Identify: identify, Limits: limits, Stack: stack, Box: box, Client: client})
+	m := New(pool, Options{Identify: identify, Limits: limits, Stack: stack, Box: box, Client: client, Guard: publicGuard})
 	e := httpserver.New(config.Config{}, httpserver.Deps{
 		Auth: auth.Middleware(keys, auth.PGUsers(pool)),
 		Modules: []httpserver.Module{
@@ -406,6 +418,16 @@ func TestProvidersPutSealsTheKeyAndNeverEchoesIt(t *testing.T) {
 
 	v.errIs(v.do(u, http.MethodPut, "/v1/me/providers/xai", `{"kind":"apiKey"}`), http.StatusBadRequest, "api_key_required")
 	v.errIs(v.do(u, http.MethodPut, "/v1/me/providers/custom", `{"kind":"hostURL"}`), http.StatusBadRequest, "base_url_required")
+	// SSRF: a base URL that names or resolves to an internal address is refused
+	// before anything is stored, for either kind.
+	for body, reason := range map[string]string{
+		`{"kind":"hostURL","baseUrl":"http://127.0.0.1:11434"}`:                `loopback("127.0.0.1")`,
+		`{"kind":"hostURL","baseUrl":"http://169.254.169.254/latest"}`:         `linkLocal("169.254.169.254")`,
+		`{"kind":"apiKey","apiKey":"sk","baseUrl":"https://10.0.0.5/v1"}`:      `privateAddress("10.0.0.5")`,
+		`{"kind":"apiKey","apiKey":"sk","baseUrl":"http://localhost:8080/v1"}`: `loopback("localhost")`,
+	} {
+		v.errIs(v.do(u, http.MethodPut, "/v1/me/providers/custom", body), http.StatusBadRequest, "invalid_base_url:"+reason)
+	}
 
 	require.Equal(t, http.StatusNoContent, v.do(u, http.MethodDelete, "/v1/me/providers/openai", "").code)
 	cred, err = v.m.opts.Stack.Credentials.Credential(context.Background(), llm.OpenAI, u)

@@ -526,9 +526,10 @@ func TestResponsesConformToSpec(t *testing.T) {
 	}
 }
 
-// Swift's usedBytes reads as 0 (see usedBytes), so only the new bytes meet the
-// ceiling. ing_fay stores 1073741000 B of her 1 GiB, ing_pam 99 GiB of his 100.
-func TestWhatATenantStoresDoesNotCountAgainstTheCeiling(t *testing.T) {
+// What a tenant already stores counts (post-archive fix, backlog 1.3; Swift
+// always read 0). ing_fay stores 1073741000 B of her 1 GiB, ing_pam 99 GiB of his
+// 100.
+func TestWhatATenantStoresCountsAgainstTheCeiling(t *testing.T) {
 	v := setup(t, plentyOfDisk)
 	fay := uuid.MustParse("1A6E0000-0000-4000-8000-0000000000A4")
 	pam := uuid.MustParse("1A6E0000-0000-4000-8000-0000000000A5")
@@ -536,12 +537,42 @@ func TestWhatATenantStoresDoesNotCountAgainstTheCeiling(t *testing.T) {
 		return v.do(user, http.MethodPost, "/v1/ingestions",
 			`{"items":[{"kind":"file","fileName":"a.txt","contentType":"text/plain","sizeBytes":`+size+`}]}`)
 	}
-	require.Equal(t, http.StatusOK, create(fay, "825").code)
-	require.Equal(t, http.StatusOK, create(pam, "2147483648").code)
-
-	r := create(fay, "1073741825")
+	// 824 B fills fay's GiB exactly; one more byte is over.
+	require.Equal(t, http.StatusOK, create(fay, "824").code)
+	r := create(fay, "825")
 	require.Equal(t, http.StatusRequestEntityTooLarge, r.code)
-	require.JSONEq(t, `{"error":{"message":"storage quota exceeded: 0 B of 1.0 GiB used"}}`, string(r.body))
+	require.JSONEq(t, `{"error":{"message":"storage quota exceeded: 1024.0 MiB of 1.0 GiB used"}}`, string(r.body))
+
+	r = create(pam, "2147483648")
+	require.Equal(t, http.StatusRequestEntityTooLarge, r.code)
+	require.JSONEq(t, `{"error":{"message":"storage quota exceeded: 99.0 GiB of 100.0 GiB used"}}`, string(r.body))
+	require.Equal(t, http.StatusOK, create(pam, "1073741824").code)
+}
+
+// A database Swift migrated (parity) has no vault_trash: the quota still works,
+// on vault files alone.
+func TestQuotaWithoutTheTrashTable(t *testing.T) {
+	v := setup(t, plentyOfDisk)
+	_, err := v.pool.Exec(context.Background(), `DROP TABLE vault_trash`)
+	require.NoError(t, err)
+	fay := uuid.MustParse("1A6E0000-0000-4000-8000-0000000000A4")
+	create := func(size string) resp {
+		return v.do(fay, http.MethodPost, "/v1/ingestions", `{"items":[{"kind":"file","fileName":"a.txt","contentType":"text/plain","sizeBytes":`+size+`}]}`)
+	}
+	require.Equal(t, http.StatusOK, create("824").code)
+	require.Equal(t, http.StatusRequestEntityTooLarge, create("825").code)
+}
+
+// Trashed files stay on disk until the purge, so they count too.
+func TestTrashCountsAgainstTheCeiling(t *testing.T) {
+	v := setup(t, plentyOfDisk)
+	fay := uuid.MustParse("1A6E0000-0000-4000-8000-0000000000A4")
+	_, err := v.pool.Exec(context.Background(), `INSERT INTO vault_trash
+		(id, tenant_id, vault_file_id, original_path, trash_name, content_type, size_bytes, sha256, deleted_at)
+		VALUES (gen_random_uuid(), $1, gen_random_uuid(), 'old.bin', '_deleted_old.bin', 'application/octet-stream', 824, 'x', now())`, fay)
+	require.NoError(t, err)
+	r := v.do(fay, http.MethodPost, "/v1/ingestions", `{"items":[{"kind":"file","fileName":"a.txt","contentType":"text/plain","sizeBytes":1}]}`)
+	require.Equal(t, http.StatusRequestEntityTooLarge, r.code)
 }
 
 // Over a real connection: the recorder never sets net/http's Content-Length.

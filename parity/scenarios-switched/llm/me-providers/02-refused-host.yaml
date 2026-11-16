@@ -1,0 +1,13 @@
+# Ollama and custom base URLs on a refused port: /test is a network failure and
+# /models falls back to the catalog. Moved here from scenarios/me-providers/03 when
+# Go's SSRF guard started refusing loopback base URLs (docs/migration/cutover-log.md,
+# post-archive fixes): state llm opens private ranges, as a dev setup would.
+module: me-providers
+steps:
+  - {name: an ollama host on a refused port, as: mp_ann, request: {method: PUT, path: /v1/me/providers/ollama, json: {kind: hostURL, baseUrl: "http://127.0.0.1:9"}}}
+  - {name: ollama test, as: mp_ann, request: {method: POST, path: /v1/me/providers/ollama/test}}
+  - {name: ollama models with a host, as: mp_ann, request: {method: GET, path: /v1/me/providers/ollama/models}}
+
+  - {name: a custom endpoint on a refused port, as: mp_ann, request: {method: PUT, path: /v1/me/providers/custom, json: {kind: hostURL, baseUrl: "http://127.0.0.1:9"}}}
+  - {name: custom test probes the model list, as: mp_ann, request: {method: POST, path: /v1/me/providers/custom/test}}
+  - {name: custom models, as: mp_ann, request: {method: GET, path: /v1/me/providers/custom/models}}
