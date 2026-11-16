@@ -69,27 +69,36 @@ func QuotaFromConfig(cfg config.Config) Quota {
 	}
 }
 
-// usedBytes is what StorageQuotaService.usedBytes answers in production: always
-// 0. Swift decodes COALESCE(SUM(size_bytes), 0), a numeric, as Int64; the decode
-// fails under try? and reads as 0, so what a tenant already stores never counts.
-// Parity pins it (ingestion/02-create). Counting it is an owner decision: a
-// bigint SUM here, and the same fix in Swift if Swift still serves the route.
-func usedBytes() int64 { return 0 }
+// usedBytes is what the tenant stores: its vault files plus its trash, which
+// stays on disk until the 30-day purge. Swift's StorageQuotaService decoded
+// COALESCE(SUM(size_bytes), 0), a numeric, as Int64 under try?, so it always read
+// 0 and only the new batch met the ceiling. Fixed after the archive (backlog
+// 1.3): the SUM is cast to bigint. Hand-written because vault_trash postdates the
+// schema snapshot sqlc reads.
+func (m *Module) usedBytes(ctx context.Context, tenant uuid.UUID) (int64, error) {
+	var used int64
+	err := m.pool.QueryRow(ctx, `SELECT
+		COALESCE((SELECT SUM(size_bytes) FROM vault_files WHERE tenant_id = $1), 0)::bigint +
+		COALESCE((SELECT SUM(size_bytes) FROM vault_trash WHERE tenant_id = $1), 0)::bigint`, tenant).Scan(&used)
+	return used, err
+}
 
 // quotaDenied is StorageQuotaService.check; it returns what the message needs.
-func (m *Module) quotaDenied(ctx context.Context, tenant uuid.UUID, tier string, incoming int64) (used, limit int64, denied bool) {
+func (m *Module) quotaDenied(ctx context.Context, tenant uuid.UUID, tier string, incoming int64) (used, limit int64, denied bool, err error) {
 	if !m.quota.Enabled {
-		return 0, 0, false
+		return 0, 0, false, nil
 	}
 	ceiling := m.quota.Limits.For(tier)
 	if ceiling == nil {
-		return 0, 0, false
+		return 0, 0, false, nil
 	}
-	used = usedBytes()
+	if used, err = m.usedBytes(ctx, tenant); err != nil {
+		return 0, 0, false, err
+	}
 	if used+max(0, incoming) <= *ceiling {
-		return 0, 0, false
+		return 0, 0, false, nil
 	}
-	return used, *ceiling, true
+	return used, *ceiling, true, nil
 }
 
 // quotaMessage is StorageQuotaService.message, the body of the 413.

@@ -2369,3 +2369,18 @@ stacked and merged by the owner in this order: #598, #599, #600.
 - community could not be exercised on staging (disabled there); CI parity covers it. The #599 body lets the owner drop
   its two entries.
 - `community/00-auth`, `skills-cron/01-routes` and `hermes/01-runs-errors` gained `smoke: true`.
+
+## Post-archive fixes
+
+Deliberate changes from Swift, made after the archive (`docs/post-archive-backlog.md`).
+
+### Storage quota counts stored bytes (backlog 1.3)
+
+- `POST /v1/ingestions` checks the tier ceiling against what the tenant already stores plus the batch. Stored bytes
+  are `vault_files` plus `vault_trash` (trash stays on disk until the 30-day purge), summed as bigint. Swift decoded
+  a numeric `SUM` as `Int64` under `try?`, so it always read 0 and the 413 always said "0 B of ...". The 413 now
+  names the real figure.
+- Batches accepted but not yet uploaded don't count, as before: their bytes count once the files land.
+- Parity: the ing_fay and ing_pam steps in `ingestion/02-create` pinned the Swift behaviour and were removed;
+  `TestWhatATenantStoresCountsAgainstTheCeiling` and `TestTrashCountsAgainstTheCeiling` cover them.
+
