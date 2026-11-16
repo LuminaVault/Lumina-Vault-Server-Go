@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -28,7 +29,7 @@ func TestAuthServiceSwiftRules(t *testing.T) {
 		return email
 	}
 
-	t.Run("five failed logins lock for fifteen minutes, before the password is checked", func(t *testing.T) {
+	t.Run("five failed logins lock for fifteen minutes", func(t *testing.T) {
 		h := build(t, pool, harness{})
 		email := register(t, h)
 		for range 5 {
@@ -41,6 +42,67 @@ func TestAuthServiceSwiftRules(t *testing.T) {
 		require.NoError(t, pool.QueryRow(ctx, `SELECT EXTRACT(EPOCH FROM lockout_until - now()) / 60 FROM users WHERE email = $1`, email).Scan(&minutes))
 		assert.InDelta(t, 15, minutes, 0.5)
 		assert.Equal(t, int64(5), h.user(t, "email = $1", email).failed)
+	})
+
+	// Post-archive fixes (backlog: auth weaknesses kept by #85).
+	t.Run("a locked account answers 423 only to the right password, and does not count", func(t *testing.T) {
+		h := build(t, pool, harness{})
+		email := register(t, h)
+		for range 5 {
+			_, _ = h.svc.Login(ctx, email, "WrongPassword12345!", false)
+		}
+		var until1 time.Time
+		require.NoError(t, pool.QueryRow(ctx, `SELECT lockout_until FROM users WHERE email = $1`, email).Scan(&until1))
+		_, err := h.svc.Login(ctx, email, "WrongPassword12345!", false)
+		assert.ErrorIs(t, err, authservice.ErrInvalidCredentials, "a wrong password does not reveal the lock")
+		var until2 time.Time
+		require.NoError(t, pool.QueryRow(ctx, `SELECT lockout_until FROM users WHERE email = $1`, email).Scan(&until2))
+		assert.True(t, until1.Equal(until2), "the lock is not extended")
+		assert.Equal(t, int64(5), h.user(t, "email = $1", email).failed)
+		_, err = h.svc.Login(ctx, email, password, false)
+		assert.ErrorIs(t, err, authservice.ErrAccountLocked)
+	})
+
+	t.Run("a failure after the lock expired starts the count afresh", func(t *testing.T) {
+		h := build(t, pool, harness{})
+		email := register(t, h)
+		_, err := pool.Exec(ctx, `UPDATE users SET failed_login_attempts = 5, lockout_until = now() - interval '1 second' WHERE email = $1`, email)
+		require.NoError(t, err)
+		_, err = h.svc.Login(ctx, email, "WrongPassword12345!", false)
+		assert.ErrorIs(t, err, authservice.ErrInvalidCredentials)
+		assert.Equal(t, int64(1), h.user(t, "email = $1", email).failed)
+		var until *time.Time
+		require.NoError(t, pool.QueryRow(ctx, `SELECT lockout_until FROM users WHERE email = $1`, email).Scan(&until))
+		assert.Nil(t, until, "one failure does not lock again")
+		_, err = h.svc.Login(ctx, email, password, false)
+		require.NoError(t, err)
+	})
+
+	t.Run("concurrent failures all count", func(t *testing.T) {
+		h := build(t, pool, harness{})
+		email := register(t, h)
+		var wg sync.WaitGroup
+		for range 4 {
+			wg.Go(func() { _, _ = h.svc.Login(ctx, email, "WrongPassword12345!", false) })
+		}
+		wg.Wait()
+		assert.Equal(t, int64(4), h.user(t, "email = $1", email).failed)
+	})
+
+	t.Run("an unknown email costs a bcrypt check", func(t *testing.T) {
+		// Cost 10, so bcrypt (tens of ms) outweighs the database round trips.
+		svc := authservice.New(pool, authservice.Options{Keys: keys, PasswordCost: 10})
+		email := randomEmail("timing")
+		_, err := svc.Register(ctx, email, randomUsername("timing"), password)
+		require.NoError(t, err)
+		timed := func(e string) time.Duration {
+			start := time.Now()
+			_, _ = svc.Login(ctx, e, "WrongPassword12345!", false)
+			return time.Since(start)
+		}
+		_ = timed("warm-" + uuid.NewString() + "@test.luminavault") // builds the dummy hash once
+		known, unknown := timed(email), timed("nobody-"+uuid.NewString()+"@test.luminavault")
+		assert.Greater(t, unknown, known/2, "known %v, unknown %v", known, unknown)
 	})
 
 	t.Run("a successful login clears the failure count", func(t *testing.T) {

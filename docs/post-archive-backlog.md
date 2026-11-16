@@ -43,8 +43,9 @@ Found during the port, same batch:
   `docs/migration/cutover-log.md`.
 - **xAI/Nous OAuth `complete`.** The body is read before any auth check, so a valid sessionID alone can finish a link.
 - **Auth weaknesses kept by 8A (#85).** These are listed in that PR body:
-  - The login timing oracle, and the 423 sent before the password check.
-  - The lockout counter is not reset after expiry, and failure counters are racy.
+  - ~~The login timing oracle, and the 423 sent before the password check.~~ Done.
+  - ~~The lockout counter is not reset after expiry, and failure counters are racy.~~ Done (login; see
+    "Login: timing, lock answer and failure count" in `docs/migration/cutover-log.md`).
   - ~~`mfa/resend` enumerates accounts.~~ Done (see "`mfa/resend` answers an unknown email like a known one" in
     `docs/migration/cutover-log.md`). Register 409s enumerate emails and usernames: open, needs an owner decision.
   - ~~Requesting a new code bypasses the per-row reset and verify locks.~~ Done.

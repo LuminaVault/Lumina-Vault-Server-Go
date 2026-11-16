@@ -2499,3 +2499,16 @@ Deliberate changes from Swift, made after the archive (`docs/post-archive-backlo
 - Tests: new subtests of `TestAuthServiceSwiftRules`, `TestLoggingSendersWithholdCodesOutsideDevAndTest`
   (`internal/authservice`). Parity: `auth/06-email` "new code row is not locked" was removed.
 
+### Login: timing, lock answer and failure count
+
+- An unknown email now checks the password against a dummy bcrypt hash at the service's cost, so it takes as long as a
+  wrong password for a real account (Swift answered at once: a timing oracle).
+- The password is checked before the lock. A locked account answers 423 only to the right password; a wrong one gets
+  the usual 401 and is not counted, so the lock is neither revealed nor extended (Swift answered 423 first, which
+  confirmed the account).
+- A failure after the lock has expired starts the count at one (Swift kept counting, so the next failure locked
+  again).
+- The count and the lock are one atomic `UPDATE` (Swift read, then wrote, and lost concurrent failures).
+- Tests: the new subtests of `TestAuthServiceSwiftRules` (`internal/authservice/lockout_test.go`). Parity is
+  unchanged: no step sends a wrong password to a locked account or reads the counter.
+

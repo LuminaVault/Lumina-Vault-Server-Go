@@ -10,6 +10,7 @@ import (
 	"lumina/internal/ids"
 	"lumina/internal/swiftstr"
 	"lumina/internal/wire"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -68,6 +69,9 @@ type Service struct {
 	pool *pgxpool.Pool
 	opt  Options
 	mfa  *MFA
+	// dummyHash is a bcrypt hash at the service's cost, checked when a login names
+	// no account so that an unknown email costs as much as a wrong password.
+	dummyHash func() string
 }
 
 // New returns the service. Senders default to the logging sender.
@@ -91,7 +95,15 @@ func New(pool *pgxpool.Pool, opt Options) *Service {
 			*g = DefaultCodeGenerator{}
 		}
 	}
-	return &Service{pool: pool, opt: opt, mfa: NewMFA(pool, opt.MFASender, opt.MFACodes, opt.Now)}
+	cost := opt.PasswordCost
+	dummy := sync.OnceValue(func() string {
+		h, err := auth.HashPassword("lv-no-such-account", cost)
+		if err != nil {
+			return ""
+		}
+		return h
+	})
+	return &Service{pool: pool, opt: opt, mfa: NewMFA(pool, opt.MFASender, opt.MFACodes, opt.Now), dummyHash: dummy}
 }
 
 // User is the users row as AuthService reads it.
@@ -246,31 +258,37 @@ func (s *Service) Register(ctx context.Context, email, rawUsername, password str
 
 // Login is DefaultAuthService.login. requireMFA is the mfa-auth-v1 header.
 //
-// Swift weaknesses, kept: an unknown email answers at once while a known one
-// pays for bcrypt (a timing oracle), and a locked account answers 423 before
-// the password is checked, which confirms the account exists. The lockout
-// counter is not reset when a lock expires, so the next failure locks again.
+// Post-archive fixes (backlog: auth weaknesses kept by #85). Swift answered an
+// unknown email at once while a known one paid for bcrypt, answered 423 for a
+// locked account before checking the password, kept the failure count across
+// an expired lock, and counted failures read-then-write. Now:
+//   - an unknown email checks the password against a dummy hash, so it costs
+//     the same as a wrong password;
+//   - the password is checked first; a locked account answers 423 only to the
+//     right password, and a wrong one is the usual 401 without counting;
+//   - a failure after the lock has expired starts the count afresh;
+//   - the count and the lock are one atomic UPDATE.
 func (s *Service) Login(ctx context.Context, email, password string, requireMFA bool) (*AuthResponse, error) {
 	u, err := s.FindUserByEmail(ctx, email)
 	if err != nil {
 		return nil, err
 	}
 	if u == nil {
+		auth.VerifyPassword(password, s.dummyHash())
 		return nil, ErrInvalidCredentials
 	}
-	if u.LockoutUntil != nil && u.LockoutUntil.After(s.opt.Now()) {
-		return nil, ErrAccountLocked
-	}
+	now := s.opt.Now()
+	locked := u.LockoutUntil != nil && u.LockoutUntil.After(now)
 	if !auth.VerifyPassword(password, u.PasswordHash) {
-		var lockoutAt *time.Time
-		if u.FailedLoginAttempts+1 >= maxFailedLogins {
-			t := s.opt.Now().Add(lockoutDuration)
-			lockoutAt = &t
-		}
-		if err := s.incrementFailedLogin(ctx, u.ID, lockoutAt); err != nil {
-			return nil, err
+		if !locked {
+			if err := s.countFailedLogin(ctx, u.ID, now); err != nil {
+				return nil, err
+			}
 		}
 		return nil, ErrInvalidCredentials
+	}
+	if locked {
+		return nil, ErrAccountLocked
 	}
 	if err := s.resetFailedLogin(ctx, u.ID); err != nil {
 		return nil, err
@@ -286,16 +304,18 @@ func (s *Service) Login(ctx context.Context, email, password string, requireMFA 
 	return s.IssueTokens(ctx, u)
 }
 
-// incrementFailedLogin re-reads the user and writes count + 1, as Fluent does:
-// not an atomic increment, so concurrent failures can lose one (Swift
-// weakness, kept). A nil lockoutAt clears an expired lock.
-func (s *Service) incrementFailedLogin(ctx context.Context, id uuid.UUID, lockoutAt *time.Time) error {
-	u, err := s.FindUserByID(ctx, id)
-	if err != nil || u == nil {
-		return err
-	}
-	_, err = s.pool.Exec(ctx, `UPDATE users SET failed_login_attempts = $2, lockout_until = $3, updated_at = $4 WHERE id = $1`,
-		id, u.FailedLoginAttempts+1, lockoutAt, s.opt.Now())
+// countFailedLogin adds one failure in a single UPDATE, so concurrent failures
+// all count: Postgres re-reads the row a concurrent update changed. A lock that
+// has expired starts the count at one, and the maxFailedLogins-th failure locks
+// for lockoutDuration.
+func (s *Service) countFailedLogin(ctx context.Context, id uuid.UUID, now time.Time) error {
+	_, err := s.pool.Exec(ctx, `UPDATE users SET
+		failed_login_attempts = CASE WHEN lockout_until <= $2 THEN 1 ELSE failed_login_attempts + 1 END,
+		lockout_until = CASE
+			WHEN (CASE WHEN lockout_until <= $2 THEN 1 ELSE failed_login_attempts + 1 END) >= $3 THEN $4::timestamptz
+			ELSE NULL END,
+		updated_at = $2
+		WHERE id = $1`, id, now, maxFailedLogins, now.Add(lockoutDuration))
 	return err
 }
 
