@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"lumina/internal/chunkindex"
 	"lumina/internal/embedding"
 	"lumina/internal/ids"
 	"lumina/internal/memorystore"
@@ -167,6 +168,18 @@ func (m *Module) upload(c *echo.Context) error {
 	if len(data) == 0 {
 		return wire.NewError(http.StatusBadRequest, "empty body")
 	}
+	isNote := wire.Query(c, "note") == "true"
+	// A markdown note without a sidecar title is titled from its first H1, else its
+	// filename, the same rule bulk import uses.
+	if isNote && isMarkdownPath(safe) && (sidecar == nil || sidecar.Title == nil) {
+		if content, ok := vaultfiles.DecodeUTF8(data); ok {
+			title := vaultfiles.MarkdownTitle(content, vaultfiles.LastPathComponent(safe))
+			if sidecar == nil {
+				sidecar = &vaultfiles.Metadata{}
+			}
+			sidecar.Title = &title
+		}
+	}
 	if m.guard != nil {
 		if err := m.guard.Check(int64(len(data))); err != nil {
 			return err
@@ -217,7 +230,6 @@ func (m *Module) upload(c *echo.Context) error {
 	m.sink.Enqueue(tenant, achievements.EventVaultUploaded)
 	m.latches.Latch(ctx, onboardlatch.FirstCapture, tenant)
 
-	isNote := wire.Query(c, "note") == "true"
 	m.analytics.Capture("vault_file_uploaded", ids.Upper(actor), map[string]any{
 		"content_type": contentType,
 		"is_note":      isNote,
@@ -226,6 +238,16 @@ func (m *Module) upload(c *echo.Context) error {
 	var memoryID *wire.UUID
 	if isNote {
 		memoryID = m.upsertNoteMemory(ctx, tenant, savedID, spaceID, safe, data, sidecar)
+	}
+	// UpdateContent drops a note's chunks, so every note write re-indexes: chunks for
+	// retrieval and [[wikilinks]] for backlinks and the graph.
+	if memoryID != nil && m.indexer != nil {
+		if content, ok := vaultfiles.DecodeUTF8(data); ok {
+			m.indexer.IndexBestEffort(ctx, chunkindex.IndexParams{
+				Tenant: tenant, MemoryID: memoryID.UUID, VaultFileID: &savedID, SpaceID: spaceID,
+				SourcePath: &safe, Content: content,
+			})
+		}
 	}
 	// An unfiled note gets a Space suggestion in the background.
 	if isNote && spaceID == nil && m.filing != nil {
@@ -271,9 +293,8 @@ func (m *Module) readFile(r *http.Request) ([]byte, error) {
 
 // upsertNoteMemory gives a written note its recall memory, keyed on the vault
 // file. The file write already succeeded, so a failure is logged and the response
-// has no memoryId. Text that isn't UTF-8 has no memory at all. This doesn't index:
-// no vault route writes memory_chunks, and a re-upload's UpdateContent deletes the
-// note's chunks until something rebuilds them.
+// has no memoryId. Text that isn't UTF-8 has no memory at all. Indexing (chunks and
+// wikilinks) runs after it in upload, since UpdateContent deletes the note's chunks.
 func (m *Module) upsertNoteMemory(ctx context.Context, tenant, fileID uuid.UUID, spaceID *uuid.UUID, path string, data []byte, sidecar *vaultfiles.Metadata) *wire.UUID {
 	content, ok := vaultfiles.DecodeUTF8(data)
 	if m.embeddings == nil || !ok || content == "" {
@@ -483,4 +504,12 @@ func (m *Module) move(c *echo.Context) error {
 		return err
 	}
 	return wire.JSON(c, http.StatusOK, toDTO(row))
+}
+
+func isMarkdownPath(path string) bool {
+	switch vaultfiles.Lowercased(vaultfiles.PathExtension(path)) {
+	case "md", "markdown":
+		return true
+	}
+	return false
 }

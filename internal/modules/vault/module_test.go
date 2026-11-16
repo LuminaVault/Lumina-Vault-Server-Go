@@ -10,6 +10,7 @@ import (
 	"io"
 	"lumina/internal/achievementsink"
 	"lumina/internal/auth"
+	"lumina/internal/chunkindex"
 	"lumina/internal/config"
 	"lumina/internal/dbtest"
 	"lumina/internal/diskguard"
@@ -369,6 +370,36 @@ func TestVaultRoutes(t *testing.T) {
 		var stored string
 		require.NoError(t, v.pool.QueryRow(context.Background(), `SELECT content FROM memories WHERE tenant_id = $1`, u).Scan(&stored))
 		require.Equal(t, content, stored)
+	})
+	t.Run("a markdown note upload is titled from its H1 and indexed with its wikilinks", func(t *testing.T) {
+		indexed := setupOn(t, v, func(o *Options) {
+			o.Embeddings = stubEmbedder{}
+			o.Indexer = chunkindex.NewIndexer(chunkindex.NewChunkRepository(v.pool), stubEmbedder{}, chunkindex.NewLinkRepository(v.pool))
+		})
+		u := v.user("trial")
+		content := "# The Last Light\n\nSee [[Factions]] for the houses.\n"
+		r := indexed.do(u, http.MethodPost, "/v1/vault/files?path=The_Last_Light_Universe_Bible_v0.1.md&note=true", map[string]string{"Content-Type": "text/markdown"}, []byte(content))
+		require.Equal(t, http.StatusOK, r.code, string(r.body))
+		var out VaultUploadResponse
+		require.NoError(t, json.Unmarshal(r.body, &out))
+		require.Equal(t, "inbox/The_Last_Light_Universe_Bible_v0.1.md", out.Path)
+		require.NotNil(t, out.MemoryId)
+		ctx := context.Background()
+		var title string
+		require.NoError(t, v.pool.QueryRow(ctx, `SELECT metadata->>'title' FROM vault_files WHERE tenant_id = $1`, u).Scan(&title))
+		require.Equal(t, "The Last Light", title)
+		var chunks int
+		require.NoError(t, v.pool.QueryRow(ctx, `SELECT count(*) FROM memory_chunks WHERE tenant_id = $1`, u).Scan(&chunks))
+		require.Positive(t, chunks)
+		var target string
+		require.NoError(t, v.pool.QueryRow(ctx, `SELECT raw_target FROM vault_links WHERE tenant_id = $1`, u).Scan(&target))
+		require.Equal(t, "Factions", target)
+
+		// A sidecar title wins over the H1.
+		r = indexed.do(u, http.MethodPost, "/v1/vault/files?path=other.md&note=true", map[string]string{"Content-Type": "text/markdown", "X-Vault-Metadata": `{"title":"Mine"}`}, []byte("# Theirs\n"))
+		require.Equal(t, http.StatusOK, r.code, string(r.body))
+		require.NoError(t, v.pool.QueryRow(ctx, `SELECT metadata->>'title' FROM vault_files WHERE tenant_id = $1 AND path = 'inbox/other.md'`, u).Scan(&title))
+		require.Equal(t, "Mine", title)
 	})
 
 	t.Run("exactly the limit is stored and one byte more is a bare 413", func(t *testing.T) {

@@ -71,6 +71,9 @@ type Options struct {
 	// and whenever capture.autoFile.enabled is off, means no suggestion.
 	CaptureFiling func(tenant, file uuid.UUID)
 	Analytics     *posthog.Client
+	// Indexer chunks a note upload and records its [[wikilinks]], as bulk import does.
+	// Nil skips indexing (tests that don't need it).
+	Indexer *chunkindex.Indexer
 	// MaxFileSize is VaultController.maxFileSize, 10 MiB unless a test lowers it.
 	MaxFileSize int64
 }
@@ -97,6 +100,7 @@ type Module struct {
 	latches    *onboardlatch.Latches
 	analytics  *posthog.Client
 	filing     func(tenant, file uuid.UUID)
+	indexer    *chunkindex.Indexer
 	maxFile    int64
 	now        func() time.Time
 	locks      pathLocks
@@ -130,6 +134,7 @@ func New(pool *pgxpool.Pool, opts Options) *Module {
 		latches:    opts.Latches,
 		analytics:  opts.Analytics,
 		filing:     opts.CaptureFiling,
+		indexer:    opts.Indexer,
 		maxFile:    maxFile,
 		now:        time.Now,
 	}
