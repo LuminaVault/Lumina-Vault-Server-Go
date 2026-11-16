@@ -1,5 +1,9 @@
 # X-Vault-ID: a team vault, an editor who writes, a viewer who reads, an outsider.
 module: vault
+# Go-only since the markdown import (2026-11-16): a markdown note upload is
+# titled from its first H1, else its file name, and Swift wrote no title.
+# Listings carry that title too.
+ignore: ['snapshot:vault_files.metadata.title', '$.files[*].metadata.title']
 steps:
   - name: editor uploads
     as: vault_ed

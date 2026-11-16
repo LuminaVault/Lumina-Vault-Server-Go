@@ -9,10 +9,10 @@ import (
 // IsPublic is URLEnricherGuard.isPublic, the SSRF check on captured links: http
 // or https, a host, and not a host that names an internal or private address.
 //
-// WEAKNESS, kept on purpose: it reads the URL's text and resolves nothing, so a
-// public name that resolves to a private address passes, and so does a redirect
-// from a public page to a private one. internal/ssrfguard is the guard that
-// resolves. Whether capture should use it is an owner decision.
+// It reads the URL's text and resolves nothing, so it is only the cheap first
+// check that turns an obviously internal link into a 400. The real SSRF defense
+// is the fetch client: NewEnrichmentService defaults to ssrfguard's strict
+// client, which checks every dialed address after DNS and on every redirect hop.
 //
 // QUIRKS, kept on purpose, all from reading Swift:
 //   - The IPv6 checks run on every host, so any name starting with "fc" or "fd" is

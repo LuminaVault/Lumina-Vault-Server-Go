@@ -3,6 +3,7 @@ package llm
 import (
 	"log/slog"
 	"lumina/internal/secretbox"
+	"lumina/internal/ssrfguard"
 	"net/http"
 	"net/url"
 	"slices"
@@ -22,6 +23,8 @@ type StackConfig struct {
 	HermesDefaultModel string
 	XAIResolver        XAIContainerResolver // nil until the container manager lands
 	Client             *http.Client         // nil means http.DefaultClient; tests set it
+	// BYOKGuard, when set, is the SSRF check on tenant base URLs.
+	BYOKGuard *ssrfguard.Guard
 }
 
 // Stack is the assembled routing layer.
@@ -68,6 +71,9 @@ func NewStack(cfg StackConfig) *Stack {
 	var credentials CredentialSource
 	if cfg.Box != nil {
 		stack.Credentials = NewCredentialStore(cfg.Pool, cfg.Box, cfg.XAIResolver)
+		if cfg.BYOKGuard != nil {
+			stack.Credentials.SetURLGuard(*cfg.BYOKGuard)
+		}
 		credentials = stack.Credentials
 	}
 

@@ -45,7 +45,11 @@ func (m *Module) create(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if used, limit, denied := m.quotaDenied(ctx, acc.VaultID, tier, batchBytes); denied {
+	used, limit, denied, err := m.quotaDenied(ctx, acc.VaultID, tier, batchBytes)
+	if err != nil {
+		return err
+	}
+	if denied {
 		return wire.NewError(http.StatusRequestEntityTooLarge, quotaMessage(used, limit))
 	}
 	if err := m.disk.Check(batchBytes); err != nil {

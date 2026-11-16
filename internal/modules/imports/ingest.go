@@ -52,13 +52,73 @@ func NewIngest(pool *pgxpool.Pool, imports *Service, memories *memorystore.Repos
 type IngestResult struct {
 	SpaceID   uuid.UUID
 	SpaceSlug string
-	Imported  int
-	Skipped   int
-	Failed    int
+	// Imported counts FileImported and FileUpdated; Failed counts FileFailed;
+	// Skipped counts every other status.
+	Imported int
+	Skipped  int
+	Failed   int
 	// VaultFileIDs are the rows written or updated by this batch (the Hermes
 	// mirror feeds them straight into a memory compile).
 	VaultFileIDs []uuid.UUID
+	// Files is one entry per input, in input order.
+	Files []FileResult
 }
+
+// FileStatus is what happened to one input file.
+type FileStatus string
+
+const (
+	// FileImported is a new vault file.
+	FileImported FileStatus = "imported"
+	// FileUpdated replaced an existing file at the same path (OnConflictOverwrite).
+	FileUpdated FileStatus = "updated"
+	// FileUnchanged already exists with the same bytes.
+	FileUnchanged FileStatus = "unchanged"
+	// FileEmpty has no content but whitespace.
+	FileEmpty FileStatus = "empty"
+	// FileHidden sits under a dot-folder or is a dotfile (.obsidian/, .trash/).
+	FileHidden FileStatus = "hidden"
+	// FileUnsupported has an extension other than .md, .markdown or .txt.
+	FileUnsupported FileStatus = "unsupported"
+	// FileCollision slugifies to the same vault path as an earlier file of the
+	// same request, which was kept.
+	FileCollision FileStatus = "collision"
+	// FileExists would replace a different existing file (OnConflictSkip).
+	FileExists FileStatus = "exists"
+	// FileFailed could not be written; the server log has why.
+	FileFailed FileStatus = "failed"
+)
+
+// FileResult reports one input. SavedPath is the vault path the input maps to:
+// where it was written, or for a collision or an existing file, the path that
+// is already taken. It is nil for hidden and unsupported inputs.
+type FileResult struct {
+	Path      string
+	SavedPath *string
+	Status    FileStatus
+}
+
+// OnConflict says what a file does to a different one already at its path.
+type OnConflict int
+
+const (
+	// OnConflictOverwrite replaces it: re-syncing a vault updates the notes.
+	OnConflictOverwrite OnConflict = iota
+	// OnConflictSkip leaves it and reports FileExists: a first import never
+	// replaces a note the user already has.
+	OnConflictSkip
+)
+
+// IngestOptions are the knobs of IngestBatchWith.
+type IngestOptions struct {
+	// Provenance is stamped on every written row's metadata.
+	Provenance *string
+	OnConflict OnConflict
+}
+
+// textExtensions are the inputs bulk import writes; anything else (images,
+// .canvas, .pdf) would become a junk note, so it is reported unsupported.
+var textExtensions = map[string]bool{"md": true, "markdown": true, "txt": true}
 
 // IngestBatch is ingestBatch. The disk check comes first, so a refused import leaves
 // nothing half-written.
@@ -69,6 +129,15 @@ func (i *Ingest) IngestBatch(ctx context.Context, tenant uuid.UUID, spaceName st
 // IngestBatchWithProvenance is ingestBatch(..., provenance:): provenance is
 // stamped on every written row's metadata (hermes-mirror, hermes-session).
 func (i *Ingest) IngestBatchWithProvenance(ctx context.Context, tenant uuid.UUID, spaceName string, files []FileInput, provenance *string) (IngestResult, error) {
+	return i.IngestBatchWith(ctx, tenant, spaceName, files, IngestOptions{Provenance: provenance})
+}
+
+// IngestBatchWith is the batch with every option. Hidden and unsupported inputs
+// are filtered first, then inputs that slugify to a path an earlier input of the
+// request already holds. After the writes, the tenant's pending wikilinks are
+// re-resolved, so a link to a file later in the batch (or in an earlier batch)
+// resolves.
+func (i *Ingest) IngestBatchWith(ctx context.Context, tenant uuid.UUID, spaceName string, files []FileInput, opts IngestOptions) (IngestResult, error) {
 	if i.guard != nil {
 		var total int64
 		for _, f := range files {
@@ -85,21 +154,65 @@ func (i *Ingest) IngestBatchWithProvenance(ctx context.Context, tenant uuid.UUID
 	if err := i.paths.EnsureTenantDirectories(tenant); err != nil {
 		return IngestResult{}, err
 	}
-	result := IngestResult{SpaceID: spaceID, SpaceSlug: slug}
+	result := IngestResult{SpaceID: spaceID, SpaceSlug: slug, Files: make([]FileResult, 0, len(files))}
+	claimed := make(map[string]bool, len(files))
 	for _, file := range files {
-		saved, err := i.ingestOne(ctx, tenant, spaceID, slug, file, provenance)
+		entry := FileResult{Path: file.Path}
 		switch {
-		case err != nil:
-			result.Failed++
-			slog.ErrorContext(ctx, "vault ingest failed", "tenant", tenant, "path", file.Path, "error", err)
-		case saved != nil:
+		case isHiddenPath(file.Path):
+			entry.Status = FileHidden
+		case !isTextPath(file.Path):
+			entry.Status = FileUnsupported
+		default:
+			safe := SafePath(slug, file.Path)
+			entry.SavedPath = &safe
+			if claimed[safe] {
+				entry.Status = FileCollision
+				break
+			}
+			claimed[safe] = true
+			saved, status, err := i.ingestOne(ctx, tenant, spaceID, safe, file, opts)
+			entry.Status = status
+			if err != nil {
+				entry.Status = FileFailed
+				slog.ErrorContext(ctx, "vault ingest failed", "tenant", tenant, "path", file.Path, "error", err)
+			} else if saved != nil {
+				result.VaultFileIDs = append(result.VaultFileIDs, *saved)
+			}
+		}
+		switch entry.Status {
+		case FileImported, FileUpdated:
 			result.Imported++
-			result.VaultFileIDs = append(result.VaultFileIDs, *saved)
+		case FileFailed:
+			result.Failed++
 		default:
 			result.Skipped++
 		}
+		result.Files = append(result.Files, entry)
+	}
+	if result.Imported > 0 {
+		i.indexer.ReresolvePendingBestEffort(ctx, tenant)
 	}
 	return result, nil
+}
+
+// isHiddenPath is true when any segment of the source path is a dotfile or
+// dot-folder: Obsidian's .obsidian/ and .trash/, git's .git/. "." and ".." are
+// not hidden; SafePath drops them.
+func isHiddenPath(rawPath string) bool {
+	for _, p := range strings.Split(rawPath, "/") {
+		if p != "." && p != ".." && strings.HasPrefix(p, ".") {
+			return true
+		}
+	}
+	return false
+}
+
+// isTextPath is true for .md, .markdown and .txt, and for a name with no
+// extension at all, which bulk import has always read as markdown.
+func isTextPath(rawPath string) bool {
+	ext := vaultfiles.PathExtension(vaultfiles.LastPathComponent(rawPath))
+	return ext == "" || textExtensions[vaultfiles.Lowercased(ext)]
 }
 
 func (i *Ingest) ensureSpace(ctx context.Context, tenant uuid.UUID, name string) (uuid.UUID, string, error) {
@@ -120,39 +233,43 @@ func (i *Ingest) ensureSpace(ctx context.Context, tenant uuid.UUID, name string)
 //
 // The path goes through SafePath and ResolveInside, not SanitizePath, which would
 // refuse the spaces and emoji Obsidian filenames carry. Same as Swift.
-func (i *Ingest) ingestOne(ctx context.Context, tenant, spaceID uuid.UUID, slug string, input FileInput, provenance *string) (*uuid.UUID, error) {
+func (i *Ingest) ingestOne(ctx context.Context, tenant, spaceID uuid.UUID, safe string, input FileInput, opts IngestOptions) (*uuid.UUID, FileStatus, error) {
 	content := input.Content
 	if swiftstr.TrimWhitespacesAndNewlines(content) == "" {
-		return nil, nil
+		return nil, FileEmpty, nil
 	}
-	safe := SafePath(slug, input.Path)
 	data := []byte(content)
 	sum := sha256.Sum256(data)
 	digest := hex.EncodeToString(sum[:])
 	existing, err := i.store.FindByPath(ctx, tenant, safe)
 	if err != nil {
-		return nil, err
+		return nil, FileFailed, err
 	}
 	if existing != nil && existing.SHA256 == digest {
-		return nil, nil
+		return nil, FileUnchanged, nil
+	}
+	if existing != nil && opts.OnConflict == OnConflictSkip {
+		return nil, FileExists, nil
 	}
 	target, err := vaultfiles.ResolveInside(i.paths.Raw(tenant), safe)
 	if err != nil {
-		return nil, err
+		return nil, FileFailed, err
 	}
 	if err := vaultfiles.CreateParent(target); err != nil {
-		return nil, err
+		return nil, FileFailed, err
 	}
 	if err := vaultfiles.WriteAtomic(target, data); err != nil {
-		return nil, err
+		return nil, FileFailed, err
 	}
 	title := Title(content, vaultfiles.LastPathComponent(input.Path))
-	metadata := &vaultfiles.Metadata{Title: &title, Provenance: provenance}
+	metadata := &vaultfiles.Metadata{Title: &title, Provenance: opts.Provenance}
 	var saved uuid.UUID
+	status := FileImported
 	if existing != nil {
 		saved = existing.ID
+		status = FileUpdated
 		if err := i.store.UpdateIngested(ctx, saved, spaceID, int64(len(data)), digest, metadata); err != nil {
-			return nil, err
+			return nil, FileFailed, err
 		}
 	} else {
 		saved, err = i.store.Insert(ctx, vaultfiles.UpsertParams{
@@ -160,24 +277,24 @@ func (i *Ingest) ingestOne(ctx context.Context, tenant, spaceID uuid.UUID, slug 
 			SizeBytes: int64(len(data)), SHA256: digest, Processed: true, Metadata: metadata,
 		})
 		if err != nil {
-			return nil, err
+			return nil, FileFailed, err
 		}
 	}
 	// The file is already written, so an embedding outage stores the memory without a
 	// vector rather than half-import it.
 	vec, err := embedding.EmbedForWrite(ctx, i.embeddings, content, tenant, "vault.ingest")
 	if err != nil {
-		return nil, err
+		return nil, FileFailed, err
 	}
 	memoryID, err := i.memories.IDBySourceVaultFileID(ctx, tenant, saved)
 	if err != nil {
-		return nil, err
+		return nil, FileFailed, err
 	}
 	var id uuid.UUID
 	if memoryID != nil {
 		id = *memoryID
 		if _, err := i.memories.UpdateContent(ctx, tenant, id, content, vec, nil); err != nil {
-			return nil, err
+			return nil, FileFailed, err
 		}
 	} else {
 		created, err := i.memories.Create(ctx, memorystore.CreateParams{
@@ -185,7 +302,7 @@ func (i *Ingest) ingestOne(ctx context.Context, tenant, spaceID uuid.UUID, slug 
 			SpaceID: &spaceID, ReviewState: "auto",
 		})
 		if err != nil {
-			return nil, err
+			return nil, FileFailed, err
 		}
 		id = created.ID
 	}
@@ -195,57 +312,13 @@ func (i *Ingest) ingestOne(ctx context.Context, tenant, spaceID uuid.UUID, slug 
 			SourcePath: &safe, Content: content,
 		})
 	}
-	return &saved, nil
+	return &saved, status, nil
 }
 
-// Title is title(from:fallback:): the first H1 among the file's first 21 nonempty lines,
-// else the filename without its extension. Splitting on the Character "\n" leaves CRLF
-// lines joined, and the last piece holds the rest of the file, as `maxSplits: 20` does.
-func Title(content, fallback string) string {
-	rest := content
-	for pieces := 0; pieces < 21 && rest != ""; pieces++ {
-		at := -1
-		for start := 0; pieces < 20; {
-			next := strings.IndexByte(rest[start:], '\n')
-			if next < 0 {
-				break
-			}
-			if next+start == 0 || rest[next+start-1] != '\r' {
-				at = next + start
-				break
-			}
-			start += next + 1
-		}
-		line := rest
-		if at >= 0 {
-			line, rest = rest[:at], rest[at+1:]
-		} else {
-			rest = ""
-		}
-		if line == "" {
-			pieces--
-			continue
-		}
-		t := swiftstr.TrimWhitespaces(line)
-		if swiftstr.HasASCIIPrefix(t, "# ") {
-			return swiftstr.TrimWhitespaces(t[2:])
-		}
-	}
-	return deleteExtension(fallback)
-}
+// Title is vaultfiles.MarkdownTitle, kept here for bulk import's callers and tests.
+func Title(content, fallback string) string { return vaultfiles.MarkdownTitle(content, fallback) }
 
-// deleteExtension is `(name as NSString).deletingPathExtension` on Linux, for a single
-// path component: "/" is "", and a trailing dot or a leading one is no extension.
-func deleteExtension(name string) string {
-	if name == "/" {
-		return ""
-	}
-	ext := vaultfiles.PathExtension(name)
-	if ext == "" {
-		return name
-	}
-	return strings.TrimSuffix(name, "."+ext)
-}
+func deleteExtension(name string) string { return vaultfiles.DeleteExtension(name) }
 
 // SafePath is safePath: each segment slugified, subfolders kept, `.` and `..` dropped,
 // always ending .md, under the Space's slug.
@@ -271,23 +344,6 @@ func SafePath(slug, rawPath string) string {
 	return strings.Join(segments, "/")
 }
 
-func slugifySegment(s string) string {
-	var out []string
-	lastDash := false
-	for _, ch := range swiftstr.Characters(vaultfiles.Lowercased(s)) {
-		if swiftstr.IsLetterOrNumber(ch) || ch == "." || ch == "_" {
-			out = append(out, ch)
-			lastDash = false
-		} else if !lastDash {
-			out = append(out, "-")
-			lastDash = true
-		}
-	}
-	trimmed := strings.Trim(strings.Join(out, ""), "-")
-	if trimmed == "" {
-		return "x"
-	}
-	return swiftstr.Prefix(trimmed, 80)
-}
+func slugifySegment(s string) string { return vaultfiles.SlugifySegment(s) }
 
 func isBlank(s string) bool { return swiftstr.TrimWhitespacesAndNewlines(s) == "" }

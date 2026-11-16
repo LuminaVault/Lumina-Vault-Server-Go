@@ -86,14 +86,31 @@ func (r *LinkRepository) ReplaceLinks(ctx context.Context, tenant, sourceVaultFi
 // Reresolve is reresolve: every link in the tenant against the current documents.
 // It returns how many rows changed. Each row updates on its own, as in Swift.
 func (r *LinkRepository) Reresolve(ctx context.Context, tenant uuid.UUID) (int, error) {
+	return r.reresolve(ctx, tenant, false)
+}
+
+// ReresolvePending re-resolves only the tenant's unresolved and ambiguous links.
+// A link is resolved when its source is indexed, so one pointing at a note
+// written later (the next file of an import, the next batch) stays unresolved
+// until something runs this. Writes call it after indexing; it skips the
+// already-resolved rows that make Reresolve expensive on a large vault.
+func (r *LinkRepository) ReresolvePending(ctx context.Context, tenant uuid.UUID) (int, error) {
+	return r.reresolve(ctx, tenant, true)
+}
+
+func (r *LinkRepository) reresolve(ctx context.Context, tenant uuid.UUID, pendingOnly bool) (int, error) {
 	candidates, err := r.targets(ctx, tenant)
 	if err != nil {
 		return 0, err
 	}
-	rows, err := r.pool.Query(ctx, `
+	query := `
 		SELECT link_id, source_line, raw_target, target_slug, target_heading, label, target_vault_file_id, resolution_state
 		FROM vault_links
-		WHERE tenant_id = $1`, tenant)
+		WHERE tenant_id = $1`
+	if pendingOnly {
+		query += ` AND resolution_state <> 'resolved'`
+	}
+	rows, err := r.pool.Query(ctx, query, tenant)
 	if err != nil {
 		return 0, fmt.Errorf("chunkindex: reresolve: %w", err)
 	}

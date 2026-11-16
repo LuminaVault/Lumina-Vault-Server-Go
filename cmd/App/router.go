@@ -14,7 +14,9 @@ import (
 // credential or preference write drops the cache the router reads.
 func (a *agent) routerModules() []httpserver.Module {
 	return []httpserver.Module{
-		meproviders.New(a.pool, meproviders.Options{Identify: a.identify, Limits: a.limits, Stack: a.stack, Box: a.box}),
+		meproviders.New(a.pool, meproviders.Options{
+			Identify: a.identify, Limits: a.limits, Stack: a.stack, Box: a.box, Guard: byokGuard(a.cfg),
+		}),
 		llmrouter.New(a.pool, llmrouter.Options{
 			Identify: a.identify, Limits: a.limits, Stack: a.stack, Memories: a.memories, Embeddings: a.embeddings,
 		}),

@@ -2396,19 +2396,47 @@ Deliberate changes from Swift, made after the archive (`docs/post-archive-backlo
 - Parity: `self-improvement/04-rollback` no longer rolls back the seeded runs whose snapshot names hold "/" or ".."
   (…020, …023, …024). Swift wrote through them; Go answers 409. `TestRollback` covers them.
 
-### `skills_state` updates touch only their own row (backlog 1.6)
+### Share-sheet note survives enrichment (backlog 1.5)
 
-- Swift's Fluent `save()` on a loaded `SkillsState` keyed the update by `@ID`, which is `tenant_id` alone, so every
-  `skills_state` row of the tenant took the change. Every such update now names the row's key
-  (`tenant_id, source, name`):
-  - `PATCH /v1/skills/{name}` (enabled, schedule override, APNs category);
-  - the plugins skill install/enable flip (`setSkillEnabled`);
-  - self-improvement: pin/unpin (`SetSkillPinned`), rollback's curator state (`SetSkillCuratorState`) and the
-    curator worker's `saveState`.
-- With that, archiving one skill no longer archives the tenant's others, so the next skill in the same curator run
-  is marked stale as it should be.
-- Parity: `skills_state` snapshots now go through per-scenario tenant views (`parity_si_*_state`,
-  `parity_sk_patch_state`), so a difference in one tenant no longer shows in every later snapshot of the shared
-  table. Steps that updated a row of a several-row tenant were reordered (plugins `02-premium-skills`) or given seed
-  rows that already hold the written state (`04-rollback`); `06-resources` leaves `curator_pinned` out. Go tests
-  cover several rows per tenant.
+- Enrichment reads the file it is about to replace and appends its `## Note` section to the rendered page. Swift's
+  render dropped it, so the note a user typed in the share sheet was lost once enrichment finished.
+- In a placeholder the note is everything after the first `## Note` heading, so a note with its own heading line
+  survives whole. Production only enriches fresh placeholders (capture, import).
+- The note goes into the file only, not into the link's memory, which still comes from the page metadata.
+- Parity: `capture/01-flow` no longer captures with a non-empty note; Go tests cover it.
+### `/v1/memory/graph` scrubs model identity (backlog 1.4)
+
+- Graph nodes now go through the same disclosure scrub as the sibling memory routes. A reader who is not BYOK sees
+  no origin model on a node's `createdBy`/`lastUpdatedBy`, and `contributors` is empty. The user's own agent
+  connection (`mcp:*`) is still named. The reader's preference counts, not the vault owner's.
+- Parity: `memory/05-graph` ignores `$.nodes[*].provenance`; `TestGraphHidesModelsFromManagedReaders` covers it.
+### Storage quota counts stored bytes (backlog 1.3)
+
+- `POST /v1/ingestions` checks the tier ceiling against what the tenant already stores plus the batch. Stored bytes
+  are `vault_files` plus `vault_trash` (trash stays on disk until the 30-day purge), summed as bigint. Swift decoded
+  a numeric `SUM` as `Int64` under `try?`, so it always read 0 and the 413 always said "0 B of ...". The 413 now
+  names the real figure.
+- Batches accepted but not yet uploaded don't count, as before: their bytes count once the files land.
+- Parity: the ing_fay and ing_pam steps in `ingestion/02-create` pinned the Swift behaviour and were removed;
+  `TestWhatATenantStoresCountsAgainstTheCeiling` and `TestTrashCountsAgainstTheCeiling` cover them.
+### SSRF on user-supplied outbound URLs (backlog 1.1)
+
+- `internal/ssrfguard` gained `Guard.Transport`/`Guard.Client`. The dialer checks the address it is about to connect
+  to, after DNS, so a name that resolves or re-resolves to a private address is refused, and so is every redirect
+  hop. It also refuses unspecified, multicast, `0.0.0.0/8` and `100.64.0.0/10`, and unmaps IPv4-mapped IPv6. It never
+  uses a proxy.
+- Capture enrichment (OG, X, YouTube fetches of captured links) and the Readwise, Raindrop and RSS connectors now use
+  the strict client: nothing private, nothing on the tailnet. `IsPublic` stays as the cheap 400 before any fetch.
+  `USER_FETCH_ALLOW_PRIVATE=true` opens private ranges for local stacks and parity (the feeds stub is a private
+  Docker host); production leaves it unset.
+- BYOK base URLs: `PUT /v1/me/providers/{provider}` runs `Validate` on `baseUrl` and answers
+  `400 invalid_base_url:<reason>`, as `PUT /v1/settings/hermes` does. `/test` and `/models` dial through the guarded
+  client. On the chat path, `llm.CredentialStore` validates the tenant URL on every call (the candidate list is
+  cached, the check is not) and returns `BaseURLRefusedError`: BYOK fails closed, other modes fall back to the
+  platform key. The SuperGrok gateway handle is in-cluster on purpose and is not checked.
+- The BYOK guard uses `BYO_HERMES_ALLOW_PRIVATE` and `BYO_HERMES_ALLOW_TAILNET_HTTP`, not `BYO_HERMES_REQUIRE_HTTPS`,
+  so a tenant's plain-http Ollama on their tailnet keeps working.
+- Rows saved before this change are not rewritten. A stored URL that the guard now refuses fails at call time.
+- Not changed: operator-configured URLs (env base URLs, Hermes, whisper, the news feeds service) and the fixed
+  third-party hosts (Resend, Twilio, PostHog, Jina, Open-Meteo, Google). The news ticker passes user feed URLs to the
+  feeds service, which fetches them; that service is out of this repo.

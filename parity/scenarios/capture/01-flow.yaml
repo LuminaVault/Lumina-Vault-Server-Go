@@ -45,7 +45,10 @@ steps:
     filesMask: *masks
 
   # The stub holds this page for 6 s, so the placeholder and "pending" are readable.
-  - {name: capture with a note, as: capture_amy, request: {method: POST, path: /v1/capture/safari, json: {url: "http://feeds:8080/capture/slow", notes: "  my note\nsecond line "}}, ignore: ["$.path"], capture: {note: $.id}}
+  # No capture with a non-empty note here: Go keeps the note through enrichment since the
+  # post-archive fix (backlog 1.5) and Swift drops it, so every later file snapshot would
+  # differ. TestEnrichmentKeepsTheShareSheetNote and TestCapturePlaceholderThenEnrichment
+  # in internal/modules/capture cover the note.
   - {name: capture with an empty note, as: capture_amy, request: {method: POST, path: /v1/capture/safari, json: {url: "http://feeds:8080/capture/slow?empty", notes: ""}}, ignore: ["$.path"], capture: {emptynote: $.id}}
   - {name: capture with a null note and an unknown key, as: capture_amy, request: {method: POST, path: /v1/capture/safari, raw: "{\"url\":\"http://feeds:8080/capture/slow?null\",\"notes\":null,\"note\":\"old key\",\"extra\":[1]}"}, ignore: ["$.path"], capture: {nullnote: $.id}}
   - name: placeholders before enrichment
@@ -53,7 +56,7 @@ steps:
     snapshot: [parity_capture_files]
     files: [capture_amy]
     filesMask: *masks
-  - name: enrichment drops the note
+  - name: enrichment rewrites the placeholders
     request: {method: GET, path: /health}
     waitEmpty: parity_capture_pending
     snapshot: [parity_capture_files]
@@ -99,7 +102,6 @@ steps:
   - {name: delete empty, as: capture_amy, request: {method: DELETE, path: "/v1/todos/{{empty}}"}}
   - {name: delete refused, as: capture_amy, request: {method: DELETE, path: "/v1/todos/{{refused}}"}}
   - {name: delete notfound, as: capture_amy, request: {method: DELETE, path: "/v1/todos/{{notfound}}"}}
-  - {name: delete note, as: capture_amy, request: {method: DELETE, path: "/v1/todos/{{note}}"}}
   - {name: delete emptynote, as: capture_amy, request: {method: DELETE, path: "/v1/todos/{{emptynote}}"}}
   - {name: delete nullnote, as: capture_amy, request: {method: DELETE, path: "/v1/todos/{{nullnote}}"}}
   - {name: delete spaced, as: capture_amy, request: {method: DELETE, path: "/v1/todos/{{spaced}}"}}

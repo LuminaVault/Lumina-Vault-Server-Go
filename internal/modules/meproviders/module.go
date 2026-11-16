@@ -21,6 +21,7 @@ import (
 	"lumina/internal/modules/meproviders/db"
 	"lumina/internal/ratelimit"
 	"lumina/internal/secretbox"
+	"lumina/internal/ssrfguard"
 	"net/http"
 	"sync"
 	"time"
@@ -37,8 +38,11 @@ type Options struct {
 	Limits   *ratelimit.Store
 	Stack    *llm.Stack
 	Box      *secretbox.Box
-	// Client is the probe session for /test and /models. Nil means a default client.
+	// Client is the probe session for /test and /models. Nil means Guard's client.
 	Client *http.Client
+	// Guard checks a tenant's base URL when it is saved, and its client dials
+	// every probe. The zero value refuses private, loopback and tailnet targets.
+	Guard ssrfguard.Guard
 }
 
 // Module is the route group. Every route is jwtAuthenticator + settingsByUser in
@@ -59,7 +63,7 @@ type Module struct {
 func New(pool *pgxpool.Pool, opts Options) *Module {
 	client := opts.Client
 	if client == nil {
-		client = &http.Client{}
+		client = opts.Guard.Client(0)
 	}
 	return &Module{
 		pool: pool, q: db.New(pool), opts: opts, client: client,

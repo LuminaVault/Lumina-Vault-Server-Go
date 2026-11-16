@@ -2,8 +2,12 @@
 # the hubs, so several would come back in a different order on each process. Go sorts
 # them by id (a Go test covers that). mem_ann also has one. The team vault holds a
 # memory 02-upsert just wrote, whose activity decays with the clock.
+#
+# Node provenance is ignored: Go scrubs origin models for managed readers here since the
+# post-archive fix (backlog 1.4) and Swift never did. TestGraphHidesModelsFromManagedReaders
+# in internal/modules/memory covers it.
 module: memory
-ignore: [$.generatedAt]
+ignore: [$.generatedAt, "$.nodes[*].provenance"]
 steps:
   - {name: "graph default", as: mem_gra, request: {method: GET, path: "/v1/memory/graph"}}
   - {name: "graph no wiki", as: mem_gra, request: {method: GET, path: "/v1/memory/graph?includeWikiPages=false"}}

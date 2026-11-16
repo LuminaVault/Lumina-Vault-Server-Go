@@ -237,7 +237,8 @@ func (r RaindropConnector) FetchURLs(ctx context.Context, config map[string]stri
 }
 
 // RSSConnector is RSSConnector: a user-supplied feed, text-guarded by
-// URLEnricherGuard.isPublic (no DNS, as in Swift).
+// URLEnricherGuard.isPublic. The server wires DefaultHTTP with ssrfguard's
+// strict client, which checks the dialed address after DNS.
 type RSSConnector struct{ HTTP HTTPGetter }
 
 func (RSSConnector) Binding() string { return "rss" }

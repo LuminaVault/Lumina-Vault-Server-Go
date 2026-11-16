@@ -360,6 +360,8 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 				Sink:    sink,
 				Latches: onboardlatch.New(pool), Analytics: analytics,
 				CaptureFiling: agent.captureFiling(),
+				Indexer: chunkindex.NewIndexer(chunkindex.NewChunkRepository(pool), embeddings,
+					chunkindex.NewLinkRepository(pool)),
 			}),
 			todos.New(pool, paths, todos.Options{Disk: disk, Memories: memories, Embeddings: embeddings}),
 			captureModule(pool, cfg, box, limits, links, analytics),
@@ -497,7 +499,8 @@ func linkCaptureService(pool *pgxpool.Pool, cfg config.Config, paths vaultpaths.
 	store := vaultfiles.NewStore(pool, paths)
 	enrichment := linkcapture.NewEnrichmentService(linkcapture.EnrichmentOptions{
 		Paths: paths, Store: store, Embeddings: embeddings, Memories: memories,
-		Jina: &linkcapture.JinaEnricher{APIKey: cfg.JinaAPIKey},
+		Client: userFetchGuard(cfg).Client(0),
+		Jina:   &linkcapture.JinaEnricher{APIKey: cfg.JinaAPIKey},
 		Hooks: &linkcapture.HookDispatcher{
 			Registry:  linkcapture.NewHookRegistry(linkcapture.ReadingTimeHook{}),
 			Installed: linkcapture.InstalledSlugsFrom(pool),
