@@ -2,8 +2,10 @@ package migrations_test
 
 import (
 	"context"
+	"io/fs"
 	"lumina/internal/dbtest"
 	"lumina/internal/migrations"
+	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -59,6 +61,50 @@ func TestAdoptFluentRequiresExactManifest(t *testing.T) {
 	var exists bool
 	require.NoError(t, pool.QueryRow(ctx, `SELECT to_regclass('public.notes') IS NOT NULL`).Scan(&exists))
 	require.False(t, exists, "adopt must not execute migration SQL")
+}
+
+// A database adopted from Fluent has every embedded version recorded and none
+// of their DDL run. A table that only goose creates must therefore arrive in
+// a version written after the adoption, or it never arrives.
+func TestUpAfterAdoptRunsVersionsAddedLater(t *testing.T) {
+	ctx := context.Background()
+	pool := dbtest.Postgres(t)
+	fluentDB(t, pool, "M00_EnableExtensions")
+	require.NoError(t, migrations.AdoptFluent(ctx, pool, testFS, []string{"M00_EnableExtensions"}))
+
+	later := fstest.MapFS{"00003_notes_ensure.sql": {Data: []byte("-- +goose Up\nCREATE TABLE IF NOT EXISTS notes (id uuid PRIMARY KEY);\n-- +goose Down\nSELECT 1;\n")}}
+	for name, f := range testFS {
+		later[name] = f
+	}
+	require.NoError(t, migrations.Up(ctx, pool, later))
+	var exists bool
+	require.NoError(t, pool.QueryRow(ctx, `SELECT to_regclass('public.notes') IS NOT NULL`).Scan(&exists))
+	require.True(t, exists, "the version added after adoption must run")
+}
+
+// 00004 exists only to give adopted databases the table 00002 defines, so the
+// two must describe the same table: same statements, word for word.
+func TestPendingActionsEnsureRepeats00002(t *testing.T) {
+	up := func(name string) string {
+		b, err := fs.ReadFile(migrations.SQL(), name)
+		require.NoError(t, err)
+		_, rest, ok := strings.Cut(string(b), "-- +goose Up\n")
+		require.True(t, ok, name)
+		body, _, ok := strings.Cut(rest, "-- +goose Down")
+		require.True(t, ok, name)
+		return strings.TrimSpace(body)
+	}
+	require.Equal(t, up("00002_assistant_pending_actions.sql"), up("00004_assistant_pending_actions_ensure.sql"))
+}
+
+// Both files run on a fresh database; the second must be a no-op there.
+func TestPendingActionsTableOnFreshDB(t *testing.T) {
+	ctx := context.Background()
+	pool := dbtest.Postgres(t)
+	require.NoError(t, migrations.Up(ctx, pool, migrations.SQL()))
+	var exists bool
+	require.NoError(t, pool.QueryRow(ctx, `SELECT to_regclass('public.assistant_pending_actions') IS NOT NULL`).Scan(&exists))
+	require.True(t, exists)
 }
 
 func TestEmbeddedFSLoads(t *testing.T) {
