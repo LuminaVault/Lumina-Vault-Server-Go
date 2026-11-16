@@ -3745,7 +3745,9 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ProviderCredentialDTO' }
         '400':
-          description: Validation error (api_key_required / base_url_required / invalid_base_url).
+          description: >-
+            Validation error (api_key_required / base_url_required / invalid_base_url, or
+            invalid_base_url:<reason> when the SSRF guard refuses baseUrl).
     delete:
       tags: [Me]
       operationId: providerCredentialDelete

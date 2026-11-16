@@ -2369,3 +2369,27 @@ stacked and merged by the owner in this order: #598, #599, #600.
 - community could not be exercised on staging (disabled there); CI parity covers it. The #599 body lets the owner drop
   its two entries.
 - `community/00-auth`, `skills-cron/01-routes` and `hermes/01-runs-errors` gained `smoke: true`.
+
+## Post-archive fixes
+
+Deliberate changes from Swift, made after the archive (`docs/post-archive-backlog.md`).
+
+### SSRF on user-supplied outbound URLs (backlog 1.1)
+
+- `internal/ssrfguard` gained `Guard.Transport`/`Guard.Client`. The dialer checks the address it is about to connect
+  to, after DNS, so a name that resolves or re-resolves to a private address is refused, and so is every redirect
+  hop. It also refuses unspecified, multicast, `0.0.0.0/8` and `100.64.0.0/10`, and unmaps IPv4-mapped IPv6. It never
+  uses a proxy.
+- Capture enrichment (OG, X, YouTube fetches of captured links) and the Readwise, Raindrop and RSS connectors now use
+  the strict client: nothing private, nothing on the tailnet. `IsPublic` stays as the cheap 400 before any fetch.
+- BYOK base URLs: `PUT /v1/me/providers/{provider}` runs `Validate` on `baseUrl` and answers
+  `400 invalid_base_url:<reason>`, as `PUT /v1/settings/hermes` does. `/test` and `/models` dial through the guarded
+  client. On the chat path, `llm.CredentialStore` validates the tenant URL on every call (the candidate list is
+  cached, the check is not) and returns `BaseURLRefusedError`: BYOK fails closed, other modes fall back to the
+  platform key. The SuperGrok gateway handle is in-cluster on purpose and is not checked.
+- The BYOK guard uses `BYO_HERMES_ALLOW_PRIVATE` and `BYO_HERMES_ALLOW_TAILNET_HTTP`, not `BYO_HERMES_REQUIRE_HTTPS`,
+  so a tenant's plain-http Ollama on their tailnet keeps working.
+- Rows saved before this change are not rewritten. A stored URL that the guard now refuses fails at call time.
+- Not changed: operator-configured URLs (env base URLs, Hermes, whisper, the news feeds service) and the fixed
+  third-party hosts (Resend, Twilio, PostHog, Jina, Open-Meteo, Google). The news ticker passes user feed URLs to the
+  feeds service, which fetches them; that service is out of this repo.

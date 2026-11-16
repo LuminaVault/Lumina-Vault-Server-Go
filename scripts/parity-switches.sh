@@ -250,7 +250,9 @@ for _ in $(seq 1 60); do
   curl -fsS "http://localhost:18085/health" >/dev/null 2>&1 && break
   sleep 1
 done
-run_state llm SWITCH_HERMES_GATEWAY_URL=http://llmstub:8080 SWITCH_CAPTURE_AUTO_FILE_ENABLED=true
+# Private ranges open: the me-providers scenarios save base URLs on the stub and on
+# loopback, which Go's SSRF guard on BYOK base URLs refuses otherwise.
+run_state llm SWITCH_HERMES_GATEWAY_URL=http://llmstub:8080 SWITCH_CAPTURE_AUTO_FILE_ENABLED=true SWITCH_BYO_HERMES_ALLOW_PRIVATE=true
 agents_state
 chat_state
 llm_selftest

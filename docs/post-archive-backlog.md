@@ -25,7 +25,8 @@ Read this before you pick up server work. When an item lands, strike it here in 
 These were decided on 2026-11-11 (D-owner-2026-11-11 items 5–9, plus `skills_state`) and then held for parity. Each
 one is a deliberate change from Swift. Name each in `docs/migration/cutover-log.md` when it lands.
 
-1. **SSRF.** Every outbound fetch goes through `internal/ssrfguard`, BYOK base URLs included.
+1. ~~**SSRF.** Every outbound fetch goes through `internal/ssrfguard`, BYOK base URLs included.~~ Done: see
+   "SSRF on user-supplied outbound URLs" in `docs/migration/cutover-log.md`.
 2. **Vault file paths.** `internal/vaultfiles` refuses symlink escapes and `link/../nope.md` (the `TestSwiftWeakness*`
    cases in `internal/vaultfiles/resolve_test.go`). Snapshot restore paths in self-improvement go through the same
    checks.

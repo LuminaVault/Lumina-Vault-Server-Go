@@ -135,6 +135,12 @@ func (m *Module) put(c *echo.Context) error {
 		}
 	}
 	ctx := c.Request().Context()
+	if body.BaseURL != nil && *body.BaseURL != "" {
+		// The SSRF guard: the same check, and the same 400, as PUT /v1/settings/hermes.
+		if _, err := m.opts.Guard.Validate(ctx, *body.BaseURL); err != nil {
+			return wire.NewError(http.StatusBadRequest, "invalid_base_url:"+err.Error())
+		}
+	}
 	if err := m.upsert(ctx, tenant, kind, body); err != nil {
 		m.log.ErrorContext(ctx, "provider credential upsert failed", "error", err)
 		return wire.NewError(http.StatusInternalServerError, "credential_save_failed")
