@@ -2396,6 +2396,12 @@ Deliberate changes from Swift, made after the archive (`docs/post-archive-backlo
 - Parity: `self-improvement/04-rollback` no longer rolls back the seeded runs whose snapshot names hold "/" or ".."
   (…020, …023, …024). Swift wrote through them; Go answers 409. `TestRollback` covers them.
 
+### `/v1/memory/graph` scrubs model identity (backlog 1.4)
+
+- Graph nodes now go through the same disclosure scrub as the sibling memory routes. A reader who is not BYOK sees
+  no origin model on a node's `createdBy`/`lastUpdatedBy`, and `contributors` is empty. The user's own agent
+  connection (`mcp:*`) is still named. The reader's preference counts, not the vault owner's.
+- Parity: `memory/05-graph` ignores `$.nodes[*].provenance`; `TestGraphHidesModelsFromManagedReaders` covers it.
 ### Storage quota counts stored bytes (backlog 1.3)
 
 - `POST /v1/ingestions` checks the tier ceiling against what the tenant already stores plus the batch. Stored bytes
