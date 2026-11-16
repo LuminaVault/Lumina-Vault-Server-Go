@@ -1,12 +1,13 @@
 # xAI and Nous OAuth. Neither server can run docker here, so starting a flow for
 # a tenant without a container is the empty 500 of a failed spawn, and revoke's
 # CLI call fails and is ignored. Sessions are in memory: completing one that was
-# never started is a 404.
+# never started is a 404. No unauthenticated complete step: Go answers 401 before the
+# body since the post-archive fix, where Swift read the body first and completed by
+# session id alone (TestXaiController, TestCompleteBelongsToTheSessionsTenant).
 module: integrations
 steps:
   - {name: xai status no token, request: {method: GET, path: /v1/integrations/xai, headers: {X-Forwarded-For: 10.97.0.1}}}
   - {name: xai start no token, request: {method: POST, path: /v1/integrations/xai/start, headers: {X-Forwarded-For: 10.97.0.1}}}
-  - {name: xai complete no token, request: {method: POST, path: /v1/integrations/xai/complete, json: {}, headers: {X-Forwarded-For: 10.97.0.1}}}
   - {name: xai revoke no token, request: {method: DELETE, path: /v1/integrations/xai, headers: {X-Forwarded-For: 10.97.0.1}}}
   - {name: nous status no token, request: {method: GET, path: /v1/integrations/nous, headers: {X-Forwarded-For: 10.97.0.1}}}
   - {name: nous start no token, request: {method: POST, path: /v1/integrations/nous/start, headers: {X-Forwarded-For: 10.97.0.1}}}

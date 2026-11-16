@@ -59,11 +59,11 @@ func New(pool *pgxpool.Pool, opt Options) *Module {
 func (m *Module) Register(r httpserver.Router, authMW echo.MiddlewareFunc) {
 	r.GET("/v1/integrations/xai", m.xaiStatus, authMW)
 	r.POST("/v1/integrations/xai/start", m.xaiStart, authMW)
-	r.POST("/v1/integrations/xai/complete", m.xaiComplete) // no identity: Swift completes by session alone
+	r.POST("/v1/integrations/xai/complete", m.xaiComplete, authMW)
 	r.DELETE("/v1/integrations/xai", m.xaiRevoke, authMW)
 	r.GET("/v1/integrations/nous", m.nousStatus, authMW)
 	r.POST("/v1/integrations/nous/start", m.nousStart, authMW)
-	r.POST("/v1/integrations/nous/complete", m.nousComplete) // no identity: Swift completes by session alone
+	r.POST("/v1/integrations/nous/complete", m.nousComplete, authMW)
 	r.DELETE("/v1/integrations/nous", m.nousRevoke, authMW)
 }
 
@@ -92,13 +92,20 @@ func (s *sessionStore) put(id string, tenant uuid.UUID) {
 	s.sessions[id] = session{tenant: tenant, startedAt: s.now()}
 }
 
-func (s *sessionStore) take(id string) (session, bool) {
+// take removes and returns the session when it belongs to tenant. Another
+// tenant's attempt finds nothing and leaves the session in place, so it can
+// neither finish nor burn someone else's link. Swift completed by session id
+// alone, with no identity; fixed after the archive.
+func (s *sessionStore) take(id string, tenant uuid.UUID) (session, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.sweep()
 	v, ok := s.sessions[id]
+	if !ok || v.tenant != tenant {
+		return session{}, false
+	}
 	delete(s.sessions, id)
-	return v, ok
+	return v, true
 }
 
 func (s *sessionStore) sweep() {
@@ -189,8 +196,8 @@ func (m *Module) XaiStart(ctx context.Context, tenant uuid.UUID) (XaiStartRespon
 
 // XaiComplete is XaiOAuthService.complete: on success the tenant moves to the pro
 // tier and gets an oauth marker credential for xai.
-func (m *Module) XaiComplete(ctx context.Context, sessionID, callbackURL string) (XaiStatusResponse, error) {
-	s, ok := m.xaiSessions.take(sessionID)
+func (m *Module) XaiComplete(ctx context.Context, tenant uuid.UUID, sessionID, callbackURL string) (XaiStatusResponse, error) {
+	s, ok := m.xaiSessions.take(sessionID, tenant)
 	if !ok {
 		return XaiStatusResponse{}, ErrSessionNotFound
 	}
@@ -282,6 +289,10 @@ func (m *Module) xaiStart(c *echo.Context) error {
 }
 
 func (m *Module) xaiComplete(c *echo.Context) error {
+	tenant, err := tenantOf(c)
+	if err != nil {
+		return err
+	}
 	body, err := wire.Bind[xaiCompleteRequest](c)
 	if err != nil {
 		return err
@@ -292,7 +303,7 @@ func (m *Module) xaiComplete(c *echo.Context) error {
 	if body.CallbackURL == "" {
 		return wire.NewError(http.StatusBadRequest, "callbackURL required")
 	}
-	s, err := m.XaiComplete(c.Request().Context(), body.SessionID, body.CallbackURL)
+	s, err := m.XaiComplete(c.Request().Context(), tenant, body.SessionID, body.CallbackURL)
 	var failed *BackendFailedError
 	switch {
 	case errors.Is(err, ErrSessionNotFound):
@@ -370,8 +381,8 @@ func (m *Module) NousStart(ctx context.Context, tenant uuid.UUID) (NousStartResp
 }
 
 // NousComplete is NousOAuthService.complete. The tier is left alone.
-func (m *Module) NousComplete(ctx context.Context, sessionID string) (NousStatusResponse, error) {
-	s, ok := m.nousSessions.take(sessionID)
+func (m *Module) NousComplete(ctx context.Context, tenant uuid.UUID, sessionID string) (NousStatusResponse, error) {
+	s, ok := m.nousSessions.take(sessionID, tenant)
 	if !ok {
 		return NousStatusResponse{}, ErrSessionNotFound
 	}
@@ -439,6 +450,10 @@ func (m *Module) nousStart(c *echo.Context) error {
 }
 
 func (m *Module) nousComplete(c *echo.Context) error {
+	tenant, err := tenantOf(c)
+	if err != nil {
+		return err
+	}
 	body, err := wire.Bind[nousCompleteRequest](c)
 	if err != nil {
 		return err
@@ -446,7 +461,7 @@ func (m *Module) nousComplete(c *echo.Context) error {
 	if body.SessionID == "" {
 		return wire.NewError(http.StatusBadRequest, "sessionID required")
 	}
-	s, err := m.NousComplete(c.Request().Context(), body.SessionID)
+	s, err := m.NousComplete(c.Request().Context(), tenant, body.SessionID)
 	var failed *BackendFailedError
 	switch {
 	case errors.Is(err, ErrSessionNotFound):

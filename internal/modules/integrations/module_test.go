@@ -170,7 +170,7 @@ func TestXaiCompletePromotes(t *testing.T) {
 	start, err := v.m.XaiStart(ctx, u)
 	require.NoError(t, err)
 	cb := "http://127.0.0.1:56121/callback?code=c&state=s"
-	s, err := v.m.XaiComplete(ctx, start.SessionID, cb)
+	s, err := v.m.XaiComplete(ctx, u, start.SessionID, cb)
 	require.NoError(t, err)
 	require.True(t, s.Connected)
 	require.Equal(t, "pro", s.Tier)
@@ -188,7 +188,7 @@ func TestXaiCompleteBackendRejects(t *testing.T) {
 	u := v.user()
 	start, err := v.m.XaiStart(context.Background(), u)
 	require.NoError(t, err)
-	_, err = v.m.XaiComplete(context.Background(), start.SessionID, "http://127.0.0.1:56121/callback?code=x")
+	_, err = v.m.XaiComplete(context.Background(), u, start.SessionID, "http://127.0.0.1:56121/callback?code=x")
 	var failed *BackendFailedError
 	require.ErrorAs(t, err, &failed)
 	require.NotEqual(t, "pro", v.tier(u))
@@ -197,8 +197,34 @@ func TestXaiCompleteBackendRejects(t *testing.T) {
 // Ported from XaiOAuthServiceTests: complete with unknown session throws sessionNotFound.
 func TestXaiCompleteUnknownSession(t *testing.T) {
 	v := setup(t, true)
-	_, err := v.m.XaiComplete(context.Background(), "nope", "http://x/?code=1")
+	_, err := v.m.XaiComplete(context.Background(), v.user(), "nope", "http://x/?code=1")
 	require.ErrorIs(t, err, ErrSessionNotFound)
+}
+
+// Another tenant cannot finish or burn a link (post-archive fix): Swift completed by
+// session id alone. The owner's complete still works afterwards.
+func TestCompleteBelongsToTheSessionsTenant(t *testing.T) {
+	v := setup(t, true)
+	ctx := context.Background()
+	owner, other := v.user(), v.user()
+
+	xs, err := v.m.XaiStart(ctx, owner)
+	require.NoError(t, err)
+	_, err = v.m.XaiComplete(ctx, other, xs.SessionID, "http://127.0.0.1:56121/callback?code=x")
+	require.ErrorIs(t, err, ErrSessionNotFound)
+	require.Empty(t, v.xai.completeURLs)
+	require.NotEqual(t, "pro", v.tier(other))
+	_, err = v.m.XaiComplete(ctx, owner, xs.SessionID, "http://127.0.0.1:56121/callback?code=x")
+	require.NoError(t, err)
+	require.Equal(t, "pro", v.tier(owner))
+
+	ns, err := v.m.NousStart(ctx, owner)
+	require.NoError(t, err)
+	_, err = v.m.NousComplete(ctx, other, ns.SessionID)
+	require.ErrorIs(t, err, ErrSessionNotFound)
+	require.Empty(t, v.nous.calls)
+	_, err = v.m.NousComplete(ctx, owner, ns.SessionID)
+	require.NoError(t, err)
 }
 
 // Ported from XaiOAuthServiceTests: revoke clears xai connection and demotes tier to free.
@@ -208,7 +234,7 @@ func TestXaiRevoke(t *testing.T) {
 	ctx := context.Background()
 	start, err := v.m.XaiStart(ctx, u)
 	require.NoError(t, err)
-	_, err = v.m.XaiComplete(ctx, start.SessionID, "http://127.0.0.1:56121/callback?code=c")
+	_, err = v.m.XaiComplete(ctx, u, start.SessionID, "http://127.0.0.1:56121/callback?code=c")
 	require.NoError(t, err)
 	s, err := v.m.XaiRevoke(ctx, u)
 	require.NoError(t, err)
@@ -237,7 +263,7 @@ func TestNousComplete(t *testing.T) {
 	ctx := context.Background()
 	start, err := v.m.NousStart(ctx, u)
 	require.NoError(t, err)
-	s, err := v.m.NousComplete(ctx, start.SessionID)
+	s, err := v.m.NousComplete(ctx, u, start.SessionID)
 	require.NoError(t, err)
 	require.True(t, s.Connected)
 	require.NotNil(t, s.NousConnectedAt)
@@ -252,7 +278,7 @@ func TestNousCompleteBackendRejects(t *testing.T) {
 	u := v.user()
 	start, err := v.m.NousStart(context.Background(), u)
 	require.NoError(t, err)
-	_, err = v.m.NousComplete(context.Background(), start.SessionID)
+	_, err = v.m.NousComplete(context.Background(), u, start.SessionID)
 	var failed *BackendFailedError
 	require.ErrorAs(t, err, &failed)
 	s, err := v.m.NousStatus(context.Background(), u)
@@ -263,7 +289,7 @@ func TestNousCompleteBackendRejects(t *testing.T) {
 // Ported from NousOAuthServiceTests: complete with unknown session throws sessionNotFound.
 func TestNousCompleteUnknownSession(t *testing.T) {
 	v := setup(t, true)
-	_, err := v.m.NousComplete(context.Background(), "nope")
+	_, err := v.m.NousComplete(context.Background(), v.user(), "nope")
 	require.ErrorIs(t, err, ErrSessionNotFound)
 }
 
@@ -274,7 +300,7 @@ func TestNousRevoke(t *testing.T) {
 	ctx := context.Background()
 	start, err := v.m.NousStart(ctx, u)
 	require.NoError(t, err)
-	_, err = v.m.NousComplete(ctx, start.SessionID)
+	_, err = v.m.NousComplete(ctx, u, start.SessionID)
 	require.NoError(t, err)
 	s, err := v.m.NousRevoke(ctx, u)
 	require.NoError(t, err)
@@ -297,6 +323,15 @@ func TestXaiController(t *testing.T) {
 	code, body = v.do(u, http.MethodPost, "/v1/integrations/xai/complete", `{"sessionID":"nope","callbackURL":"http://127.0.0.1:56121/callback?code=x"}`)
 	require.Equal(t, http.StatusNotFound, code)
 	require.Contains(t, string(body), "session not found or expired")
+
+	// No bearer is a 401 before the body is read (post-archive fix; Swift took the
+	// session id alone).
+	for _, path := range []string{"/v1/integrations/xai/complete", "/v1/integrations/nous/complete"} {
+		code, _ = v.do(uuid.Nil, http.MethodPost, path, `{"sessionID":"nope","callbackURL":"x"}`)
+		require.Equal(t, http.StatusUnauthorized, code, path)
+		code, _ = v.do(uuid.Nil, http.MethodPost, path, `{`)
+		require.Equal(t, http.StatusUnauthorized, code, path)
+	}
 
 	code, _ = v.do(u, http.MethodPost, "/v1/integrations/xai/complete", `{}`)
 	require.Equal(t, http.StatusBadRequest, code)

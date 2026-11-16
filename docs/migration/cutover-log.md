@@ -2512,3 +2512,14 @@ Deliberate changes from Swift, made after the archive (`docs/post-archive-backlo
 - Tests: the new subtests of `TestAuthServiceSwiftRules` (`internal/authservice/lockout_test.go`). Parity is
   unchanged: no step sends a wrong password to a locked account or reads the counter.
 
+### xAI/Nous OAuth `complete` needs the session's own tenant
+
+- Swift's `POST /v1/integrations/{xai,nous}/complete` had no identity: it read the body and completed by session id
+  alone, so anyone holding a live session id could finish (or burn) another tenant's link. Both routes now sit behind
+  the auth middleware (401 before the body is read), and a session is taken only by the tenant that started it.
+  Another tenant gets the same 404 as an unknown session, and the session stays usable by its owner.
+- Clients: iOS `CompleteXaiConnect`/`CompleteNousConnect` already send the bearer (`requiresAuth` defaults to true);
+  the web app does not call these routes.
+- Tests: `TestCompleteBelongsToTheSessionsTenant`, the no-bearer cases in `TestXaiController`
+  (`internal/modules/integrations`). Parity: the "xai complete no token" step was removed.
+

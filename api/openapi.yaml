@@ -5398,8 +5398,10 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '401':
+          description: No tenant identity on the request (missing or invalid JWT). Checked before the body.
         '404':
-          description: '`session not found or expired`.'
+          description: '`session not found or expired`, or the session belongs to another tenant (it stays usable by its own).'
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
@@ -5490,8 +5492,10 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '401':
+          description: No tenant identity on the request (missing or invalid JWT). Checked before the body.
         '404':
-          description: '`session not found or expired`.'
+          description: '`session not found or expired`, or the session belongs to another tenant (it stays usable by its own).'
           content:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
