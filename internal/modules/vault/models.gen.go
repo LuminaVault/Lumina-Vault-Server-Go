@@ -224,6 +224,78 @@ func (e VaultOutgoingLinkResolutionState) Valid() bool {
 	}
 }
 
+// Defines values for VaultPropertyTypeType.
+const (
+	VaultPropertyTypeTypeCheckbox    VaultPropertyTypeType = "checkbox"
+	VaultPropertyTypeTypeDate        VaultPropertyTypeType = "date"
+	VaultPropertyTypeTypeDatetime    VaultPropertyTypeType = "datetime"
+	VaultPropertyTypeTypeMultiselect VaultPropertyTypeType = "multiselect"
+	VaultPropertyTypeTypeNumber      VaultPropertyTypeType = "number"
+	VaultPropertyTypeTypeSelect      VaultPropertyTypeType = "select"
+	VaultPropertyTypeTypeText        VaultPropertyTypeType = "text"
+	VaultPropertyTypeTypeUrl         VaultPropertyTypeType = "url"
+)
+
+// Valid indicates whether the value is a known member of the VaultPropertyTypeType enum.
+func (e VaultPropertyTypeType) Valid() bool {
+	switch e {
+	case VaultPropertyTypeTypeCheckbox:
+		return true
+	case VaultPropertyTypeTypeDate:
+		return true
+	case VaultPropertyTypeTypeDatetime:
+		return true
+	case VaultPropertyTypeTypeMultiselect:
+		return true
+	case VaultPropertyTypeTypeNumber:
+		return true
+	case VaultPropertyTypeTypeSelect:
+		return true
+	case VaultPropertyTypeTypeText:
+		return true
+	case VaultPropertyTypeTypeUrl:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for VaultPropertyTypePutRequestType.
+const (
+	VaultPropertyTypePutRequestTypeCheckbox    VaultPropertyTypePutRequestType = "checkbox"
+	VaultPropertyTypePutRequestTypeDate        VaultPropertyTypePutRequestType = "date"
+	VaultPropertyTypePutRequestTypeDatetime    VaultPropertyTypePutRequestType = "datetime"
+	VaultPropertyTypePutRequestTypeMultiselect VaultPropertyTypePutRequestType = "multiselect"
+	VaultPropertyTypePutRequestTypeNumber      VaultPropertyTypePutRequestType = "number"
+	VaultPropertyTypePutRequestTypeSelect      VaultPropertyTypePutRequestType = "select"
+	VaultPropertyTypePutRequestTypeText        VaultPropertyTypePutRequestType = "text"
+	VaultPropertyTypePutRequestTypeUrl         VaultPropertyTypePutRequestType = "url"
+)
+
+// Valid indicates whether the value is a known member of the VaultPropertyTypePutRequestType enum.
+func (e VaultPropertyTypePutRequestType) Valid() bool {
+	switch e {
+	case VaultPropertyTypePutRequestTypeCheckbox:
+		return true
+	case VaultPropertyTypePutRequestTypeDate:
+		return true
+	case VaultPropertyTypePutRequestTypeDatetime:
+		return true
+	case VaultPropertyTypePutRequestTypeMultiselect:
+		return true
+	case VaultPropertyTypePutRequestTypeNumber:
+		return true
+	case VaultPropertyTypePutRequestTypeSelect:
+		return true
+	case VaultPropertyTypePutRequestTypeText:
+		return true
+	case VaultPropertyTypePutRequestTypeUrl:
+		return true
+	default:
+		return false
+	}
+}
+
 // ErrorEnvelope defines model for ErrorEnvelope.
 type ErrorEnvelope struct {
 	Error   string  `json:"error"`
@@ -321,8 +393,16 @@ type VaultFileDTO struct {
 	Metadata        *VaultNoteMetadataDTO `json:"metadata,omitempty"`
 	Path            string                `json:"path"`
 	ProcessedAt     *wire.Time            `json:"processedAt,omitempty"`
-	Sha256          *string               `json:"sha256,omitempty"`
-	SizeBytes       int                   `json:"sizeBytes"`
+
+	// Properties Backlog E8.2. The note's frontmatter, normalized: text, numbers,
+	// booleans, null, ISO 8601 dates (`2026-12-01`) or datetimes, lists.
+	// Absent when the note has none or properties are off.
+	Properties *map[string]interface{} `json:"properties,omitempty"`
+
+	// PropertiesError Why the frontmatter couldn't be read. The file is never rewritten.
+	PropertiesError *string `json:"propertiesError,omitempty"`
+	Sha256          *string `json:"sha256,omitempty"`
+	SizeBytes       int     `json:"sizeBytes"`
 
 	// SpaceId The Space the file is filed in; absent when unfiled (in `inbox/`).
 	SpaceId         *wire.UUID `json:"spaceId,omitempty"`
@@ -502,6 +582,37 @@ type VaultOutgoingLink struct {
 // VaultOutgoingLinkResolutionState defines model for VaultOutgoingLink.ResolutionState.
 type VaultOutgoingLinkResolutionState string
 
+// VaultPropertiesPatchRequest defines model for VaultPropertiesPatchRequest.
+type VaultPropertiesPatchRequest struct {
+	// Set Names to values. A value is text, a number, a boolean, null or a list of those.
+	Set   *map[string]interface{} `json:"set,omitempty"`
+	Unset *[]string               `json:"unset,omitempty"`
+}
+
+// VaultPropertyType defines model for VaultPropertyType.
+type VaultPropertyType struct {
+	Name    string                `json:"name"`
+	Options []string              `json:"options"`
+	Type    VaultPropertyTypeType `json:"type"`
+}
+
+// VaultPropertyTypeType defines model for VaultPropertyType.Type.
+type VaultPropertyTypeType string
+
+// VaultPropertyTypePutRequest defines model for VaultPropertyTypePutRequest.
+type VaultPropertyTypePutRequest struct {
+	Options *[]string                       `json:"options,omitempty"`
+	Type    VaultPropertyTypePutRequestType `json:"type"`
+}
+
+// VaultPropertyTypePutRequestType defines model for VaultPropertyTypePutRequest.Type.
+type VaultPropertyTypePutRequestType string
+
+// VaultPropertyTypesResponse defines model for VaultPropertyTypesResponse.
+type VaultPropertyTypesResponse struct {
+	Types []VaultPropertyType `json:"types"`
+}
+
 // VaultStatusResponse defines model for VaultStatusResponse.
 type VaultStatusResponse struct {
 	CreatedAt *wire.Time `json:"createdAt,omitempty"`
@@ -677,6 +788,14 @@ type VaultNoteFromTemplateParams struct {
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
+// VaultPropertiesPatchParams defines parameters for VaultPropertiesPatch.
+type VaultPropertiesPatchParams struct {
+	Path string `form:"path" json:"path"`
+
+	// IfMatch The sha256 of the version the client last saw (E5.1).
+	IfMatch *string `json:"If-Match,omitempty"`
+}
+
 // VaultTemplatesSeedParams defines parameters for VaultTemplatesSeed.
 type VaultTemplatesSeedParams struct {
 	// IdempotencyKey HER-39 — client-generated UUIDv4. Retrying a mutating request with the same key (within 24 h) replays the cached response instead of re-executing the handler. Reusing a key with a different request body returns 409. Tenant-scoped: the same key value across different tenants does not collide.
@@ -704,3 +823,9 @@ type VaultMoveJSONRequestBody = VaultMoveRequest
 
 // VaultNoteFromTemplateJSONRequestBody defines body for VaultNoteFromTemplate for application/json ContentType.
 type VaultNoteFromTemplateJSONRequestBody = VaultFromTemplateRequest
+
+// VaultPropertiesPatchJSONRequestBody defines body for VaultPropertiesPatch for application/json ContentType.
+type VaultPropertiesPatchJSONRequestBody = VaultPropertiesPatchRequest
+
+// VaultPropertyTypePutJSONRequestBody defines body for VaultPropertyTypePut for application/json ContentType.
+type VaultPropertyTypePutJSONRequestBody = VaultPropertyTypePutRequest

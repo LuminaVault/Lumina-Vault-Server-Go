@@ -54,6 +54,9 @@ type fileDTO struct {
 	Metadata        *noteMetadataDTO `json:"metadata,omitempty"`
 	CreatedByUserID *wire.UUID       `json:"createdByUserId,omitempty"`
 	UpdatedByUserID *wire.UUID       `json:"updatedByUserId,omitempty"`
+	// Backlog E8.2: absent when the note has none.
+	Properties      map[string]any `json:"properties,omitempty"`
+	PropertiesError *string        `json:"propertiesError,omitempty"`
 }
 
 // noteMetadataDTO is VaultNoteMetadataDTO. Tags is a pointer because Swift tells
@@ -94,6 +97,10 @@ func toDTO(f *vaultfiles.VaultFile) fileDTO {
 		UpdatedAt:       wireTime(f.UpdatedAt),
 		CreatedByUserID: wireUUID(f.CreatedByUserID),
 		UpdatedByUserID: wireUUID(f.UpdatedByUserID),
+		PropertiesError: f.PropertiesError,
+	}
+	if len(f.Properties) > 0 {
+		out.Properties = f.Properties
 	}
 	if m := f.Metadata; m != nil {
 		meta := noteMetadataDTO{
