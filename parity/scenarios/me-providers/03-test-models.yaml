@@ -1,7 +1,9 @@
 # POST /{provider}/test and GET /{provider}/models with every provider host
 # refused (docker-compose.parity.yml): the error and fallback paths. A refused
 # connection is not evidence about the key, so nothing is stamped. The success
-# paths run against the LLM stub in scenarios-switched/llm.
+# paths run against the LLM stub in scenarios-switched/llm. So do the ollama and
+# custom hosts on a refused port (02-refused-host there): saving a loopback base
+# URL needs private ranges open since Go's SSRF guard.
 module: me-providers
 steps:
   - {name: test without a credential, as: mp_cid, request: {method: POST, path: /v1/me/providers/openai/test}}
@@ -27,14 +29,6 @@ steps:
   - {name: a gemini key, as: mp_cid, request: {method: PUT, path: /v1/me/providers/gemini, json: {kind: apiKey, apiKey: AIza-parity}}}
   - {name: gemini test, as: mp_cid, request: {method: POST, path: /v1/me/providers/gemini/test}}
   - {name: gemini models with a key, as: mp_cid, request: {method: GET, path: /v1/me/providers/gemini/models}}
-
-  - {name: an ollama host, as: mp_cid, request: {method: PUT, path: /v1/me/providers/ollama, json: {kind: hostURL, baseUrl: "http://127.0.0.1:9"}}}
-  - {name: ollama test, as: mp_cid, request: {method: POST, path: /v1/me/providers/ollama/test}}
-  - {name: ollama models with a host, as: mp_cid, request: {method: GET, path: /v1/me/providers/ollama/models}}
-
-  - {name: a custom endpoint, as: mp_cid, request: {method: PUT, path: /v1/me/providers/custom, json: {kind: hostURL, baseUrl: "http://127.0.0.1:9"}}}
-  - {name: custom test probes the model list, as: mp_cid, request: {method: POST, path: /v1/me/providers/custom/test}}
-  - {name: custom models, as: mp_cid, request: {method: GET, path: /v1/me/providers/custom/models}}
 
   - {name: an oauth marker has no secret to test, as: mp_cid, request: {method: PUT, path: /v1/me/providers/nvidia, json: {kind: oauth}}}
   - name: so test finds no credential

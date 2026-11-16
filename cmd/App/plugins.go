@@ -3,6 +3,7 @@ package main
 import (
 	"lumina/internal/hermescontainers"
 	"lumina/internal/modules/plugins"
+	"time"
 )
 
 // pluginsModule is /v1/plugins (6F). Swift mounts it only with a secret box, and
@@ -13,7 +14,7 @@ func (a *agent) pluginsModule() *plugins.Module {
 	if a.box == nil {
 		return nil
 	}
-	http := plugins.DefaultHTTP{}
+	http := plugins.DefaultHTTP{Client: userFetchGuard(a.cfg).Client(60 * time.Second)}
 	return plugins.New(a.pool, plugins.Options{
 		Identify: a.identify, Limits: a.limits, BYO: byoHermes(a.pool, a.cfg, a.box), Box: a.box,
 		Importer: a.imports,
