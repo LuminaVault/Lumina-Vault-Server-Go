@@ -9,9 +9,12 @@ steps:
     as: mcp_ann
     request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: browse, arguments: {}}}}
     ignore: ["$.result.content"]
-  - name: browse with prefix and limit
+  # No pathPrefix step: Swift's U+FFFF range matched nothing under the database's en_US.utf8
+  # collation, and Go's starts_with finds the paths since the post-archive fix
+  # (TestBrowsePathPrefix in internal/modules/mcp).
+  - name: browse with a limit
     as: mcp_ann
-    request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: browse, arguments: {pathPrefix: notes/b, limit: 1}}}}
+    request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: browse, arguments: {limit: 1}}}}
     ignore: ["$.result.content"]
   - {name: browse limit zero, as: mcp_ann, request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: browse, arguments: {limit: 0}}}}}
   - {name: browse limit too big, as: mcp_ann, request: {method: POST, path: /v1/mcp, json: {jsonrpc: "2.0", id: 1, method: tools/call, params: {name: browse, arguments: {limit: 501}}}}}

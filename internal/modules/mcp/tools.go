@@ -535,9 +535,12 @@ func (s *Service) browse(ctx context.Context, args map[string]any, tenant uuid.U
 	}
 	query := `SELECT id, path, size_bytes FROM vault_files WHERE tenant_id = $1`
 	params := []any{tenant}
+	// starts_with, not Swift's `path >= p AND path < p || U+FFFF` range: under
+	// en_US.utf8 collation U+FFFF does not sort after the prefix's paths, so the
+	// range matched nothing (post-archive fix).
 	if prefix, ok := argString(args, "pathPrefix"); ok && prefix != "" {
-		query += ` AND path >= $2 AND path < $3`
-		params = append(params, prefix, prefix+"￿")
+		query += ` AND starts_with(path, $2)`
+		params = append(params, prefix)
 	}
 	query += fmt.Sprintf(` ORDER BY path LIMIT %d`, limit)
 	rows, err := s.pool.Query(ctx, query, params...)

@@ -371,3 +371,30 @@ func TestProtocolEnvelope(t *testing.T) {
 	code, _ = v.do(tok, http.MethodPost, "/v1/mcp", strings.Repeat(" ", 1<<20+1))
 	require.Equal(t, http.StatusRequestEntityTooLarge, code)
 }
+
+// browse's pathPrefix is a plain prefix under the database's collation
+// (en_US.utf8 in pgvector's image), with no pattern characters (post-archive
+// fix: Swift's U+FFFF range matched nothing under that collation).
+func TestBrowsePathPrefix(t *testing.T) {
+	v := setup(t)
+	got := v.issue(alice, `{"name":"browse","clientKind":"other"}`)
+	for _, p := range []string{"notes/a.md", "notes/b/c.md", "notesx.md", "raw/notes/d.md", "n_tes/e.md", "Notes/f.md", "notes%/g.md"} {
+		_, err := v.pool.Exec(context.Background(), `INSERT INTO vault_files (id, tenant_id, path, content_type, size_bytes, sha256, created_at, updated_at)
+			VALUES (gen_random_uuid(), $1, $2, 'text/markdown', 1, 'x', now(), now())`, alice, p)
+		require.NoError(t, err)
+	}
+	paths := func(prefix string) []string {
+		res, rpcErr := v.call(got.Token, "browse", map[string]any{"pathPrefix": prefix, "limit": 50})
+		require.Nil(t, rpcErr)
+		var out []string
+		for _, d := range res["documents"].([]any) {
+			out = append(out, d.(map[string]any)["path"].(string))
+		}
+		return out
+	}
+	require.ElementsMatch(t, []string{"notes/a.md", "notes/b/c.md", "notes/plan.md"}, paths("notes/"), "with base.sql's notes/plan.md")
+	require.ElementsMatch(t, []string{"notes/a.md", "notes/b/c.md", "notes/plan.md", "notesx.md", "notes%/g.md"}, paths("notes"))
+	require.ElementsMatch(t, []string{"notes%/g.md"}, paths("notes%"))
+	require.ElementsMatch(t, []string{"n_tes/e.md"}, paths("n_"))
+	require.Empty(t, paths("zzz"))
+}

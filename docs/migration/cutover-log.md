@@ -2459,3 +2459,11 @@ Deliberate changes from Swift, made after the archive (`docs/post-archive-backlo
 - Tests: `TestAuthServiceSwiftRules` "mfa resend: an unknown email answers like a known one…", `TestSessionRoutesWire`
   (`internal/modules/authroutes`). Parity: `auth/03-mfa` "resend unknown" was removed.
 
+### MCP `browse` `pathPrefix`
+
+- Swift filtered with `path >= p AND path < p || U+FFFF`. Under the database's en_US.utf8 collation (pgvector's image,
+  in production and parity alike) that range matched nothing, so a prefix always listed no documents. Go uses
+  `starts_with(path, p)`: a plain, case-sensitive prefix with no pattern characters.
+- Tests: `TestBrowsePathPrefix` (`internal/modules/mcp`), which fails on the old query. Parity: the `mcp/02-tools`
+  prefix step now browses with a limit only.
+

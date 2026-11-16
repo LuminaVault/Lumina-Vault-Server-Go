@@ -51,8 +51,9 @@ Found during the port, same batch:
   - Codes are compared in non-constant time, and the logging sender writes OTP codes to logs.
   - A password reset does not invalidate access tokens.
   - Refresh has no reuse detection and is not transactional.
-- **MCP `browse` `pathPrefix`.** The `path >= p AND path < p || U+FFFF` range matches nothing under en_US.utf8
-  collation. Use `starts_with` or `COLLATE "C"`.
+- ~~**MCP `browse` `pathPrefix`.** The `path >= p AND path < p || U+FFFF` range matches nothing under en_US.utf8
+  collation. Use `starts_with` or `COLLATE "C"`.~~ Done: see "MCP `browse` `pathPrefix`" in
+  `docs/migration/cutover-log.md`.
 - ~~**`usage_meter`.** There is no unique `(tenant_id, day, model)` key, and metering is read-then-write, so concurrent
   calls split rows. Add the key through an expand-only migration, then upsert.~~
   Already true in Go: `usage_meter` has the primary key `(tenant_id, day, model)` (`schema-swift.sql`), and
