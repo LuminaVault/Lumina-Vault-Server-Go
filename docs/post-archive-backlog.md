@@ -36,8 +36,9 @@ one is a deliberate change from Swift. Name each in `docs/migration/cutover-log.
 
 Found during the port, same batch:
 
-- **JWT unknown `kid`.** A token that names an unknown `kid` is verified with the active key (a JWTKit fallback that
-  Go matched in #85). Refuse unknown kids.
+- ~~**JWT unknown `kid`.** A token that names an unknown `kid` is verified with the active key (a JWTKit fallback that
+  Go matched in #85). Refuse unknown kids.~~ Done: see "JWT: an unknown `kid` is refused" in
+  `docs/migration/cutover-log.md`.
 - **xAI/Nous OAuth `complete`.** The body is read before any auth check, so a valid sessionID alone can finish a link.
 - **Auth weaknesses kept by 8A (#85).** These are listed in that PR body:
   - The login timing oracle, and the 423 sent before the password check.

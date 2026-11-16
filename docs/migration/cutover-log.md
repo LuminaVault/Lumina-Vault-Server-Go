@@ -2369,3 +2369,19 @@ stacked and merged by the owner in this order: #598, #599, #600.
 - community could not be exercised on staging (disabled there); CI parity covers it. The #599 body lets the owner drop
   its two entries.
 - `community/00-auth`, `skills-cron/01-routes` and `hermes/01-runs-errors` gained `smoke: true`.
+
+## Post-archive fixes
+
+Deliberate changes from Swift, made after the archive (`docs/post-archive-backlog.md`).
+
+### JWT: an unknown `kid` is refused
+
+- Swift's `JWTKeyCollection.getSigner` fell back to the default signer when a token named a `kid` no key had, so such a
+  token verified with the active key; #85 matched it. `Keyset.lookup` now refuses an unknown `kid` (401). A token with
+  no `kid` still verifies with the active key, and a retired key still listed in `JWT_HMAC_SECRETS` still verifies
+  tokens that name it.
+- Rollout: Go mints with the active `kid` only, and access tokens live one hour, so no live token names an unconfigured
+  `kid`. Swift-minted tokens expired days after the 2026-11-13 archive.
+- Tests: `TestUnknownKidIsRefused`, `TestTokenNamingAnUnknownKidRejected` (`internal/auth`). Parity: the unknown-kid
+  steps in `app/02-me` and `cross/auth/01-sessions` were removed.
+
