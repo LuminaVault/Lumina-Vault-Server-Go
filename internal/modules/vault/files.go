@@ -201,6 +201,14 @@ func (m *Module) upload(c *echo.Context) error {
 			return err
 		}
 	}
+	// `If-None-Match: *` is create-only: an import never replaces a note that
+	// already has the name, so the client can pick another one.
+	if r.Header.Get("If-None-Match") == "*" {
+		if err := checkAbsent(target); err != nil {
+			unlock()
+			return err
+		}
+	}
 	err = vaultfiles.ReplaceFile(target, data)
 	unlock()
 	if err != nil {

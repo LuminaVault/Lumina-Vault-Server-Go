@@ -642,6 +642,12 @@ type VaultUploadParams struct {
 	// written. `*` means "the file must exist". Weak tags never match.
 	// Omit the header to overwrite unconditionally.
 	IfMatch *string `json:"If-Match,omitempty"`
+
+	// IfNoneMatch Create-only write: `*` refuses to replace a file that already
+	// exists at the resolved path (412, nothing written). Used by
+	// markdown import so an imported file never overwrites a note with
+	// the same name. Any other value is ignored.
+	IfNoneMatch *string `json:"If-None-Match,omitempty"`
 }
 
 // VaultMoveParams defines parameters for VaultMove.

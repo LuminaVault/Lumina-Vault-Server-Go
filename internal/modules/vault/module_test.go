@@ -401,6 +401,16 @@ func TestVaultRoutes(t *testing.T) {
 		require.NoError(t, v.pool.QueryRow(ctx, `SELECT metadata->>'title' FROM vault_files WHERE tenant_id = $1 AND path = 'inbox/other.md'`, u).Scan(&title))
 		require.Equal(t, "Mine", title)
 	})
+	t.Run("If-None-Match star refuses to replace an existing file", func(t *testing.T) {
+		u := v.user("trial")
+		create := map[string]string{"Content-Type": "text/markdown", "If-None-Match": "*"}
+		first := v.do(u, http.MethodPost, "/v1/vault/files?path=dup.md&note=true", create, []byte("one"))
+		require.Equal(t, http.StatusOK, first.code, string(first.body))
+		second := v.do(u, http.MethodPost, "/v1/vault/files?path=dup.md&note=true", create, []byte("two"))
+		require.Equal(t, http.StatusPreconditionFailed, second.code, string(second.body))
+		read := v.do(u, http.MethodGet, "/v1/vault/files/inbox/dup.md", nil, nil)
+		require.Equal(t, "one", string(read.body))
+	})
 
 	t.Run("exactly the limit is stored and one byte more is a bare 413", func(t *testing.T) {
 		small := setupOn(t, v, func(o *Options) { o.MaxFileSize = 8 })
