@@ -53,6 +53,9 @@ func TestConfigEnvNamesComeFromSwiftKeys(t *testing.T) {
 		"QUICK_ASSISTANT_ENABLED": true,
 		// Go-only: lets a chat turn run the app tools (internal/modules/chat/stream.go).
 		"CHAT_APP_ACTIONS_ENABLED": true,
+		// Go-only: opens private ranges to the user-fetch SSRF guard for local stacks
+		// and parity's feeds stub (post-archive backlog 1.1; cmd/App/ssrf.go).
+		"USER_FETCH_ALLOW_PRIVATE": true,
 		// TranscribeProviderRegistry.loadConfig builds these with key = "openai".
 		"TRANSCRIBE_RATECARD_OPENAI_MTOK_PER_SECOND":              true,
 		"TRANSCRIBE_RATECARD_OPENAI_IMPUTED_USD_PER_AUDIO_MINUTE": true,
