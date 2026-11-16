@@ -2471,6 +2471,7 @@ Deliberate changes from Swift, made after the archive (`docs/post-archive-backlo
 
 Deliberate changes from Swift, made after the archive (`docs/post-archive-backlog.md`).
 
+
 ### Password reset invalidates access tokens
 
 - goose `00005_users_sessions_valid_after` adds a nullable `users.sessions_valid_after` (expand-only; the Swift
@@ -2483,4 +2484,3 @@ Deliberate changes from Swift, made after the archive (`docs/post-archive-backlo
 - Cost: the per-request user lookup reads the column instead of `EXISTS`; still one query.
 - Tests: `TestSessionTokensIssuedBeforeTheCutoffAreRefused` (`internal/auth`), `TestPasswordResetInvalidatesAccessTokens`
   and `TestPasswordResetWithoutTheCutoffColumn` (`internal/authservice`).
-
