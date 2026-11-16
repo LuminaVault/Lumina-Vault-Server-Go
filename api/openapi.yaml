@@ -6975,6 +6975,101 @@ paths:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
+  /v1/vault/history:
+    get:
+      tags: [Vault]
+      operationId: vaultHistory
+      x-lv-module: vault
+      summary: A file's saved versions
+      description: |
+        Backlog E4.3. The commits that changed `path`, newest first, from the
+        tenant's vault repository. Empty when history is off or the path never
+        changed. A version with `deleted` true is the commit that removed it.
+      security: [{ bearerJWT: [] }]
+      parameters:
+        - { name: path, in: query, required: true, schema: { type: string } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+        - name: before
+          in: query
+          required: false
+          description: A version sha from the previous page; the list starts after it.
+          schema: { type: string }
+      responses:
+        '200':
+          description: The versions, newest first.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VaultHistoryResponse' }
+        '400':
+          description: Missing or invalid path.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /v1/vault/versions/{sha}:
+    get:
+      tags: [Vault]
+      operationId: vaultVersion
+      x-lv-module: vault
+      summary: A file's bytes at one version
+      description: Backlog E4.3. The raw bytes of `path` at commit `sha`.
+      security: [{ bearerJWT: [] }]
+      parameters:
+        - { name: sha, in: path, required: true, schema: { type: string } }
+        - { name: path, in: query, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: The file as it was.
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        '400':
+          description: Missing or invalid path.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/vault/versions/{sha}/restore:
+    post:
+      tags: [Vault]
+      operationId: vaultVersionRestore
+      x-lv-module: vault
+      summary: Restore a file to one version
+      description: |
+        Backlog E4.3. Writes `path` as it was at `sha` through the normal save
+        path (row, recall memory, history). History is never rewritten: the
+        restore becomes a new version. Accepts `If-Match` like an upload.
+      security: [{ bearerJWT: [] }]
+      parameters:
+        - { name: sha, in: path, required: true, schema: { type: string } }
+        - { name: path, in: query, required: true, schema: { type: string } }
+        - name: If-Match
+          in: header
+          required: false
+          description: The sha256 of the version the client last saw (E5.1).
+          schema: { type: string }
+      responses:
+        '200':
+          description: The restored file.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VaultFileDTO' }
+        '400':
+          description: Missing or invalid path.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '412':
+          description: The file changed since the version in If-Match; nothing was written.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
   /v1/vault/trash/{id}/restore:
     post:
       tags: [Vault]
@@ -16752,6 +16847,24 @@ components:
         spaceId: { type: string, format: uuid }
         title: { type: string }
         deletedAt: { type: string, format: date-time }
+    VaultHistoryVersion:
+      type: object
+      required: [sha, committedAt, message, reason, sizeBytes, deleted]
+      properties:
+        sha: { type: string }
+        committedAt: { type: string, format: date-time }
+        message: { type: string, description: The commit subject. }
+        reason: { type: string, description: 'upload, move, delete, restore, import, sweep, …' }
+        actorId: { type: string, format: uuid, description: The user who saved it, when known. }
+        sizeBytes: { type: integer, format: int64 }
+        deleted: { type: boolean, description: This version removed the file. }
+    VaultHistoryResponse:
+      type: object
+      required: [versions]
+      properties:
+        versions:
+          type: array
+          items: { $ref: '#/components/schemas/VaultHistoryVersion' }
     VaultTrashListResponse:
       type: object
       required: [items]

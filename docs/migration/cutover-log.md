@@ -2374,6 +2374,28 @@ stacked and merged by the owner in this order: #598, #599, #600.
 
 Deliberate changes from Swift, made after the archive (`docs/post-archive-backlog.md`).
 
+### Vault file paths: symlink escapes (backlog 1.2)
+
+- `vaultfiles.ResolveInside` keeps Swift's lexical check, with the same 400 text, and adds a physical one. It walks the
+  path from the root's real location (`EvalSymlinks`): every existing symlink on the way must resolve inside the
+  root, and `..` steps up from where the walk really is. A symlink that can't be followed (dangling, looping) is
+  refused. `link/secret.md`, a `note.md` symlink to a file outside, and `link/../nope.md` all answer
+  `400 resolved path escapes vault root` now. Links that stay inside keep working.
+- `vaultfiles.ResolveEntryInside` does not follow a symlink as the last component, so a link that points outside, or
+  nowhere, can still be deleted (vault delete, todo delete) or moved (`MoveFile` source). The directories on the way
+  are still checked. The operation moves the link, never its target.
+- Every caller that skipped `SanitizePath` (lint's stored paths, `MoveFile` and `moveToSpace` sources,
+  `CaptureLink`, `enrichAndRewrite`, `todos.delete`, the ingestion source route) goes through the physical check.
+- Self-improvement rollback: a snapshot's skill name must be one path segment and resolves inside
+  `<tenant>/skills`; otherwise the run has no usable snapshot (`409 rollback_snapshot_unavailable`), checked before
+  anything is written. Swift wrote `<skills>/<name>/SKILL.md` for any stored name. `archivedPath` is removed only
+  when it names one entry directly under the tenant's `skills/.archive`; Swift removed any absolute path. The curator
+  worker uses the same check for manifest names and for the model's merge target, and skips a target it refuses.
+- The tests that pinned Swift's behaviour (`TestSwiftWeakness*` in `internal/vaultfiles/resolve_test.go`, the
+  "name is not cleaned" rollback case) now test the fixed behaviour.
+- Parity: `self-improvement/04-rollback` no longer rolls back the seeded runs whose snapshot names hold "/" or ".."
+  (…020, …023, …024). Swift wrote through them; Go answers 409. `TestRollback` covers them.
+
 ### Share-sheet note survives enrichment (backlog 1.5)
 
 - Enrichment reads the file it is about to replace and appends its `## Note` section to the rendered page. Swift's
@@ -2382,4 +2404,3 @@ Deliberate changes from Swift, made after the archive (`docs/post-archive-backlo
   survives whole. Production only enriches fresh placeholders (capture, import).
 - The note goes into the file only, not into the link's memory, which still comes from the page metadata.
 - Parity: `capture/01-flow` no longer captures with a non-empty note; Go tests cover it.
-
