@@ -49,8 +49,11 @@ Found during the port, same batch:
   - Refresh has no reuse detection and is not transactional.
 - **MCP `browse` `pathPrefix`.** The `path >= p AND path < p || U+FFFF` range matches nothing under en_US.utf8
   collation. Use `starts_with` or `COLLATE "C"`.
-- **`usage_meter`.** There is no unique `(tenant_id, day, model)` key, and metering is read-then-write, so concurrent
-  calls split rows. Add the key through an expand-only migration, then upsert.
+- ~~**`usage_meter`.** There is no unique `(tenant_id, day, model)` key, and metering is read-then-write, so concurrent
+  calls split rows. Add the key through an expand-only migration, then upsert.~~
+  Already true in Go: `usage_meter` has the primary key `(tenant_id, day, model)` (`schema-swift.sql`), and
+  `internal/usagemeter` writes with `INSERT … ON CONFLICT (tenant_id, day, model) DO UPDATE` (since wave 4,
+  `953181e`), so concurrent calls add to one row. Nothing to change.
 
 ### 2. Hermes upgrade for CVE-2026-10221
 

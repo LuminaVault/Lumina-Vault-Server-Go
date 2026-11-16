@@ -4,6 +4,7 @@ import (
 	"context"
 	"lumina/internal/dbtest"
 	"lumina/internal/migrations"
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
@@ -53,4 +54,32 @@ func TestMeter(t *testing.T) {
 		none.RecordVisionEmbed(tenant, "k", func() { called = true })
 		require.True(t, called)
 	})
+}
+
+// Concurrent records add to the one (tenant, day, model) row: the primary key
+// and ON CONFLICT DO UPDATE make each record one atomic statement. Pins the
+// post-archive backlog's usage_meter item, which Go already meets.
+func TestConcurrentRecordsAddToOneRow(t *testing.T) {
+	ctx := context.Background()
+	pool := dbtest.Postgres(t)
+	require.NoError(t, migrations.Up(ctx, pool, migrations.SQL()))
+	tenant := uuid.New()
+	_, err := pool.Exec(ctx, `INSERT INTO users (id, email, password_hash, username, created_at, updated_at)
+		VALUES ($1, 'c@test', 'x', 'c', now(), now())`, tenant)
+	require.NoError(t, err)
+	m := New(pool)
+	var wg sync.WaitGroup
+	for range 20 {
+		wg.Go(func() {
+			m.Record(ctx, tenant, "race-model", 3, 5)
+			m.RecordCharacters(ctx, tenant, "race-model", 7)
+		})
+	}
+	wg.Wait()
+	var in, out, chars int64
+	var rows int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT sum(mtok_in)::bigint, sum(mtok_out)::bigint, sum(chars_out)::bigint, count(*)
+		FROM usage_meter WHERE tenant_id = $1 AND model = 'race-model'`, tenant).Scan(&in, &out, &chars, &rows))
+	require.Equal(t, 1, rows)
+	require.Equal(t, []int64{60, 100, 140}, []int64{in, out, chars})
 }
