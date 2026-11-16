@@ -1,4 +1,8 @@
 # Curator resources: vault skills from the catalog, plus archived state rows with no file.
+# Pinning updates only the pinned row in Go since the post-archive fix (backlog 1.6); Swift's
+# save() pinned every row of the tenant. So the snapshots (parity_si_res_state) leave
+# curator_pinned out and the lists after a pin ignore it; the selfimprovement module tests
+# "a loaded row: pinning updates only that row" covers it.
 module: self-improvement
 steps:
   - name: "list with no token"
@@ -24,7 +28,7 @@ steps:
   - name: "put the skills on disk"
     as: si_res
     request: {method: POST, path: "/v1/me/improvement/runs/5e1f1000-0000-4000-8000-000000000028/rollback"}
-    snapshot: [skills_state]
+    snapshot: [parity_si_res_state]
     files: [si_res]
   - name: "the catalog finds them, with archived rows and without the active orphan"
     as: si_res
@@ -32,17 +36,18 @@ steps:
   - name: "another tenant sees none of it"
     as: si_foe
     request: {method: GET, path: "/v1/me/improvement/resources"}
-  - name: "pinning a loaded row updates every row of the tenant"
+  - name: "pin a loaded row"
     as: si_res
     request: {method: PATCH, path: "/v1/me/improvement/resources/skill/alpha", raw: "{\"pinned\":true}"}
-    snapshot: [skills_state]
+    snapshot: [parity_si_res_state]
   - name: "the list shows it"
     as: si_res
     request: {method: GET, path: "/v1/me/improvement/resources"}
+    ignore: ["$.skills[*].pinned"]
   - name: "unpin does the same"
     as: si_res
     request: {method: PATCH, path: "/v1/me/improvement/resources/skill/alpha", raw: "{\"pinned\":false}"}
-    snapshot: [skills_state]
+    snapshot: [parity_si_res_state]
   - name: "a state this version does not know reads as active"
     as: si_res
     request: {method: PATCH, path: "/v1/me/improvement/resources/skill/beta", raw: "{\"pinned\":false}"}
@@ -55,7 +60,7 @@ steps:
   - name: "a manifest name with no state row inserts one"
     as: si_res
     request: {method: PATCH, path: "/v1/me/improvement/resources/skill/other-name", raw: "{\"pinned\":true}"}
-    snapshot: [skills_state]
+    snapshot: [parity_si_res_state]
   - name: "a vault skill replacing a built-in can be pinned"
     as: si_res
     request: {method: PATCH, path: "/v1/me/improvement/resources/skill/daily-brief", raw: "{\"pinned\":true}"}
@@ -74,7 +79,7 @@ steps:
   - name: "an archived row with no file"
     as: si_res
     request: {method: PATCH, path: "/v1/me/improvement/resources/skill/gone-skill", raw: "{\"pinned\":true}"}
-    snapshot: [skills_state]
+    snapshot: [parity_si_res_state]
   - name: "an archived job row with no file takes either kind"
     as: si_res
     request: {method: PATCH, path: "/v1/me/improvement/resources/skill/job-gone", raw: "{\"pinned\":true}"}
@@ -162,4 +167,5 @@ steps:
   - name: "the list at the end"
     as: si_res
     request: {method: GET, path: "/v1/me/improvement/resources"}
-    snapshot: [skills_state]
+    ignore: ["$.skills[*].pinned"]
+    snapshot: [parity_si_res_state]

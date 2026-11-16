@@ -175,7 +175,9 @@ INSERT INTO self_improvement_changes (id, tenant_id, run_id, kind, state, trigge
 -- Curator state. A built-in row beside the vault rows, because Swift's save() on a loaded
 -- row updates every row of the tenant (SkillsState's @ID is tenant_id alone).
 INSERT INTO skills_state (tenant_id, source, name, enabled, curator_pinned, curator_state, curator_last_activity_at, curator_archived_at) VALUES
-  ('5e1f0000-0000-4000-8000-0000000000ad', 'vault', 'seeded', true, true, 'archived', '2026-03-03T00:00:00Z', '2026-03-04T00:00:00Z'),
+  -- si_skill's other rows hold what 04-rollback's restores write ('active', no archived time), so Swift's
+  -- tenant-wide update and Go's own-row one (backlog 1.6) leave the same table.
+  ('5e1f0000-0000-4000-8000-0000000000ad', 'vault', 'seeded', true, true, 'active', '2026-03-03T00:00:00Z', NULL),
   ('5e1f0000-0000-4000-8000-0000000000ad', 'builtin', 'daily-brief', true, false, 'active', NULL, NULL),
   ('5e1f0000-0000-4000-8000-0000000000ae', 'vault', 'gone-skill', true, true, 'archived', '2026-03-05T00:00:00Z', '2026-03-06T00:00:00Z'),
   ('5e1f0000-0000-4000-8000-0000000000ae', 'vault', 'job-gone', true, false, 'archived', NULL, NULL),
@@ -188,3 +190,17 @@ INSERT INTO skills_state (tenant_id, source, name, enabled, curator_pinned, cura
 INSERT INTO user_hermes_config (id, tenant_id, base_url, verified_at, created_at, updated_at) VALUES
   ('5e1f5000-0000-4000-8000-000000000001', '5e1f0000-0000-4000-8000-0000000000af', 'https://8.8.8.8:8642', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
   ('5e1f5000-0000-4000-8000-000000000002', '5e1f0000-0000-4000-8000-0000000000b0', 'http://10.20.30.40:8642', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+
+-- skills_state per scenario tenant, so a difference in one tenant's rows does not show in
+-- every later snapshot. Swift's save() updated every skills_state row of the tenant; Go
+-- only the row's own since the post-archive fix (backlog 1.6). 06-resources pins rows of
+-- a tenant with several, so its view leaves curator_pinned out.
+CREATE VIEW parity_si_skill_state AS
+  SELECT * FROM skills_state WHERE tenant_id = '5e1f0000-0000-4000-8000-0000000000ad';
+CREATE VIEW parity_si_res_state AS
+  SELECT tenant_id, source, name, enabled, curator_state, curator_last_activity_at, curator_archived_at
+  FROM skills_state WHERE tenant_id IN ('5e1f0000-0000-4000-8000-0000000000ae', '5e1f0000-0000-4000-8000-0000000000a8',
+    '5e1f0000-0000-4000-8000-0000000000a1');
+CREATE VIEW parity_si_byo_state AS
+  SELECT * FROM skills_state WHERE tenant_id IN ('5e1f0000-0000-4000-8000-0000000000af', '5e1f0000-0000-4000-8000-0000000000b0');
+

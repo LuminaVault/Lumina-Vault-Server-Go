@@ -11,6 +11,6 @@ steps:
   - name: create from chat
     as: sk_gus
     request: {method: POST, path: /v1/jobs, json: {title: "Daily Stock Prices!", cron: "0 8 * * 1-5", domain: stocks, spec: "Report the closing prices of AAPL and MSFT with a short summary of the day.", conversationId: 5c10c100-0000-4000-8000-000000000001}}
-    snapshot: [skills_state]
-  - {name: re-create without origin keeps it, as: sk_gus, request: {method: POST, path: /v1/jobs, json: {title: "daily stock prices", cron: "30 7 * * *", spec: short}}, snapshot: [skills_state]}
+    snapshot: [parity_sk_patch_state]
+  - {name: re-create without origin keeps it, as: sk_gus, request: {method: POST, path: /v1/jobs, json: {title: "daily stock prices", cron: "30 7 * * *", spec: short}}, snapshot: [parity_sk_patch_state]}
   - {name: list shows the vault job, as: sk_gus, request: {method: GET, path: /v1/skills}}

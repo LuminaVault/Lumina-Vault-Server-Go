@@ -11,6 +11,6 @@ steps:
   - {name: bad category, as: sk_hal, request: {method: PATCH, path: /v1/skills/daily-brief, json: {apnsCategory: loud}}}
   - {name: wrong type, as: sk_hal, request: {method: PATCH, path: /v1/skills/daily-brief, json: {enabled: "no"}}}
   - {name: malformed, as: sk_hal, request: {method: PATCH, path: /v1/skills/daily-brief, raw: '{"enabled":'}}
-  - {name: create state, as: sk_hal, request: {method: PATCH, path: /v1/skills/daily-brief, json: {enabled: false, scheduleOverride: "0 7 * * *", apnsCategory: digest}}, snapshot: [skills_state]}
-  - {name: update the existing row, as: sk_hal, request: {method: PATCH, path: /v1/skills/daily-brief, json: {scheduleOverride: "", apnsCategory: runCompleted}}, snapshot: [skills_state]}
-  - {name: second row, as: sk_hal, request: {method: PATCH, path: /v1/skills/pattern-detector, json: {}}, snapshot: [skills_state]}
+  - {name: create state, as: sk_hal, request: {method: PATCH, path: /v1/skills/daily-brief, json: {enabled: false, scheduleOverride: "0 7 * * *", apnsCategory: digest}}, snapshot: [parity_sk_patch_state]}
+  - {name: update the existing row, as: sk_hal, request: {method: PATCH, path: /v1/skills/daily-brief, json: {scheduleOverride: "", apnsCategory: runCompleted}}, snapshot: [parity_sk_patch_state]}
+  - {name: second row, as: sk_hal, request: {method: PATCH, path: /v1/skills/pattern-detector, json: {}}, snapshot: [parity_sk_patch_state]}

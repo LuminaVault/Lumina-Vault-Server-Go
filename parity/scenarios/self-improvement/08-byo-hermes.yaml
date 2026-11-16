@@ -39,7 +39,7 @@ steps:
   - name: "rollback conflicts"
     as: si_byo
     request: {method: POST, path: "/v1/me/improvement/runs/5e1f1000-0000-4000-8000-000000000029/rollback"}
-    snapshot: [self_improvement_runs, skills_state]
+    snapshot: [self_improvement_runs, parity_si_byo_state]
     files: [si_byo]
   - name: "reads still answer"
     as: si_byo

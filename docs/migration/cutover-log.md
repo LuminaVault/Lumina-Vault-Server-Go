@@ -2385,5 +2385,9 @@ Deliberate changes from Swift, made after the archive (`docs/post-archive-backlo
     curator worker's `saveState`.
 - With that, archiving one skill no longer archives the tenant's others, so the next skill in the same curator run
   is marked stale as it should be.
-- Parity: the steps that pinned the spread were rewritten or removed; Go tests cover several rows per tenant.
+- Parity: `skills_state` snapshots now go through per-scenario tenant views (`parity_si_*_state`,
+  `parity_sk_patch_state`), so a difference in one tenant no longer shows in every later snapshot of the shared
+  table. Steps that updated a row of a several-row tenant were reordered (plugins `02-premium-skills`) or given seed
+  rows that already hold the written state (`04-rollback`); `06-resources` leaves `curator_pinned` out. Go tests
+  cover several rows per tenant.
 

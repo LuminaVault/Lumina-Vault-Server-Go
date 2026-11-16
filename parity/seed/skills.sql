@@ -87,3 +87,10 @@ FROM skills_state WHERE tenant_id IN (SELECT id FROM users WHERE username IN ('s
 CREATE VIEW parity_sk_briefs AS
 SELECT tenant_id, cards, end_note
 FROM briefs WHERE tenant_id IN (SELECT id FROM users WHERE username IN ('sk_ivy', 'sk_jon'));
+
+-- skills_state of the PATCH and jobs scenarios' tenants only, so a difference elsewhere in
+-- the shared table (backlog 1.6: Swift's save() spread to every row of a tenant) does not
+-- show here.
+CREATE VIEW parity_sk_patch_state AS
+SELECT * FROM skills_state WHERE tenant_id IN (SELECT id FROM users WHERE username IN ('sk_hal', 'sk_cy', 'sk_gus'));
+
