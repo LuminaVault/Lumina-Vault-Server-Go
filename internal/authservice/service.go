@@ -571,10 +571,25 @@ func (s *Service) ConfirmEmail(ctx context.Context, email, code string) error {
 	return err
 }
 
-// Refresh is DefaultAuthService.refresh: rotate (revoke, then issue). Not
-// transactional and no reuse detection, as in Swift (wave-6-8-plan.md).
+// Refresh is DefaultAuthService.refresh: rotate (revoke, then issue), in one
+// transaction, so a failure part way leaves the old token usable rather than
+// the user signed out. A token reused after revocation revokes the tenant's
+// refresh tokens (auth.ConsumeRefreshToken) and is the usual 401. Swift was not
+// transactional and had no reuse detection; fixed after the archive.
 func (s *Service) Refresh(ctx context.Context, refreshToken string) (*AuthResponse, error) {
-	tenant, err := auth.ConsumeRefreshToken(ctx, s.pool, refreshToken, s.opt.Now())
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
+	tenant, err := auth.ConsumeRefreshToken(ctx, tx, refreshToken, s.opt.Now())
+	if errors.Is(err, auth.ErrRefreshReused) {
+		if err := tx.Commit(ctx); err != nil {
+			return nil, err
+		}
+		s.opt.Log.Warn("refresh token reused after revocation; revoked the tenant's refresh tokens", "tenant_id", ids.Upper(tenant))
+		return nil, ErrInvalidRefresh
+	}
 	if errors.Is(err, auth.ErrInvalidRefresh) {
 		return nil, ErrInvalidRefresh
 	}
@@ -588,7 +603,14 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (*AuthRespon
 	if u == nil {
 		return nil, ErrInvalidRefresh
 	}
-	return s.IssueTokens(ctx, u)
+	resp, err := s.issueTokens(ctx, tx, u)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return resp, nil
 }
 
 // RevokeRefresh is DefaultAuthService.revokeRefresh.
@@ -632,6 +654,12 @@ func knownOverride(v string) string {
 // through: the BILLING_TIER_OVERRIDE_EMAILS stamp, `$set is_internal`, then an
 // access token (hpid only for a ready Hermes profile) and a new refresh token.
 func (s *Service) IssueTokens(ctx context.Context, u *User) (*AuthResponse, error) {
+	return s.issueTokens(ctx, s.pool, u)
+}
+
+// issueTokens is IssueTokens with the new refresh row written through db, so
+// Refresh can write it in its transaction.
+func (s *Service) issueTokens(ctx context.Context, db auth.DB, u *User) (*AuthResponse, error) {
 	if err := s.applyTierOverrideAllowlist(ctx, u); err != nil {
 		return nil, err
 	}
@@ -654,7 +682,7 @@ func (s *Service) IssueTokens(ctx context.Context, u *User) (*AuthResponse, erro
 	if err != nil {
 		return nil, err
 	}
-	refresh, err := auth.IssueRefreshToken(ctx, s.pool, u.ID, s.opt.Now())
+	refresh, err := auth.IssueRefreshToken(ctx, db, u.ID, s.opt.Now())
 	if err != nil {
 		return nil, err
 	}

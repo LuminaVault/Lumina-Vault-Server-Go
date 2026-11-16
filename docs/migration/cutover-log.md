@@ -2523,3 +2523,15 @@ Deliberate changes from Swift, made after the archive (`docs/post-archive-backlo
 - Tests: `TestCompleteBelongsToTheSessionsTenant`, the no-bearer cases in `TestXaiController`
   (`internal/modules/integrations`). Parity: the "xai complete no token" step was removed.
 
+### Refresh: atomic rotation, reuse detection, one transaction
+
+- Consuming a refresh token is one `UPDATE … RETURNING` (unrevoked, unexpired, user exists), so of two refreshes of
+  the same token exactly one wins. Swift read, then revoked, and both could win.
+- Reuse: a token revoked more than `auth.RefreshReuseGrace` (30 s) ago revokes every live refresh token of the tenant
+  and answers the usual 401. The grace covers a client racing itself. There is no token-family column, so the whole
+  tenant signs in again; a stolen chain dies with it.
+- `Service.Refresh` consumes and writes the new refresh row in one transaction: a failure while issuing leaves the old
+  token usable instead of signing the user out. The reuse revocation is committed even though the call fails.
+- Tests: `TestRefreshRotationIsAtomicAndDetectsReuse` (`internal/authservice`). Parity: `auth/04-refresh` "revoked
+  token" (seeded long revoked, so reuse) moved last, after the steps that use the tenant's other tokens.
+

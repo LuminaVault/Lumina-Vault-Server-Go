@@ -14,7 +14,8 @@ import (
 )
 
 // The refresh half of AuthService: issue, rotate (revoke then the caller
-// issues), revoke. Not transactional, no reuse detection, as Swift.
+// issues), revoke. The rotation's atomicity, reuse detection and transaction are
+// covered by TestRefreshRotationIsAtomicAndDetectsReuse in internal/authservice.
 func TestRefreshTokenLifecycle(t *testing.T) {
 	ctx := context.Background()
 	pool := dbtest.Postgres(t)

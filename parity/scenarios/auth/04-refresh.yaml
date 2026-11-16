@@ -9,7 +9,6 @@ steps:
     ignore: ["$.accessToken", "$.refreshToken"]
   - {name: rotated token is revoked, request: {method: POST, path: /v1/auth/refresh, headers: {X-Forwarded-For: 198.51.103.1}, json: {refreshToken: parity-refresh-seeded-ok-000000000000000000}}}
   - {name: expired token, request: {method: POST, path: /v1/auth/refresh, headers: {X-Forwarded-For: 198.51.103.1}, json: {refreshToken: parity-refresh-seeded-expired-00000000000000}}}
-  - {name: revoked token, request: {method: POST, path: /v1/auth/refresh, headers: {X-Forwarded-For: 198.51.103.1}, json: {refreshToken: parity-refresh-seeded-revoked-00000000000000}}}
   - {name: unknown token, request: {method: POST, path: /v1/auth/refresh, headers: {X-Forwarded-For: 198.51.103.1}, json: {refreshToken: ""}}}
   - {name: new access token works, request: {method: GET, path: /v1/auth/me, headers: {Authorization: "Bearer {{t2}}"}}}
   - name: refresh the new token
@@ -20,4 +19,7 @@ steps:
   - {name: logged out token, request: {method: POST, path: /v1/auth/refresh, headers: {X-Forwarded-For: 198.51.103.2}, json: {refreshToken: "{{r3}}"}}}
   - {name: logout again, request: {method: POST, path: /v1/auth/logout, json: {refreshToken: "{{r3}}"}}}
   - {name: logout unknown, request: {method: POST, path: /v1/auth/logout, json: {refreshToken: never-issued}}}
+  # Last: a token revoked long ago is reuse, and Go then revokes the tenant's other refresh tokens
+  # (post-archive fix), which would end r2 and r3 above early. Swift only answers 401; so does Go.
+  - {name: revoked token, request: {method: POST, path: /v1/auth/refresh, headers: {X-Forwarded-For: 198.51.103.1}, json: {refreshToken: parity-refresh-seeded-revoked-00000000000000}}}
   - {name: logout with a bearer still needs the body, as: auth_me, request: {method: POST, path: /v1/auth/logout, json: {}}}
