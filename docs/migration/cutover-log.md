@@ -2369,3 +2369,15 @@ stacked and merged by the owner in this order: #598, #599, #600.
 - community could not be exercised on staging (disabled there); CI parity covers it. The #599 body lets the owner drop
   its two entries.
 - `community/00-auth`, `skills-cron/01-routes` and `hermes/01-runs-errors` gained `smoke: true`.
+
+## Post-archive fixes
+
+Deliberate changes from Swift, made after the archive (`docs/post-archive-backlog.md`).
+
+### `/v1/memory/graph` scrubs model identity (backlog 1.4)
+
+- Graph nodes now go through the same disclosure scrub as the sibling memory routes. A reader who is not BYOK sees
+  no origin model on a node's `createdBy`/`lastUpdatedBy`, and `contributors` is empty. The user's own agent
+  connection (`mcp:*`) is still named. The reader's preference counts, not the vault owner's.
+- Parity: `memory/05-graph` ignores `$.nodes[*].provenance`; `TestGraphHidesModelsFromManagedReaders` covers it.
+

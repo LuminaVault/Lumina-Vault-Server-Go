@@ -30,7 +30,8 @@ one is a deliberate change from Swift. Name each in `docs/migration/cutover-log.
    cases in `internal/vaultfiles/resolve_test.go`). Snapshot restore paths in self-improvement go through the same
    checks.
 3. **Storage quota.** Enforce it.
-4. **`/v1/memory/graph`.** Scrub what it discloses.
+4. ~~**`/v1/memory/graph`.** Scrub what it discloses.~~ Done: see "`/v1/memory/graph` scrubs model identity" in
+   `docs/migration/cutover-log.md`.
 5. **Share-sheet note deletion.** Fix it.
 6. **`skills_state`.** A PATCH updates only its own row, not every row for that skill name.
 

@@ -128,10 +128,15 @@ func derefOr(s *string) string {
 	return *s
 }
 
-// graph serves GET /v1/memory/graph. Unlike its sibling routes Swift does not run this
-// response through ModelDisclosurePolicy, so a managed tenant sees origin models here.
+// graph serves GET /v1/memory/graph. Swift skipped ModelDisclosurePolicy here, so a
+// managed tenant saw origin models on graph nodes; since the archive (backlog 1.4) the
+// nodes are scrubbed like every sibling route.
 func (m *Module) graph(c *echo.Context) error {
 	a, err := m.access.Resolve(c, vaultaccess.Read)
+	if err != nil {
+		return err
+	}
+	visible, err := m.visible(c)
 	if err != nil {
 		return err
 	}
@@ -164,6 +169,11 @@ func (m *Module) graph(c *echo.Context) error {
 	out, err := m.buildGraph(c.Request().Context(), a.VaultID, limit, similarity, maxEdges, includeWiki, kinds, filter)
 	if err != nil {
 		return err
+	}
+	if !visible {
+		for i := range out.Nodes {
+			scrubSummary(out.Nodes[i].Provenance)
+		}
 	}
 	return wire.JSON(c, http.StatusOK, out)
 }
