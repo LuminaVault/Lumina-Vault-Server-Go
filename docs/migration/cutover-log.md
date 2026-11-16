@@ -2396,6 +2396,14 @@ Deliberate changes from Swift, made after the archive (`docs/post-archive-backlo
 - Parity: `self-improvement/04-rollback` no longer rolls back the seeded runs whose snapshot names hold "/" or ".."
   (…020, …023, …024). Swift wrote through them; Go answers 409. `TestRollback` covers them.
 
+### Share-sheet note survives enrichment (backlog 1.5)
+
+- Enrichment reads the file it is about to replace and appends its `## Note` section to the rendered page. Swift's
+  render dropped it, so the note a user typed in the share sheet was lost once enrichment finished.
+- In a placeholder the note is everything after the first `## Note` heading, so a note with its own heading line
+  survives whole. Production only enriches fresh placeholders (capture, import).
+- The note goes into the file only, not into the link's memory, which still comes from the page metadata.
+- Parity: `capture/01-flow` no longer captures with a non-empty note; Go tests cover it.
 ### `/v1/memory/graph` scrubs model identity (backlog 1.4)
 
 - Graph nodes now go through the same disclosure scrub as the sibling memory routes. A reader who is not BYOK sees

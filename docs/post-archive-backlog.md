@@ -32,7 +32,8 @@ one is a deliberate change from Swift. Name each in `docs/migration/cutover-log.
    checks.~~ Done: see "Vault file paths: symlink escapes" in `docs/migration/cutover-log.md`.
 3. ~~**Storage quota.** Enforce it.~~ Done: see "Storage quota counts stored bytes" in `docs/migration/cutover-log.md`.
 4. **`/v1/memory/graph`.** Scrub what it discloses.
-5. **Share-sheet note deletion.** Fix it.
+5. ~~**Share-sheet note deletion.** Fix it.~~ Done: see "Share-sheet note survives enrichment" in
+   `docs/migration/cutover-log.md`.
 6. **`skills_state`.** A PATCH updates only its own row, not every row for that skill name.
 
 Found during the port, same batch:

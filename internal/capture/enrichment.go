@@ -15,6 +15,7 @@ import (
 	"lumina/internal/vaultfiles"
 	"lumina/internal/vaultpaths"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 
@@ -101,10 +102,10 @@ func (s *EnrichmentService) enricherFor(u *URL) Enricher {
 // the row's size, hash and status. Any failure marks the row "failed", best
 // effort, and never reaches the caller, because the capture already succeeded.
 //
-// QUIRK, as in Swift: the render doesn't carry the "## Note" section of the
-// placeholder, so the note a user typed in the share sheet is on disk only until
-// enrichment finishes. The whole metadata value read here is written back, so an
-// edit to the row while this runs can be lost.
+// The note a user typed in the share sheet is carried into the rewritten file
+// (keptNote). Swift's render dropped it, so the note lived only until enrichment
+// finished; fixed after the archive (backlog 1.5). The whole metadata value read
+// here is written back, so an edit to the row while this runs can be lost.
 func (s *EnrichmentService) EnrichAndRewrite(ctx context.Context, fileID uuid.UUID, urlString string, tenant uuid.UUID) {
 	if err := s.enrichAndRewrite(ctx, fileID, urlString, tenant); err != nil {
 		slog.ErrorContext(ctx, "enrichment failed", "tenant", ids.Upper(tenant), "file", ids.Upper(fileID), "error", err)
@@ -161,6 +162,11 @@ func (s *EnrichmentService) enrichAndRewrite(ctx context.Context, fileID uuid.UU
 	if err != nil {
 		return err
 	}
+	if existing, err := os.ReadFile(target); err == nil { //nolint:gosec // target comes from ResolveInside
+		if note, ok := keptNote(string(existing)); ok {
+			data = append(data, "## Note\n"+note+"\n"...)
+		}
+	}
 	if err := vaultfiles.WriteAtomic(target, data); err != nil {
 		return err
 	}
@@ -170,6 +176,26 @@ func (s *EnrichmentService) enrichAndRewrite(ctx context.Context, fileID uuid.UU
 	}
 	s.indexMemory(ctx, metadata, fileID, row.SpaceID, tenant)
 	return nil
+}
+
+// noteHeading starts the section placeholderMarkdown writes for a share-sheet note.
+const noteHeading = "\n## Note\n"
+
+// keptNote finds the share-sheet note in the file enrichment is about to replace.
+// In the placeholder it is everything after the first "## Note" heading, so a
+// note that holds its own "## Note" line survives whole. In a file enrichment
+// already rewrote (a retry), the note was appended last, so the last heading
+// counts: page content above it can't be mistaken for the note.
+func keptNote(file string) (string, bool) {
+	i := strings.Index(file, noteHeading)
+	if !strings.Contains(file, "\n# [Pending Enrichment]\n") {
+		i = strings.LastIndex(file, noteHeading)
+	}
+	if i < 0 {
+		return "", false
+	}
+	note := strings.TrimSuffix(file[i+len(noteHeading):], "\n")
+	return note, note != ""
 }
 
 // RenderMarkdown is the vault file an enriched link becomes. Only double quotes

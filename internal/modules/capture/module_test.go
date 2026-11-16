@@ -217,8 +217,8 @@ func TestCapturePlaceholderThenEnrichment(t *testing.T) {
 	v.runEnrichment()
 	require.Equal(t, "done", v.enrichmentStatus(a.ID))
 	got := v.file(amy, a.Path)
-	require.Equal(t, "---\ntitle: \"Parity\"\nsource: \"https://example.com/post?x=1\"\n---\n\n# Parity\n\n## Description\nAn article.\n\n", got)
-	require.NotContains(t, got, "my note", "QUIRK: enrichment drops the note")
+	// Post-archive fix (backlog 1.5): the note survives enrichment. Swift dropped it.
+	require.Equal(t, "---\ntitle: \"Parity\"\nsource: \"https://example.com/post?x=1\"\n---\n\n# Parity\n\n## Description\nAn article.\n\n## Note\nmy note\n", got)
 
 	var size int64
 	var content string
@@ -275,6 +275,28 @@ func TestRefusals(t *testing.T) {
 
 // A failing enricher answers nothing different: the row ends "failed" with the
 // placeholder still on disk.
+// A note with its own "## Note" line and several lines survives enrichment whole.
+// Production only enriches fresh placeholders (capture, import); a second run over
+// an enriched file (a retry) keeps a plain note once.
+func TestEnrichmentKeepsTheShareSheetNote(t *testing.T) {
+	ctx := context.Background()
+	v := setup(t, options{enricher: article()})
+	const note = "line one\n## Note\nline three"
+	a := v.capture(amy, `{"url":"https://example.com/","notes":"line one\n## Note\nline three"}`)
+	plain := v.capture(amy, `{"url":"https://example.com/b","notes":"just this"}`)
+	v.runEnrichment()
+	got := v.file(amy, a.Path)
+	require.True(t, strings.HasSuffix(got, "\n## Note\n"+note+"\n"), got)
+
+	first := v.file(amy, plain.Path)
+	require.True(t, strings.HasSuffix(first, "\n## Note\njust this\n"), first)
+	s := linkcapture.NewEnrichmentService(linkcapture.EnrichmentOptions{
+		Paths: v.paths, Store: vaultfiles.NewStore(v.pool, v.paths), Enrichers: []linkcapture.Enricher{article()},
+	})
+	s.EnrichAndRewrite(ctx, uuid.MustParse(plain.ID), "https://example.com/b", amy)
+	require.Equal(t, first, v.file(amy, plain.Path))
+}
+
 func TestEnrichmentFailureMarksRow(t *testing.T) {
 	v := setup(t, options{enricher: stubEnricher{err: errors.New("boom")}})
 	a := v.capture(amy, `{"url":"https://example.com/","notes":"kept"}`)
