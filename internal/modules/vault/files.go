@@ -177,7 +177,18 @@ func (m *Module) upload(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := vaultfiles.ReplaceFile(target, data); err != nil {
+	// E5.1: the check and the write hold one lock, so two saves made from the
+	// same version can't both pass.
+	unlock := m.locks.lock(tenant, safe)
+	if ifMatch := r.Header.Get("If-Match"); ifMatch != "" {
+		if err := checkIfMatch(ifMatch, target); err != nil {
+			unlock()
+			return err
+		}
+	}
+	err = vaultfiles.ReplaceFile(target, data)
+	unlock()
+	if err != nil {
 		return err
 	}
 
