@@ -493,7 +493,7 @@ func linkCaptureService(pool *pgxpool.Pool, cfg config.Config, paths vaultpaths.
 	store := vaultfiles.NewStore(pool, paths)
 	enrichment := linkcapture.NewEnrichmentService(linkcapture.EnrichmentOptions{
 		Paths: paths, Store: store, Embeddings: embeddings, Memories: memories,
-		Client: userFetchGuard.Client(0),
+		Client: userFetchGuard(cfg).Client(0),
 		Jina:   &linkcapture.JinaEnricher{APIKey: cfg.JinaAPIKey},
 		Hooks: &linkcapture.HookDispatcher{
 			Registry:  linkcapture.NewHookRegistry(linkcapture.ReadingTimeHook{}),

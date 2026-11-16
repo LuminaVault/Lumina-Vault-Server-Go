@@ -2382,6 +2382,8 @@ Deliberate changes from Swift, made after the archive (`docs/post-archive-backlo
   uses a proxy.
 - Capture enrichment (OG, X, YouTube fetches of captured links) and the Readwise, Raindrop and RSS connectors now use
   the strict client: nothing private, nothing on the tailnet. `IsPublic` stays as the cheap 400 before any fetch.
+  `USER_FETCH_ALLOW_PRIVATE=true` opens private ranges for local stacks and parity (the feeds stub is a private
+  Docker host); production leaves it unset.
 - BYOK base URLs: `PUT /v1/me/providers/{provider}` runs `Validate` on `baseUrl` and answers
   `400 invalid_base_url:<reason>`, as `PUT /v1/settings/hermes` does. `/test` and `/models` dial through the guarded
   client. On the chat path, `llm.CredentialStore` validates the tenant URL on every call (the candidate list is

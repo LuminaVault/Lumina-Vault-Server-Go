@@ -18,5 +18,8 @@ func byokGuard(cfg config.Config) ssrfguard.Guard {
 }
 
 // userFetchGuard is for pages and feeds a user hands us (captured links, RSS,
-// Readwise and Raindrop). Nothing private, nothing on the tailnet.
-var userFetchGuard = ssrfguard.Guard{}
+// Readwise and Raindrop). Nothing private, nothing on the tailnet, unless
+// USER_FETCH_ALLOW_PRIVATE opens private ranges for a local stack or parity.
+func userFetchGuard(cfg config.Config) ssrfguard.Guard {
+	return ssrfguard.Guard{AllowPrivateRanges: cfg.UserFetchAllowPrivate}
+}

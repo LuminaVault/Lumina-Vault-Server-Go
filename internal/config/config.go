@@ -298,6 +298,10 @@ type Config struct {
 	BYOHermesAllowPrivate    string `env:"BYO_HERMES_ALLOW_PRIVATE" envDefault:"false"`
 	BYOHermesRequireHTTPSRaw string `env:"BYO_HERMES_REQUIRE_HTTPS"`
 	BYOHermesAllowTailnet    string `env:"BYO_HERMES_ALLOW_TAILNET_HTTP" envDefault:"true"`
+	// UserFetchAllowPrivate opens private ranges to the SSRF guard on pages and feeds a
+	// user hands us (capture, RSS, Readwise, Raindrop). For local stacks and parity
+	// only; production leaves it off.
+	UserFetchAllowPrivate bool `env:"USER_FETCH_ALLOW_PRIVATE" envDefault:"false"`
 
 	// MaxConcurrentStreamsPerUser is the ceiling on ratelimit.InFlightLimit for /v1/llm and /v1/query.
 	MaxConcurrentStreamsPerUser int `env:"HTTP_MAX_CONCURRENT_STREAMS_PER_USER" envDefault:"3"`

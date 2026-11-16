@@ -44,6 +44,10 @@ x-common-env: &common-env
   # base64 of 32 bytes of 0x01 (the golden-fixture key; never a real key)
   LV_SECRET_MASTER_KEY: AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=
   FLUENT_AUTOMIGRATE: "false"
+  # Go only: the capture, import and connector scenarios fetch from the feeds stub, a
+  # private Docker host that the user-fetch SSRF guard refuses otherwise. Swift has no
+  # such guard and ignores the variable.
+  USER_FETCH_ALLOW_PRIVATE: "true"
   OTEL_ENABLED: "false"
   LOG_LEVEL: warning
   # "test" keeps the schedulers and workers off so DB snapshots only change
