@@ -219,3 +219,53 @@ func TestUnknownKidIsRefused(t *testing.T) {
 		t.Fatal("empty keyset must verify nothing")
 	}
 }
+
+// cutoffUsers is a SessionChecker: the user exists with the given cutoff.
+type cutoffUsers struct {
+	user   uuid.UUID
+	cutoff *time.Time
+}
+
+func (f cutoffUsers) Exists(_ context.Context, id uuid.UUID) (bool, error) { return id == f.user, nil }
+
+func (f cutoffUsers) SessionsValidAfter(_ context.Context, id uuid.UUID) (*time.Time, bool, error) {
+	return f.cutoff, id == f.user, nil
+}
+
+// A password reset's cutoff refuses the session tokens issued before it
+// (post-archive fix: Swift left them valid until they expired). iat is kept to
+// the second, so a token from the reset's own second passes.
+func TestSessionTokensIssuedBeforeTheCutoffAreRefused(t *testing.T) {
+	user := uuid.New()
+	keys := NewKeyset(Key{Kid: "a", Secret: []byte(secretA)})
+	at := func(iat time.Time) string {
+		c := session(user)
+		c.IssuedAt = jwt.NewNumericDate(iat)
+		return mint(t, "a", secretA, c, jwt.SigningMethodHS256)
+	}
+	cutoff := time.Date(2026, 11, 16, 12, 0, 0, 500_000_000, time.UTC)
+
+	code, _ := serve(t, keys, cutoffUsers{user: user}, at(cutoff.Add(-time.Hour)))
+	require.Equal(t, http.StatusOK, code, "no cutoff: any iat")
+
+	users := cutoffUsers{user: user, cutoff: &cutoff}
+	code, _ = serve(t, keys, users, at(cutoff.Add(-time.Minute)))
+	require.Equal(t, http.StatusUnauthorized, code, "issued before the reset")
+	code, _ = serve(t, keys, users, at(cutoff.Add(-time.Second)))
+	require.Equal(t, http.StatusUnauthorized, code, "the second before")
+	code, seen := serve(t, keys, users, at(cutoff))
+	require.Equal(t, http.StatusOK, code, "the reset's own second")
+	require.Equal(t, user, seen)
+	code, _ = serve(t, keys, users, at(cutoff.Add(time.Minute)))
+	require.Equal(t, http.StatusOK, code, "issued after")
+	code, _ = serve(t, keys, users, at(time.Now()))
+	require.Equal(t, http.StatusOK, code, "a fresh token")
+
+	noIat := session(user)
+	noIat.IssuedAt = nil
+	code, _ = serve(t, keys, users, mint(t, "a", secretA, noIat, jwt.SigningMethodHS256))
+	require.Equal(t, http.StatusUnauthorized, code, "no iat once a cutoff is set")
+
+	code, _ = serve(t, keys, cutoffUsers{user: uuid.New(), cutoff: &cutoff}, at(cutoff.Add(time.Minute)))
+	require.Equal(t, http.StatusUnauthorized, code, "unknown user")
+}

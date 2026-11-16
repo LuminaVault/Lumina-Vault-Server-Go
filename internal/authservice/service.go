@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -412,8 +413,9 @@ func (s *Service) failOTP(ctx context.Context, table string, r *otpRow, maxFailu
 }
 
 // ResetPassword is DefaultAuthService.resetPassword: the newest unused code,
-// then a new hash, the login lockout cleared, every refresh token revoked and a
-// new session. Access tokens already issued stay valid until they expire.
+// then a new hash, the login lockout cleared, every refresh token revoked, the
+// access tokens issued so far invalidated, and a new session. Swift left the
+// access tokens valid until they expired; fixed after the archive.
 //
 // Swift weaknesses, kept: the lock is on the code row, so a new forgot-password
 // starts a fresh five attempts; the hashes are compared with ==; and an unknown
@@ -466,6 +468,9 @@ func (s *Service) ResetPassword(ctx context.Context, email, code, newPassword st
 	u.PasswordHash, u.FailedLoginAttempts, u.LockoutUntil = hash, 0, nil
 	if _, err := s.pool.Exec(ctx, `UPDATE refresh_tokens SET revoked_at = $2 WHERE tenant_id = $1 AND revoked_at IS NULL`,
 		u.ID, s.opt.Now()); err != nil {
+		return nil, err
+	}
+	if err := s.invalidateSessions(ctx, u.ID); err != nil {
 		return nil, err
 	}
 	return s.IssueTokens(ctx, u)
@@ -642,4 +647,16 @@ func (s *Service) applyTierOverrideAllowlist(ctx context.Context, u *User) error
 	u.TierOverride = granted
 	s.opt.Log.Info("tier override stamped from allowlist", "user_id", ids.Upper(u.ID), "tier_override", granted)
 	return nil
+}
+
+// invalidateSessions stamps users.sessions_valid_after, so auth.Identify refuses
+// the session tokens issued before now. A database Swift migrated (parity) has
+// no such column; there the stamp is skipped, as the check is.
+func (s *Service) invalidateSessions(ctx context.Context, id uuid.UUID) error {
+	_, err := s.pool.Exec(ctx, `UPDATE users SET sessions_valid_after = $2 WHERE id = $1`, id, s.opt.Now())
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "42703" { // undefined_column
+		return nil
+	}
+	return err
 }

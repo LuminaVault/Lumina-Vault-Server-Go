@@ -24,10 +24,20 @@ type AudioUserLoader interface {
 	AudioTokenEpoch(ctx context.Context, id uuid.UUID) (epoch *time.Time, found bool, err error)
 }
 
-type pgAudioUsers struct{ pool *pgxpool.Pool }
+type pgAudioUsers struct {
+	pool     *pgxpool.Pool
+	sessions pgUsers
+}
 
-// PGAudioUsers reads users.hermes_audio_token_epoch.
-func PGAudioUsers(pool *pgxpool.Pool) AudioUserLoader { return pgAudioUsers{pool} }
+// PGAudioUsers reads users.hermes_audio_token_epoch, and the session cutoff
+// (SessionChecker) for ordinary session tokens.
+func PGAudioUsers(pool *pgxpool.Pool) AudioUserLoader {
+	return pgAudioUsers{pool: pool, sessions: PGUsers(pool).(pgUsers)}
+}
+
+func (u pgAudioUsers) SessionsValidAfter(ctx context.Context, id uuid.UUID) (*time.Time, bool, error) {
+	return u.sessions.SessionsValidAfter(ctx, id)
+}
 
 func (u pgAudioUsers) AudioTokenEpoch(ctx context.Context, id uuid.UUID) (*time.Time, bool, error) {
 	var epoch *time.Time
@@ -88,11 +98,27 @@ func AudioIdentify(keys Keyset, users AudioUserLoader) echo.MiddlewareFunc {
 			if scoped && epoch != nil && !issuedAfter(claims.IssuedAtSeconds, *epoch) {
 				return next(c)
 			}
+			// An ordinary session meets the password-reset cutoff here too (post-archive fix).
+			if checker, ok := users.(SessionChecker); ok && !scoped {
+				cutoff, found, err := checker.SessionsValidAfter(c.Request().Context(), id)
+				if err != nil {
+					return err
+				}
+				if !found || (cutoff != nil && !issuedAtOrAfter(claims.IssuedAtSeconds, *cutoff)) {
+					return next(c)
+				}
+			}
 			c.Set(ctxUserID, id)
 			c.Set(ctxHPID, claims.HPID)
 			return next(c)
 		}
 	}
+}
+
+// issuedAtOrAfter is the session cutoff's test at second precision, as
+// sessionValid compares it: a nil iat fails.
+func issuedAtOrAfter(iat *float64, cutoff time.Time) bool {
+	return iat != nil && *iat >= float64(cutoff.Truncate(time.Second).Unix())
 }
 
 // issuedAfter is `issuedAt > epoch`, in seconds since 1970 as Foundation's Date

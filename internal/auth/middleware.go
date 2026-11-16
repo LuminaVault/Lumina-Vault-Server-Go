@@ -6,6 +6,7 @@ import (
 	"lumina/internal/ids"
 	"lumina/internal/wire"
 	"strings"
+	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -72,7 +73,7 @@ func Identify(keys Keyset, users UserLoader) echo.MiddlewareFunc {
 			if err != nil {
 				return next(c)
 			}
-			ok, err := users.Exists(c.Request().Context(), id)
+			ok, err := sessionValid(c.Request().Context(), users, id, claims.IssuedAt)
 			if err != nil {
 				return err
 			}
@@ -83,6 +84,27 @@ func Identify(keys Keyset, users UserLoader) echo.MiddlewareFunc {
 			return next(c)
 		}
 	}
+}
+
+// sessionValid is whether the token's user exists and, when the loader knows
+// the user's cutoff, the token was issued at or after it. A password reset sets
+// the cutoff, so the access tokens issued before it stop working (post-archive
+// fix: Swift left them valid until they expired). jwt keeps iat to the second,
+// so the cutoff is compared at second precision: a token from the same second
+// as the reset still passes. A token with no iat fails once a cutoff is set.
+func sessionValid(ctx context.Context, users UserLoader, id uuid.UUID, iat *jwt.NumericDate) (bool, error) {
+	checker, ok := users.(SessionChecker)
+	if !ok {
+		return users.Exists(ctx, id)
+	}
+	cutoff, found, err := checker.SessionsValidAfter(ctx, id)
+	if err != nil || !found {
+		return false, err
+	}
+	if cutoff == nil {
+		return true, nil
+	}
+	return iat != nil && !iat.Before(cutoff.Truncate(time.Second)), nil
 }
 
 // Require is requireIdentity() as route middleware, for chains where

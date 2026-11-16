@@ -2467,3 +2467,20 @@ Deliberate changes from Swift, made after the archive (`docs/post-archive-backlo
 - Tests: `TestBrowsePathPrefix` (`internal/modules/mcp`), which fails on the old query. Parity: the `mcp/02-tools`
   prefix step now browses with a limit only.
 
+## Post-archive fixes
+
+Deliberate changes from Swift, made after the archive (`docs/post-archive-backlog.md`).
+
+### Password reset invalidates access tokens
+
+- goose `00005_users_sessions_valid_after` adds a nullable `users.sessions_valid_after` (expand-only; the Swift
+  rollback image never reads it). `ResetPassword` stamps it, and `auth.Identify` and `auth.AudioIdentify` (for ordinary
+  sessions) refuse session tokens whose `iat` is before it. Swift left them valid until they expired (one hour).
+- jwt keeps `iat` to the second, so the cutoff is compared at second precision: a token from the reset's own second
+  still passes. A token with no `iat` fails once a cutoff is set. Scoped audio tokens keep their own epoch.
+- `auth.PGUsers` probes once for the column. A database Swift migrated has none (parity's), and there both the stamp
+  and the check are off; production runs goose, so it has the column after the migrate hook.
+- Cost: the per-request user lookup reads the column instead of `EXISTS`; still one query.
+- Tests: `TestSessionTokensIssuedBeforeTheCutoffAreRefused` (`internal/auth`), `TestPasswordResetInvalidatesAccessTokens`
+  and `TestPasswordResetWithoutTheCutoffColumn` (`internal/authservice`).
+

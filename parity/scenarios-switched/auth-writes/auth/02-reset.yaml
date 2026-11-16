@@ -1,6 +1,8 @@
 # Successful POST /v1/auth/reset-password on auth-reset's seeded code (111111): the code is
 # spent, every refresh token is revoked, the old password stops working and the new one logs
-# in. The access token minted before the reset keeps working (Swift does not revoke it).
+# in. The access token minted before the reset keeps working here only because parity's
+# databases are Swift-migrated: Go refuses it once goose 00005 adds users.sessions_valid_after
+# (post-archive fix; TestPasswordResetInvalidatesAccessTokens in internal/authservice).
 module: auth
 steps:
   - name: login before the reset

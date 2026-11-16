@@ -49,7 +49,8 @@ Found during the port, same batch:
     `docs/migration/cutover-log.md`). Register 409s enumerate emails and usernames: open, needs an owner decision.
   - Requesting a new code bypasses the per-row reset and verify locks.
   - Codes are compared in non-constant time, and the logging sender writes OTP codes to logs.
-  - A password reset does not invalidate access tokens.
+  - ~~A password reset does not invalidate access tokens.~~ Done (see "Password reset invalidates access tokens"
+    in `docs/migration/cutover-log.md`).
   - Refresh has no reuse detection and is not transactional.
 - ~~**MCP `browse` `pathPrefix`.** The `path >= p AND path < p || U+FFFF` range matches nothing under en_US.utf8
   collation. Use `starts_with` or `COLLATE "C"`.~~ Done: see "MCP `browse` `pathPrefix`" in
