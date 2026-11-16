@@ -96,7 +96,7 @@ func (f *Files) Delete(ctx context.Context, vault, actor uuid.UUID, path string)
 		return errFileNotFound
 	}
 	rawRoot := f.paths.Raw(vault)
-	target, err := vaultfiles.ResolveInside(rawRoot, safe)
+	target, err := vaultfiles.ResolveEntryInside(rawRoot, safe)
 	if err != nil {
 		return err
 	}
