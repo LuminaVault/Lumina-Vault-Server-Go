@@ -245,7 +245,7 @@ func (s *Store) MoveFile(ctx context.Context, row *VaultFile, to string, tenant 
 		return wire.NewError(http.StatusConflict, "destination path already exists")
 	}
 	rawRoot := s.paths.Raw(tenant)
-	src, err := ResolveInside(rawRoot, row.Path)
+	src, err := ResolveEntryInside(rawRoot, row.Path)
 	if err != nil {
 		return err
 	}

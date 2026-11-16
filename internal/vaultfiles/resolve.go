@@ -16,27 +16,34 @@ const (
 
 // ResolveInside is VaultController.resolveInside, the second half of the path
 // traversal boundary. It appends relative to rawRoot, and answers 400 unless
-// the standardized result is strictly below the standardized root.
+// the result is strictly below the root, judged twice:
+//
+//   - Lexically, as Swift did: the standardized result must sit under the
+//     standardized root. This keeps Swift's answers, error text and quirks.
+//   - Physically, which Swift never did (post-archive fix, backlog 1.2): walking
+//     the path from the root's real location, every existing symlink must
+//     resolve inside the root, and a ".." steps up from where the walk really
+//     is. A symlink that can't be followed (dangling, looping) is refused,
+//     because a write through a dangling link creates its target wherever it
+//     points.
 //
 // As in Swift, the returned path is the appended one, not the standardized
 // one: "a/../b.md" comes back with its ".." and the OS resolves it physically.
-//
-// WEAKNESS, kept on purpose and tested: Swift's doc comment claims this defends
-// against symlink escape, and it mostly doesn't, because standardizing a path
-// only consults the filesystem when the path has a ".." component.
-//
-//   - "link/secret.md" with link -> /outside passes. A symlink planted inside
-//     the vault can read and write outside it, and SanitizePath can't help:
-//     "link/secret.md" is a clean path.
-//   - "link/../sib.md" with link -> /outside is refused if /outside/../sib.md
-//     exists. If it doesn't, symlink resolution gives up, the check falls back
-//     to the lexical "raw/sib.md" and passes, and the returned path still
-//     reaches /outside/../sib.md. A write through it lands outside the root.
-//     SanitizePath refuses "..", so this needs a caller that skips it.
-//
-// Nothing here calls realpath, because Swift doesn't and both servers must
-// agree while they share the volume. Fixing it is a decision for both servers.
+// The physical check is what makes that safe.
 func ResolveInside(rawRoot, relative string) (string, error) {
+	return resolveInside(rawRoot, relative, true)
+}
+
+// ResolveEntryInside is ResolveInside for callers that rename or remove the
+// entry itself (delete to trash, the source of a move): a symlink as the last
+// component is not followed, so a link that points outside the vault can still
+// be removed, and the operation moves the link, never its target. Every
+// directory on the way is still checked.
+func ResolveEntryInside(rawRoot, relative string) (string, error) {
+	return resolveInside(rawRoot, relative, false)
+}
+
+func resolveInside(rawRoot, relative string, followLast bool) (string, error) {
 	// URL(fileURLWithPath:) makes a relative root absolute.
 	if !filepath.IsAbs(rawRoot) {
 		abs, err := filepath.Abs(rawRoot)
@@ -50,7 +57,64 @@ func ResolveInside(rawRoot, relative string) (string, error) {
 	if !hasPrefix(standardizingPath(target), rootPrefix) {
 		return "", badRequest("resolved path escapes vault root")
 	}
+	if !physicallyInside(rawRoot, relative, followLast) {
+		return "", badRequest("resolved path escapes vault root")
+	}
 	return target, nil
+}
+
+// physicallyInside walks relative from the real location of root. Components
+// that exist are followed through any symlink and must stay inside; once a
+// component is missing, the rest can only create entries under the last real
+// directory, so only its ".." steps are still checked, lexically. A root that
+// doesn't exist yet has nothing to escape through. With followLast false, a
+// symlink as the final component is taken as the entry it is.
+func physicallyInside(root, relative string, followLast bool) bool {
+	realRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return true
+	}
+	inside := func(p string) bool { return p == realRoot || strings.HasPrefix(p, realRoot+"/") }
+	components := strings.Split(relative, "/")
+	last := len(components) - 1
+	for last >= 0 && (components[last] == "" || components[last] == ".") {
+		last--
+	}
+	current, exists := realRoot, true
+	for i, c := range components {
+		switch c {
+		case "", ".":
+			continue
+		case "..":
+			current = filepath.Dir(current)
+			if !inside(current) {
+				return false
+			}
+			continue
+		}
+		next := current + "/" + c
+		if !exists {
+			current = next
+			continue
+		}
+		info, err := os.Lstat(next)
+		switch {
+		case err != nil:
+			exists = false
+			current = next
+		case info.Mode()&os.ModeSymlink != 0 && !followLast && i == last:
+			current = next
+		case info.Mode()&os.ModeSymlink != 0:
+			resolved, err := filepath.EvalSymlinks(next)
+			if err != nil || !inside(resolved) {
+				return false
+			}
+			current = resolved
+		default:
+			current = next
+		}
+	}
+	return current != realRoot
 }
 
 // appendingPath is URL.appendingPathComponent(_:).path: one slash at the join,
