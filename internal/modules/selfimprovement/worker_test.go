@@ -112,8 +112,7 @@ func TestTickDryRunSkipsPinnedSkillAndAppliesZeroMutations(t *testing.T) {
 
 // A live curator archives a skill idle for 90+ days (directory moved, snapshot
 // with archivedPath), marks a 30+ day one stale, leaves a fresh one, mirrors the
-// report and stamps the settings. Swift's SkillsState saves by tenant_id, so the
-// state updates reach every skills_state row of the tenant.
+// report and stamps the settings.
 func TestTickLiveCuratorArchivesAndMarksStale(t *testing.T) {
 	v := setup(t)
 	tenant := v.user()
@@ -354,27 +353,32 @@ func TestTickEnqueuesDueWeeklyReviews(t *testing.T) {
 	require.Equal(t, 1, s)
 }
 
-// Swift's SkillsState @ID is tenant_id, so saving a loaded row updates every
-// skills_state row of the tenant: archiving one existing skill archives them all,
-// and the next skills then read as archived and aren't marked stale. Kept for
-// parity (security and correctness fixes wait until Swift is archived).
-func TestTickCuratorSavesLoadedStateTenantWide(t *testing.T) {
+// Saving a loaded row updates only that row (post-archive fix, backlog 1.6). Swift's
+// SkillsState @ID is tenant_id, so archiving one existing skill archived them all,
+// and the next skill then read as archived and wasn't marked stale.
+func TestTickCuratorSavesLoadedStateForItsOwnRow(t *testing.T) {
 	v := setup(t)
 	tenant := v.user()
 	for _, name := range []string{"ancient", "dusty"} {
 		v.writeSkill(tenant, name, name)
 		v.exec(`INSERT INTO skills_state (tenant_id, source, name, enabled, curator_pinned, curator_state) VALUES ($1, 'vault', $2, TRUE, FALSE, 'active')`, tenant, name)
 	}
-	v.exec(`INSERT INTO skills_state (tenant_id, source, name, enabled) VALUES ($1, 'builtin', 'other', TRUE)`, tenant)
+	v.exec(`INSERT INTO skills_state (tenant_id, source, name, enabled, curator_state) VALUES ($1, 'builtin', 'other', TRUE, 'active')`, tenant)
 	v.ageSkill(tenant, "ancient", 120)
 	v.ageSkill(tenant, "dusty", 45)
 	v.exec(`INSERT INTO self_improvement_settings (id, tenant_id, consolidate) VALUES (gen_random_uuid(), $1, FALSE)`, tenant)
 
 	run := v.drain(v.worker(&stubReviewLLM{}), v.queueRun(tenant, "curator", false))
 	require.Equal(t, "succeeded", run.status, run.failure)
-	require.Equal(t, 1, run.applied)
-	require.NotContains(t, *run.report, "stale")
-	var notArchived int
-	v.scalar(`SELECT count(*) FROM skills_state WHERE tenant_id = $1 AND curator_state <> 'archived'`, &notArchived, tenant)
-	require.Zero(t, notArchived)
+	require.Contains(t, *run.report, "stale")
+	states := map[string]string{}
+	rows, err := v.pool.Query(context.Background(), `SELECT name, curator_state FROM skills_state WHERE tenant_id = $1`, tenant)
+	require.NoError(t, err)
+	for rows.Next() {
+		var name, state string
+		require.NoError(t, rows.Scan(&name, &state))
+		states[name] = state
+	}
+	rows.Close()
+	require.Equal(t, map[string]string{"ancient": "archived", "dusty": "stale", "other": "active"}, states)
 }

@@ -198,6 +198,28 @@ func TestSkillInstallFlipsSkillsState(t *testing.T) {
 	require.False(t, enabled())
 }
 
+// The flip touches only the skill's own row (post-archive fix, backlog 1.6). Swift's
+// save() keyed it by tenant_id, so every skills_state row of the tenant flipped.
+func TestSkillInstallFlipsOnlyItsOwnRow(t *testing.T) {
+	v := setup(t)
+	u := v.user("trial")
+	_, err := v.pool.Exec(context.Background(), `INSERT INTO skills_state (tenant_id, source, name, enabled) VALUES
+		($1, 'builtin', 'daily-brief', TRUE), ($1, 'builtin', 'weekly-review', TRUE), ($1, 'vault', 'mine', TRUE)`, u)
+	require.NoError(t, err)
+	dto := v.install(u, `{"pluginSlug":"skill-daily-brief","config":{}}`)
+	v.do(u, http.MethodPatch, "/v1/plugins/installs/"+dto.ID.String(), `{"status":"disabled"}`)
+	var off []string
+	rows, err := v.pool.Query(context.Background(), `SELECT name FROM skills_state WHERE tenant_id = $1 AND NOT enabled ORDER BY name`, u)
+	require.NoError(t, err)
+	for rows.Next() {
+		var n string
+		require.NoError(t, rows.Scan(&n))
+		off = append(off, n)
+	}
+	rows.Close()
+	require.Equal(t, []string{"daily-brief"}, off)
+}
+
 func TestHubInstallNeedsAContainer(t *testing.T) {
 	v := setup(t)
 	u := v.user("trial")

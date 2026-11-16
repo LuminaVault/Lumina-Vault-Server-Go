@@ -500,7 +500,7 @@ func (m *Module) restore(ctx context.Context, tenant uuid.UUID, snapshot resourc
 	case err != nil:
 		return err
 	}
-	return m.q.SetTenantSkillsCuratorState(ctx, db.SetTenantSkillsCuratorStateParams{TenantID: tenant, CuratorState: snapshot.state})
+	return m.q.SetSkillCuratorState(ctx, db.SetSkillCuratorStateParams{TenantID: tenant, Name: snapshot.name, CuratorState: snapshot.state})
 }
 
 // skillFile is <tenant>/skills/<name>/SKILL.md. Concatenated rather than joined so a
@@ -612,7 +612,7 @@ func (m *Module) pinResource(c *echo.Context) error {
 		out.Title = manifest.Description
 	}
 	if hasState {
-		if err := m.q.SetTenantSkillsPinned(ctx, db.SetTenantSkillsPinnedParams{TenantID: tenant, CuratorPinned: body.Pinned}); err != nil {
+		if err := m.q.SetSkillPinned(ctx, db.SetSkillPinnedParams{TenantID: tenant, Name: name, CuratorPinned: body.Pinned}); err != nil {
 			return err
 		}
 		out.State = resourceState(existing.CuratorState)

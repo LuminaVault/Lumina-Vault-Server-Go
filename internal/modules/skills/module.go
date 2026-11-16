@@ -328,14 +328,14 @@ func (m *Module) patch(c *echo.Context) error {
 		st = state{source: string(mf.Source), name: mf.Name, enabled: true}
 	}
 
-	// Fluent's save: an existing row updates only the fields assigned, keyed by
-	// its @ID alone (tenant_id), so every skills_state row of the tenant takes
-	// them. Swift's weakness, kept until the archive (D-security-after-archive).
+	// An existing row updates only the fields assigned, and only that row. Swift's
+	// Fluent save() keyed it by @ID, tenant_id alone, so every skills_state row of
+	// the tenant took them; fixed after the archive (backlog 1.6).
 	var sets []string
 	var args []any
 	set := func(column string, v any) {
 		args = append(args, v)
-		sets = append(sets, fmt.Sprintf("%s = $%d", column, len(args)+1))
+		sets = append(sets, fmt.Sprintf("%s = $%d", column, len(args)+3))
 	}
 	if body.Enabled != nil {
 		st.enabled = *body.Enabled
@@ -362,8 +362,8 @@ func (m *Module) patch(c *echo.Context) error {
 			return err
 		}
 	case len(sets) > 0:
-		query := "UPDATE skills_state SET " + strings.Join(sets, ", ") + " WHERE tenant_id = $1"
-		if _, err := m.pool.Exec(ctx, query, append([]any{tenant}, args...)...); err != nil {
+		query := "UPDATE skills_state SET " + strings.Join(sets, ", ") + " WHERE tenant_id = $1 AND source = $2 AND name = $3"
+		if _, err := m.pool.Exec(ctx, query, append([]any{tenant, st.source, st.name}, args...)...); err != nil {
 			return err
 		}
 	}

@@ -2369,3 +2369,21 @@ stacked and merged by the owner in this order: #598, #599, #600.
 - community could not be exercised on staging (disabled there); CI parity covers it. The #599 body lets the owner drop
   its two entries.
 - `community/00-auth`, `skills-cron/01-routes` and `hermes/01-runs-errors` gained `smoke: true`.
+
+## Post-archive fixes
+
+Deliberate changes from Swift, made after the archive (`docs/post-archive-backlog.md`).
+
+### `skills_state` updates touch only their own row (backlog 1.6)
+
+- Swift's Fluent `save()` on a loaded `SkillsState` keyed the update by `@ID`, which is `tenant_id` alone, so every
+  `skills_state` row of the tenant took the change. Every such update now names the row's key
+  (`tenant_id, source, name`):
+  - `PATCH /v1/skills/{name}` (enabled, schedule override, APNs category);
+  - the plugins skill install/enable flip (`setSkillEnabled`);
+  - self-improvement: pin/unpin (`SetSkillPinned`), rollback's curator state (`SetSkillCuratorState`) and the
+    curator worker's `saveState`.
+- With that, archiving one skill no longer archives the tenant's others, so the next skill in the same curator run
+  is marked stale as it should be.
+- Parity: the steps that pinned the spread were rewritten or removed; Go tests cover several rows per tenant.
+

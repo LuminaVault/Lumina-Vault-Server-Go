@@ -32,7 +32,8 @@ one is a deliberate change from Swift. Name each in `docs/migration/cutover-log.
 3. **Storage quota.** Enforce it.
 4. **`/v1/memory/graph`.** Scrub what it discloses.
 5. **Share-sheet note deletion.** Fix it.
-6. **`skills_state`.** A PATCH updates only its own row, not every row for that skill name.
+6. ~~**`skills_state`.** A PATCH updates only its own row, not every row for that skill name.~~ Done: see
+   "`skills_state` updates touch only their own row" in `docs/migration/cutover-log.md`.
 
 Found during the port, same batch:
 

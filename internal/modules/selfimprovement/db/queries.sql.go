@@ -361,35 +361,36 @@ func (q *Queries) SetRunStatus(ctx context.Context, arg SetRunStatusParams) (Sel
 	return i, err
 }
 
-const setTenantSkillsCuratorState = `-- name: SetTenantSkillsCuratorState :exec
-UPDATE skills_state SET curator_state = $2, curator_archived_at = NULL WHERE tenant_id = $1
+const setSkillCuratorState = `-- name: SetSkillCuratorState :exec
+UPDATE skills_state SET curator_state = $3, curator_archived_at = NULL WHERE tenant_id = $1 AND source = 'vault' AND name = $2
 `
 
-type SetTenantSkillsCuratorStateParams struct {
+type SetSkillCuratorStateParams struct {
 	TenantID     uuid.UUID
+	Name         string
 	CuratorState string
 }
 
-// Also every row of the tenant, for the same reason.
-func (q *Queries) SetTenantSkillsCuratorState(ctx context.Context, arg SetTenantSkillsCuratorStateParams) error {
-	_, err := q.db.Exec(ctx, setTenantSkillsCuratorState, arg.TenantID, arg.CuratorState)
+func (q *Queries) SetSkillCuratorState(ctx context.Context, arg SetSkillCuratorStateParams) error {
+	_, err := q.db.Exec(ctx, setSkillCuratorState, arg.TenantID, arg.Name, arg.CuratorState)
 	return err
 }
 
-const setTenantSkillsPinned = `-- name: SetTenantSkillsPinned :exec
-UPDATE skills_state SET curator_pinned = $2 WHERE tenant_id = $1
+const setSkillPinned = `-- name: SetSkillPinned :exec
+UPDATE skills_state SET curator_pinned = $3 WHERE tenant_id = $1 AND source = 'vault' AND name = $2
 `
 
-type SetTenantSkillsPinnedParams struct {
+type SetSkillPinnedParams struct {
 	TenantID      uuid.UUID
+	Name          string
 	CuratorPinned bool
 }
 
-// Not a typo. SkillsState's Fluent @ID is tenant_id alone, so Swift's save() on a
-// row it loaded updates every skills_state row the tenant has, whatever its name
-// or source.
-func (q *Queries) SetTenantSkillsPinned(ctx context.Context, arg SetTenantSkillsPinnedParams) error {
-	_, err := q.db.Exec(ctx, setTenantSkillsPinned, arg.TenantID, arg.CuratorPinned)
+// Only the skill's own row. Swift's save() keyed the update by Fluent's @ID, which
+// for SkillsState is tenant_id alone, so it hit every row of the tenant; fixed after
+// the archive (backlog 1.6).
+func (q *Queries) SetSkillPinned(ctx context.Context, arg SetSkillPinnedParams) error {
+	_, err := q.db.Exec(ctx, setSkillPinned, arg.TenantID, arg.Name, arg.CuratorPinned)
 	return err
 }
 
