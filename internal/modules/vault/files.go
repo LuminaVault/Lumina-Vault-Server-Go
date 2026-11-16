@@ -248,13 +248,16 @@ func (m *Module) upload(c *echo.Context) error {
 		memoryID = m.upsertNoteMemory(ctx, tenant, savedID, spaceID, safe, data, sidecar)
 	}
 	// UpdateContent drops a note's chunks, so every note write re-indexes: chunks for
-	// retrieval and [[wikilinks]] for backlinks and the graph.
+	// retrieval and [[wikilinks]] for backlinks and the graph. Then the vault's
+	// pending links re-resolve, since this note may be the one they point at.
 	if memoryID != nil && m.indexer != nil {
 		if content, ok := vaultfiles.DecodeUTF8(data); ok {
 			m.indexer.IndexBestEffort(ctx, chunkindex.IndexParams{
 				Tenant: tenant, MemoryID: memoryID.UUID, VaultFileID: &savedID, SpaceID: spaceID,
 				SourcePath: &safe, Content: content,
 			})
+			// Links elsewhere that were waiting for this note now find it.
+			m.indexer.ReresolvePendingBestEffort(ctx, tenant)
 		}
 	}
 	// An unfiled note gets a Space suggestion in the background.

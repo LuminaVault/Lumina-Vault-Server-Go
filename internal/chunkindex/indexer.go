@@ -100,3 +100,19 @@ func (x *Indexer) IndexBestEffort(ctx context.Context, p IndexParams) {
 	}
 	slog.DebugContext(ctx, fmt.Sprintf("chunk.index tenant=%s memory=%s chunks=%d", p.Tenant, p.MemoryID, count))
 }
+
+// ReresolvePendingBestEffort upgrades the tenant's unresolved and ambiguous
+// wikilinks against the vault as it is now, logging rather than returning a
+// failure: the write that called it already succeeded. A nil Indexer or one
+// without links does nothing.
+func (x *Indexer) ReresolvePendingBestEffort(ctx context.Context, tenant uuid.UUID) {
+	if x == nil || x.links == nil {
+		return
+	}
+	changed, err := x.links.ReresolvePending(ctx, tenant)
+	if err != nil {
+		slog.ErrorContext(ctx, fmt.Sprintf("chunk.links.reresolve.failed tenant=%s: %v", tenant, err))
+		return
+	}
+	slog.DebugContext(ctx, fmt.Sprintf("chunk.links.reresolve tenant=%s changed=%d", tenant, changed))
+}
