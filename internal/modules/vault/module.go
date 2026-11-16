@@ -172,6 +172,11 @@ func (m *Module) Register(r httpserver.Router, _ echo.MiddlewareFunc) {
 	r.POST("/v1/vault/templates/seed", m.seedTemplates, m.identify, idem)
 	r.POST("/v1/vault/notes/from-template", m.noteFromTemplate, m.identify, idem)
 	r.POST("/v1/vault/daily", m.dailyNote, m.identify, idem)
+
+	// Backlog E4.3: version history.
+	r.GET(historyPath, m.history, m.identify)
+	r.GET(versionsPath+"/:sha", m.version, m.identify)
+	r.POST(versionsPath+"/:sha/restore", m.restoreVersion, m.identify, idem)
 }
 
 func notFound(*echo.Context) error { return echo.ErrNotFound }

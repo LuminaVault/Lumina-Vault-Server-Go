@@ -1057,6 +1057,7 @@ func TestResponsesConformToSpec(t *testing.T) {
 		{http.MethodGet, "/v1/vault/context/" + hub.String(), nil, ""},
 		{http.MethodGet, "/v1/vault/links/" + hub.String(), nil, ""},
 		{http.MethodGet, "/v1/vault/trash", nil, ""},
+		{http.MethodGet, "/v1/vault/history?path=a.md", nil, ""},
 		// VaultFileDTO, now with spaceId/updatedAt/actor fields in the spec. The
 		// daily note comes first so the list has a filed note (spaceId set).
 		{http.MethodPost, "/v1/vault/daily?date=2026-11-16", nil, ""},
