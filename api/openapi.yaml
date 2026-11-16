@@ -6876,6 +6876,105 @@ paths:
               schema: { $ref: '#/components/schemas/VaultTrashListResponse' }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
+  /v1/vault/templates/seed:
+    post:
+      tags: [Vault]
+      operationId: vaultTemplatesSeed
+      x-lv-module: vault
+      summary: Create the Templates Space and its starter templates
+      description: |
+        Backlog E6.1. Ensures the Templates Space (slug `templates`, folder
+        `templates/`) and writes the starter templates (`daily.md`,
+        `meeting.md`, `project.md`) that don't exist yet. Never overwrites a
+        template. List templates with `GET /v1/vault/files?space=templates`.
+      security: [{ bearerJWT: [] }]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: The Templates Space and the templates this call wrote.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VaultTemplatesSeedResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /v1/vault/notes/from-template:
+    post:
+      tags: [Vault]
+      operationId: vaultNoteFromTemplate
+      x-lv-module: vault
+      summary: Create a note from a template
+      description: |
+        Backlog E6.1. Renders `templates/<template>` and writes it to
+        `<space folder or inbox>/<name from title>.md`. Variables:
+        `{{date}}` (YYYY-MM-DD) and `{{time}}` (HH:mm) in `tz`, `{{title}}`,
+        `{{space}}` (Space name). Unknown `{{...}}` stays as written.
+      security: [{ bearerJWT: [] }]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VaultFromTemplateRequest' }
+      responses:
+        '201':
+          description: The new note.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VaultFileDTO' }
+        '400':
+          description: Missing title, bad `tz`, malformed or foreign `spaceId`.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: A note with that name already exists.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  /v1/vault/daily:
+    post:
+      tags: [Vault]
+      operationId: vaultDailyNote
+      x-lv-module: vault
+      summary: Get or create the daily note
+      description: |
+        Backlog E6.2. Returns `daily/<date>.md`, creating it from
+        `templates/daily.md` (or a built-in starter) when missing. Two
+        devices asking at once get the same note.
+      security: [{ bearerJWT: [] }]
+      parameters:
+        - in: query
+          name: date
+          description: YYYY-MM-DD. Defaults to today in `tz`.
+          schema: { type: string }
+        - in: query
+          name: tz
+          description: IANA time zone, e.g. `Europe/Lisbon`. Defaults to UTC.
+          schema: { type: string }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: The daily note already existed.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VaultFileDTO' }
+        '201':
+          description: The daily note was created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VaultFileDTO' }
+        '400':
+          description: Malformed `date` or `tz`.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
   /v1/vault/trash/{id}/restore:
     post:
       tags: [Vault]
@@ -16660,6 +16759,23 @@ components:
         items:
           type: array
           items: { $ref: '#/components/schemas/VaultTrashItem' }
+    VaultTemplatesSeedResponse:
+      type: object
+      required: [spaceId, created]
+      properties:
+        spaceId: { type: string, format: uuid }
+        created:
+          type: array
+          description: File names written by this call; empty when all existed.
+          items: { type: string }
+    VaultFromTemplateRequest:
+      type: object
+      required: [template, title]
+      properties:
+        template: { type: string, description: 'File name in `templates/`, e.g. `meeting.md`.' }
+        title: { type: string }
+        spaceId: { type: string, format: uuid }
+        tz: { type: string, description: IANA time zone. Defaults to UTC. }
     VaultFileDTO:
       type: object
       required: [id, path, contentType, sizeBytes]
