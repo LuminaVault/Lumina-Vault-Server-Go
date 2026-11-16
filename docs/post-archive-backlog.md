@@ -26,9 +26,9 @@ These were decided on 2026-11-11 (D-owner-2026-11-11 items 5–9, plus `skills_s
 one is a deliberate change from Swift. Name each in `docs/migration/cutover-log.md` when it lands.
 
 1. **SSRF.** Every outbound fetch goes through `internal/ssrfguard`, BYOK base URLs included.
-2. **Vault file paths.** `internal/vaultfiles` refuses symlink escapes and `link/../nope.md` (the `TestSwiftWeakness*`
+2. ~~**Vault file paths.** `internal/vaultfiles` refuses symlink escapes and `link/../nope.md` (the `TestSwiftWeakness*`
    cases in `internal/vaultfiles/resolve_test.go`). Snapshot restore paths in self-improvement go through the same
-   checks.
+   checks.~~ Done: see "Vault file paths: symlink escapes" in `docs/migration/cutover-log.md`.
 3. ~~**Storage quota.** Enforce it.~~ Done: see "Storage quota counts stored bytes" in `docs/migration/cutover-log.md`.
 4. **`/v1/memory/graph`.** Scrub what it discloses.
 5. **Share-sheet note deletion.** Fix it.

@@ -446,6 +446,13 @@ func (m *Module) rollback(c *echo.Context) error {
 	if !ok || len(snapshots) == 0 {
 		return errNoSnapshot
 	}
+	// A name that isn't one segment can't be restored safely, so the run has no
+	// usable snapshot. Checked before anything is written.
+	for _, snapshot := range snapshots {
+		if _, err := m.skillFile(tenant, snapshot.name); err != nil {
+			return errNoSnapshot
+		}
+	}
 	for _, snapshot := range snapshots {
 		if m.changedSinceRun(tenant, snapshot) {
 			return errResourceChanged
@@ -466,8 +473,8 @@ func (m *Module) rollback(c *echo.Context) error {
 // changedSinceRun says the active file is no longer what the curator left. A missing
 // or unreadable file, or a snapshot with no afterSHA, doesn't count.
 func (m *Module) changedSinceRun(tenant uuid.UUID, snapshot resourceSnapshot) bool {
-	active := m.skillFile(tenant, snapshot.name)
-	if snapshot.afterSHA == nil || !vaultfiles.Exists(active) {
+	active, err := m.skillFile(tenant, snapshot.name)
+	if err != nil || snapshot.afterSHA == nil || !vaultfiles.Exists(active) {
 		return false
 	}
 	data, err := os.ReadFile(active) //nolint:gosec // skillFile: Swift checks nothing here either, see there
@@ -479,7 +486,10 @@ func (m *Module) changedSinceRun(tenant uuid.UUID, snapshot resourceSnapshot) bo
 }
 
 func (m *Module) restore(ctx context.Context, tenant uuid.UUID, snapshot resourceSnapshot) error {
-	active := m.skillFile(tenant, snapshot.name)
+	active, err := m.skillFile(tenant, snapshot.name)
+	if err != nil {
+		return err
+	}
 	// os.MkdirAll on the uncleaned directory, because createDirectory creates each
 	// component of what it's given, a directory before a ".." included.
 	if err := os.MkdirAll(strings.TrimSuffix(active, "/SKILL.md"), 0o755); err != nil { //nolint:gosec // the mode Foundation's createDirectory leaves; Hermes reads this tree
@@ -489,11 +499,13 @@ func (m *Module) restore(ctx context.Context, tenant uuid.UUID, snapshot resourc
 		return err
 	}
 	if snapshot.archivedPath != nil && *snapshot.archivedPath != "" {
-		// try? in Swift. The path is absolute and goes unchecked, as in Swift: the
-		// curator wrote it, and only that row of the database names it.
-		_ = os.RemoveAll(*snapshot.archivedPath)
+		// try? in Swift, which removed whatever absolute path the row named. Now
+		// only an entry under the tenant's skills/.archive is removed.
+		if dir, ok := m.archivedDir(tenant, *snapshot.archivedPath); ok {
+			_ = os.RemoveAll(dir)
+		}
 	}
-	_, err := m.q.VaultSkillState(ctx, db.VaultSkillStateParams{TenantID: tenant, Name: snapshot.name})
+	_, err = m.q.VaultSkillState(ctx, db.VaultSkillStateParams{TenantID: tenant, Name: snapshot.name})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return m.q.InsertSkillState(ctx, db.InsertSkillStateParams{TenantID: tenant, Name: snapshot.name, CuratorState: snapshot.state})
@@ -503,14 +515,37 @@ func (m *Module) restore(ctx context.Context, tenant uuid.UUID, snapshot resourc
 	return m.q.SetTenantSkillsCuratorState(ctx, db.SetTenantSkillsCuratorStateParams{TenantID: tenant, CuratorState: snapshot.state})
 }
 
-// skillFile is <tenant>/skills/<name>/SKILL.md. Concatenated rather than joined so a
-// ".." in name reaches the filesystem as it does through Swift's
-// appendingPathComponent. Swift runs name through no path check at this site, and
-// this keeps that (D-wave4-prep): it skips vaultfiles.SanitizePath and ResolveInside.
-// Its only source is a snapshot's name, which is a manifest name from a vault
-// SKILL.md, never the request.
-func (m *Module) skillFile(tenant uuid.UUID, name string) string {
-	return m.paths.TenantRoot(tenant) + "/skills/" + name + "/SKILL.md"
+// skillFile is <tenant>/skills/<name>/SKILL.md. Swift checked nothing here; since
+// the archive (backlog 1.2) name must be one path segment and the result goes
+// through vaultfiles.ResolveInside, so a name from a vault SKILL.md, a stored
+// snapshot or the curator model can't reach outside the tenant's skills tree.
+func (m *Module) skillFile(tenant uuid.UUID, name string) (string, error) {
+	if !validSkillName(name) {
+		return "", errBadSkillName
+	}
+	return vaultfiles.ResolveInside(m.skillsRoot(tenant), name+"/SKILL.md")
+}
+
+func (m *Module) skillsRoot(tenant uuid.UUID) string { return m.paths.TenantRoot(tenant) + "/skills" }
+
+// archiveRoot is where the curator moves archived skills (Worker.archive).
+func (m *Module) archiveRoot(tenant uuid.UUID) string { return m.skillsRoot(tenant) + "/.archive" }
+
+var errBadSkillName = errors.New("skill name is not a single path segment")
+
+func validSkillName(name string) bool {
+	return name != "" && name != "." && name != ".." && !strings.ContainsAny(name, "/\x00")
+}
+
+// archivedDir checks a snapshot's archivedPath: one entry directly under the
+// tenant's skills/.archive, and nothing a symlink takes elsewhere.
+func (m *Module) archivedDir(tenant uuid.UUID, path string) (string, bool) {
+	entry, ok := strings.CutPrefix(path, m.archiveRoot(tenant)+"/")
+	if !ok || !validSkillName(entry) {
+		return "", false
+	}
+	resolved, err := vaultfiles.ResolveEntryInside(m.archiveRoot(tenant), entry)
+	return resolved, err == nil
 }
 
 // MARK: - Resources

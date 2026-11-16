@@ -342,6 +342,29 @@ type VaultFromTemplateRequest struct {
 	Tz *string `json:"tz,omitempty"`
 }
 
+// VaultHistoryResponse defines model for VaultHistoryResponse.
+type VaultHistoryResponse struct {
+	Versions []VaultHistoryVersion `json:"versions"`
+}
+
+// VaultHistoryVersion defines model for VaultHistoryVersion.
+type VaultHistoryVersion struct {
+	// ActorId The user who saved it
+	ActorId     *wire.UUID `json:"actorId,omitempty"`
+	CommittedAt wire.Time  `json:"committedAt"`
+
+	// Deleted This version removed the file.
+	Deleted bool `json:"deleted"`
+
+	// Message The commit subject.
+	Message string `json:"message"`
+
+	// Reason upload, move, delete, restore, import, sweep, …
+	Reason    string `json:"reason"`
+	Sha       string `json:"sha"`
+	SizeBytes int64  `json:"sizeBytes"`
+}
+
 // VaultIncomingLink defines model for VaultIncomingLink.
 type VaultIncomingLink struct {
 	RawTarget       string                           `json:"rawTarget"`
@@ -633,6 +656,15 @@ type VaultDeleteParams struct {
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
 }
 
+// VaultHistoryParams defines parameters for VaultHistory.
+type VaultHistoryParams struct {
+	Path  string `form:"path" json:"path"`
+	Limit *int   `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Before A version sha from the previous page; the list starts after it.
+	Before *string `form:"before,omitempty" json:"before,omitempty"`
+}
+
 // VaultNoteFromTemplateParams defines parameters for VaultNoteFromTemplate.
 type VaultNoteFromTemplateParams struct {
 	// IdempotencyKey HER-39 — client-generated UUIDv4. Retrying a mutating request with the same key (within 24 h) replays the cached response instead of re-executing the handler. Reusing a key with a different request body returns 409. Tenant-scoped: the same key value across different tenants does not collide.
@@ -643,6 +675,19 @@ type VaultNoteFromTemplateParams struct {
 type VaultTemplatesSeedParams struct {
 	// IdempotencyKey HER-39 — client-generated UUIDv4. Retrying a mutating request with the same key (within 24 h) replays the cached response instead of re-executing the handler. Reusing a key with a different request body returns 409. Tenant-scoped: the same key value across different tenants does not collide.
 	IdempotencyKey *IdempotencyKey `json:"Idempotency-Key,omitempty"`
+}
+
+// VaultVersionParams defines parameters for VaultVersion.
+type VaultVersionParams struct {
+	Path string `form:"path" json:"path"`
+}
+
+// VaultVersionRestoreParams defines parameters for VaultVersionRestore.
+type VaultVersionRestoreParams struct {
+	Path string `form:"path" json:"path"`
+
+	// IfMatch The sha256 of the version the client last saw (E5.1).
+	IfMatch *string `json:"If-Match,omitempty"`
 }
 
 // VaultCreateJSONRequestBody defines body for VaultCreate for application/json ContentType.
