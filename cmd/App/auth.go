@@ -24,6 +24,7 @@ func authService(pool *pgxpool.Pool, cfg config.Config, keys auth.Keyset, paths 
 	sender := func(label string) authservice.Sender {
 		return authservice.NewSender(authservice.SenderConfig{
 			Kind: cfg.EmailKind, APIKey: cfg.EmailResendAPIKey, FromAddress: cfg.EmailFromAddress, ReplyTo: cfg.EmailReplyTo,
+			Environment: cfg.LVEnvironment,
 		}, slog.Default().With("label", label))
 	}
 	overrides := billing.ParseTierOverrides(cfg.BillingTierOverrideEmails, slog.Default().With("label", "lv.billing.tier-override"))
@@ -61,9 +62,11 @@ func authModule(pool *pgxpool.Pool, cfg config.Config, service *authservice.Serv
 		XClient:        authservice.NewXClient(slog.Default().With("label", "lv.auth.x")),
 		SMS: authservice.NewSMSSender(authservice.SMSConfig{
 			Kind: cfg.SMSKind, AccountSID: cfg.TwilioAccountSID, AuthToken: cfg.TwilioAuthToken, FromNumber: cfg.TwilioFromNumber,
+			Environment: cfg.LVEnvironment,
 		}, slog.Default().With("label", "lv.sms")),
 		MagicSender: authservice.NewSender(authservice.SenderConfig{
 			Kind: cfg.EmailKind, APIKey: cfg.EmailResendAPIKey, FromAddress: cfg.EmailFromAddress, ReplyTo: cfg.EmailReplyTo,
+			Environment: cfg.LVEnvironment,
 		}, slog.Default().With("label", "lv.auth.magic")),
 		Challenges:   authservice.NewPreAuthChallengeStore(authservice.PreAuthLifetime, authservice.PreAuthMaxAttempts),
 		PhoneCodes:   fixed(cfg.PhoneFixedOTP),

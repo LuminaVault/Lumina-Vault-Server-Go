@@ -3,6 +3,7 @@ package authservice
 import (
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
 	"math/big"
@@ -38,4 +39,10 @@ func (g FixedCodeGenerator) Generate() string { return g.Code }
 func sha256Hex(s string) string {
 	sum := sha256.Sum256([]byte(s))
 	return hex.EncodeToString(sum[:])
+}
+
+// codeMatches compares a stored code hash with the hash of a submitted code in
+// constant time. Swift compared them with ==; fixed after the archive.
+func codeMatches(storedHash, code string) bool {
+	return subtle.ConstantTimeCompare([]byte(storedHash), []byte(sha256Hex(code))) == 1
 }

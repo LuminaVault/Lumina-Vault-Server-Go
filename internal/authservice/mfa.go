@@ -74,8 +74,9 @@ func (m *MFA) find(ctx context.Context, id uuid.UUID) (*challenge, error) {
 
 // Verify is DefaultMFAService.verify: false for an unknown, consumed, expired
 // or exhausted challenge; a wrong code counts a failure and the fifth burns the
-// challenge. Swift weakness, kept: the hashes are compared with ==, not in
-// constant time, and nothing ties the challenge to the client that started it.
+// challenge. The hashes are compared in constant time (Swift used ==; fixed
+// after the archive). Swift weakness, kept: nothing ties the challenge to the
+// client that started it.
 func (m *MFA) Verify(ctx context.Context, id uuid.UUID, code string) (bool, error) {
 	c, err := m.find(ctx, id)
 	if err != nil || c == nil {
@@ -85,7 +86,7 @@ func (m *MFA) Verify(ctx context.Context, id uuid.UUID, code string) (bool, erro
 	if c.consumedAt != nil || c.expiresAt.Before(now) || c.failed >= mfaMaxFailedAttempts {
 		return false, nil
 	}
-	if c.codeHash == sha256Hex(code) {
+	if codeMatches(c.codeHash, code) {
 		_, err := m.pool.Exec(ctx, `UPDATE mfa_challenges SET consumed_at = $2 WHERE id = $1`, id, now)
 		return err == nil, err
 	}

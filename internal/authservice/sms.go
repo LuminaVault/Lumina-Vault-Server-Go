@@ -16,13 +16,17 @@ type SMSSender interface {
 	Send(ctx context.Context, code, phone, purpose string) error
 }
 
-// LoggingSMSSender is the dev fallback. Swift weakness, kept: the code goes to
-// the log at warning level, so with SMS_KIND unset in a deployed environment
-// anyone who reads the logs can complete a phone sign-in for any number.
-type LoggingSMSSender struct{ Log *slog.Logger }
+// LoggingSMSSender is the dev fallback. It writes the code only when ShowCode
+// is set (a local environment). Swift always wrote it, so with SMS_KIND unset in
+// a deployed environment anyone who read the logs could complete a phone
+// sign-in for any number; fixed after the archive.
+type LoggingSMSSender struct {
+	Log      *slog.Logger
+	ShowCode bool
+}
 
 func (s LoggingSMSSender) Send(_ context.Context, code, phone, purpose string) error {
-	s.log().Warn(fmt.Sprintf("sms OTP (dev only): purpose=%s to=%s code=%s", purpose, phone, code))
+	s.log().Warn(fmt.Sprintf("sms OTP (dev only): purpose=%s to=%s code=%s", purpose, phone, shownCode(code, s.ShowCode)))
 	return nil
 }
 
@@ -119,6 +123,7 @@ func percentEncode(s string) string {
 // SMSConfig is what makeSMSSender reads: sms.kind and twilio.*.
 type SMSConfig struct {
 	Kind, AccountSID, AuthToken, FromNumber string
+	Environment                             string // LV_ENVIRONMENT, as SenderConfig.Environment
 }
 
 // NewSMSSender is makeSMSSender: "twilio" (any case) sends through Twilio,
@@ -137,5 +142,5 @@ func NewSMSSender(cfg SMSConfig, log *slog.Logger) SMSSender {
 	default:
 		log.Warn(fmt.Sprintf("unknown sms.kind=%s; falling back to LoggingSMSSender", cfg.Kind))
 	}
-	return LoggingSMSSender{Log: log}
+	return LoggingSMSSender{Log: log, ShowCode: LocalEnvironment(cfg.Environment)}
 }

@@ -19,4 +19,5 @@ steps:
   - {name: lock 5 locks, request: {method: POST, path: /v1/auth/email/confirm, headers: {X-Forwarded-For: 198.51.105.3}, json: {email: auth-verifylock@parity.test, code: "000000"}}}
   - {name: right code while locked, request: {method: POST, path: /v1/auth/email/confirm, headers: {X-Forwarded-For: 198.51.105.4}, json: {email: auth-verifylock@parity.test, code: "222222"}}}
   - {name: send verify while locked, request: {method: POST, path: /v1/auth/email/send-verify, headers: {X-Forwarded-For: 198.51.105.4}, json: {email: auth-verifylock@parity.test}}}
-  - {name: new code row is not locked, request: {method: POST, path: /v1/auth/email/confirm, headers: {X-Forwarded-For: 198.51.105.4}, json: {email: auth-verifylock@parity.test, code: "222222"}}}
+  # No "new code row is not locked" step: a new code keeps the lock in Go since the post-archive fix
+  # (Swift's new row started afresh). TestAuthServiceSwiftRules "verify: a new code keeps the lock" covers it.

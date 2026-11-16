@@ -24,6 +24,20 @@ type Sender interface {
 // email.replyTo.
 type SenderConfig struct {
 	Kind, APIKey, FromAddress, ReplyTo string
+	// Environment is LV_ENVIRONMENT: the logging sender shows codes only in a
+	// local one (see LocalEnvironment).
+	Environment string
+}
+
+// LocalEnvironment reports whether LV_ENVIRONMENT names a machine nobody else
+// reads the logs of: unset, "dev" or "test". Only there do the logging senders
+// write the code itself.
+func LocalEnvironment(env string) bool {
+	switch env {
+	case "", "dev", "test":
+		return true
+	}
+	return false
 }
 
 // ResendEndpoint is the URL ResendEmailOTPSender hard-codes.
@@ -48,17 +62,29 @@ func NewSender(cfg SenderConfig, log *slog.Logger) Sender {
 	default:
 		log.Warn(fmt.Sprintf("unknown email.kind=%s; falling back to LoggingEmailOTPSender", cfg.Kind))
 	}
-	return LoggingSender{Log: log}
+	return LoggingSender{Log: log, ShowCode: LocalEnvironment(cfg.Environment)}
 }
 
-// LoggingSender is LoggingEmailOTPSender, the default. Swift weakness, kept:
-// the code is written to the log at warning level, so with EMAIL_KIND unset in
-// a deployed environment anyone who reads the logs can complete any OTP flow.
-type LoggingSender struct{ Log *slog.Logger }
+// LoggingSender is LoggingEmailOTPSender, the default. It writes the code only
+// when ShowCode is set (a local environment); otherwise the line says the code
+// was withheld. Swift always wrote it, so with EMAIL_KIND unset in a deployed
+// environment anyone who read the logs could complete any OTP flow; fixed after
+// the archive.
+type LoggingSender struct {
+	Log      *slog.Logger
+	ShowCode bool
+}
 
 func (s LoggingSender) Send(_ context.Context, code, to, purpose string) error {
-	s.Log.Warn(fmt.Sprintf("email OTP (dev only): purpose=%s to=%s code=%s", purpose, to, code))
+	s.Log.Warn(fmt.Sprintf("email OTP (dev only): purpose=%s to=%s code=%s", purpose, to, shownCode(code, s.ShowCode)))
 	return nil
+}
+
+func shownCode(code string, show bool) string {
+	if show {
+		return code
+	}
+	return "<withheld outside dev and test>"
 }
 
 // ResendSender is ResendEmailOTPSender: POST {Endpoint} with a Bearer key and

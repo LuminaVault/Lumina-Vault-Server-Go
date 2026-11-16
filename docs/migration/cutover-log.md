@@ -2484,3 +2484,18 @@ Deliberate changes from Swift, made after the archive (`docs/post-archive-backlo
 - Cost: the per-request user lookup reads the column instead of `EXISTS`; still one query.
 - Tests: `TestSessionTokensIssuedBeforeTheCutoffAreRefused` (`internal/auth`), `TestPasswordResetInvalidatesAccessTokens`
   and `TestPasswordResetWithoutTheCutoffColumn` (`internal/authservice`).
+
+### OTP codes: locks, comparison and logs
+
+- A new reset or verification code row carries over the tenant's newest unused row's failure count (unless its lock has
+  expired) and any lock still running. Swift started each new row at zero and unlocked, so asking for a new code gave
+  a fresh five attempts and lifted the lock.
+- Counting a wrong code is one atomic `UPDATE`, and a failure after the row's lock has expired counts from one.
+- MFA, reset, verification and pre-auth (phone, magic link) codes are compared in constant time (`codeMatches`); Swift
+  used `==`.
+- The logging email and SMS senders write the code only when `LV_ENVIRONMENT` is unset, `dev` or `test`; elsewhere
+  the line says it was withheld. Swift always wrote it, so with `EMAIL_KIND`/`SMS_KIND` unset in a deployed
+  environment anyone who read the logs could finish any OTP flow.
+- Tests: new subtests of `TestAuthServiceSwiftRules`, `TestLoggingSendersWithholdCodesOutsideDevAndTest`
+  (`internal/authservice`). Parity: `auth/06-email` "new code row is not locked" was removed.
+

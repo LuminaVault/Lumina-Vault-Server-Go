@@ -367,8 +367,7 @@ func (s *Service) resetCode(ctx context.Context, email string) error {
 	}
 	code := s.opt.ResetCodes.Generate()
 	now := s.opt.Now()
-	if _, err := s.pool.Exec(ctx, `INSERT INTO password_reset_tokens (id, tenant_id, code_hash, expires_at, used_at, failed_attempts, locked_until, created_at)
-		VALUES ($1, $2, $3, $4, NULL, 0, NULL, $5)`, uuid.New(), u.ID, sha256Hex(code), now.Add(resetCodeLifetime), now); err != nil {
+	if err := s.insertOTP(ctx, "password_reset_tokens", u.ID, code, now.Add(resetCodeLifetime), now); err != nil {
 		return err
 	}
 	return s.opt.ResetSender.Send(ctx, code, u.Email, "reset")
@@ -398,17 +397,34 @@ func (s *Service) latestUnused(ctx context.Context, table string, tenant uuid.UU
 	return &r, nil
 }
 
-// failOTP counts a wrong code on the row and locks it at max, as Fluent saves
-// the incremented value it read.
+// insertOTP stores a new code row. It carries over the tenant's newest unused
+// row's failure count (unless that row's lock has expired) and any lock still
+// running, so asking for a new code neither resets the attempts nor lifts a
+// lock. Swift's new row started at zero and unlocked, a fresh five attempts per
+// request; fixed after the archive.
+func (s *Service) insertOTP(ctx context.Context, table string, tenant uuid.UUID, code string, expiresAt, now time.Time) error {
+	_, err := s.pool.Exec(ctx, `INSERT INTO `+table+` (id, tenant_id, code_hash, expires_at, used_at, failed_attempts, locked_until, created_at)
+		VALUES ($1, $2, $3, $4, NULL,
+			COALESCE((SELECT CASE WHEN locked_until <= $5 THEN 0 ELSE failed_attempts END FROM `+table+`
+				WHERE tenant_id = $2 AND used_at IS NULL ORDER BY created_at DESC LIMIT 1), 0),
+			(SELECT max(locked_until) FROM `+table+` WHERE tenant_id = $2 AND used_at IS NULL AND locked_until > $5),
+			$5)`, uuid.New(), tenant, sha256Hex(code), expiresAt, now)
+	return err
+}
+
+// failOTP counts a wrong code on the row in one atomic UPDATE and locks it at
+// maxFailures. A failure after the row's lock has expired starts the count at
+// one. Swift saved the value it had read, so concurrent failures could be lost;
+// fixed after the archive.
 func (s *Service) failOTP(ctx context.Context, table string, r *otpRow, maxFailures int64, lockout time.Duration) error {
-	failed := r.failed + 1
-	var locked *time.Time
-	if failed >= maxFailures {
-		t := s.opt.Now().Add(lockout)
-		locked = &t
-	}
-	_, err := s.pool.Exec(ctx, `UPDATE `+table+` SET failed_attempts = $2, locked_until = COALESCE($3, locked_until) WHERE id = $1`,
-		r.id, failed, locked)
+	now := s.opt.Now()
+	_, err := s.pool.Exec(ctx, `UPDATE `+table+` SET
+		failed_attempts = CASE WHEN locked_until <= $2 THEN 1 ELSE failed_attempts + 1 END,
+		locked_until = CASE
+			WHEN (CASE WHEN locked_until <= $2 THEN 1 ELSE failed_attempts + 1 END) >= $3 THEN $4::timestamptz
+			WHEN locked_until <= $2 THEN NULL
+			ELSE locked_until END
+		WHERE id = $1`, r.id, now, maxFailures, now.Add(lockout))
 	return err
 }
 
@@ -417,9 +433,11 @@ func (s *Service) failOTP(ctx context.Context, table string, r *otpRow, maxFailu
 // access tokens issued so far invalidated, and a new session. Swift left the
 // access tokens valid until they expired; fixed after the archive.
 //
-// Swift weaknesses, kept: the lock is on the code row, so a new forgot-password
-// starts a fresh five attempts; the hashes are compared with ==; and an unknown
-// email gives the same 401 as a wrong code only after skipping the work.
+// A new forgot-password carries the attempts and any lock over to the new code
+// row, and the hashes are compared in constant time (both fixed after the
+// archive; Swift started each row afresh and compared with ==). Swift weakness,
+// kept: an unknown email gives the same 401 as a wrong code only after skipping
+// the work.
 func (s *Service) ResetPassword(ctx context.Context, email, code, newPassword string) (*AuthResponse, error) {
 	// As Register: the code is marked used before the bcrypt hash, so a client
 	// that leaves mid-request must not strand the reset half done.
@@ -448,7 +466,7 @@ func (s *Service) ResetPassword(ctx context.Context, email, code, newPassword st
 	if row.expiresAt.Before(now) {
 		return nil, ErrResetCodeInvalid
 	}
-	if row.codeHash != sha256Hex(code) {
+	if !codeMatches(row.codeHash, code) {
 		if err := s.failOTP(ctx, "password_reset_tokens", row, maxResetFailures, resetLockoutDuration); err != nil {
 			return nil, err
 		}
@@ -485,8 +503,7 @@ func (s *Service) SendVerification(ctx context.Context, email string) error {
 	}
 	code := s.opt.VerifyCodes.Generate()
 	now := s.opt.Now()
-	if _, err := s.pool.Exec(ctx, `INSERT INTO email_verification_tokens (id, tenant_id, code_hash, expires_at, used_at, failed_attempts, locked_until, created_at)
-		VALUES ($1, $2, $3, $4, NULL, 0, NULL, $5)`, uuid.New(), u.ID, sha256Hex(code), now.Add(verifyCodeLifetime), now); err != nil {
+	if err := s.insertOTP(ctx, "email_verification_tokens", u.ID, code, now.Add(verifyCodeLifetime), now); err != nil {
 		return err
 	}
 	return s.opt.VerifySender.Send(ctx, code, u.Email, "verify")
@@ -494,8 +511,8 @@ func (s *Service) SendVerification(ctx context.Context, email string) error {
 
 // ConfirmEmail is DefaultAuthService.confirmEmail. An already verified user
 // succeeds whatever the code. Swift weaknesses, kept: an unknown email answers
-// 401 while a verified one answers 204, so the route tells the two apart; the
-// lock is per code row, as for reset.
+// 401 while a verified one answers 204, so the route tells the two apart. A new
+// code carries the attempts and lock over, as for reset (fixed after the archive).
 func (s *Service) ConfirmEmail(ctx context.Context, email, code string) error {
 	u, err := s.FindUserByEmail(ctx, email)
 	if err != nil {
@@ -521,7 +538,7 @@ func (s *Service) ConfirmEmail(ctx context.Context, email, code string) error {
 	if row.expiresAt.Before(now) {
 		return ErrVerifyCodeInvalid
 	}
-	if row.codeHash != sha256Hex(code) {
+	if !codeMatches(row.codeHash, code) {
 		if err := s.failOTP(ctx, "email_verification_tokens", row, maxVerifyFailures, verifyLockoutDuration); err != nil {
 			return err
 		}

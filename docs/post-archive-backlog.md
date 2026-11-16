@@ -47,8 +47,9 @@ Found during the port, same batch:
   - The lockout counter is not reset after expiry, and failure counters are racy.
   - ~~`mfa/resend` enumerates accounts.~~ Done (see "`mfa/resend` answers an unknown email like a known one" in
     `docs/migration/cutover-log.md`). Register 409s enumerate emails and usernames: open, needs an owner decision.
-  - Requesting a new code bypasses the per-row reset and verify locks.
-  - Codes are compared in non-constant time, and the logging sender writes OTP codes to logs.
+  - ~~Requesting a new code bypasses the per-row reset and verify locks.~~ Done.
+  - ~~Codes are compared in non-constant time, and the logging sender writes OTP codes to logs.~~ Done (see
+    "OTP codes: locks, comparison and logs" in `docs/migration/cutover-log.md`).
   - ~~A password reset does not invalidate access tokens.~~ Done (see "Password reset invalidates access tokens"
     in `docs/migration/cutover-log.md`).
   - Refresh has no reuse detection and is not transactional.

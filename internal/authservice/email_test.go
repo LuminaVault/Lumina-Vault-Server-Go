@@ -1,10 +1,12 @@
 package authservice_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"lumina/internal/authservice"
 	"lumina/internal/wire"
 	"net/http"
@@ -127,4 +129,26 @@ func TestNewSender(t *testing.T) {
 		assert.True(t, ok, kind)
 	}
 	assert.True(t, strings.HasPrefix(authservice.ResendEndpoint, "https://api.resend.com/"))
+}
+
+// The logging senders write the code only in a local environment (post-archive
+// fix): Swift always wrote it, so anyone reading a deployed environment's logs
+// could complete an OTP flow.
+func TestLoggingSendersWithholdCodesOutsideDevAndTest(t *testing.T) {
+	ctx := context.Background()
+	for env, shown := range map[string]bool{"": true, "dev": true, "test": true, "staging": false, "production": false} {
+		var buf bytes.Buffer
+		log := slog.New(slog.NewTextHandler(&buf, nil))
+		email := authservice.NewSender(authservice.SenderConfig{Environment: env}, log)
+		require.NoError(t, email.Send(ctx, "481516", "a@b.c", "login"))
+		sms := authservice.NewSMSSender(authservice.SMSConfig{Environment: env}, log)
+		require.NoError(t, sms.Send(ctx, "234223", "+15555550100", "login"))
+		out := buf.String()
+		assert.Equal(t, shown, strings.Contains(out, "481516"), "email, env %q: %s", env, out)
+		assert.Equal(t, shown, strings.Contains(out, "234223"), "sms, env %q: %s", env, out)
+		assert.Contains(t, out, "a@b.c", env)
+	}
+	var buf bytes.Buffer
+	require.NoError(t, authservice.LoggingSender{Log: slog.New(slog.NewTextHandler(&buf, nil))}.Send(ctx, "481516", "a@b.c", "login"))
+	assert.NotContains(t, buf.String(), "481516", "the zero value withholds")
 }

@@ -108,7 +108,7 @@ func (s *PreAuthChallengeStore) ConsumeTyped(destination, code string) (outcome 
 		burn()
 		return ConsumeLockedOut, "", ""
 	}
-	if e.codeHash != sha256Hex(code) {
+	if !codeMatches(e.codeHash, code) {
 		e.attempts++
 		if e.attempts >= s.maxAttempts {
 			burn()

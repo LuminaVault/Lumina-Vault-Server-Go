@@ -5,6 +5,7 @@ import (
 	"lumina/internal/authservice"
 	"lumina/internal/modules/billing"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
@@ -107,7 +108,8 @@ func TestAuthServiceSwiftRules(t *testing.T) {
 		assert.Empty(t, code)
 	})
 
-	t.Run("reset: five wrong codes lock the code row; a new code starts afresh", func(t *testing.T) {
+	// Post-archive fix: Swift locked only the code row, so a new code started afresh.
+	t.Run("reset: five wrong codes lock; a new code keeps the lock", func(t *testing.T) {
 		h := build(t, pool, harness{})
 		email := register(t, h)
 		require.NoError(t, h.svc.ForgotPassword(ctx, email))
@@ -117,10 +119,63 @@ func TestAuthServiceSwiftRules(t *testing.T) {
 		}
 		_, err := h.svc.ResetPassword(ctx, email, "654321", "NewPasswordCorrectHorse1!")
 		assert.ErrorIs(t, err, authservice.ErrResetLocked)
-		// Swift weakness, kept: the lock is per row.
 		require.NoError(t, h.svc.ResendReset(ctx, email))
 		_, err = h.svc.ResetPassword(ctx, email, "654321", "NewPasswordCorrectHorse1!")
+		assert.ErrorIs(t, err, authservice.ErrResetLocked)
+
+		// Once the lock runs out, a wrong code counts from one and the right one works.
+		_, err = pool.Exec(ctx, `UPDATE password_reset_tokens SET locked_until = now() - interval '1 second'
+			WHERE tenant_id = (SELECT id FROM users WHERE email = $1)`, email)
 		require.NoError(t, err)
+		_, err = h.svc.ResetPassword(ctx, email, "000000", "NewPasswordCorrectHorse1!")
+		assert.ErrorIs(t, err, authservice.ErrResetCodeInvalid)
+		var failed int64
+		require.NoError(t, pool.QueryRow(ctx, `SELECT failed_attempts FROM password_reset_tokens
+			WHERE tenant_id = (SELECT id FROM users WHERE email = $1) ORDER BY created_at DESC LIMIT 1`, email).Scan(&failed))
+		assert.Equal(t, int64(1), failed)
+		_, err = h.svc.ResetPassword(ctx, email, "654321", "NewPasswordCorrectHorse1!")
+		require.NoError(t, err)
+	})
+
+	t.Run("reset: a new code keeps the failures so far", func(t *testing.T) {
+		h := build(t, pool, harness{})
+		email := register(t, h)
+		require.NoError(t, h.svc.ForgotPassword(ctx, email))
+		for range 4 {
+			_, _ = h.svc.ResetPassword(ctx, email, "000000", "NewPasswordCorrectHorse1!")
+		}
+		require.NoError(t, h.svc.ResendReset(ctx, email))
+		_, err := h.svc.ResetPassword(ctx, email, "000000", "NewPasswordCorrectHorse1!")
+		assert.ErrorIs(t, err, authservice.ErrResetCodeInvalid)
+		_, err = h.svc.ResetPassword(ctx, email, "654321", "NewPasswordCorrectHorse1!")
+		assert.ErrorIs(t, err, authservice.ErrResetLocked, "the fifth failure across codes locks")
+	})
+
+	t.Run("verify: a new code keeps the lock", func(t *testing.T) {
+		h := build(t, pool, harness{})
+		email := register(t, h)
+		require.NoError(t, h.svc.SendVerification(ctx, email))
+		for range 5 {
+			_ = h.svc.ConfirmEmail(ctx, email, "000000")
+		}
+		require.ErrorIs(t, h.svc.ConfirmEmail(ctx, email, "789012"), authservice.ErrVerifyLocked)
+		require.NoError(t, h.svc.SendVerification(ctx, email))
+		require.ErrorIs(t, h.svc.ConfirmEmail(ctx, email, "789012"), authservice.ErrVerifyLocked)
+	})
+
+	t.Run("concurrent wrong codes all count", func(t *testing.T) {
+		h := build(t, pool, harness{})
+		email := register(t, h)
+		require.NoError(t, h.svc.ForgotPassword(ctx, email))
+		var wg sync.WaitGroup
+		for range 4 {
+			wg.Go(func() { _, _ = h.svc.ResetPassword(ctx, email, "000000", "NewPasswordCorrectHorse1!") })
+		}
+		wg.Wait()
+		var failed int64
+		require.NoError(t, pool.QueryRow(ctx, `SELECT failed_attempts FROM password_reset_tokens
+			WHERE tenant_id = (SELECT id FROM users WHERE email = $1)`, email).Scan(&failed))
+		assert.Equal(t, int64(4), failed)
 	})
 
 	t.Run("reset checks the new password first and refuses an unknown email", func(t *testing.T) {
