@@ -1031,8 +1031,8 @@ func TestRawPathHelpers(t *testing.T) {
 	require.Equal(t, []string{"v1", "vault", "files", "a%20b.md"}, wire.PathSegments(req))
 }
 
-// Bodies the spec describes validate against it (decisions.md D2). VaultFileDTO
-// and VaultMoveRequest have drifted, so list and move aren't checked here.
+// Bodies the spec describes validate against it (decisions.md D2).
+// VaultMoveRequest has drifted, so move isn't checked here.
 func TestResponsesConformToSpec(t *testing.T) {
 	ctx := context.Background()
 	doc, err := openapi3.NewLoader().LoadFromFile("../../../api/openapi.yaml")
@@ -1057,9 +1057,13 @@ func TestResponsesConformToSpec(t *testing.T) {
 		{http.MethodGet, "/v1/vault/context/" + hub.String(), nil, ""},
 		{http.MethodGet, "/v1/vault/links/" + hub.String(), nil, ""},
 		{http.MethodGet, "/v1/vault/trash", nil, ""},
+		// VaultFileDTO, now with spaceId/updatedAt/actor fields in the spec. The
+		// daily note comes first so the list has a filed note (spaceId set).
+		{http.MethodPost, "/v1/vault/daily?date=2026-11-16", nil, ""},
+		{http.MethodGet, "/v1/vault/files", nil, ""},
 	} {
 		r := v.do(u, c.method, c.path, c.headers, []byte(c.body))
-		require.Equal(t, http.StatusOK, r.code, "%s %s: %s", c.method, c.path, r.body)
+		require.Contains(t, []int{http.StatusOK, http.StatusCreated}, r.code, "%s %s: %s", c.method, c.path, r.body)
 		req := httptest.NewRequest(c.method, c.path, strings.NewReader(c.body))
 		for k, val := range c.headers {
 			req.Header.Set(k, val)
