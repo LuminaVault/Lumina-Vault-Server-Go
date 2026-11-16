@@ -30,7 +30,7 @@ one is a deliberate change from Swift. Name each in `docs/migration/cutover-log.
 2. ~~**Vault file paths.** `internal/vaultfiles` refuses symlink escapes and `link/../nope.md` (the `TestSwiftWeakness*`
    cases in `internal/vaultfiles/resolve_test.go`). Snapshot restore paths in self-improvement go through the same
    checks.~~ Done: see "Vault file paths: symlink escapes" in `docs/migration/cutover-log.md`.
-3. **Storage quota.** Enforce it.
+3. ~~**Storage quota.** Enforce it.~~ Done: see "Storage quota counts stored bytes" in `docs/migration/cutover-log.md`.
 4. **`/v1/memory/graph`.** Scrub what it discloses.
 5. **Share-sheet note deletion.** Fix it.
 6. **`skills_state`.** A PATCH updates only its own row, not every row for that skill name.

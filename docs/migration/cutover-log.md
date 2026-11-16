@@ -2396,6 +2396,15 @@ Deliberate changes from Swift, made after the archive (`docs/post-archive-backlo
 - Parity: `self-improvement/04-rollback` no longer rolls back the seeded runs whose snapshot names hold "/" or ".."
   (…020, …023, …024). Swift wrote through them; Go answers 409. `TestRollback` covers them.
 
+### Storage quota counts stored bytes (backlog 1.3)
+
+- `POST /v1/ingestions` checks the tier ceiling against what the tenant already stores plus the batch. Stored bytes
+  are `vault_files` plus `vault_trash` (trash stays on disk until the 30-day purge), summed as bigint. Swift decoded
+  a numeric `SUM` as `Int64` under `try?`, so it always read 0 and the 413 always said "0 B of ...". The 413 now
+  names the real figure.
+- Batches accepted but not yet uploaded don't count, as before: their bytes count once the files land.
+- Parity: the ing_fay and ing_pam steps in `ingestion/02-create` pinned the Swift behaviour and were removed;
+  `TestWhatATenantStoresCountsAgainstTheCeiling` and `TestTrashCountsAgainstTheCeiling` cover them.
 ### SSRF on user-supplied outbound URLs (backlog 1.1)
 
 - `internal/ssrfguard` gained `Guard.Transport`/`Guard.Client`. The dialer checks the address it is about to connect
