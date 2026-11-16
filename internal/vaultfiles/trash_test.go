@@ -35,7 +35,7 @@ func TestTrashNameCutsALongNameOnARuneBoundary(t *testing.T) {
 
 func moveToTrash(t *testing.T, raw, relative string, id uuid.UUID) (bool, error) {
 	t.Helper()
-	target, err := vaultfiles.ResolveInside(raw, relative)
+	target, err := vaultfiles.ResolveEntryInside(raw, relative)
 	require.NoError(t, err)
 	return vaultfiles.MoveFileToTrash(raw, target, vaultfiles.TrashName(id, relative, deletedAt))
 }
