@@ -2538,3 +2538,9 @@ Deliberate changes from Swift, made after the archive (`docs/post-archive-backlo
 - Tests: `TestRefreshRotationIsAtomicAndDetectsReuse` (`internal/authservice`). Parity: `auth/04-refresh` "revoked
   token" (seeded long revoked, so reuse) moved last, after the steps that use the tenant's other tokens.
 
+### `skills_state` updates touch only their own row (backlog 1.6)
+
+- Swift's Fluent `save()` keyed `SkillsState` updates by `tenant_id` alone, so every row of the tenant took the
+  change: pinning one skill pinned all of them. The skills PATCH, the plugins enable flip, self-improvement
+  pin/unpin, rollback state and the curator worker now name `(tenant_id, source, name)` (#152).
+- Parity: `skills_state` snapshots are scoped per tenant, because Swift's tenant-wide update diverges from Go's.
