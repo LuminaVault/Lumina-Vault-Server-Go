@@ -107,6 +107,21 @@ func ConsumeRefreshToken(ctx context.Context, db DB, raw string, now time.Time) 
 	return uuid.Nil, ErrInvalidRefresh
 }
 
+// RefreshTokenTenant is the tenant a refresh token was issued to, whatever its
+// state; false when the token is unknown. It decides nothing: only
+// ConsumeRefreshToken says whether the token may be used.
+func RefreshTokenTenant(ctx context.Context, db DB, raw string) (uuid.UUID, bool, error) {
+	var tenant uuid.UUID
+	err := db.QueryRow(ctx, `SELECT tenant_id FROM refresh_tokens WHERE token_hash = $1 LIMIT 1`, HashRefreshToken(raw)).Scan(&tenant)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return uuid.Nil, false, nil
+	}
+	if err != nil {
+		return uuid.Nil, false, err
+	}
+	return tenant, true, nil
+}
+
 // ErrRefreshReused is ErrInvalidRefresh after reuse was detected and the
 // tenant's refresh tokens were revoked. errors.Is(ErrRefreshReused,
 // ErrInvalidRefresh) holds, so callers answer the same 401.

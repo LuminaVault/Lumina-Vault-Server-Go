@@ -122,8 +122,13 @@ type User struct {
 const userColumns = `id, email, username, password_hash, is_verified, failed_login_attempts, lockout_until, tier_override, vault_initialized`
 
 func (s *Service) findUser(ctx context.Context, where string, arg any) (*User, error) {
+	return findUserIn(ctx, s.pool, where, arg)
+}
+
+// findUserIn is findUser through db, which may be a transaction.
+func findUserIn(ctx context.Context, db auth.DB, where string, arg any) (*User, error) {
 	var u User
-	err := s.pool.QueryRow(ctx, `SELECT `+userColumns+` FROM users WHERE `+where+` LIMIT 1`, arg).
+	err := db.QueryRow(ctx, `SELECT `+userColumns+` FROM users WHERE `+where+` LIMIT 1`, arg).
 		Scan(&u.ID, &u.Email, &u.Username, &u.PasswordHash, &u.IsVerified, &u.FailedLoginAttempts, &u.LockoutUntil, &u.TierOverride, &u.VaultInitialized)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
@@ -577,6 +582,14 @@ func (s *Service) ConfirmEmail(ctx context.Context, email, code string) error {
 // refresh tokens (auth.ConsumeRefreshToken) and is the usual 401. Swift was not
 // transactional and had no reuse detection; fixed after the archive.
 func (s *Service) Refresh(ctx context.Context, refreshToken string) (*AuthResponse, error) {
+	// Whatever reads through the pool runs before the transaction opens, and
+	// the rest goes through tx. A transaction that waits for a second pool
+	// connection never gets one once every connection is held by a refresh of
+	// the same token waiting on this one's row lock.
+	hpid, err := s.refreshProfileID(ctx, refreshToken)
+	if err != nil {
+		return nil, err
+	}
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return nil, err
@@ -596,14 +609,14 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (*AuthRespon
 	if err != nil {
 		return nil, err
 	}
-	u, err := s.FindUserByID(ctx, tenant)
+	u, err := findUserIn(ctx, tx, `id = $1`, tenant)
 	if err != nil {
 		return nil, err
 	}
 	if u == nil {
 		return nil, ErrInvalidRefresh
 	}
-	resp, err := s.issueTokens(ctx, tx, u)
+	resp, err := s.issueTokensFor(ctx, tx, u, hpid)
 	if err != nil {
 		return nil, err
 	}
@@ -611,6 +624,36 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (*AuthRespon
 		return nil, err
 	}
 	return resp, nil
+}
+
+// refreshProfileID is the ready Hermes profile id of the tenant a refresh token
+// belongs to, "" when there is none or the token is unknown. It only reads;
+// ConsumeRefreshToken still decides whether the token is good.
+func (s *Service) refreshProfileID(ctx context.Context, refreshToken string) (string, error) {
+	if s.opt.Profiles == nil {
+		return "", nil
+	}
+	tenant, ok, err := auth.RefreshTokenTenant(ctx, s.pool, refreshToken)
+	if err != nil || !ok {
+		return "", err
+	}
+	return s.hermesProfileID(ctx, tenant)
+}
+
+// hermesProfileID is the hpid claim: the tenant's Hermes profile id, only when
+// the profile is ready.
+func (s *Service) hermesProfileID(ctx context.Context, tenant uuid.UUID) (string, error) {
+	if s.opt.Profiles == nil {
+		return "", nil
+	}
+	profile, err := s.opt.Profiles.Find(ctx, tenant)
+	if err != nil {
+		return "", err
+	}
+	if profile != nil && profile.Status == "ready" {
+		return profile.HermesProfileID, nil
+	}
+	return "", nil
 }
 
 // RevokeRefresh is DefaultAuthService.revokeRefresh.
@@ -657,26 +700,26 @@ func (s *Service) IssueTokens(ctx context.Context, u *User) (*AuthResponse, erro
 	return s.issueTokens(ctx, s.pool, u)
 }
 
-// issueTokens is IssueTokens with the new refresh row written through db, so
-// Refresh can write it in its transaction.
+// issueTokens is IssueTokens with its writes going through db.
 func (s *Service) issueTokens(ctx context.Context, db auth.DB, u *User) (*AuthResponse, error) {
-	if err := s.applyTierOverrideAllowlist(ctx, u); err != nil {
+	hpid, err := s.hermesProfileID(ctx, u.ID)
+	if err != nil {
+		return nil, err
+	}
+	return s.issueTokensFor(ctx, db, u, hpid)
+}
+
+// issueTokensFor is issueTokens with the hpid already looked up. Every query
+// goes through db, so Refresh can run it in its transaction without taking a
+// second pool connection.
+func (s *Service) issueTokensFor(ctx context.Context, db auth.DB, u *User, hpid string) (*AuthResponse, error) {
+	if err := s.applyTierOverrideAllowlist(ctx, db, u); err != nil {
 		return nil, err
 	}
 	if s.opt.Analytics != nil {
 		s.opt.Analytics.Capture("$set", ids.Upper(u.ID), map[string]any{
 			"$set": map[string]any{"is_internal": knownOverride(u.TierOverride) != "none"},
 		})
-	}
-	hpid := ""
-	if s.opt.Profiles != nil {
-		profile, err := s.opt.Profiles.Find(ctx, u.ID)
-		if err != nil {
-			return nil, err
-		}
-		if profile != nil && profile.Status == "ready" {
-			hpid = profile.HermesProfileID
-		}
 	}
 	access, err := s.opt.Keys.MintAccess(u.ID, s.opt.Now(), hpid)
 	if err != nil {
@@ -694,7 +737,7 @@ func (s *Service) issueTokens(ctx context.Context, db auth.DB, u *User) (*AuthRe
 
 // applyTierOverrideAllowlist only raises: a listed email is stamped unless the
 // row already matches or already holds ultimate.
-func (s *Service) applyTierOverrideAllowlist(ctx context.Context, u *User) error {
+func (s *Service) applyTierOverrideAllowlist(ctx context.Context, db auth.DB, u *User) error {
 	if s.opt.TierOverride == nil {
 		return nil
 	}
@@ -706,7 +749,7 @@ func (s *Service) applyTierOverrideAllowlist(ctx context.Context, u *User) error
 	if current == granted || current == "ultimate" {
 		return nil
 	}
-	if _, err := s.pool.Exec(ctx, `UPDATE users SET tier_override = $2, updated_at = $3 WHERE id = $1`, u.ID, granted, s.opt.Now()); err != nil {
+	if _, err := db.Exec(ctx, `UPDATE users SET tier_override = $2, updated_at = $3 WHERE id = $1`, u.ID, granted, s.opt.Now()); err != nil {
 		return err
 	}
 	u.TierOverride = granted

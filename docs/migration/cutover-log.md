@@ -2532,6 +2532,9 @@ Deliberate changes from Swift, made after the archive (`docs/post-archive-backlo
   tenant signs in again; a stolen chain dies with it.
 - `Service.Refresh` consumes and writes the new refresh row in one transaction: a failure while issuing leaves the old
   token usable instead of signing the user out. The reuse revocation is committed even though the call fails.
+- The transaction never asks the pool for a second connection: the Hermes profile is read before it opens, and the
+  user lookup and the tier stamp go through it. Otherwise refreshes racing on one token deadlock once they hold every
+  connection (seen in CI on a 4-connection pool).
 - Tests: `TestRefreshRotationIsAtomicAndDetectsReuse` (`internal/authservice`). Parity: `auth/04-refresh` "revoked
   token" (seeded long revoked, so reuse) moved last, after the steps that use the tenant's other tokens.
 

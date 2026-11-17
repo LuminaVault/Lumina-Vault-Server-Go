@@ -6,7 +6,9 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -39,6 +41,34 @@ func TestRefreshRotationIsAtomicAndDetectsReuse(t *testing.T) {
 		for range 8 {
 			wg.Go(func() {
 				if _, err := h.svc.Refresh(ctx, reg.RefreshToken); err == nil {
+					wins.Add(1)
+				} else {
+					assert.ErrorIs(t, err, authservice.ErrInvalidRefresh)
+				}
+			})
+		}
+		wg.Wait()
+		assert.Equal(t, int32(1), wins.Load())
+	})
+
+	t.Run("racing refreshes finish on a pool smaller than the race", func(t *testing.T) {
+		// Each refresh holds one connection for its transaction. If it then asked
+		// the pool for another, the winner would wait behind the losers that are
+		// waiting on its row lock, and nobody would finish.
+		cfg := pool.Config().Copy()
+		cfg.MaxConns = 2
+		small, err := pgxpool.NewWithConfig(ctx, cfg)
+		require.NoError(t, err)
+		t.Cleanup(small.Close)
+		h := build(t, small, harness{tierOverride: func(string) (string, bool) { return "pro", true }})
+		_, reg := signUp(t, h)
+		raceCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+		var wins atomic.Int32
+		var wg sync.WaitGroup
+		for range 8 {
+			wg.Go(func() {
+				if _, err := h.svc.Refresh(raceCtx, reg.RefreshToken); err == nil {
 					wins.Add(1)
 				} else {
 					assert.ErrorIs(t, err, authservice.ErrInvalidRefresh)
