@@ -6629,6 +6629,66 @@ paths:
           description: Deleted.
         '404':
           $ref: '#/components/responses/NotFound'
+    put:
+      tags: [Vault]
+      operationId: vaultReplace
+      x-lv-module: vault
+      summary: Save new bytes over an existing vault file, in place.
+      description: |
+        Replaces the content of a file that already exists, at its own path
+        and in its own Space, at any folder depth. Upload (`POST
+        /v1/vault/files`) keeps only the base name under the Space's folder,
+        so it cannot save a nested note such as a bulk-imported
+        `lore/people/ada.md` where it is. A path with no file is 404: create
+        files with upload. Otherwise it writes exactly as upload does: `note`
+        refreshes the note's memory, title and links, and `If-Match` makes the
+        save conflict-safe.
+      parameters:
+        - in: path
+          name: path
+          required: true
+          description: >-
+            Tenant-relative vault path of an existing file, spanning
+            `/`-separated segments (e.g. `lore/people/ada.md`).
+          schema: { type: string }
+        - in: query
+          name: note
+          description: "`true` writes the file as a note: its memory, embedding, title and [[wikilinks]] are refreshed."
+          schema: { type: string, enum: ['true'] }
+        - in: query
+          name: processed
+          description: "`true` marks the file processed so ingestion skips it."
+          schema: { type: string, enum: ['true'] }
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - in: header
+          name: If-Match
+          description: |
+            The sha256 of the version the client edited, quoted or bare. The
+            file is replaced only when the bytes on disk still hash to it;
+            otherwise 412 and nothing is written. Omit to overwrite.
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200':
+          description: File stored.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VaultUploadResponse' }
+        '400':
+          description: Malformed path or empty body.
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '415':
+          description: The Content-Type does not fit the file's extension.
+        '412':
+          description: "`If-Match` was sent and the file changed since that version. Nothing was written."
+        '507': { $ref: '#/components/responses/InsufficientStorage' }
 
   /v1/vault/export:
     get:
