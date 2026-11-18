@@ -154,6 +154,7 @@ func (m *Module) Register(r httpserver.Router, _ echo.MiddlewareFunc) {
 	r.POST(filesPath+"/move", m.move, files...)
 	r.GET(filesPath+"/*", m.read, files...)
 	r.DELETE(filesPath+"/*", m.delete, files...)
+	r.PUT(filesPath+"/*", m.replace, files...)
 	// Hummingbird's trie picks the constant "move" over "**", and that node has
 	// only POST, so these two are 404 and not a read of a file called "move".
 	r.GET(filesPath+"/move", notFound)

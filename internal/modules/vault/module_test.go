@@ -4,7 +4,9 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -400,6 +402,65 @@ func TestVaultRoutes(t *testing.T) {
 		require.Equal(t, http.StatusOK, r.code, string(r.body))
 		require.NoError(t, v.pool.QueryRow(ctx, `SELECT metadata->>'title' FROM vault_files WHERE tenant_id = $1 AND path = 'inbox/other.md'`, u).Scan(&title))
 		require.Equal(t, "Mine", title)
+	})
+	t.Run("PUT saves a nested note in place, in its Space, as a note", func(t *testing.T) {
+		indexed := setupOn(t, v, func(o *Options) {
+			o.Embeddings = stubEmbedder{}
+			o.Indexer = chunkindex.NewIndexer(chunkindex.NewChunkRepository(v.pool), stubEmbedder{}, chunkindex.NewLinkRepository(v.pool))
+		})
+		ctx := context.Background()
+		u := v.user("trial")
+		lore := v.space(u, "lore")
+		first := []byte("# Ada\n\nA pilot.\n")
+		r := indexed.do(u, http.MethodPost, "/v1/vault/files?path=ada.md&note=true&space_id="+lore.String(), map[string]string{"Content-Type": "text/markdown"}, first)
+		require.Equal(t, http.StatusOK, r.code, string(r.body))
+		require.Equal(t, http.StatusOK, indexed.move(u, "lore/ada.md", "lore/people/ada.md").code)
+
+		sum := sha256.Sum256(first)
+		edit := []byte("# Ada Lovelace\n\nFlies for [[Factions]].\n")
+		headers := map[string]string{"Content-Type": "text/markdown", "If-Match": `"` + hex.EncodeToString(sum[:]) + `"`}
+		r = indexed.do(u, http.MethodPut, "/v1/vault/files/lore/people/ada.md?note=true&processed=true", headers, edit)
+		require.Equal(t, http.StatusOK, r.code, string(r.body))
+		var out VaultUploadResponse
+		require.NoError(t, json.Unmarshal(r.body, &out))
+		require.Equal(t, "lore/people/ada.md", out.Path)
+		require.NotNil(t, out.MemoryId)
+
+		read := indexed.do(u, http.MethodGet, "/v1/vault/files/lore/people/ada.md", nil, nil)
+		require.Equal(t, string(edit), string(read.body))
+		var rows int
+		require.NoError(t, v.pool.QueryRow(ctx, `SELECT count(*) FROM vault_files WHERE tenant_id = $1`, u).Scan(&rows))
+		require.Equal(t, 1, rows, "the save must not file a second copy under lore/")
+		var title string
+		var space uuid.UUID
+		require.NoError(t, v.pool.QueryRow(ctx, `SELECT metadata->>'title', space_id FROM vault_files WHERE tenant_id = $1`, u).Scan(&title, &space))
+		require.Equal(t, "Ada Lovelace", title)
+		require.Equal(t, lore, space)
+		var memory string
+		require.NoError(t, v.pool.QueryRow(ctx, `SELECT content FROM memories WHERE id = $1`, out.MemoryId.UUID).Scan(&memory))
+		require.Equal(t, string(edit), memory)
+		var target string
+		require.NoError(t, v.pool.QueryRow(ctx, `SELECT raw_target FROM vault_links WHERE tenant_id = $1`, u).Scan(&target))
+		require.Equal(t, "Factions", target)
+
+		// The version it was edited from is gone: 412, nothing written.
+		stale := indexed.do(u, http.MethodPut, "/v1/vault/files/lore/people/ada.md?note=true", headers, []byte("# Lost\n"))
+		require.Equal(t, http.StatusPreconditionFailed, stale.code, string(stale.body))
+		read = indexed.do(u, http.MethodGet, "/v1/vault/files/lore/people/ada.md", nil, nil)
+		require.Equal(t, string(edit), string(read.body))
+	})
+	t.Run("PUT never creates a file and stays inside the vault", func(t *testing.T) {
+		u := v.user("trial")
+		md := map[string]string{"Content-Type": "text/markdown"}
+		missing := v.do(u, http.MethodPut, "/v1/vault/files/lore/people/nobody.md", md, []byte("x"))
+		require.Equal(t, http.StatusNotFound, missing.code, string(missing.body))
+		require.Equal(t, http.StatusNotFound, v.do(u, http.MethodGet, "/v1/vault/files/lore/people/nobody.md", nil, nil).code)
+		require.Equal(t, http.StatusBadRequest, v.do(u, http.MethodPut, "/v1/vault/files/../escape.md", md, []byte("x")).code)
+		require.Equal(t, http.StatusUnauthorized, v.do(uuid.Nil, http.MethodPut, "/v1/vault/files/inbox/a.md", md, []byte("x")).code)
+
+		path := v.upload(u, "empty-body.md", "kept")
+		require.Equal(t, http.StatusBadRequest, v.do(u, http.MethodPut, "/v1/vault/files/"+path, md, nil).code)
+		require.Equal(t, http.StatusUnsupportedMediaType, v.do(u, http.MethodPut, "/v1/vault/files/"+path, map[string]string{"Content-Type": "image/png"}, []byte("x")).code)
 	})
 	t.Run("If-None-Match star refuses to replace an existing file", func(t *testing.T) {
 		u := v.user("trial")

@@ -154,7 +154,35 @@ func (m *Module) upload(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
+	return m.writeFile(c, actor, tenant, safe, spaceID)
+}
 
+// replace is PUT /v1/vault/files/{path}: new bytes for a file that already
+// exists, written at its own path and kept in its own Space. Upload files by
+// base name under the Space's folder, so a note deeper than that, such as a
+// bulk-imported <space>/lore/people/ada.md, could not be saved in place. A path
+// with no row is 404: new files go through upload, which picks their folder.
+func (m *Module) replace(c *echo.Context) error {
+	actor, err := requireIdentity(c)
+	if err != nil {
+		return err
+	}
+	a, err := m.access.Resolve(c, vaultaccess.Write)
+	if err != nil {
+		return err
+	}
+	row, safe, err := m.rowAtCatchAll(c, a)
+	if err != nil {
+		return err
+	}
+	return m.writeFile(c, actor, a.VaultID, safe, row.SpaceID)
+}
+
+// writeFile is the shared half of upload and replace: everything after the path
+// and Space are decided. Query `note` and `processed`, the X-Vault-Metadata
+// sidecar, If-Match and If-None-Match apply to both.
+func (m *Module) writeFile(c *echo.Context, actor, tenant uuid.UUID, safe string, spaceID *uuid.UUID) error {
+	ctx := c.Request().Context()
 	r := c.Request()
 	contentType := "application/octet-stream"
 	if values, ok := r.Header["Content-Type"]; ok {
