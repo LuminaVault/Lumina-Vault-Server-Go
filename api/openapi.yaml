@@ -7085,6 +7085,111 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
 
+  /v1/vault/properties:
+    patch:
+      tags: [Vault]
+      operationId: vaultPropertiesPatch
+      x-lv-module: vault
+      summary: Set or remove a note's properties
+      description: |
+        Backlog E8.2. Edits the note's YAML frontmatter, creating it when the
+        note has none, and saves through the normal path (row, recall memory,
+        history). Only the lines of the keys that change are rewritten. A
+        change that alters nothing writes nothing. A key in both `set` and
+        `unset` is set. Off (404) unless `VAULT_PROPERTIES_ENABLED`.
+      security: [{ bearerJWT: [] }]
+      parameters:
+        - { name: path, in: query, required: true, schema: { type: string } }
+        - name: If-Match
+          in: header
+          required: false
+          description: The sha256 of the version the client last saw (E5.1).
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VaultPropertiesPatchRequest' }
+      responses:
+        '200':
+          description: The saved note, with its properties.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VaultFileDTO' }
+        '400':
+          description: Missing path, not a Markdown note, or an invalid name or value.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '412':
+          description: The note changed since the version in If-Match; nothing was written.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '422':
+          description: |
+            The frontmatter is invalid YAML or can't be edited key by key, or a
+            value doesn't fit its property's declared type. Nothing was written.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  /v1/vault/property-types:
+    get:
+      tags: [Vault]
+      operationId: vaultPropertyTypes
+      x-lv-module: vault
+      summary: The vault's property types
+      description: |
+        Backlog E8.2. One type per property name, inferred the first time a
+        name is seen and changeable with PUT. Off (404) unless
+        `VAULT_PROPERTIES_ENABLED`.
+      security: [{ bearerJWT: [] }]
+      responses:
+        '200':
+          description: Types by name.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VaultPropertyTypesResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/vault/property-types/{name}:
+    put:
+      tags: [Vault]
+      operationId: vaultPropertyTypePut
+      x-lv-module: vault
+      summary: Declare a property's type
+      description: |
+        Backlog E8.2. Changes the registry only; no file is rewritten. Values
+        that don't fit the new type stay as written and are left out of typed
+        filters. `options` (select and multiselect) replaces the list when
+        given and keeps it when absent. The reserved names `title`, `tags`,
+        `due` and `done` have fixed types (`due` may be date or datetime).
+      security: [{ bearerJWT: [] }]
+      parameters:
+        - { name: name, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VaultPropertyTypePutRequest' }
+      responses:
+        '200':
+          description: The stored type.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VaultPropertyType' }
+        '400':
+          description: Unknown type, an invalid name, or a reserved name's type.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /v1/vault/trash/{id}/restore:
     post:
       tags: [Vault]
@@ -16969,6 +17074,58 @@ components:
         createdByUserId: { type: string, format: uuid }
         updatedByUserId: { type: string, format: uuid }
         metadata: { $ref: '#/components/schemas/VaultNoteMetadataDTO' }
+        properties:
+          type: object
+          additionalProperties: true
+          description: |
+            Backlog E8.2. The note's frontmatter, normalized: text, numbers,
+            booleans, null, ISO 8601 dates (`2026-12-01`) or datetimes, lists.
+            Absent when the note has none or properties are off.
+        propertiesError:
+          type: string
+          description: Why the frontmatter couldn't be read. The file is never rewritten.
+
+    VaultPropertiesPatchRequest:
+      type: object
+      properties:
+        set:
+          type: object
+          additionalProperties: true
+          description: Names to values. A value is text, a number, a boolean, null or a list of those.
+        unset:
+          type: array
+          items: { type: string }
+
+    VaultPropertyType:
+      type: object
+      required: [name, type, options]
+      properties:
+        name: { type: string }
+        type:
+          type: string
+          enum: [text, number, select, multiselect, date, datetime, checkbox, url]
+        options:
+          type: array
+          items: { type: string }
+
+    VaultPropertyTypesResponse:
+      type: object
+      required: [types]
+      properties:
+        types:
+          type: array
+          items: { $ref: '#/components/schemas/VaultPropertyType' }
+
+    VaultPropertyTypePutRequest:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [text, number, select, multiselect, date, datetime, checkbox, url]
+        options:
+          type: array
+          items: { type: string }
 
     # The note sidecar. Any markdown file can carry it; `isTodo` is what makes
     # a note a todo, and `enrichmentStatus` is set only on captured links.

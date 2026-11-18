@@ -182,6 +182,11 @@ func (m *Module) Register(r httpserver.Router, _ echo.MiddlewareFunc) {
 	r.GET(historyPath, m.history, m.identify)
 	r.GET(versionsPath+"/:sha", m.version, m.identify)
 	r.POST(versionsPath+"/:sha/restore", m.restoreVersion, m.identify, idem)
+
+	// Backlog E8.2: note properties (404 unless VAULT_PROPERTIES_ENABLED).
+	r.PATCH(propertiesPath, m.patchProperties, m.identify, idem)
+	r.GET(propertyTypesPath, m.propertyTypes, m.identify)
+	r.PUT(propertyTypesPath+"/:name", m.putPropertyType, m.identify, idem)
 }
 
 func notFound(*echo.Context) error { return echo.ErrNotFound }

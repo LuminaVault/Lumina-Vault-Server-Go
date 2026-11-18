@@ -334,6 +334,9 @@ type Config struct {
 	// VaultGitEnabled turns on per-tenant vault history (backlog E4,
 	// internal/vaultgit): the committer, VaultGitSweep and VaultGitGC.
 	VaultGitEnabled string `env:"VAULT_GIT_ENABLED" envDefault:"false"`
+	// VaultPropertiesEnabled indexes Markdown frontmatter into
+	// vault_files.properties and turns on the properties API (backlog E8.2).
+	VaultPropertiesEnabled string `env:"VAULT_PROPERTIES_ENABLED" envDefault:"false"`
 
 	// Product analytics (posthog package). Off unless both are set, as in Swift.
 	PostHogProjectToken string `env:"POSTHOG_PROJECT_TOKEN"`

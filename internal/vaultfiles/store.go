@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"lumina/internal/vaultpaths"
+	"lumina/internal/vaultprops"
 	"lumina/internal/wire"
 	"net/http"
 	"time"
@@ -31,24 +32,40 @@ type VaultFile struct {
 	Metadata        *Metadata
 	CreatedAt       *time.Time
 	UpdatedAt       *time.Time
+	// Properties is the note's frontmatter (E8.2), empty unless indexed.
+	Properties vaultprops.Props
+	// PropertiesError is set when the frontmatter is invalid.
+	PropertiesError *string
 }
 
 // Columns lists vault_files in the order Scan reads them, for a module's own
-// list queries.
+// list queries. Select them FROM vault_files without an alias.
+//
+// properties and properties_error (go-only migration 00006) are read through
+// to_jsonb(vault_files), which yields NULL when a column is absent: the parity
+// databases are Swift-migrated and never get goose columns, and every read of
+// vault_files must keep working there.
 const Columns = `id, tenant_id, created_by_user_id, updated_by_user_id, space_id, path, content_type,
-	size_bytes, sha256, processed_at, metadata, created_at, updated_at`
+	size_bytes, sha256, processed_at, metadata, created_at, updated_at,
+	to_jsonb(vault_files) -> 'properties', to_jsonb(vault_files) ->> 'properties_error'`
 
 // Scan reads one row selected with Columns.
 func Scan(row pgx.Row) (*VaultFile, error) {
 	var f VaultFile
-	var metadata []byte
+	var metadata, properties []byte
 	if err := row.Scan(&f.ID, &f.TenantID, &f.CreatedByUserID, &f.UpdatedByUserID, &f.SpaceID, &f.Path,
-		&f.ContentType, &f.SizeBytes, &f.SHA256, &f.ProcessedAt, &metadata, &f.CreatedAt, &f.UpdatedAt); err != nil {
+		&f.ContentType, &f.SizeBytes, &f.SHA256, &f.ProcessedAt, &metadata, &f.CreatedAt, &f.UpdatedAt,
+		&properties, &f.PropertiesError); err != nil {
 		return nil, err
 	}
 	var err error
 	if f.Metadata, err = decodeColumn(metadata); err != nil {
 		return nil, err
+	}
+	if len(properties) > 0 && string(properties) != "null" {
+		if err := json.Unmarshal(properties, &f.Properties); err != nil {
+			return nil, fmt.Errorf("vault_files.properties: %w", err)
+		}
 	}
 	return &f, nil
 }
@@ -113,7 +130,11 @@ func (s *Store) Upsert(ctx context.Context, p UpsertParams) (uuid.UUID, error) {
 		return uuid.Nil, err
 	}
 	if existing == nil {
-		return s.insert(ctx, p, processedAt, now)
+		id, err := s.insert(ctx, p, processedAt, now)
+		if err == nil {
+			s.reindexAfterWrite(ctx, id, p.Path)
+		}
+		return id, err
 	}
 	var merged *Metadata
 	if p.Metadata != nil {
@@ -130,6 +151,9 @@ func (s *Store) Upsert(ctx context.Context, p UpsertParams) (uuid.UUID, error) {
 			space_id = COALESCE($6, space_id), metadata = COALESCE($7::jsonb, metadata), updated_at = $8
 		WHERE id = $1`,
 		existing.ID, p.ContentType, p.SizeBytes, p.SHA256, processedAt, p.SpaceID, metadata, now)
+	if err == nil {
+		s.reindexAfterWrite(ctx, existing.ID, p.Path)
+	}
 	return existing.ID, err
 }
 
@@ -141,7 +165,11 @@ func (s *Store) Insert(ctx context.Context, p UpsertParams) (uuid.UUID, error) {
 	if p.Processed {
 		processedAt = &now
 	}
-	return s.insert(ctx, p, processedAt, now)
+	id, err := s.insert(ctx, p, processedAt, now)
+	if err == nil {
+		s.reindexAfterWrite(ctx, id, p.Path)
+	}
+	return id, err
 }
 
 func (s *Store) insert(ctx context.Context, p UpsertParams, processedAt *time.Time, now time.Time) (uuid.UUID, error) {
@@ -191,6 +219,9 @@ func (s *Store) UpdateContent(ctx context.Context, id uuid.UUID, sizeBytes int64
 	}
 	_, err = s.pool.Exec(ctx, `UPDATE vault_files SET size_bytes = $2, sha256 = $3, metadata = $4::jsonb, updated_at = $5 WHERE id = $1`,
 		id, sizeBytes, sha256, metadata, time.Now())
+	if err == nil {
+		s.reindexAfterWrite(ctx, id, "")
+	}
 	return err
 }
 
@@ -328,6 +359,9 @@ func (s *Store) UpdateIngested(ctx context.Context, id, spaceID uuid.UUID, sizeB
 		UPDATE vault_files
 		SET space_id = $2, size_bytes = $3, sha256 = $4, processed_at = $5, metadata = $6::jsonb, updated_at = $5
 		WHERE id = $1`, id, spaceID, sizeBytes, sha256, now, metadata)
+	if err == nil {
+		s.reindexAfterWrite(ctx, id, "")
+	}
 	return err
 }
 

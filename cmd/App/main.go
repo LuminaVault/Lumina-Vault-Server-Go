@@ -330,6 +330,8 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		disk := diskguard.New(paths.Root, cfg.StorageMinFreeBytes, cfg.StorageMinFreeRatio, diskguard.Options{})
 		memories := memorystore.New(pool, nil)
 		registered = append(registered, j1Jobs(pool, cfg, disk)...)
+		// Backlog E8.2: note properties, indexed on every Markdown write.
+		vaultfiles.EnableProperties(swiftBoolDefaultFalse(cfg.VaultPropertiesEnabled))
 		// Backlog E4: vault history, off unless VAULT_GIT_ENABLED.
 		gitJobs, stopVaultGit := vaultGit(pool, cfg, paths, disk)
 		registered = append(registered, gitJobs...)
