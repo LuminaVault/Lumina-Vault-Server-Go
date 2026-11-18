@@ -213,7 +213,8 @@ func (c *Client) post(ctx context.Context, endpoint, bearer, session string, id 
 	if session != "" {
 		req.Header.Set("Mcp-Session-Id", session)
 	}
-	resp, err := c.HTTP.Do(req)
+	// Redirects are refused whatever client was injected (redirect.go).
+	resp, err := noRedirects(c.HTTP).Do(req)
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil, nil, false, ctx.Err()

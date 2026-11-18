@@ -21,6 +21,7 @@ type asMeta struct {
 	AuthorizationEndpoint string `json:"authorization_endpoint"`
 	TokenEndpoint         string `json:"token_endpoint"`
 	RegistrationEndpoint  string `json:"registration_endpoint"`
+	RevocationEndpoint    string `json:"revocation_endpoint"` // RFC 7009; optional
 }
 
 // send validates rawURL with the guard, performs the request and returns the

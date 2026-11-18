@@ -35,6 +35,12 @@ type asStub struct {
 	lastForm  url.Values
 	issuer    string // override; empty means srv.URL
 	refreshFn func(w http.ResponseWriter)
+
+	revokes atomic.Int32
+	// guarded by mu
+	revokeForm   url.Values
+	revokeStatus int  // 0 means 200
+	noRevocation bool // leave revocation_endpoint out of the metadata
 }
 
 func newAS(t *testing.T) *asStub {
@@ -48,10 +54,27 @@ func newAS(t *testing.T) *asStub {
 		if s.issuer != "" {
 			iss = s.issuer
 		}
-		json.NewEncoder(w).Encode(map[string]any{
+		meta := map[string]any{
 			"issuer": iss, "authorization_endpoint": s.srv.URL + "/authorize",
 			"token_endpoint": s.srv.URL + "/token", "registration_endpoint": s.srv.URL + "/register",
-		})
+		}
+		s.mu.Lock()
+		if !s.noRevocation {
+			meta["revocation_endpoint"] = s.srv.URL + "/revoke"
+		}
+		s.mu.Unlock()
+		json.NewEncoder(w).Encode(meta)
+	})
+	mux.HandleFunc("/revoke", func(w http.ResponseWriter, r *http.Request) {
+		require.NoError(t, r.ParseForm())
+		s.revokes.Add(1)
+		s.mu.Lock()
+		s.revokeForm = r.PostForm
+		status := s.revokeStatus
+		s.mu.Unlock()
+		if status != 0 {
+			w.WriteHeader(status)
+		}
 	})
 	mux.HandleFunc("/register", func(w http.ResponseWriter, r *http.Request) {
 		s.regs.Add(1)
@@ -299,4 +322,87 @@ func TestRefreshForcesOnceThenReusesRotatedToken(t *testing.T) {
 	require.ErrorIs(t, err, connectedapps.ErrNotOAuth)
 	_, err = o.Refresh(ctx, bob, "aaru", "x")
 	require.ErrorIs(t, err, connectedapps.ErrNotConnected)
+}
+
+func TestRevokePostsRefreshTokenToRevocationEndpoint(t *testing.T) {
+	s := newAS(t)
+	o, _ := newOAuth(t, s)
+	finish(t, o)
+	require.NoError(t, o.Revoke(context.Background(), alice, "aaru"))
+	require.EqualValues(t, 1, s.revokes.Load())
+	s.mu.Lock()
+	f := s.revokeForm
+	s.mu.Unlock()
+	require.Equal(t, "ref-1", f.Get("token"))
+	require.Equal(t, "refresh_token", f.Get("token_type_hint"))
+	require.Equal(t, "cid-1", f.Get("client_id"))
+
+	// A failing endpoint is an error that never carries the token.
+	s.mu.Lock()
+	s.revokeStatus = http.StatusInternalServerError
+	s.mu.Unlock()
+	err := o.Revoke(context.Background(), alice, "aaru")
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), "ref-1")
+}
+
+func TestRevokeSkipsWhenNothingToRevoke(t *testing.T) {
+	s := newAS(t)
+	o, store := newOAuth(t, s)
+	// Not connected: nothing to do.
+	require.NoError(t, o.Revoke(context.Background(), alice, "aaru"))
+	// Connected without a refresh token.
+	require.NoError(t, store.Save(context.Background(), bob, connectedapps.Account{AppID: "aaru", AccessToken: "acc"}))
+	require.NoError(t, o.Revoke(context.Background(), bob, "aaru"))
+	// The server advertises no revocation endpoint.
+	finish(t, o)
+	s.mu.Lock()
+	s.noRevocation = true
+	s.mu.Unlock()
+	require.NoError(t, o.Revoke(context.Background(), alice, "aaru"))
+	require.Zero(t, s.revokes.Load())
+
+	require.ErrorIs(t, o.Revoke(context.Background(), alice, "norviq"), connectedapps.ErrNotOAuth)
+	require.ErrorIs(t, o.Revoke(context.Background(), alice, "nope"), connectedapps.ErrUnknownApp)
+}
+
+func TestFinishFailureNamesTheApp(t *testing.T) {
+	s := newAS(t)
+	o, _ := newOAuth(t, s)
+	au, err := o.Start(context.Background(), alice, "aaru", nil)
+	require.NoError(t, err)
+	st, _ := stateOf(t, au)
+	s.srv.Close() // the exchange cannot reach the token endpoint
+	app, _, err := o.Finish(context.Background(), st, "c")
+	require.Error(t, err)
+	require.Equal(t, "aaru", app)
+}
+
+// R17: a 307 would make Go re-send the form (refresh token included) to the
+// redirect target, which the guard never saw.
+func TestTokenEndpointRedirectIsRefused(t *testing.T) {
+	var hits atomic.Int32
+	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		json.NewEncoder(w).Encode(map[string]any{"access_token": "stolen", "expires_in": 3600})
+	}))
+	defer other.Close()
+	s := newAS(t)
+	s.refreshFn = func(w http.ResponseWriter) {
+		w.Header().Set("Location", other.URL+"/token")
+		w.WriteHeader(http.StatusTemporaryRedirect)
+	}
+	o, store := newOAuth(t, s)
+	caller := s.srv.Client()
+	require.Nil(t, caller.CheckRedirect, "the caller's client is left alone")
+	finish(t, o)
+	_, err := o.Fresh(context.Background(), alice, "aaru")
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), other.URL)
+	require.NotContains(t, err.Error(), "ref-1")
+	require.Zero(t, hits.Load(), "the redirect target must never be contacted")
+	require.Nil(t, s.srv.Client().CheckRedirect)
+	a, err := store.Get(context.Background(), alice, "aaru")
+	require.NoError(t, err)
+	require.Equal(t, "acc-1", a.AccessToken)
 }

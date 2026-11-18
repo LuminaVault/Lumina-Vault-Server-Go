@@ -553,6 +553,12 @@ func validatedReturn(raw string, allowedOrigins []string) (string, bool) {
 	return "", false
 }
 
+// ValidReturn is the returnTo allowlist rule for other OAuth callbacks in this
+// server (connected apps), so they share one rule with calendar.
+func ValidReturn(raw string, allowedOrigins []string) (string, bool) {
+	return validatedReturn(raw, allowedOrigins)
+}
+
 // redirectTo is GoogleCalendarOAuthService.redirect: base plus status and
 // reason, keeping any query base already has.
 func redirectTo(base, status string, reason *string) string {

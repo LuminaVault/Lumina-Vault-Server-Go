@@ -392,6 +392,14 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		// /v1/ws (5J) flips with kb-compile, the device result route, mcp and skills.
 		deps.Modules = append(deps.Modules, wsroute.New(pool, sockets, identify))
 		deps.Modules = append(deps.Modules, agent.agentsModule())
+		// Connected apps: the settings API, when CONNECTED_APPS_ENABLED. The
+		// Service stays nil with the flag off. It is set before the mcp and chat
+		// modules are built, which will read it.
+		var connectedAppsMod httpserver.Module
+		connectedAppsMod, agent.connectedApps = connectedAppsModule(pool, cfg)
+		if connectedAppsMod != nil {
+			deps.Modules = append(deps.Modules, connectedAppsMod)
+		}
 		deps.Modules = append(deps.Modules, agent.mcpModule(deviceRPC))
 		deps.Modules = append(deps.Modules, agent.routerModules()...)
 		deps.Modules = append(deps.Modules, agent.chatModules(links, enrichment, analytics)...)

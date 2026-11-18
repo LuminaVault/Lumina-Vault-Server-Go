@@ -259,3 +259,50 @@ func TestClientCapTextInvalidUTF8(t *testing.T) {
 		t.Fatalf("content after bad byte lost: %q", got[:12])
 	}
 }
+
+// R17: a redirected tools/call would carry the bearer and arguments to a host
+// the guard never saw.
+func TestClientRefusesRedirects(t *testing.T) {
+	var mu sync.Mutex
+	hits := 0
+	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		hits++
+		mu.Unlock()
+		jsonReply(w, `{"jsonrpc":"2.0","id":1,"result":{}}`)
+	}))
+	defer other.Close()
+	// initialize succeeds; only the tools/call POST is redirected.
+	s := newStub(t, func(w http.ResponseWriter, _ int, r rpcReq) {
+		if r.Method != "tools/call" {
+			t.Errorf("unexpected method %s", r.Method)
+		}
+		w.Header().Set("Location", other.URL+"/mcp")
+		w.WriteHeader(http.StatusTemporaryRedirect)
+	})
+	caller := s.srv.Client()
+	c := &Client{HTTP: caller, Guard: allowAll{}}
+	_, err := c.CallTool(context.Background(), s.srv.URL, "secret-bearer", "read_library", map[string]any{"q": "x"})
+	if err == nil {
+		t.Fatal("want an error for a redirected call")
+	}
+	s.mu.Lock()
+	last := s.seen[len(s.seen)-1].method
+	s.mu.Unlock()
+	if last != "tools/call" {
+		t.Fatalf("the redirected request was %s, want tools/call", last)
+	}
+	for _, leak := range []string{other.URL, s.srv.URL, "secret-bearer"} {
+		if strings.Contains(err.Error(), leak) {
+			t.Fatalf("error leaks %q: %v", leak, err)
+		}
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if hits != 0 {
+		t.Fatalf("redirect target got %d requests", hits)
+	}
+	if caller.CheckRedirect != nil {
+		t.Fatal("the caller's client was mutated")
+	}
+}

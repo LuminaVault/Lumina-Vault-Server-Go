@@ -6,6 +6,7 @@ import (
 	"lumina/internal/capture"
 	"lumina/internal/chunkindex"
 	"lumina/internal/config"
+	"lumina/internal/connectedapps"
 	"lumina/internal/diskguard"
 	"lumina/internal/embedding"
 	"lumina/internal/entitlement"
@@ -86,6 +87,9 @@ type agent struct {
 	// mcp is /v1/mcp's tool service, set by mcpModule(); Quick Assistant's vault
 	// tools run through the same instance (Decision 1).
 	mcp *mcp.Service
+	// connectedApps is the user's other first-party apps as tool sources, set
+	// by main; nil unless CONNECTED_APPS_ENABLED.
+	connectedApps *connectedapps.Service
 	// gatewayProbe is shared with /health/deep (set by main).
 	gatewayProbe *hermesprofile.GatewayProbe
 	// containers is the HermesContainerManager the container modules share,

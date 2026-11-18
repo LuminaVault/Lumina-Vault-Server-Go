@@ -33,8 +33,9 @@ var (
 )
 
 const (
-	sessionTTL   = 600 * time.Second
-	refreshAhead = 120 * time.Second
+	sessionTTL    = 600 * time.Second
+	refreshAhead  = 120 * time.Second
+	revokeTimeout = 5 * time.Second
 )
 
 func isNoRows(err error) bool { return errors.Is(err, pgx.ErrNoRows) }
@@ -99,9 +100,11 @@ type OAuth struct {
 	locks  map[string]*sync.Mutex
 }
 
+// NewOAuth builds the flow. Whatever httpc does with redirects, the copy kept
+// here refuses them.
 func NewOAuth(pool *pgxpool.Pool, reg Registry, store *Store, httpc *http.Client, guard Validator, callbackURL string) *OAuth {
 	o := &OAuth{
-		registry: reg, store: store, pool: pool, http: httpc, guard: guard,
+		registry: reg, store: store, pool: pool, http: noRedirects(httpc), guard: guard,
 		callbackURL: callbackURL, now: time.Now, locks: map[string]*sync.Mutex{},
 	}
 	o.sessions = &sessionStore{sessions: map[string]oauthSession{}, now: func() time.Time { return o.now() }}
@@ -198,7 +201,9 @@ func (o *OAuth) tokenRequest(ctx context.Context, tokenURL string, form url.Valu
 	return status, tr, nil
 }
 
-// Finish completes the flow: it exchanges the code and stores the tokens.
+// Finish completes the flow: it exchanges the code and stores the tokens. Once
+// the state is known the app id comes back even with an error, so the caller
+// can say which app failed; returnTo comes back only on success.
 func (o *OAuth) Finish(ctx context.Context, state, code string) (string, *string, error) {
 	sess, ok := o.sessions.take(state)
 	if !ok {
@@ -208,6 +213,11 @@ func (o *OAuth) Finish(ctx context.Context, state, code string) (string, *string
 	if err != nil {
 		return "", nil, err
 	}
+	returnTo, err := o.exchange(ctx, sess, app, code)
+	return app.ID, returnTo, err
+}
+
+func (o *OAuth) exchange(ctx context.Context, sess oauthSession, app App, code string) (*string, error) {
 	status, tr, err := o.tokenRequest(ctx, sess.tokenURL, url.Values{
 		"grant_type":    {"authorization_code"},
 		"code":          {code},
@@ -217,10 +227,10 @@ func (o *OAuth) Finish(ctx context.Context, state, code string) (string, *string
 		"resource":      {app.MCPURL},
 	})
 	if err != nil {
-		return "", nil, err
+		return nil, err
 	}
 	if status != http.StatusOK || tr.AccessToken == "" {
-		return "", nil, fmt.Errorf("connectedapps: token exchange failed (%d)", status)
+		return nil, fmt.Errorf("connectedapps: token exchange failed (%d)", status)
 	}
 	acct := Account{AppID: app.ID, AccessToken: tr.AccessToken, RefreshToken: tr.RefreshToken}
 	if tr.ExpiresIn > 0 {
@@ -231,9 +241,9 @@ func (o *OAuth) Finish(ctx context.Context, state, code string) (string, *string
 		acct.Scope = &tr.Scope
 	}
 	if err := o.store.Save(ctx, sess.user, acct); err != nil {
-		return "", nil, err
+		return nil, err
 	}
-	return app.ID, sess.returnTo, nil
+	return sess.returnTo, nil
 }
 
 // Fresh returns a usable access token, refreshing when under 120s remain.
@@ -378,4 +388,62 @@ func (o *OAuth) SavePAT(ctx context.Context, user uuid.UUID, appID, token string
 		return ErrBadPAT
 	}
 	return o.store.Save(ctx, user, Account{AppID: appID, AccessToken: token})
+}
+
+// Revoke tells the app's authorization server to drop the user's refresh
+// token (RFC 7009) before a disconnect. It is a no-op without an account, a
+// refresh token, a registered client or an advertised revocation endpoint,
+// and it gives up after revokeTimeout. It shares the refresh lock, so it
+// revokes the token a concurrent refresh left behind, not the one it replaced.
+func (o *OAuth) Revoke(ctx context.Context, user uuid.UUID, appID string) error {
+	app, err := o.app(appID)
+	if err != nil {
+		return err
+	}
+	if app.Auth != AuthOAuth {
+		return ErrNotOAuth
+	}
+	ctx, cancel := context.WithTimeout(ctx, revokeTimeout)
+	defer cancel()
+	mu := o.lockFor(user, appID)
+	mu.Lock()
+	defer mu.Unlock()
+	acct, err := o.store.Get(ctx, user, appID)
+	if errors.Is(err, ErrNotConnected) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if acct.RefreshToken == "" {
+		return nil
+	}
+	// The cached client only: a disconnect never registers a new one.
+	var clientID string
+	if err := o.pool.QueryRow(ctx, `SELECT client_id FROM connected_app_clients WHERE app_id = $1`, app.ID).Scan(&clientID); err != nil {
+		if isNoRows(err) {
+			return nil
+		}
+		return err
+	}
+	meta, err := o.discover(ctx, app)
+	if err != nil {
+		return err
+	}
+	if meta.RevocationEndpoint == "" {
+		return nil
+	}
+	form := url.Values{
+		"token":           {acct.RefreshToken},
+		"token_type_hint": {"refresh_token"},
+		"client_id":       {clientID},
+	}
+	status, _, err := o.send(ctx, http.MethodPost, meta.RevocationEndpoint, "application/x-www-form-urlencoded", []byte(form.Encode()))
+	if err != nil {
+		return err
+	}
+	if status != http.StatusOK {
+		return fmt.Errorf("connectedapps: revocation returned %d", status)
+	}
+	return nil
 }
