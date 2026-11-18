@@ -39,9 +39,15 @@ type VaultFile struct {
 }
 
 // Columns lists vault_files in the order Scan reads them, for a module's own
-// list queries.
+// list queries. Select them FROM vault_files without an alias.
+//
+// properties and properties_error (go-only migration 00006) are read through
+// to_jsonb(vault_files), which yields NULL when a column is absent: the parity
+// databases are Swift-migrated and never get goose columns, and every read of
+// vault_files must keep working there.
 const Columns = `id, tenant_id, created_by_user_id, updated_by_user_id, space_id, path, content_type,
-	size_bytes, sha256, processed_at, metadata, created_at, updated_at, properties, properties_error`
+	size_bytes, sha256, processed_at, metadata, created_at, updated_at,
+	to_jsonb(vault_files) -> 'properties', to_jsonb(vault_files) ->> 'properties_error'`
 
 // Scan reads one row selected with Columns.
 func Scan(row pgx.Row) (*VaultFile, error) {
@@ -56,7 +62,7 @@ func Scan(row pgx.Row) (*VaultFile, error) {
 	if f.Metadata, err = decodeColumn(metadata); err != nil {
 		return nil, err
 	}
-	if len(properties) > 0 {
+	if len(properties) > 0 && string(properties) != "null" {
 		if err := json.Unmarshal(properties, &f.Properties); err != nil {
 			return nil, fmt.Errorf("vault_files.properties: %w", err)
 		}

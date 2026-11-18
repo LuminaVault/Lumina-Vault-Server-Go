@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 )
@@ -408,4 +409,41 @@ func TestMoveFileDatabaseFailureLeavesFileMoved(t *testing.T) {
 	require.NoFileExists(t, filepath.Join(raw, "a.md"))
 	require.FileExists(t, filepath.Join(raw, "b.md"))
 	require.Equal(t, "a.md", f.row(t, alice, row.ID).Path, "the transaction rolled back")
+}
+
+// Parity databases are Swift-migrated and lack go-only columns: reads and
+// writes must work without properties and properties_error while the flag is
+// off.
+func TestReadsWorkWithoutThePropertiesColumns(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	_, err := f.pool.Exec(ctx, `ALTER TABLE vault_files DROP COLUMN properties, DROP COLUMN properties_error`)
+	require.NoError(t, err)
+
+	id := f.upsert(t, vaultfiles.UpsertParams{Path: "a.md", Metadata: &vaultfiles.Metadata{Title: ptr("t")}})
+	row := f.row(t, alice, id)
+	require.Equal(t, "a.md", row.Path)
+	require.Nil(t, row.Properties)
+	require.Nil(t, row.PropertiesError)
+
+	rows, err := f.pool.Query(ctx, `SELECT `+vaultfiles.Columns+` FROM vault_files WHERE tenant_id = $1`, alice)
+	require.NoError(t, err)
+	list, err := pgx.CollectRows(rows, func(r pgx.CollectableRow) (*vaultfiles.VaultFile, error) { return vaultfiles.Scan(r) })
+	require.NoError(t, err)
+	var paths []string
+	for _, r := range list {
+		paths = append(paths, r.Path)
+	}
+	require.Contains(t, paths, "a.md")
+}
+
+func TestColumnsReadThePropertiesWhenPresent(t *testing.T) {
+	f := setup(t)
+	ctx := context.Background()
+	id := f.upsert(t, vaultfiles.UpsertParams{Path: "a.md"})
+	_, err := f.pool.Exec(ctx, `UPDATE vault_files SET properties = '{"status":"Done","n":2}', properties_error = 'bad' WHERE id = $1`, id)
+	require.NoError(t, err)
+	row := f.row(t, alice, id)
+	require.Equal(t, map[string]any{"status": "Done", "n": 2.0}, map[string]any(row.Properties))
+	require.Equal(t, "bad", *row.PropertiesError)
 }
