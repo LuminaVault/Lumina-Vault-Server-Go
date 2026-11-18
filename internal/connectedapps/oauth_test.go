@@ -274,3 +274,29 @@ func TestSavePATValidatesPrefix(t *testing.T) {
 	_, err = store.Get(ctx, alice, "norviq")
 	require.NoError(t, err)
 }
+
+func TestRefreshForcesOnceThenReusesRotatedToken(t *testing.T) {
+	s := newAS(t)
+	o, store := newOAuth(t, s)
+	finish(t, o) // registers the client and stores acc-1
+	ctx := context.Background()
+	exp := time.Now().Add(time.Hour)
+	require.NoError(t, store.Save(ctx, alice, connectedapps.Account{
+		AppID: "aaru", AccessToken: "live", RefreshToken: "r", ExpiresAt: &exp}))
+
+	tok, err := o.Refresh(ctx, alice, "aaru", "live")
+	require.NoError(t, err)
+	require.Equal(t, "acc-2", tok)
+	require.EqualValues(t, 1, s.refreshes.Load())
+
+	// A second caller that got a 401 on the same stale token reuses the new one.
+	tok, err = o.Refresh(ctx, alice, "aaru", "live")
+	require.NoError(t, err)
+	require.Equal(t, "acc-2", tok)
+	require.EqualValues(t, 1, s.refreshes.Load())
+
+	_, err = o.Refresh(ctx, alice, "norviq", "x")
+	require.ErrorIs(t, err, connectedapps.ErrNotOAuth)
+	_, err = o.Refresh(ctx, bob, "aaru", "x")
+	require.ErrorIs(t, err, connectedapps.ErrNotConnected)
+}

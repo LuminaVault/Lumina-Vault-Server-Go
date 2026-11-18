@@ -272,6 +272,34 @@ func (o *OAuth) Fresh(ctx context.Context, user uuid.UUID, appID string) (string
 	return o.refresh(ctx, user, app, acct)
 }
 
+// Refresh forces a token refresh after the remote app rejected staleToken
+// with a 401. It shares Fresh's per-(user, app) lock and failure semantics. If
+// another caller already replaced the token (the stored one differs from
+// staleToken), it returns that one without a second POST.
+func (o *OAuth) Refresh(ctx context.Context, user uuid.UUID, appID, staleToken string) (string, error) {
+	app, err := o.app(appID)
+	if err != nil {
+		return "", err
+	}
+	if app.Auth != AuthOAuth {
+		return "", ErrNotOAuth
+	}
+	mu := o.lockFor(user, appID)
+	mu.Lock()
+	defer mu.Unlock()
+	acct, err := o.store.Get(ctx, user, appID)
+	if err != nil {
+		return "", err
+	}
+	if acct.Status != "connected" {
+		return "", ErrNotConnected
+	}
+	if acct.AccessToken != staleToken {
+		return acct.AccessToken, nil
+	}
+	return o.refresh(ctx, user, app, acct)
+}
+
 func (o *OAuth) needsRefresh(a Account) bool {
 	return a.ExpiresAt != nil && a.ExpiresAt.Sub(o.now()) < refreshAhead
 }
