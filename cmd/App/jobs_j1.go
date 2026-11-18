@@ -12,6 +12,7 @@ import (
 	"lumina/internal/vaultpaths"
 	"lumina/internal/workers"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -30,6 +31,12 @@ func j1Jobs(pool *pgxpool.Pool, cfg config.Config, disk *diskguard.Guard) []jobs
 		workers.NewVaultTrashPurge(vaultfiles.NewStore(pool, vaultpaths.Paths{Root: cfg.VaultRootPath}),
 			vaultpaths.Paths{Root: cfg.VaultRootPath}, cfg.AccountDeletionPurgeAfterDays,
 			slog.Default().With("label", "lv.vault.trashpurge")).Job(),
+		// Go-only (backlog E8.2): indexes notes written before VAULT_PROPERTIES_ENABLED;
+		// a no-op while the flag is off.
+		(&workers.VaultPropertiesBackfill{
+			Store:  vaultfiles.NewStore(pool, vaultpaths.Paths{Root: cfg.VaultRootPath}),
+			Logger: slog.Default().With("label", "lv.vault.propertiesbackfill"), Pause: time.Second,
+		}).Job(),
 	}
 	if cfg.LVEnvironment != "test" {
 		out = append(out,

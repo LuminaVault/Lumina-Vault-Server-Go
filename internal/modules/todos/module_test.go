@@ -2,6 +2,8 @@ package todos_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"io/fs"
 	"lumina/internal/auth"
@@ -13,6 +15,7 @@ import (
 	"lumina/internal/memorystore"
 	"lumina/internal/migrations"
 	"lumina/internal/modules/todos"
+	"lumina/internal/vaultfiles"
 	"lumina/internal/vaultpaths"
 	"lumina/parity/scenario"
 	"net/http"
@@ -428,4 +431,73 @@ func TestResponsesConformToSpec(t *testing.T) {
 		out.SetBodyBytes(r.body)
 		require.NoError(t, openapi3filter.ValidateResponse(ctx, out), "%s %s: %s", c.method, c.path, r.body)
 	}
+}
+
+// Backlog E8.2 (spec D1): with properties on, a todo's title, done and due go
+// into the note's frontmatter, and the sidecar follows it.
+func TestPatchWritesTheNoteFrontmatter(t *testing.T) {
+	vaultfiles.EnableProperties(true)
+	t.Cleanup(func() { vaultfiles.EnableProperties(false) })
+	v := setup(t, nil)
+	ctx := context.Background()
+
+	var id, path string
+	require.NoError(t, v.pool.QueryRow(ctx, `SELECT id::text, path FROM vault_files
+		WHERE tenant_id = $1 AND path LIKE '%.md' ORDER BY path LIMIT 1`, tia).Scan(&id, &path))
+	file := filepath.Join(v.paths.Raw(tia), path)
+	require.NoError(t, os.MkdirAll(filepath.Dir(file), 0o755))
+	require.NoError(t, os.WriteFile(file, []byte("---\nstatus: open # mine\n---\nBuy milk\n"), 0o600))
+
+	r := v.do(tia, http.MethodPatch, "/v1/todos/"+id, `{"done":true,"title":"Milk","dueAt":"2027-01-02T00:00:00Z"}`)
+	require.Equal(t, http.StatusOK, r.code, string(r.body))
+	got := decode[dto](t, r)
+	require.True(t, got.Done)
+	require.Equal(t, "Milk", got.Title)
+
+	b, err := os.ReadFile(file)
+	require.NoError(t, err)
+	text := string(b)
+	require.True(t, strings.HasPrefix(text, "---\nstatus: open # mine\n"), text)
+	require.Contains(t, text, "\ndone: true\n")
+	require.Contains(t, text, "\ntitle: Milk\n")
+	require.Contains(t, text, "\ndue: 2027-01-02\n")
+	require.True(t, strings.HasSuffix(text, "---\nBuy milk\n"), text)
+
+	md := v.metadata(id)
+	require.Equal(t, true, md["done"])
+	require.Equal(t, true, md["isTodo"])
+	require.Equal(t, "Milk", md["title"])
+	sum := sha256.Sum256(b)
+	require.Equal(t, 1, v.count(`SELECT count(*) FROM vault_files WHERE id = $1 AND sha256 = $2 AND size_bytes = $3
+		AND properties->>'done' = 'true' AND properties_indexed_at IS NOT NULL`, id, hex.EncodeToString(sum[:]), len(b)))
+
+	// Un-done reads back from the file, not a stale sidecar.
+	r = v.do(tia, http.MethodPatch, "/v1/todos/"+id, `{"done":false}`)
+	require.Equal(t, http.StatusOK, r.code, string(r.body))
+	require.Equal(t, false, v.metadata(id)["done"])
+	b, err = os.ReadFile(file)
+	require.NoError(t, err)
+	require.Contains(t, string(b), "\ndone: false\n")
+}
+
+func TestPatchKeepsTheSidecarWhenFrontmatterIsInvalid(t *testing.T) {
+	vaultfiles.EnableProperties(true)
+	t.Cleanup(func() { vaultfiles.EnableProperties(false) })
+	v := setup(t, nil)
+	ctx := context.Background()
+
+	var id, path string
+	require.NoError(t, v.pool.QueryRow(ctx, `SELECT id::text, path FROM vault_files
+		WHERE tenant_id = $1 AND path LIKE '%.md' ORDER BY path LIMIT 1`, tia).Scan(&id, &path))
+	file := filepath.Join(v.paths.Raw(tia), path)
+	require.NoError(t, os.MkdirAll(filepath.Dir(file), 0o755))
+	bad := "---\ntitle: [unclosed\n---\nx\n"
+	require.NoError(t, os.WriteFile(file, []byte(bad), 0o600))
+
+	r := v.do(tia, http.MethodPatch, "/v1/todos/"+id, `{"done":true}`)
+	require.Equal(t, http.StatusOK, r.code, string(r.body))
+	require.Equal(t, true, v.metadata(id)["done"])
+	b, err := os.ReadFile(file)
+	require.NoError(t, err)
+	require.Equal(t, bad, string(b), "an invalid file is never rewritten")
 }
