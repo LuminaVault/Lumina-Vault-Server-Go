@@ -47,6 +47,16 @@ var allowedExtensions = map[string][]string{
 	"webm":     {"video/webm"},
 }
 
+// ContentTypeForExtension is the content type upload stores for a file
+// extension (no dot, any case), and false for one upload refuses.
+func ContentTypeForExtension(ext string) (string, bool) {
+	types, ok := allowedExtensions[Lowercased(ext)]
+	if !ok {
+		return "", false
+	}
+	return types[0], true
+}
+
 // SanitizePath is VaultController.sanitizePath, the first half of the path
 // traversal boundary: a client path becomes a relative path whose segments are
 // all letters, marks, numbers, ".", "_" or "-", with an allowed extension. The
