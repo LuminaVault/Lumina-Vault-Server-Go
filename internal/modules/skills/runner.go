@@ -428,9 +428,9 @@ func (r *Runner) dispatchOutputs(ctx context.Context, mf skills.Manifest, tenant
 	for _, out := range mf.Outputs {
 		switch out.Kind {
 		case skills.OutputMemo:
-			path := "memos/" + dateStamp(r.now()) + "/" + skillSlug(mf.Name) + ".md"
-			if out.Path != nil {
-				path = *out.Path
+			path, used := memoOutputPath(mf.Name, out.Path, r.now())
+			if out.Path != nil && !used {
+				r.log.WarnContext(ctx, fmt.Sprintf("skills.runner memo path %q unusable for skill %s; wrote %s", *out.Path, mf.Name, path))
 			}
 			if err := r.persistVaultFile(ctx, tenant, path, content, "text/markdown", nil); err != nil {
 				return err
@@ -575,6 +575,32 @@ func (r *Runner) fileJobResult(ctx context.Context, res runResult, mf skills.Man
 	}
 	path := *slug + "/jobs/" + mf.Name + "-" + dateStamp(res.endedAt) + ".md"
 	_ = r.persistVaultFile(ctx, tenant, path, res.markdown, "text/markdown", space)
+}
+
+// memoPlaceholders are the tokens a memo output's manifest path may carry.
+// Swift documented `memos/{date}/daily-brief.md` (SkillManifest.swift) but
+// never expanded it, and neither did the first Go port, so daily-brief wrote
+// one file literally named {date} that every vault reader rejects.
+func memoPlaceholders(skill string, now time.Time) *strings.Replacer {
+	return strings.NewReplacer("{date}", dateStamp(now), "{slug}", skillSlug(skill))
+}
+
+// memoOutputPath is where a memo output is written. A manifest path has its
+// placeholders expanded and must then pass vaultfiles.SanitizePath, the check
+// every reader applies; otherwise the default memos/<date>/<slug>.md is used,
+// so a run never writes a note the vault cannot open. used reports whether the
+// manifest's path was taken.
+func memoOutputPath(skill string, manifestPath *string, now time.Time) (path string, used bool) {
+	fallback := "memos/" + dateStamp(now) + "/" + skillSlug(skill) + ".md"
+	if manifestPath == nil {
+		return fallback, false
+	}
+	expanded := memoPlaceholders(skill, now).Replace(*manifestPath)
+	safe, err := vaultfiles.SanitizePath(expanded)
+	if err != nil {
+		return fallback, false
+	}
+	return safe, true
 }
 
 // dateStamp is yyyy-MM-dd in UTC.
