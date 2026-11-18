@@ -188,6 +188,13 @@ func (m *Module) Register(r httpserver.Router, _ echo.MiddlewareFunc) {
 	r.GET(propertyTypesPath, m.propertyTypes, m.identify)
 	r.PUT(propertyTypesPath+"/:name", m.putPropertyType, m.identify, idem)
 	r.POST(queryPath, m.query, m.identify)
+
+	// Backlog E8.3: saved views (404 unless VAULT_PROPERTIES_ENABLED).
+	r.GET(viewsPath, m.listViews, m.identify)
+	r.POST(viewsPath, m.createView, m.identify, idem)
+	r.GET(viewsPath+"/:id", m.getView, m.identify)
+	r.PUT(viewsPath+"/:id", m.putView, m.identify, idem)
+	r.DELETE(viewsPath+"/:id", m.deleteView, m.identify, idem)
 }
 
 func notFound(*echo.Context) error { return echo.ErrNotFound }

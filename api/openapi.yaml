@@ -7170,6 +7170,108 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /v1/vault/views:
+    get:
+      tags: [Vault]
+      operationId: vaultViewsList
+      x-lv-module: vault
+      summary: List saved views
+      description: Backlog E8.3. Behind VAULT_PROPERTIES_ENABLED; 404 while off. Sorted by name.
+      security: [{ bearerJWT: [] }]
+      responses:
+        '200':
+          description: The vault's saved views.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VaultViewsResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Vault]
+      operationId: vaultViewCreate
+      x-lv-module: vault
+      summary: Save a view
+      description: |
+        Backlog E8.3. A view is a stored `POST /v1/vault/query` (scope,
+        filter, sort, group) with its columns. It is validated as a query
+        would be, so a saved view always runs. At most 200 per vault.
+      security: [{ bearerJWT: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VaultViewInput' }
+      responses:
+        '201':
+          description: The saved view.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VaultView' }
+        '400':
+          description: An invalid name, scope, filter, sort or column.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: The vault already has 200 views.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+
+  /v1/vault/views/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [Vault]
+      operationId: vaultViewGet
+      x-lv-module: vault
+      summary: Read a saved view
+      security: [{ bearerJWT: [] }]
+      responses:
+        '200':
+          description: The view.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VaultView' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Vault]
+      operationId: vaultViewPut
+      x-lv-module: vault
+      summary: Replace a saved view
+      security: [{ bearerJWT: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VaultViewInput' }
+      responses:
+        '200':
+          description: The updated view.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VaultView' }
+        '400':
+          description: An invalid name, scope, filter, sort or column.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Vault]
+      operationId: vaultViewDelete
+      x-lv-module: vault
+      summary: Delete a saved view
+      security: [{ bearerJWT: [] }]
+      responses:
+        '204': { description: Deleted. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /v1/vault/property-types:
     get:
       tags: [Vault]
@@ -17178,6 +17280,61 @@ components:
           type: string
           enum: [asc, desc]
           default: asc
+
+    VaultViewColumn:
+      type: object
+      required: [property]
+      properties:
+        property: { type: string }
+        width: { type: integer, minimum: 40, maximum: 2000 }
+
+    VaultViewInput:
+      type: object
+      required: [name, scope]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        scope: { $ref: '#/components/schemas/VaultQueryScope' }
+        columns:
+          type: array
+          maxItems: 100
+          items: { $ref: '#/components/schemas/VaultViewColumn' }
+        filter:
+          type: array
+          maxItems: 20
+          items: { $ref: '#/components/schemas/VaultQueryFilter' }
+        sort:
+          type: array
+          maxItems: 3
+          items: { $ref: '#/components/schemas/VaultQuerySort' }
+        group: { type: string }
+
+    VaultView:
+      type: object
+      required: [id, name, scope, columns, filter, sort, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        scope: { $ref: '#/components/schemas/VaultQueryScope' }
+        columns:
+          type: array
+          items: { $ref: '#/components/schemas/VaultViewColumn' }
+        filter:
+          type: array
+          items: { $ref: '#/components/schemas/VaultQueryFilter' }
+        sort:
+          type: array
+          items: { $ref: '#/components/schemas/VaultQuerySort' }
+        group: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    VaultViewsResponse:
+      type: object
+      required: [views]
+      properties:
+        views:
+          type: array
+          items: { $ref: '#/components/schemas/VaultView' }
 
     VaultQueryResponse:
       type: object
