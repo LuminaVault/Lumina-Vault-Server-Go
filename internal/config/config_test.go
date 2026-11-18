@@ -51,6 +51,13 @@ func TestConfigEnvNamesComeFromSwiftKeys(t *testing.T) {
 		"CHAT_HERMES_RUNS_BRIDGE_URL": true,
 		// Go-only: ships Quick Assistant dark; Swift has no switch (internal/modules/quickassistant).
 		"QUICK_ASSISTANT_ENABLED": true,
+		// Go-only: connected apps ship dark, and each app's public MCP endpoint is
+		// first-party config (internal/connectedapps/registry.go).
+		"CONNECTED_APPS_ENABLED":        true,
+		"CONNECTED_APPS_NORVIQ_MCP_URL": true,
+		"CONNECTED_APPS_AARU_MCP_URL":   true,
+		"CONNECTED_APPS_KHEPRI_MCP_URL": true,
+		"CONNECTED_APPS_LOCI_MCP_URL":   true,
 		// Go-only: lets a chat turn run the app tools (internal/modules/chat/stream.go).
 		"CHAT_APP_ACTIONS_ENABLED": true,
 		// Go-only: opens private ranges to the user-fetch SSRF guard for local stacks
