@@ -53,14 +53,16 @@ Found during the port, same batch:
   - ~~The lockout counter is not reset after expiry, and failure counters are racy.~~ Done (login; see
     "Login: timing, lock answer and failure count" in `docs/migration/cutover-log.md`).
   - ~~`mfa/resend` enumerates accounts.~~ Done (see "`mfa/resend` answers an unknown email like a known one" in
-    `docs/migration/cutover-log.md`). Register 409s enumerate emails and usernames: open, needs an owner decision.
+    `docs/migration/cutover-log.md`). Register 409s enumerate emails and usernames:
+    kept on purpose (owner decision 2026-11-18).
   - ~~Requesting a new code bypasses the per-row reset and verify locks.~~ Done.
   - ~~Codes are compared in non-constant time, and the logging sender writes OTP codes to logs.~~ Done (see
     "OTP codes: locks, comparison and logs" in `docs/migration/cutover-log.md`).
   - ~~A password reset does not invalidate access tokens.~~ Done (see "Password reset invalidates access tokens"
     in `docs/migration/cutover-log.md`).
   - ~~Refresh has no reuse detection and is not transactional.~~ Done (see "Refresh: atomic rotation, reuse
-    detection, one transaction" in `docs/migration/cutover-log.md`).
+    detection, one transaction" in `docs/migration/cutover-log.md`). Reuse revokes the login chain, not the tenant
+    (owner decision 2026-11-18; see "Refresh reuse revokes the login chain, not the tenant").
 - ~~**MCP `browse` `pathPrefix`.** The `path >= p AND path < p || U+FFFF` range matches nothing under en_US.utf8
   collation. Use `starts_with` or `COLLATE "C"`.~~ Done: see "MCP `browse` `pathPrefix`" in
   `docs/migration/cutover-log.md`.

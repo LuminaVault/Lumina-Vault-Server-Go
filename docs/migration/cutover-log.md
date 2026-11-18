@@ -2544,3 +2544,20 @@ Deliberate changes from Swift, made after the archive (`docs/post-archive-backlo
   change: pinning one skill pinned all of them. The skills PATCH, the plugins enable flip, self-improvement
   pin/unpin, rollback state and the curator worker now name `(tenant_id, source, name)` (#152).
 - Parity: `skills_state` snapshots are scoped per tenant, because Swift's tenant-wide update diverges from Go's.
+
+### Refresh reuse revokes the login chain, not the tenant
+
+- Owner decision 2026-11-18, the scope "Refresh: atomic rotation, reuse detection, one transaction" left open. goose
+  `00009` adds a nullable `refresh_tokens.family_id`. A sign-in (`issueTokens`) starts a family; `Service.Refresh`
+  issues the rotated token in the family of the one it consumed.
+- Reuse after `auth.RefreshReuseGrace` revokes the reused token's family only, so the tenant's other devices stay
+  signed in; the chain's newest token dies with it. A row with no family (issued before `00009`, or by the Swift
+  rollback image, which never writes the column) keeps the tenant-wide revocation.
+- The column is probed once (`auth.RefreshFamilyColumn`, `Service.families`), before any transaction opens, as
+  `users.sessions_valid_after` is: a database Swift migrated (parity) has none, and there refresh behaves exactly as
+  before. Parity `auth/04-refresh` is unchanged.
+- Tests: `TestRefreshRotationIsAtomicAndDetectsReuse` (`internal/authservice`): "reuse after the grace revokes only
+  that login chain" (was: revokes every token of the tenant), "a token without a family revokes every refresh token
+  of the tenant", "sign-ins start families and rotation keeps them".
+- Register keeps answering 409 for a taken email or username (owner decision 2026-11-18): the enumeration is
+  accepted, no change.
