@@ -82,6 +82,34 @@ func (s *Service) Forget(user uuid.UUID, appID string) {
 	s.mu.Unlock()
 }
 
+func isTimeout(err error) bool {
+	return errors.Is(err, context.DeadlineExceeded) || err.Error() == "connectedapps: request timed out"
+}
+
+// callError is what Call hands back for failures that are not typed
+// sentinels: fixed text with no remote content, wrapping the cause for
+// errors.Is only.
+type callError struct {
+	msg   string
+	cause error
+}
+
+func (e *callError) Error() string { return e.msg }
+func (e *callError) Unwrap() error { return e.cause }
+
+// sanitize keeps remote error text away from the caller (and so the model).
+func sanitize(app App, err error) error {
+	var re *ReconnectError
+	switch {
+	case err == nil, errors.As(err, &re),
+		errors.Is(err, ErrNotConnected), errors.Is(err, ErrToolNotAllowed), errors.Is(err, ErrUnknownApp):
+		return err
+	case isTimeout(err):
+		return &callError{app.Name + " timed out.", err}
+	}
+	return &callError{app.Name + " could not answer right now.", err}
+}
+
 // errKind maps an error to a fixed string that is safe to log.
 func errKind(err error) string {
 	switch {
@@ -91,7 +119,7 @@ func errKind(err error) string {
 		return "unauthorized"
 	case errors.Is(err, ErrNotConnected):
 		return "not_connected"
-	case errors.Is(err, context.DeadlineExceeded), strings.Contains(err.Error(), "timed out"):
+	case isTimeout(err):
 		return "timeout"
 	}
 	return "error"
@@ -167,7 +195,7 @@ func (s *Service) Call(ctx context.Context, user uuid.UUID, name string, args ma
 		return cerr
 	})
 	if err != nil {
-		return "", err
+		return "", sanitize(app, err)
 	}
 	return out, nil
 }

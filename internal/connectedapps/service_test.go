@@ -30,6 +30,7 @@ type mcpApp struct {
 	okTokens  map[string]bool // bearer values that are accepted
 	tools     []string
 	result    string
+	rpcErr    string // when set, tools/call answers a JSON-RPC error with this message
 }
 
 func newMCPApp(t *testing.T, ok ...string) *mcpApp {
@@ -75,6 +76,10 @@ func newMCPApp(t *testing.T, ok ...string) *mcpApp {
 			}
 			json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": *req.ID, "result": map[string]any{"tools": ts}})
 		case "tools/call":
+			if a.rpcErr != "" {
+				json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": *req.ID, "error": map[string]any{"code": -32000, "message": a.rpcErr}})
+				return
+			}
 			json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": *req.ID, "result": map[string]any{
 				"content": []map[string]any{{"type": "text", "text": a.result}}}})
 		}
@@ -213,7 +218,7 @@ func TestCallRejectsUnlistedTool(t *testing.T) {
 	app := newMCPApp(t, "alice-token")
 	e := newSvc(t, app, nil)
 	saveAlice(t, e, "alice-token")
-	for _, name := range []string{"aaru__apply_library_patch", "nope__read_library", "aaru", "aaru__"} {
+	for _, name := range []string{"aaru__apply_library_patch", "nope__read_library", "aaru", "aaru__", "aaru__read_library__x", "AARU__read_library"} {
 		_, err := e.svc.Call(context.Background(), alice, name, nil)
 		require.Error(t, err, name)
 		require.False(t, strings.Contains(err.Error(), "alice-token"))
@@ -328,4 +333,15 @@ func TestToolCacheExpiresAfterTTL(t *testing.T) {
 	_, err = e.svc.Tools(ctx, alice, nil)
 	require.NoError(t, err)
 	require.EqualValues(t, 2, e.app.listCalls.Load())
+}
+
+func TestCallHidesRemoteErrorText(t *testing.T) {
+	app := newMCPApp(t, "alice-token")
+	app.rpcErr = "SECRET-REMOTE-DETAIL"
+	e := newSvc(t, app, nil)
+	saveAlice(t, e, "alice-token")
+	_, err := e.svc.Call(context.Background(), alice, "aaru__read_library", nil)
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), "SECRET-REMOTE-DETAIL")
+	require.Equal(t, "Aaru could not answer right now.", err.Error())
 }
