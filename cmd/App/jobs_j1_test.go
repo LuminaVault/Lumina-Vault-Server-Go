@@ -33,7 +33,7 @@ func TestJ1JobsFollowSwiftStartConditions(t *testing.T) {
 	}
 	want := []string{
 		"AnalyticsMaintenanceService", "CalendarSyncWorker", "DeletedDataPurgeService", "DiskSpaceMonitorService",
-		"GraphLayoutWorker", "ReminderScheduler", "RetrievalLeakReportWorker", "VaultTrashPurge",
+		"GraphLayoutWorker", "ReminderScheduler", "RetrievalLeakReportWorker", "VaultPropertiesBackfill", "VaultTrashPurge",
 	}
 	require.Equal(t, want, j1Names(all))
 
@@ -52,5 +52,5 @@ func TestJ1JobsFollowSwiftStartConditions(t *testing.T) {
 	// LV_ENVIRONMENT=test keeps only the ones Swift doesn't gate on it.
 	test := all
 	test.LVEnvironment = "test"
-	require.Equal(t, []string{"CalendarSyncWorker", "DeletedDataPurgeService", "DiskSpaceMonitorService", "VaultTrashPurge"}, j1Names(test))
+	require.Equal(t, []string{"CalendarSyncWorker", "DeletedDataPurgeService", "DiskSpaceMonitorService", "VaultPropertiesBackfill", "VaultTrashPurge"}, j1Names(test))
 }

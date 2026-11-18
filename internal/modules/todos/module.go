@@ -22,6 +22,7 @@ import (
 	"lumina/internal/modules/todos/db"
 	"lumina/internal/swiftstr"
 	"lumina/internal/vaultfiles"
+	"lumina/internal/vaultgit"
 	"lumina/internal/vaultpaths"
 	"lumina/internal/wire"
 	"net/http"
@@ -256,10 +257,40 @@ func (m *Module) update(c *echo.Context) error {
 		md.ProjectID = &patch.ProjectID.UUID
 	}
 	row.Metadata = md
-	if err := m.store.UpdateMetadata(ctx, row.ID, md); err != nil {
+	// Backlog E8.2 (spec D1): with properties on, title, done and due go into
+	// the note's frontmatter, so the file and the sidecar agree. A note whose
+	// frontmatter can't be edited keeps the sidecar-only write.
+	written, err := m.store.WriteProperties(ctx, row, frontmatterChanges(*patch), md)
+	if err != nil {
+		return err
+	}
+	if written {
+		vaultgit.Touch(tenant, "todo", ids.Upper(tenant), "")
+	} else if err := m.store.UpdateMetadata(ctx, row.ID, md); err != nil {
 		return err
 	}
 	return wire.JSON(c, http.StatusOK, m.toDTO(row))
+}
+
+// frontmatterChanges are the patch's projected fields as frontmatter values.
+// A due date at midnight UTC is written as a date.
+func frontmatterChanges(p TodoPatchRequest) map[string]any {
+	set := map[string]any{}
+	if p.Title != nil {
+		set["title"] = *p.Title
+	}
+	if p.Done != nil {
+		set["done"] = *p.Done
+	}
+	if p.DueAt != nil {
+		due := p.DueAt.UTC()
+		if due.Equal(due.Truncate(24 * time.Hour)) {
+			set["due"] = due.Format(time.DateOnly)
+		} else {
+			set["due"] = due.Format(time.RFC3339)
+		}
+	}
+	return set
 }
 
 // delete also takes any other vault file of the tenant. The file's rename and the

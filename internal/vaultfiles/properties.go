@@ -2,6 +2,8 @@ package vaultfiles
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -105,7 +107,9 @@ func (s *Store) Reindex(ctx context.Context, id uuid.UUID) error {
 	}
 	props, perr := ParseFileProperties(s.paths.Raw(row.TenantID), row.Path)
 	if errors.Is(perr, os.ErrNotExist) {
-		return nil
+		// Nothing to read; mark it so the backfill moves on.
+		_, err := s.pool.Exec(ctx, `UPDATE vault_files SET properties_indexed_at = NOW() WHERE id = $1`, id)
+		return err
 	}
 	var errText *string
 	if perr != nil {
@@ -131,7 +135,8 @@ func (s *Store) Reindex(ctx context.Context, id uuid.UUID) error {
 	// No updated_at bump: the write that triggered this already moved it.
 	if _, err := s.pool.Exec(ctx, `
 		UPDATE vault_files
-		SET properties = $2::jsonb, properties_error = $3, metadata = COALESCE($4::jsonb, metadata)
+		SET properties = $2::jsonb, properties_error = $3, metadata = COALESCE($4::jsonb, metadata),
+			properties_indexed_at = NOW()
 		WHERE id = $1`, id, string(encoded), errText, metadata); err != nil {
 		return err
 	}
@@ -256,4 +261,59 @@ func (s *Store) SetPropertyType(ctx context.Context, tenant uuid.UUID, name stri
 		return PropertyType{}, err
 	}
 	return out, nil
+}
+
+// UnindexedNotes returns up to limit Markdown rows never indexed, by id after
+// afterID (uuid.Nil to start), for the backfill.
+func (s *Store) UnindexedNotes(ctx context.Context, afterID uuid.UUID, limit int) ([]uuid.UUID, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id FROM vault_files
+		WHERE properties_indexed_at IS NULL AND id > $1
+			AND (lower(path) LIKE '%.md' OR lower(path) LIKE '%.markdown')
+		ORDER BY id LIMIT $2`, afterID, limit)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+}
+
+// WriteProperties sets keys in a Markdown note's frontmatter and saves the
+// row with metadata m, so the projection (D1) reads back what the caller set
+// and the file and the sidecar can't drift. It reports false, writing
+// nothing, when properties are off, the row isn't a note, the file is gone,
+// or its frontmatter can't be edited (invalid YAML, anchors, ...): the caller
+// then keeps the sidecar-only write.
+func (s *Store) WriteProperties(ctx context.Context, row *VaultFile, set map[string]any, m *Metadata) (bool, error) {
+	if !PropertiesEnabled() || row == nil || !IsMarkdownPath(row.Path) || len(set) == 0 {
+		return false, nil
+	}
+	target, err := ResolveInside(s.paths.Raw(row.TenantID), row.Path)
+	if err != nil {
+		return false, nil //nolint:nilerr // an unreachable file keeps the sidecar write
+	}
+	current, err := os.ReadFile(target) //nolint:gosec // target comes from ResolveInside
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	next, err := vaultprops.Apply(current, set, nil)
+	if errors.Is(err, vaultprops.ErrInvalid) || errors.Is(err, vaultprops.ErrUneditable) {
+		slog.InfoContext(ctx, "vault properties: frontmatter not editable, sidecar only", "id", row.ID, "err", err)
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if string(next) != string(current) {
+		if err := ReplaceFile(target, next); err != nil {
+			return false, err
+		}
+	}
+	sum := sha256.Sum256(next)
+	if err := s.UpdateContent(ctx, row.ID, int64(len(next)), hex.EncodeToString(sum[:]), m); err != nil {
+		return false, err
+	}
+	return true, nil
 }
