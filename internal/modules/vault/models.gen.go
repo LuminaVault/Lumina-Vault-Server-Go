@@ -296,6 +296,63 @@ func (e VaultPropertyTypePutRequestType) Valid() bool {
 	}
 }
 
+// Defines values for VaultQueryFilterOp.
+const (
+	Contains   VaultQueryFilterOp = "contains"
+	Eq         VaultQueryFilterOp = "eq"
+	Gt         VaultQueryFilterOp = "gt"
+	Gte        VaultQueryFilterOp = "gte"
+	IsEmpty    VaultQueryFilterOp = "isEmpty"
+	IsNotEmpty VaultQueryFilterOp = "isNotEmpty"
+	Lt         VaultQueryFilterOp = "lt"
+	Lte        VaultQueryFilterOp = "lte"
+	Neq        VaultQueryFilterOp = "neq"
+)
+
+// Valid indicates whether the value is a known member of the VaultQueryFilterOp enum.
+func (e VaultQueryFilterOp) Valid() bool {
+	switch e {
+	case Contains:
+		return true
+	case Eq:
+		return true
+	case Gt:
+		return true
+	case Gte:
+		return true
+	case IsEmpty:
+		return true
+	case IsNotEmpty:
+		return true
+	case Lt:
+		return true
+	case Lte:
+		return true
+	case Neq:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for VaultQuerySortDir.
+const (
+	Asc  VaultQuerySortDir = "asc"
+	Desc VaultQuerySortDir = "desc"
+)
+
+// Valid indicates whether the value is a known member of the VaultQuerySortDir enum.
+func (e VaultQuerySortDir) Valid() bool {
+	switch e {
+	case Asc:
+		return true
+	case Desc:
+		return true
+	default:
+		return false
+	}
+}
+
 // ErrorEnvelope defines model for ErrorEnvelope.
 type ErrorEnvelope struct {
 	Error   string  `json:"error"`
@@ -613,6 +670,69 @@ type VaultPropertyTypesResponse struct {
 	Types []VaultPropertyType `json:"types"`
 }
 
+// VaultQueryFilter defines model for VaultQueryFilter.
+type VaultQueryFilter struct {
+	Op       VaultQueryFilterOp `json:"op"`
+	Property string             `json:"property"`
+
+	// Value Text, a number, a boolean or an ISO 8601 date; not used by isEmpty and isNotEmpty.
+	Value interface{} `json:"value,omitempty"`
+}
+
+// VaultQueryFilterOp defines model for VaultQueryFilter.Op.
+type VaultQueryFilterOp string
+
+// VaultQueryGroup defines model for VaultQueryGroup.
+type VaultQueryGroup struct {
+	Count int `json:"count"`
+
+	// Value The group's value; absent for notes without the property.
+	Value interface{} `json:"value,omitempty"`
+}
+
+// VaultQueryRequest defines model for VaultQueryRequest.
+type VaultQueryRequest struct {
+	Cursor *string             `json:"cursor,omitempty"`
+	Filter *[]VaultQueryFilter `json:"filter,omitempty"`
+
+	// Group One property to count by (select, multiselect, checkbox, or a date by day).
+	Group *string           `json:"group,omitempty"`
+	Limit *int              `json:"limit,omitempty"`
+	Scope VaultQueryScope   `json:"scope"`
+	Sort  *[]VaultQuerySort `json:"sort,omitempty"`
+}
+
+// VaultQueryResponse defines model for VaultQueryResponse.
+type VaultQueryResponse struct {
+	Columns    []VaultPropertyType `json:"columns"`
+	Groups     *[]VaultQueryGroup  `json:"groups,omitempty"`
+	NextCursor *string             `json:"nextCursor,omitempty"`
+	Rows       []VaultQueryRow     `json:"rows"`
+}
+
+// VaultQueryRow defines model for VaultQueryRow.
+type VaultQueryRow struct {
+	File       VaultFileDTO           `json:"file"`
+	Properties map[string]interface{} `json:"properties"`
+}
+
+// VaultQueryScope defines model for VaultQueryScope.
+type VaultQueryScope struct {
+	// Folder A vault folder; matches notes anywhere below it.
+	Folder  *string    `json:"folder,omitempty"`
+	SpaceId *wire.UUID `json:"spaceId,omitempty"`
+	Tag     *string    `json:"tag,omitempty"`
+}
+
+// VaultQuerySort defines model for VaultQuerySort.
+type VaultQuerySort struct {
+	Dir      *VaultQuerySortDir `json:"dir,omitempty"`
+	Property string             `json:"property"`
+}
+
+// VaultQuerySortDir defines model for VaultQuerySort.Dir.
+type VaultQuerySortDir string
+
 // VaultStatusResponse defines model for VaultStatusResponse.
 type VaultStatusResponse struct {
 	CreatedAt *wire.Time `json:"createdAt,omitempty"`
@@ -829,3 +949,6 @@ type VaultPropertiesPatchJSONRequestBody = VaultPropertiesPatchRequest
 
 // VaultPropertyTypePutJSONRequestBody defines body for VaultPropertyTypePut for application/json ContentType.
 type VaultPropertyTypePutJSONRequestBody = VaultPropertyTypePutRequest
+
+// VaultQueryJSONRequestBody defines body for VaultQuery for application/json ContentType.
+type VaultQueryJSONRequestBody = VaultQueryRequest

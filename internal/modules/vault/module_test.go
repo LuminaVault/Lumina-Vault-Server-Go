@@ -1143,6 +1143,8 @@ func TestResponsesConformToSpec(t *testing.T) {
 	router, err := gorillamux.NewRouter(doc)
 	require.NoError(t, err)
 
+	propsOn(t)
+	jsonHeader := map[string]string{"Content-Type": "application/json"}
 	v := setup(t)
 	u := v.user("trial")
 	hub, _ := v.indexFixtures(u)
@@ -1164,6 +1166,11 @@ func TestResponsesConformToSpec(t *testing.T) {
 		// daily note comes first so the list has a filed note (spaceId set).
 		{http.MethodPost, "/v1/vault/daily?date=2026-11-16", nil, ""},
 		{http.MethodGet, "/v1/vault/files", nil, ""},
+		// Backlog E8.2 (flag on for this test).
+		{http.MethodPatch, "/v1/vault/properties?path=inbox/spec.md", jsonHeader, `{"set":{"status":"Doing","tags":["a"]}}`},
+		{http.MethodGet, "/v1/vault/property-types", nil, ""},
+		{http.MethodPut, "/v1/vault/property-types/status", jsonHeader, `{"type":"select","options":["Doing"]}`},
+		{http.MethodPost, "/v1/vault/query", jsonHeader, `{"scope":{"folder":"inbox"},"group":"status","limit":1}`},
 	} {
 		r := v.do(u, c.method, c.path, c.headers, []byte(c.body))
 		require.Contains(t, []int{http.StatusOK, http.StatusCreated}, r.code, "%s %s: %s", c.method, c.path, r.body)

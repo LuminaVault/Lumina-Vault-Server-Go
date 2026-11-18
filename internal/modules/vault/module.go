@@ -188,6 +188,7 @@ func (m *Module) Register(r httpserver.Router, _ echo.MiddlewareFunc) {
 	r.PATCH(propertiesPath, m.patchProperties, m.identify, idem)
 	r.GET(propertyTypesPath, m.propertyTypes, m.identify)
 	r.PUT(propertyTypesPath+"/:name", m.putPropertyType, m.identify, idem)
+	r.POST(queryPath, m.query, m.identify)
 }
 
 func notFound(*echo.Context) error { return echo.ErrNotFound }
