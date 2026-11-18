@@ -4,15 +4,14 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"net/http"
-	"strconv"
-	"strings"
-	"time"
-
 	"lumina/internal/vaultaccess"
 	"lumina/internal/vaultfiles"
 	"lumina/internal/vaultprops"
 	"lumina/internal/wire"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/labstack/echo/v5"
@@ -219,8 +218,8 @@ func scopeClauses(b *sqlBuilder, s VaultQueryScope) ([]string, error) {
 		out = append(out, "space_id = "+b.arg(s.SpaceId.UUID))
 	}
 	if s.Folder != nil && strings.Trim(*s.Folder, "/ ") != "" {
-		folder, err := vaultfiles.SanitizePath(strings.Trim(*s.Folder, "/"))
-		if err != nil {
+		folder, ok := cleanFolder(*s.Folder)
+		if !ok {
 			return nil, badQuery("invalid folder")
 		}
 		out = append(out, `path LIKE `+b.arg(likeEscaper.Replace(folder)+"/%"))
@@ -233,6 +232,21 @@ func scopeClauses(b *sqlBuilder, s VaultQueryScope) ([]string, error) {
 		return nil, badQuery("scope needs spaceId, folder or tag")
 	}
 	return out, nil
+}
+
+// cleanFolder trims slashes and refuses empty, "." or ".." segments. The
+// folder only becomes a LIKE prefix; it never reaches the filesystem.
+func cleanFolder(raw string) (string, bool) {
+	folder := strings.Trim(strings.TrimSpace(raw), "/")
+	if folder == "" || len(folder) > 1024 || strings.ContainsAny(folder, "\x00\n\r") {
+		return "", false
+	}
+	for _, seg := range strings.Split(folder, "/") {
+		if seg == "" || seg == "." || seg == ".." {
+			return "", false
+		}
+	}
+	return folder, true
 }
 
 func checkName(name string) error {
