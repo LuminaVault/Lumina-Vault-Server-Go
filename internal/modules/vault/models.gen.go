@@ -781,6 +781,40 @@ type VaultUploadResponse struct {
 	Size     int        `json:"size"`
 }
 
+// VaultView defines model for VaultView.
+type VaultView struct {
+	Columns   []VaultViewColumn  `json:"columns"`
+	CreatedAt wire.Time          `json:"createdAt"`
+	Filter    []VaultQueryFilter `json:"filter"`
+	Group     *string            `json:"group,omitempty"`
+	Id        wire.UUID          `json:"id"`
+	Name      string             `json:"name"`
+	Scope     VaultQueryScope    `json:"scope"`
+	Sort      []VaultQuerySort   `json:"sort"`
+	UpdatedAt wire.Time          `json:"updatedAt"`
+}
+
+// VaultViewColumn defines model for VaultViewColumn.
+type VaultViewColumn struct {
+	Property string `json:"property"`
+	Width    *int   `json:"width,omitempty"`
+}
+
+// VaultViewInput defines model for VaultViewInput.
+type VaultViewInput struct {
+	Columns *[]VaultViewColumn  `json:"columns,omitempty"`
+	Filter  *[]VaultQueryFilter `json:"filter,omitempty"`
+	Group   *string             `json:"group,omitempty"`
+	Name    string              `json:"name"`
+	Scope   VaultQueryScope     `json:"scope"`
+	Sort    *[]VaultQuerySort   `json:"sort,omitempty"`
+}
+
+// VaultViewsResponse defines model for VaultViewsResponse.
+type VaultViewsResponse struct {
+	Views []VaultView `json:"views"`
+}
+
 // IdempotencyKey defines model for IdempotencyKey.
 type IdempotencyKey = wire.UUID
 
@@ -952,3 +986,9 @@ type VaultPropertyTypePutJSONRequestBody = VaultPropertyTypePutRequest
 
 // VaultQueryJSONRequestBody defines body for VaultQuery for application/json ContentType.
 type VaultQueryJSONRequestBody = VaultQueryRequest
+
+// VaultViewCreateJSONRequestBody defines body for VaultViewCreate for application/json ContentType.
+type VaultViewCreateJSONRequestBody = VaultViewInput
+
+// VaultViewPutJSONRequestBody defines body for VaultViewPut for application/json ContentType.
+type VaultViewPutJSONRequestBody = VaultViewInput

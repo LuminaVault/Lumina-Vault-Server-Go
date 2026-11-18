@@ -1,6 +1,7 @@
 package vault
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/labstack/echo/v5"
 )
@@ -93,22 +95,9 @@ func (m *Module) query(c *echo.Context) error {
 		return err
 	}
 
-	types := map[string]vaultprops.Type{}
-	registry, err := m.store.PropertyTypes(ctx, tenant)
+	typeOf, err := m.propertyTypeOf(ctx, tenant)
 	if err != nil {
 		return err
-	}
-	for _, t := range registry {
-		types[strings.ToLower(t.Name)] = t.Type
-	}
-	typeOf := func(name string) vaultprops.Type {
-		if t, ok := types[strings.ToLower(name)]; ok {
-			return t
-		}
-		if t, ok := vaultprops.Reserved[strings.ToLower(name)]; ok {
-			return t
-		}
-		return vaultprops.Text
 	}
 
 	b := &sqlBuilder{}
@@ -210,6 +199,28 @@ func (m *Module) query(c *echo.Context) error {
 		}
 	}
 	return wire.JSON(c, http.StatusOK, out)
+}
+
+// propertyTypeOf returns the vault's type for a property name: the registry's,
+// else a reserved name's, else text.
+func (m *Module) propertyTypeOf(ctx context.Context, tenant uuid.UUID) (func(string) vaultprops.Type, error) {
+	registry, err := m.store.PropertyTypes(ctx, tenant)
+	if err != nil {
+		return nil, err
+	}
+	types := make(map[string]vaultprops.Type, len(registry))
+	for _, t := range registry {
+		types[strings.ToLower(t.Name)] = t.Type
+	}
+	return func(name string) vaultprops.Type {
+		if t, ok := types[strings.ToLower(name)]; ok {
+			return t
+		}
+		if t, ok := vaultprops.Reserved[strings.ToLower(name)]; ok {
+			return t
+		}
+		return vaultprops.Text
+	}, nil
 }
 
 func scopeClauses(b *sqlBuilder, s VaultQueryScope) ([]string, error) {
