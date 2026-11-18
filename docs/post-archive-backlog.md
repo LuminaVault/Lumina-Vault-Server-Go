@@ -17,6 +17,9 @@ Read this before you pick up server work. When an item lands, strike it here in 
   test of the fixed behaviour.
 - Tests never use real API keys; use stub servers.
 - Staging talks to `hermes-stub-staging` and never to production Hermes.
+- No Hermes work of any kind, security fixes included (owner, 2026-11-18): Hermes is being retired and Lumina's AI
+  moves to Anthropic directly from this server. The CVE-2026-10221 upgrade was dropped; its fork PR
+  (LuminaVaultHermesAgent #23) was closed unmerged.
 
 ## Next: queued in this order
 
@@ -67,25 +70,6 @@ Found during the port, same batch:
   `internal/usagemeter` writes with `INSERT … ON CONFLICT (tenant_id, day, model) DO UPDATE` (since wave 4,
   `953181e`), so concurrent calls add to one row. Nothing to change.
 
-### 2. Hermes upgrade for CVE-2026-10221
-
-`hermes-production` runs the LuminaVaultHermesAgent fork 0.18.2 (image `ghcr.io/luminavault/hermes@sha256:9892ad09…`),
-which is affected. The image chain now runs:
-
-1. The fork's `luminavault-image.yml` publishes `ghcr.io/luminavault/luminavault-hermes-agent:sha-*`.
-2. In this repo, `docker/hermes.Dockerfile` pins that base by digest.
-3. This repo's `.github/workflows/hermes-image.yml` publishes `ghcr.io/luminavault/hermes`. It moved here from
-   LuminaVaultServer in #115; GHCR Actions access is granted.
-4. LuminaVaultInfra `apps/hermes/hermes.yaml` pins the digest in two containers. That is an owner-merged infra PR.
-
-Steps:
-
-1. Bump the fork to a patched release.
-2. Bump the `FROM` digest here, and confirm the Hermes Image run is green.
-3. Open the infra PR with the new digest.
-4. Smoke production: run a chat completion and an ingestion through Hermes.
-5. Rollback is reverting the infra PR.
-
 ### 3. ~~Knowledge extraction self-edge~~ Done
 
 See "Knowledge extraction skips a self-pair" in `docs/migration/cutover-log.md`.
@@ -117,7 +101,7 @@ purpose.
 **What is left:**
 
 1. **Hand-written SQL.** About 108 non-test files still call `pool.Query`, `pool.QueryRow` or `pool.Exec` with
-   inline SQL. Examples: `internal/hermesmirror`, `internal/llm`, `internal/authservice`, `internal/workers`,
+   inline SQL. Examples: `internal/llm`, `internal/authservice`, `internal/workers`,
    `internal/modules/skills`, `internal/modules/workflows`, `internal/modules/ingestion/worker.go` and
    `internal/modules/knowledge/extraction.go`.
 2. **Schema source.** Every package points `schema:` at the `schema-swift.sql` snapshot, plus individual migrations
