@@ -7136,6 +7136,40 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ErrorEnvelope' }
 
+  /v1/vault/query:
+    post:
+      tags: [Vault]
+      operationId: vaultQuery
+      x-lv-module: vault
+      summary: Query notes by their properties
+      description: |
+        Backlog E8.2 (spec D6). Behind VAULT_PROPERTIES_ENABLED; 404 while off.
+        Markdown notes only. `scope` needs at least one of `spaceId`, `folder`
+        or `tag`; scope fields and filters are ANDed. A value that doesn't fit
+        its property's type is left out of typed comparisons (`gt`, `gte`,
+        `lt`, `lte`). The built-ins `path`, `name`, `createdAt` and
+        `updatedAt` work as properties. `cursor` is opaque: pass back
+        `nextCursor` to read the next page.
+      security: [{ bearerJWT: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VaultQueryRequest' }
+      responses:
+        '200':
+          description: Matching notes, the property columns present in scope, and group counts.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VaultQueryResponse' }
+        '400':
+          description: No scope, an unknown op, a bad value, or too many sort keys.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /v1/vault/property-types:
     get:
       tags: [Vault]
@@ -17095,6 +17129,87 @@ components:
         unset:
           type: array
           items: { type: string }
+
+    VaultQueryRequest:
+      type: object
+      required: [scope]
+      properties:
+        scope: { $ref: '#/components/schemas/VaultQueryScope' }
+        filter:
+          type: array
+          maxItems: 20
+          items: { $ref: '#/components/schemas/VaultQueryFilter' }
+        sort:
+          type: array
+          maxItems: 3
+          items: { $ref: '#/components/schemas/VaultQuerySort' }
+        group:
+          type: string
+          description: One property to count by (select, multiselect, checkbox, or a date by day).
+        limit: { type: integer, minimum: 1, maximum: 500, default: 100 }
+        cursor: { type: string }
+
+    VaultQueryScope:
+      type: object
+      properties:
+        spaceId: { type: string, format: uuid }
+        folder:
+          type: string
+          description: A vault folder; matches notes anywhere below it.
+        tag: { type: string }
+
+    VaultQueryFilter:
+      type: object
+      required: [property, op]
+      properties:
+        property: { type: string }
+        op:
+          type: string
+          enum: [eq, neq, contains, gt, gte, lt, lte, isEmpty, isNotEmpty]
+        value:
+          description: Text, a number, a boolean or an ISO 8601 date; not used by isEmpty and isNotEmpty.
+
+    VaultQuerySort:
+      type: object
+      required: [property]
+      properties:
+        property: { type: string }
+        dir:
+          type: string
+          enum: [asc, desc]
+          default: asc
+
+    VaultQueryResponse:
+      type: object
+      required: [rows, columns]
+      properties:
+        rows:
+          type: array
+          items: { $ref: '#/components/schemas/VaultQueryRow' }
+        columns:
+          type: array
+          items: { $ref: '#/components/schemas/VaultPropertyType' }
+        groups:
+          type: array
+          items: { $ref: '#/components/schemas/VaultQueryGroup' }
+        nextCursor: { type: string }
+
+    VaultQueryRow:
+      type: object
+      required: [file, properties]
+      properties:
+        file: { $ref: '#/components/schemas/VaultFileDTO' }
+        properties:
+          type: object
+          additionalProperties: true
+
+    VaultQueryGroup:
+      type: object
+      required: [count]
+      properties:
+        value:
+          description: The group's value; absent for notes without the property.
+        count: { type: integer }
 
     VaultPropertyType:
       type: object
