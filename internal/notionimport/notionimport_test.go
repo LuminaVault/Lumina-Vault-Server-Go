@@ -54,7 +54,7 @@ func TestUnpackLimits(t *testing.T) {
 		many = append(many, text("p/"+strings.Repeat("a", n%7)+string(rune('a'+n%26))+time.Duration(n).String()+".md", "x"))
 	}
 	inner := buildZip(t, text("deep.md", "x"))
-	middle := buildZip(t, zipFile{"inner.zip", inner}, text("mid.md", "x"))
+	middle := buildZip(t, zipFile{Name: "inner.zip", Data: inner}, text("mid.md", "x"))
 	for _, c := range []struct {
 		name  string
 		data  []byte
@@ -67,9 +67,9 @@ func TestUnpackLimits(t *testing.T) {
 		{name: "dot dot", data: buildZip(t, text("ok.md", "x"), text("../evil.md", "x")), limit: "outside"},
 		{name: "dot dot inside", data: buildZip(t, text("a/../../evil.md", "x")), limit: "outside"},
 		{name: "absolute", data: buildZip(t, text("/etc/passwd", "x")), limit: "absolute"},
-		{name: "bomb ratio", data: buildZip(t, zipFile{"zeros.bin", make([]byte, 4<<20)}), limit: "ZIP bomb"},
-		{name: "bomb in nested", data: buildZip(t, zipFile{"part.zip", buildZip(t, zipFile{"zeros.bin", make([]byte, 4<<20)})}), limit: "ZIP bomb"},
-		{name: "dot dot in nested", data: buildZip(t, zipFile{"part.zip", buildZip(t, text("../x.md", "x"))}), limit: "outside"},
+		{name: "bomb ratio", data: buildZip(t, zipFile{Name: "zeros.bin", Data: make([]byte, 4<<20)}), limit: "ZIP bomb"},
+		{name: "bomb in nested", data: buildZip(t, zipFile{Name: "part.zip", Data: buildZip(t, zipFile{Name: "zeros.bin", Data: make([]byte, 4<<20)})}), limit: "ZIP bomb"},
+		{name: "dot dot in nested", data: buildZip(t, zipFile{Name: "part.zip", Data: buildZip(t, text("../x.md", "x"))}), limit: "outside"},
 		{name: "too many", data: buildZip(t, many...), limit: "more than 20000 files"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -86,7 +86,7 @@ func TestUnpackLimits(t *testing.T) {
 	}
 
 	t.Run("nested one level only", func(t *testing.T) {
-		data := buildZip(t, zipFile{"outer.zip", middle})
+		data := buildZip(t, zipFile{Name: "outer.zip", Data: middle})
 		a := unpack(t, data)
 		var names []string
 		for _, e := range a.Entries {
@@ -171,7 +171,7 @@ func TestMapPathsEdges(t *testing.T) {
 		{"same name different ids", []string{"A " + idQ4 + ".md", "A " + idGone + "/c.md", "A " + idGone + ".md"}, []string{"s/a.md", "s/a-2/c.md", "s/a-2.md"}},
 		{"names that fold together", []string{"Hello World.md", "hello-world.md", "HELLO  WORLD.md"}, []string{"s/hello-world.md", "s/hello-world-2.md", "s/hello-world-3.md"}},
 		{"suffix survives the cap", []string{long + ".md", long + "!.md"}, []string{
-			"s/" + strings.Repeat("long-name-", 8) + ".md",
+			"s/" + strings.Repeat("long-name-", 8)[:79] + ".md",
 			"s/" + strings.Repeat("long-name-", 8)[:78] + "-2.md",
 		}},
 		{"leading dot is not hidden later", []string{"a/..env notes.md"}, nil},

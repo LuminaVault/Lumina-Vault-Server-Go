@@ -7594,6 +7594,72 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ImportCreateResponse' }
 
+  /v1/vault/import/notion:
+    post:
+      tags: [Import]
+      operationId: vaultImportNotion
+      x-lv-module: import
+      summary: Import a Notion export (the "Markdown & CSV" ZIP) into one Space.
+      description: |
+        Backlog E7.1 and E7.2 (spec 2026-11-18-e7-notion-import). The body is
+        the raw ZIP Notion exports, not multipart. Pages become notes with the
+        Notion ids stripped from their paths; links between exported pages
+        become `[[wikilinks]]`; attachments become vault files (25 MB each at
+        most). Each database (a CSV plus its folder of row pages) becomes a
+        folder of notes with typed frontmatter and one saved view, while
+        `VAULT_PROPERTIES_ENABLED` is on; while it is off, a database imports
+        as its row pages and `warnings` says so.
+
+        `dryRun=true` runs the same pipeline and writes nothing: files that
+        would be written report `planned`.
+
+        Limits: 200 MB compressed, 1 GB unpacked, 20,000 files, no entry
+        compressed more than 100 times, entry paths inside the archive, nested
+        ZIPs one level deep, and 5,000 notes per import (split a larger
+        export). The work is synchronous: the response is the report.
+      security: [{ bearerJWT: [] }]
+      parameters:
+        - name: space
+          in: query
+          required: false
+          schema: { type: string, default: Notion }
+          description: Target Space name (created if missing).
+        - name: dryRun
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+        - name: onConflict
+          in: query
+          required: false
+          schema: { type: string, enum: [skip, overwrite], default: skip }
+          description: |
+            What a file does to a different one already at its vault path.
+            `skip` (the default) leaves it and reports `exists`; `overwrite`
+            replaces it.
+      requestBody:
+        required: true
+        content:
+          application/zip:
+            schema: { type: string, format: binary }
+      responses:
+        '200':
+          description: The report, the same shape for a dry run and an import.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VaultNotionImportReport' }
+        '400':
+          description: |
+            Not a ZIP, an empty one, a broken limit (the message says which),
+            or an invalid `dryRun` or `onConflict`.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '401':
+          description: No tenant identity on the request (missing or invalid JWT).
+        '413':
+          description: Body larger than 200 MB.
+        '507': { $ref: '#/components/responses/InsufficientStorage' }
+
   /v1/import/vault-bulk:
     post:
       operationId: importVaultBulk
@@ -11246,6 +11312,109 @@ components:
             slugifies to the path of an earlier input of this request;
             `exists` a different file is there (`onConflict: skip`); `failed`
             could not be written.
+
+    # ── Import: Notion (Go-only, backlog E7) ──
+    VaultNotionImportReport:
+      type: object
+      required: [dryRun, spaceSlug, pages, databases, rows, attachments, written, skipped, failed, links, columns, views, collisions, files, warnings]
+      properties:
+        dryRun: { type: boolean }
+        spaceId:
+          type: string
+          format: uuid
+          description: Absent on a dry run when the Space doesn't exist yet.
+        spaceSlug: { type: string }
+        pages: { type: integer, description: Pages in the export that are not database rows. }
+        databases: { type: integer }
+        rows: { type: integer, description: Database rows; 0 while properties are off. }
+        attachments: { type: integer }
+        written: { type: integer, description: 'Files `imported` or `updated`. Always 0 on a dry run.' }
+        skipped: { type: integer, description: 'Files `unchanged`, `exists`, `empty`, `tooLarge`, `hidden` or `unsupported`.' }
+        failed: { type: integer }
+        links: { $ref: '#/components/schemas/VaultNotionImportLinks' }
+        columns:
+          type: array
+          description: The type of each database column. Empty while properties are off.
+          items: { $ref: '#/components/schemas/VaultNotionImportColumn' }
+        views:
+          type: array
+          description: One saved view per database. Empty while properties are off.
+          items: { $ref: '#/components/schemas/VaultNotionImportView' }
+        collisions:
+          type: array
+          description: Entries renamed because an earlier sibling maps to the same path.
+          items: { $ref: '#/components/schemas/VaultNotionImportCollision' }
+        files:
+          type: array
+          maxItems: 5000
+          description: One entry per file of the export, in ZIP order; at most 5,000.
+          items: { $ref: '#/components/schemas/VaultNotionImportFile' }
+        warnings:
+          type: array
+          items: { type: string }
+
+    VaultNotionImportLinks:
+      type: object
+      required: [resolved, external, unresolved, unresolvedList]
+      properties:
+        resolved: { type: integer, description: Links to something in the export, rewritten. }
+        external: { type: integer, description: Links with a scheme that point outside the export, left alone. }
+        unresolved: { type: integer, description: Relative links that match nothing in the export. }
+        unresolvedList:
+          type: array
+          maxItems: 50
+          items: { $ref: '#/components/schemas/VaultNotionImportUnresolvedLink' }
+
+    VaultNotionImportUnresolvedLink:
+      type: object
+      required: [page, target]
+      properties:
+        page: { type: string, description: The vault path of the note the link is on. }
+        target: { type: string, description: 'The link target as written, URL-decoded.' }
+
+    VaultNotionImportColumn:
+      type: object
+      required: [database, name, type]
+      properties:
+        database: { type: string }
+        name: { type: string }
+        type:
+          type: string
+          enum: [text, number, select, multiselect, date, datetime, checkbox, url]
+
+    VaultNotionImportView:
+      type: object
+      required: [name, folder]
+      properties:
+        id: { type: string, format: uuid, description: Absent on a dry run. }
+        name: { type: string }
+        folder: { type: string }
+
+    VaultNotionImportCollision:
+      type: object
+      required: [from, to]
+      properties:
+        from: { type: string, description: The entry's path in the ZIP. }
+        to: { type: string, description: The vault path it was given. }
+
+    VaultNotionImportFile:
+      type: object
+      required: [entry, kind, status]
+      properties:
+        entry: { type: string, description: "The file's path in the ZIP. A database row without a page of its own reports its CSV." }
+        savedPath:
+          type: string
+          description: The vault path the entry maps to; a database's is its folder. Absent for `hidden` entries.
+        kind:
+          type: string
+          enum: [page, row, attachment, database, other]
+        status:
+          type: string
+          enum: [imported, updated, unchanged, exists, empty, tooLarge, hidden, unsupported, failed, planned]
+          description: |
+            As `VaultBulkImportFileResult.status`, plus `tooLarge` (an
+            attachment over 25 MB, or a page or CSV over 16 MB) and `planned`
+            (a dry run would write it).
 
     # ── Kanban: promote (LuminaVaultShared CardPromoteRequest) ──
     CardPromoteRequest:

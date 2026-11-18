@@ -221,28 +221,40 @@ func (m *Mapping) claim(parent, name, suffix string) (string, int) {
 	}
 }
 
-// slugStem slugifies name, with " n" appended from the second on. A leading
-// dot is dropped so the result is never a hidden file, and the number survives
-// the 80-Character cap.
+// slugStem slugifies name, with " n" appended from the second on. The result
+// is a fixed point of SlugifySegment (bulk ingest slugifies the path again):
+// no dash left at either end by the 80-Character cut, and no leading dot, so
+// it is never a hidden file. The number survives the cut.
 func slugStem(name string, n int) string {
 	if n <= 1 {
-		return trimDots(vaultfiles.SlugifySegment(name))
+		return stable(vaultfiles.SlugifySegment(name))
 	}
 	number := "-" + strconv.Itoa(n)
-	out := trimDots(vaultfiles.SlugifySegment(name + " " + strconv.Itoa(n)))
+	out := stable(vaultfiles.SlugifySegment(name + " " + strconv.Itoa(n)))
 	if strings.HasSuffix(out, number) {
 		return out
 	}
-	base := []rune(trimDots(vaultfiles.SlugifySegment(name)))
+	base := []rune(stable(vaultfiles.SlugifySegment(name)))
 	if keep := maxSlugSegment - len(number); len(base) > keep {
 		base = base[:keep]
 	}
-	return strings.TrimRight(string(base), "-") + number
+	return stable(string(base)) + number
 }
 
-func trimDots(s string) string {
-	if out := strings.TrimLeft(s, "."); out != "" {
-		return out
+// stable trims what SlugifySegment would not produce at the ends of a segment.
+func stable(s string) string {
+	for {
+		next := strings.Trim(strings.TrimLeft(s, "."), "-")
+		if next == s {
+			break
+		}
+		s = next
 	}
-	return "x"
+	if s == "" {
+		return "x"
+	}
+	return s
 }
+
+// trimDots is stable for a file extension.
+func trimDots(s string) string { return stable(s) }

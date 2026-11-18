@@ -9,9 +9,13 @@ import (
 	"lumina/internal/auth"
 	"lumina/internal/httpserver"
 	"lumina/internal/ids"
+	"lumina/internal/notionimport"
 	"lumina/internal/wire"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v5"
@@ -21,6 +25,10 @@ const (
 	maxBookmarksBytes = 8 * 1024 * 1024
 	maxBulkBytes      = 96 * 1024 * 1024
 	maxBulkFiles      = 2000
+	notionPath        = "/v1/vault/import/notion"
+	// notionSpoolAge is how old a leftover upload must be before the next
+	// import removes it: longer than any import runs.
+	notionSpoolAge = 6 * time.Hour
 )
 
 // Module is the routes.
@@ -43,6 +51,9 @@ func (m *Module) Register(r httpserver.Router, _ echo.MiddlewareFunc) {
 	r.POST("/v1/import/bookmarks", m.bookmarks, m.identify)
 	r.POST("/v1/import/files", m.files, m.identify)
 	r.POST("/v1/import/vault-bulk", m.bulk, m.identify)
+	// E7: the Notion ZIP is up to 200 MB, which no phone sends in the server's
+	// 30 s read timeout.
+	r.POST(notionPath, m.notion, httpserver.LongUpload(), m.identify)
 	r.GET("/v1/import/:id", m.status, m.identify)
 	r.POST("/v1/import/:id/categorize", m.categorize, m.identify)
 	r.POST("/v1/import/:id/approve", m.approve, m.identify)
@@ -250,8 +261,8 @@ func (m *Module) bulk(c *echo.Context) error {
 	opts := IngestOptions{OnConflict: OnConflictOverwrite}
 	if body.OnConflict != nil {
 		switch VaultBulkImportRequestOnConflict(*body.OnConflict) {
-		case Overwrite:
-		case Skip:
+		case VaultBulkImportRequestOnConflictOverwrite:
+		case VaultBulkImportRequestOnConflictSkip:
 			opts.OnConflict = OnConflictSkip
 		default:
 			return wire.NewError(http.StatusBadRequest, "invalid_on_conflict")
@@ -271,4 +282,81 @@ func (m *Module) bulk(c *echo.Context) error {
 		SpaceID: wire.UUID{UUID: result.SpaceID}, SpaceSlug: result.SpaceSlug,
 		Imported: result.Imported, Skipped: result.Skipped, Failed: result.Failed, Files: files,
 	})
+}
+
+// notion is POST /v1/vault/import/notion (backlog E7): the raw ZIP of a Notion
+// export in, the report out. Like vault-bulk it asks for identity alone and
+// writes to the caller's own vault.
+//
+// The upload goes to a temp file on the vault's volume, not into memory: the
+// pod has less memory than the 200 MB this route accepts.
+func (m *Module) notion(c *echo.Context) error {
+	tenant, ok := auth.Identity(c)
+	if !ok {
+		return wire.ErrUnauthenticated
+	}
+	opts := NotionOptions{Space: wire.Query(c, "space"), OnConflict: OnConflictSkip}
+	switch wire.Query(c, "dryRun") {
+	case "", "false", "0":
+	case "true", "1":
+		opts.DryRun = true
+	default:
+		return wire.NewError(http.StatusBadRequest, "invalid_dry_run")
+	}
+	switch VaultImportNotionParamsOnConflict(wire.Query(c, "onConflict")) {
+	case "", VaultImportNotionParamsOnConflictSkip:
+	case VaultImportNotionParamsOnConflictOverwrite:
+		opts.OnConflict = OnConflictOverwrite
+	default:
+		return wire.NewError(http.StatusBadRequest, "invalid_on_conflict")
+	}
+	r := c.Request()
+	if r.ContentLength > notionimport.MaxCompressedBytes {
+		return wire.ErrBodyTooLarge
+	}
+	if m.ingest.guard != nil {
+		if err := m.ingest.guard.Check(max(r.ContentLength, 0)); err != nil {
+			return err
+		}
+	}
+	dir, err := m.ingest.notionSpool()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.RemoveAll(dir) }()
+	upload, err := os.Create(filepath.Join(dir, "upload.zip")) //nolint:gosec // dir is ours, from MkdirTemp
+	if err != nil {
+		return err
+	}
+	defer func() { _ = upload.Close() }()
+	size, err := io.Copy(upload, io.LimitReader(r.Body, notionimport.MaxCompressedBytes+1))
+	if err != nil {
+		return err
+	}
+	if size > notionimport.MaxCompressedBytes {
+		return wire.ErrBodyTooLarge
+	}
+	report, err := m.ingest.ImportNotion(r.Context(), tenant, upload, size, dir, opts)
+	if err != nil {
+		return err
+	}
+	return wire.JSON(c, http.StatusOK, report)
+}
+
+// notionSpool makes a private temp directory for one upload, beside the
+// tenants' data so the disk guard's volume is the one it fills. Directories a
+// crashed import left behind are removed once they are old.
+func (i *Ingest) notionSpool() (string, error) {
+	root := filepath.Join(i.paths.Root, "tmp", "notion-import")
+	if err := os.MkdirAll(root, 0o750); err != nil {
+		return "", err
+	}
+	if left, err := os.ReadDir(root); err == nil {
+		for _, entry := range left {
+			if info, err := entry.Info(); err == nil && time.Since(info.ModTime()) > notionSpoolAge {
+				_ = os.RemoveAll(filepath.Join(root, entry.Name()))
+			}
+		}
+	}
+	return os.MkdirTemp(root, "upload-*")
 }
