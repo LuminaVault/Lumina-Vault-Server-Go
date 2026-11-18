@@ -13,7 +13,6 @@ import (
 	"net/url"
 	"strings"
 	"time"
-	"unicode/utf8"
 )
 
 const (
@@ -139,10 +138,9 @@ func capText(s string, max int64, force bool) string {
 	if keep > len(s) {
 		keep = len(s)
 	}
-	for keep > 0 && !utf8.ValidString(s[:keep]) {
-		keep--
-	}
-	return s[:keep] + truncatedMarker
+	// Linear: drop invalid bytes (an incomplete rune at the cut, or junk from
+	// a hostile app) without discarding the content after them.
+	return strings.ToValidUTF8(s[:keep], "") + truncatedMarker
 }
 
 // run performs initialize, notifications/initialized and then the real request.
@@ -185,6 +183,10 @@ func (c *Client) post(ctx context.Context, endpoint, bearer, session string, id 
 	if c.Guard == nil {
 		return nil, nil, false, errors.New("connectedapps: no URL guard configured")
 	}
+	if c.HTTP == nil {
+		// Fail closed: never fall back to http.DefaultClient (no dial-time SSRF guard).
+		return nil, nil, false, errors.New("connectedapps: no HTTP client configured")
+	}
 	u, err := c.Guard.Validate(ctx, endpoint)
 	if err != nil {
 		return nil, nil, false, fmt.Errorf("connectedapps: endpoint rejected: %w", err)
@@ -211,11 +213,7 @@ func (c *Client) post(ctx context.Context, endpoint, bearer, session string, id 
 	if session != "" {
 		req.Header.Set("Mcp-Session-Id", session)
 	}
-	httpc := c.HTTP
-	if httpc == nil {
-		httpc = http.DefaultClient
-	}
-	resp, err := httpc.Do(req)
+	resp, err := c.HTTP.Do(req)
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil, nil, false, ctx.Err()
@@ -299,15 +297,98 @@ func sseData(raw []byte, id int, truncated bool) []byte {
 	return nil
 }
 
-// partialText extracts the first JSON string value of a "text" key from a
-// possibly cut-off body (including the cut string's decoded prefix).
+type jsonFrame struct {
+	obj       bool
+	expectKey bool
+	key       string
+}
+
+// partialText recovers the text of result.content[] items of type "text" from
+// a possibly cut-off response body, in order. Items outside result.content
+// (structuredContent, resource.text, ...) are ignored. The final cut string,
+// if it is a text value, is recovered as a decoded prefix. Garbage yields "".
 func partialText(raw []byte) string {
-	const key = `"text":"`
-	i := bytes.Index(raw, []byte(key))
-	if i < 0 {
-		return ""
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	var stack []jsonFrame
+	var out strings.Builder
+	var itemText strings.Builder
+	itemType, hasText := "", false
+	// isItem: stack is {root obj key "result", result obj key "content", array, item obj}.
+	isItem := func() bool {
+		return len(stack) == 4 && stack[0].obj && stack[0].key == "result" &&
+			stack[1].obj && stack[1].key == "content" && !stack[2].obj && stack[3].obj
 	}
-	rest := raw[i+len(key):]
+	flush := func() {
+		if hasText && (itemType == "text" || itemType == "") {
+			out.WriteString(itemText.String())
+		}
+		itemText.Reset()
+		itemType, hasText = "", false
+	}
+	for {
+		tok, err := dec.Token()
+		if err != nil {
+			{
+				// A cut string value: recover its prefix when it is an item's text.
+				if len(stack) == 4 && isItem() && stack[3].key == "text" && !stack[3].expectKey {
+					rest := raw[dec.InputOffset():]
+					if q := bytes.IndexByte(rest, '"'); q >= 0 && itemType != "image" {
+						itemText.Reset()
+						itemText.WriteString(decodePartialString(rest[q+1:]))
+						hasText = true
+					}
+				}
+				if len(stack) >= 4 && isItem() {
+					flush()
+				}
+			}
+			return out.String()
+		}
+		// Shape: stack frames mirror open containers. Position of this token:
+		var top *jsonFrame
+		if n := len(stack); n > 0 {
+			top = &stack[n-1]
+		}
+		switch v := tok.(type) {
+		case json.Delim:
+			switch v {
+			case '{', '[':
+				if top != nil && top.obj {
+					top.expectKey = false
+				}
+				stack = append(stack, jsonFrame{obj: v == '{', expectKey: v == '{'})
+			default:
+				if isItem() {
+					flush()
+				}
+				stack = stack[:len(stack)-1]
+				if n := len(stack); n > 0 && stack[n-1].obj {
+					stack[n-1].expectKey = true
+				}
+			}
+		case string:
+			if top != nil && top.obj && top.expectKey {
+				top.key, top.expectKey = v, false
+			} else {
+				if isItem() && top.key == "text" {
+					itemText.WriteString(v)
+					hasText = true
+				} else if isItem() && top.key == "type" {
+					itemType = v
+				}
+				if top != nil && top.obj {
+					top.expectKey = true
+				}
+			}
+		default:
+			if top != nil && top.obj {
+				top.expectKey = true
+			}
+		}
+	}
+}
+
+func decodePartialString(rest []byte) string {
 	var sb strings.Builder
 	for k := 0; k < len(rest); k++ {
 		ch := rest[k]
@@ -335,6 +416,8 @@ func partialText(raw []byte) string {
 			default:
 				sb.WriteByte(rest[k])
 			}
+		case ch == '\\':
+			// lone trailing backslash: cut mid-escape
 		default:
 			sb.WriteByte(ch)
 		}

@@ -11,6 +11,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 type allowAll struct{}
@@ -213,5 +214,48 @@ func TestClientRejectsGuardFailure(t *testing.T) {
 	}
 	if len(s.seen) != 0 {
 		t.Fatalf("%d requests reached the server", len(s.seen))
+	}
+}
+
+func TestClientNilHTTPFailsClosed(t *testing.T) {
+	s := newStub(t, func(w http.ResponseWriter, id int, r rpcReq) {})
+	c := &Client{Guard: allowAll{}}
+	if _, err := c.ListTools(context.Background(), s.srv.URL, "tok"); err == nil {
+		t.Fatal("expected error")
+	}
+	if _, err := c.CallTool(context.Background(), s.srv.URL, "tok", "x", nil); err == nil {
+		t.Fatal("expected error")
+	}
+	if len(s.seen) != 0 {
+		t.Fatalf("%d requests reached the server", len(s.seen))
+	}
+}
+
+func TestClientPartialText(t *testing.T) {
+	cases := []struct{ name, body, want string }{
+		{"compact cut", `{"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"hello wor`, "hello wor"},
+		{"spaced", `{"jsonrpc": "2.0", "id": 2, "result": {"content": [{"type": "text", "text": "hello wor`, "hello wor"},
+		{"pretty", "{\n  \"result\": {\n    \"content\": [\n      {\n        \"type\": \"text\",\n        \"text\": \"a\\nb cut", "a\nb cut"},
+		{"ignores structuredContent and resource.text", `{"result":{"structuredContent":{"text":"NO"},"content":[{"type":"resource","resource":{"text":"NO2"}},{"type":"text","text":"yes`, "yes"},
+		{"two text parts", `{"result":{"content":[{"type":"text","text":"one"},{"type":"text","text":"two"},{"type":"text","text":"thr`, "onetwothr"},
+		{"text before type", `{"result":{"content":[{"text":"abc","type":"text"},{"text":"img","type":"image"},{"type":"text","text":"d`, "abcd"},
+		{"garbage", `\x00\xff not json at all }}}{{`, ""},
+		{"empty", ``, ""},
+	}
+	for _, tc := range cases {
+		if got := partialText([]byte(tc.body)); got != tc.want {
+			t.Errorf("%s: got %q want %q", tc.name, got, tc.want)
+		}
+	}
+}
+
+func TestClientCapTextInvalidUTF8(t *testing.T) {
+	s := "ab\xffcd" + strings.Repeat("é", 5000) // bad byte early, many multibyte runes
+	got := capText(s, 1001, true)
+	if len(got) > 1001 || !strings.HasSuffix(got, "\n[truncated]") || !utf8.ValidString(got) {
+		t.Fatalf("len %d valid %v", len(got), utf8.ValidString(got))
+	}
+	if !strings.HasPrefix(got, "abcdéé") {
+		t.Fatalf("content after bad byte lost: %q", got[:12])
 	}
 }
