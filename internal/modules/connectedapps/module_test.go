@@ -3,6 +3,14 @@ package connectedapps_test
 import (
 	"context"
 	"encoding/json"
+	"lumina/internal/auth"
+	"lumina/internal/config"
+	"lumina/internal/dbtest"
+	"lumina/internal/httpserver"
+	"lumina/internal/migrations"
+	"lumina/internal/modules/connectedapps"
+	"lumina/internal/secretbox"
+	"lumina/parity/scenario"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -15,15 +23,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
-	"lumina/internal/auth"
-	"lumina/internal/config"
 	core "lumina/internal/connectedapps"
-	"lumina/internal/dbtest"
-	"lumina/internal/httpserver"
-	"lumina/internal/migrations"
-	"lumina/internal/modules/connectedapps"
-	"lumina/internal/secretbox"
-	"lumina/parity/scenario"
 )
 
 const (

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"lumina/internal/ids"
 	"net/http"
 	"net/url"
 	"strings"
@@ -17,8 +18,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-
-	"lumina/internal/ids"
 )
 
 var (
@@ -380,7 +379,7 @@ func (o *OAuth) refresh(ctx context.Context, user uuid.UUID, app App, acct Accou
 // sanitizeCode keeps an OAuth error code short and plain before it is stored.
 func sanitizeCode(c string) string {
 	if c == "" || len(c) > 64 || strings.ContainsFunc(c, func(r rune) bool {
-		return !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' || r == '-' || r == '.')
+		return (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') && r != '_' && r != '-' && r != '.'
 	}) {
 		return "invalid_grant"
 	}

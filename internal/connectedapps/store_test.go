@@ -2,16 +2,15 @@ package connectedapps_test
 
 import (
 	"context"
+	"lumina/internal/connectedapps"
+	"lumina/internal/dbtest"
+	"lumina/internal/migrations"
+	"lumina/internal/secretbox"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
-
-	"lumina/internal/connectedapps"
-	"lumina/internal/dbtest"
-	"lumina/internal/migrations"
-	"lumina/internal/secretbox"
 )
 
 // testMasterKey is base64 of 32 bytes of 0x01. It is a copy of

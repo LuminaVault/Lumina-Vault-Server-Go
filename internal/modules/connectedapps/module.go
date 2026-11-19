@@ -14,17 +14,17 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"lumina/internal/auth"
+	"lumina/internal/httpserver"
+	"lumina/internal/modules/calendar"
+	"lumina/internal/wire"
 	"net/http"
 	"strings"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v5"
 
-	"lumina/internal/auth"
 	core "lumina/internal/connectedapps"
-	"lumina/internal/httpserver"
-	"lumina/internal/modules/calendar"
-	"lumina/internal/wire"
 )
 
 const (

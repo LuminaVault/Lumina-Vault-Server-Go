@@ -1,0 +1,168 @@
+# Connected apps: operator notes
+
+Connected apps let a user's Lumina act as an MCP client of their own other
+first-party apps (Norviq, Aaru, Khepri, Loci). Quick Assistant turns and
+`/v1/mcp` agent keys can then call those apps' read-only tools, named
+`<app>__<tool>` (for example `aaru__read_library`). v1 is read-only: only tools
+on each app's allowlist in `internal/connectedapps/registry.go` are exposed.
+
+## Configuration
+
+All keys are read in `internal/config/config.go`. Go only; Swift never had them.
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `CONNECTED_APPS_ENABLED` | `false` | Master switch. Read with `strings.EqualFold(v, "true")`. |
+| `CONNECTED_APPS_NORVIQ_MCP_URL` | `https://mcp.norviq.org/mcp` | Norviq MCP endpoint (access token pasted by the user). |
+| `CONNECTED_APPS_AARU_MCP_URL` | `https://api.aaruapp.com/v1/mcp` | Aaru MCP endpoint (OAuth). |
+| `CONNECTED_APPS_KHEPRI_MCP_URL` | `https://www.kheprios.com/mcp` | Khepri MCP endpoint (OAuth). |
+| `CONNECTED_APPS_LOCI_MCP_URL` | `https://api.lociai.fyi/mcp` | Loci MCP endpoint (API key pasted by the user). |
+
+Related keys that connected apps depend on:
+
+| Key | Default | Why it matters |
+| --- | --- | --- |
+| `LV_SECRET_MASTER_KEY` | empty | secretbox master key. Tokens are only stored sealed. With the flag on but this key missing or unusable, connected apps are NOT mounted (a warning is logged; no error). |
+| `MCP_PUBLIC_BASE_URL` | empty | Base of the OAuth callback URL (see below). |
+| `INGESTION_PUBLIC_BASE_URL` | empty | Fallback base when `MCP_PUBLIC_BASE_URL` is empty. If both are empty, OAuth connects answer 503 (pasted-token connects still work). |
+| `CORS_ALLOWED_ORIGINS` | see config | Allowlist for a web `returnTo` after the OAuth callback. |
+
+URLs come from config only. A user-supplied URL is never accepted, every
+outbound call goes through the SSRF guard (HTTPS required, checked at the URL
+and again at dial time), and redirects are refused.
+
+### `CONNECTED_APPS_ENABLED=false` (the default)
+
+With the flag off: no `/v1/me/connected-apps*` routes and no OAuth callback
+route are mounted, no `<app>__*` tools reach Quick Assistant or `/v1/mcp`, and
+the per-app grants field is absent from the agent-connection DTO. Nothing
+about connected apps surfaces to clients.
+
+## OAuth callback URL
+
+Registered automatically by Dynamic Client Registration (RFC 7591) on the first
+OAuth connect of an app (Aaru and Khepri use OAuth; Norviq and Loci use a
+pasted token and never register a client):
+
+    <MCP_PUBLIC_BASE_URL, else INGESTION_PUBLIC_BASE_URL>/v1/connected-apps/oauth/callback
+
+(trailing slash on the base is trimmed; see `connectedAppsCallbackURL` in
+`cmd/App/connectedapps.go`). The registration is `client_name` "LuminaVault",
+a public client (`token_endpoint_auth_method: none`), `authorization_code` plus
+`refresh_token`. If an app's operator wants to allowlist redirect URIs by hand,
+this is the exact string.
+
+**Runbook: the DCR registration is cached per app.** The resulting `client_id`
+is stored in `connected_app_clients` (one row per app) and reused forever; the
+callback URL is NOT re-registered. If you change the public base URL (or the
+callback path), the cached client still carries the old redirect URI and the
+app will reject the authorize request. Clear the cache so the next connect
+registers anew:
+
+    DELETE FROM connected_app_clients WHERE app_id = 'aaru';   -- or 'khepri', or all rows
+
+Existing users' refresh tokens were issued to the old client; after clearing,
+those users will move to `needs_reauth` on the next refresh and must reconnect.
+
+## Revoking
+
+- **User:** `DELETE /v1/me/connected-apps/:app` (authenticated). For an OAuth
+  app it first makes a best-effort RFC 7009 revocation of the refresh token at
+  the app's authorization server (5 s limit; skipped when the app advertises no
+  revocation endpoint), then deletes the local account row, then drops the
+  in-memory client. A failed upstream revoke is logged (kind only) and does not
+  block the local delete. Pasted-token apps (Norviq, Loci) have no upstream
+  revoke: the user must also delete the token in that app. A failed local
+  delete answers 500.
+- **Operator:** delete the user's row directly, which is equivalent to the
+  local half of Disconnect:
+
+      DELETE FROM connected_app_accounts WHERE user_id = '<user uuid>' AND app_id = '<app>';
+
+  To cut one agent key's access without touching the user's connection, clear
+  that key's grant (`agent_connections.connected_app_grants`) or revoke the
+  key. Upstream revocation is the user's or the app operator's job.
+- Deleting a user cascades (`ON DELETE CASCADE`).
+
+## Deploy order
+
+Migrations `00007_connected_apps.sql` and `00008` (nullable origin column on
+pending actions) are expand-only. They run as the ArgoCD PreSync goose job
+(`platform/infra/charts/app/templates/migrate-job.yaml`, enabled by
+`migrate.enabled` in `apps/api/values-common.yaml`), with `backoffLimit: 0`: a
+failed migration leaves the old ReplicaSet serving.
+
+- **The migration must succeed before the new image serves.** Every `lv_` agent
+  key lookup selects `agent_connections.connected_app_grants` (added by 00007),
+  even with the flag off. If the column is missing, all agent-key auth breaks.
+- **Rolling the image back is safe.** The columns and tables are additive and
+  the old image ignores them.
+- **Do NOT run goose Down on 00007 while the new image is running.** It drops
+  `connected_app_grants`, which the new image selects on every key lookup, and
+  drops the tables holding users' sealed tokens. Roll the image back first.
+- Merging this repo does not deploy; the infra repo's `main` does.
+
+## Privacy model
+
+- **Key = user id** (`auth.Identity`), never the vault id or `X-Vault-ID`.
+- **Tokens are sealed per user** with secretbox (`Seal/Open` bound to the user
+  id), never logged, never returned. Logs and metering record only
+  `(user, app, tool, latency_ms, ok)`: no arguments, no results.
+- **Anthropic only** (R21, R22, R24, R25). A turn that offers app tools runs on
+  Anthropic's own endpoint, pinned to the trial model. Free-lane users, and
+  users whose Anthropic route points at a tenant custom base URL, get the turn
+  without app tools. If the pinned Anthropic call fails before any tool ran,
+  the turn reruns on its original route with no app tools. App data never
+  reaches another provider.
+- **Flagged history is never replayed** (R27). User and assistant rows of a
+  turn that ran an app tool carry `origin = 'connected_app'`; every reader of
+  chat history for an LLM skips them. Follow-up questions therefore do not see
+  earlier app answers (accepted v1 UX loss).
+- **Writes after app data** (R28, R30). Once an app answered in a turn, Run-class
+  write tools (memory_save, app_reminder_create, space_create, space_update,
+  file_move, ...) are refused with fixed text. **v1 limitation: connected-app
+  data cannot be saved to memory, reminders or spaces.** Confirm-class writes
+  (for example calendar_create) are still allowed, because the user's tap is an
+  explicit ask.
+- **Confirm lines are flagged** (R29): a pending action carries the proposing
+  turn's origin, so its confirm line is flagged too.
+- **`/v1/mcp` grants default off.** An agent key sees `<app>__*` tools only
+  when the user connected the app AND the key has that app's grant (Settings,
+  Agent connections). The grant is re-checked on every call.
+- A static test (`internal/connectedapps/privacy_test.go`) fails if the admin,
+  posthog, telemetry or llm packages reference `connected_app_accounts` or
+  `connectedapps.Store`.
+
+## Known risk: cross-user OAuth completion (R19), owner decision pending
+
+The OAuth callback is unauthenticated: it finishes the flow from the `state`
+alone, because the iOS web-auth session cannot carry the user's JWT and
+cross-site web cookies are unreliable. So an attacker could start a connect on
+their own Lumina account and send the resulting authorize link to a victim; if
+the victim approves, the victim's app tokens bind to the attacker's Lumina
+account, and the attacker could then read the victim's app data through Lumina.
+
+Mitigations: the app's own first-party consent screen names Lumina, and the
+state is single-use with a 10-minute lifetime.
+
+**Status: PROVISIONALLY ACCEPTED for v1, pending the owner's decision.** Do not
+enable in production before that decision. Staging checklist item below.
+
+## Staging verification checklist
+
+Run after the owner deploys with `CONNECTED_APPS_ENABLED=true` on staging only.
+Record request IDs for each step.
+
+1. Connect your own Aaru with OAuth: `POST /v1/me/connected-apps/aaru/connect`,
+   then open the returned URL and approve.
+2. Ask Quick Assistant "what am I watching?" and get a live answer.
+3. `DELETE /v1/me/connected-apps/aaru`, then ask again: there must be no Aaru
+   tool.
+4. A second staging account lists `aaru` as `disconnected`.
+5. (R19) Verify the Aaru and Khepri consent screens always prompt for the
+   Lumina DCR client and never auto-approve (including when the user is already
+   signed in and has approved before). Norviq and Loci use pasted tokens, not
+   OAuth, so there is no consent screen to check; confirm they are not
+   reachable through any redirect flow either. If any OAuth app auto-approves,
+   stop and escalate to the owner before enabling in production.
+6. Confirm `00007` and `00008` ran in the PreSync job before the pod served.

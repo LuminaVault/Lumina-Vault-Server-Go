@@ -3,13 +3,12 @@ package connectedapps
 import (
 	"context"
 	"errors"
+	"lumina/internal/secretbox"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-
-	"lumina/internal/secretbox"
 )
 
 // ErrNotConnected means the user has no account row for the app.

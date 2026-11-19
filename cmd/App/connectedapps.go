@@ -2,16 +2,16 @@ package main
 
 import (
 	"log/slog"
+	"lumina/internal/config"
+	"lumina/internal/connectedapps"
+	"lumina/internal/httpserver"
+	"lumina/internal/secretbox"
+	"lumina/internal/ssrfguard"
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"lumina/internal/config"
-	"lumina/internal/connectedapps"
-	"lumina/internal/httpserver"
 	connectedappsmod "lumina/internal/modules/connectedapps"
-	"lumina/internal/secretbox"
-	"lumina/internal/ssrfguard"
 )
 
 // connectedAppsCallbackURL is where an app's authorization server sends the

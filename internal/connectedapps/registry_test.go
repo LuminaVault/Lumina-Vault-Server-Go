@@ -1,11 +1,10 @@
 package connectedapps
 
 import (
+	"lumina/internal/config"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-
-	"lumina/internal/config"
 )
 
 func TestRegistryOrderAndLookup(t *testing.T) {

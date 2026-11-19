@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"lumina/internal/config"
+	"lumina/internal/connectedapps"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -14,9 +16,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-
-	"lumina/internal/config"
-	"lumina/internal/connectedapps"
 )
 
 // mcpApp is a stub first-party app: MCP endpoint at /mcp plus the OAuth
@@ -40,13 +39,13 @@ func newMCPApp(t *testing.T, ok ...string) *mcpApp {
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/.well-known/oauth-protected-resource/mcp", func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]any{"authorization_servers": []string{a.srv.URL}})
+		_ = json.NewEncoder(w).Encode(map[string]any{"authorization_servers": []string{a.srv.URL}})
 	})
 	mux.HandleFunc("/.well-known/oauth-authorization-server", func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]any{"issuer": a.srv.URL, "token_endpoint": a.srv.URL + "/token"})
+		_ = json.NewEncoder(w).Encode(map[string]any{"issuer": a.srv.URL, "token_endpoint": a.srv.URL + "/token"})
 	})
 	mux.HandleFunc("/token", func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]any{"access_token": "alice-token-2", "expires_in": 3600})
+		_ = json.NewEncoder(w).Encode(map[string]any{"access_token": "alice-token-2", "expires_in": 3600})
 	})
 	mux.HandleFunc("/mcp", func(w http.ResponseWriter, r *http.Request) {
 		a.mu.Lock()
@@ -65,7 +64,7 @@ func newMCPApp(t *testing.T, ok ...string) *mcpApp {
 		w.Header().Set("Content-Type", "application/json")
 		switch req.Method {
 		case "initialize":
-			json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": *req.ID, "result": map[string]any{}})
+			_ = json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": *req.ID, "result": map[string]any{}})
 		case "notifications/initialized":
 			w.WriteHeader(http.StatusAccepted)
 		case "tools/list":
@@ -74,14 +73,15 @@ func newMCPApp(t *testing.T, ok ...string) *mcpApp {
 			for _, n := range a.tools {
 				ts = append(ts, map[string]any{"name": n, "description": "d", "inputSchema": map[string]any{"type": "object"}})
 			}
-			json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": *req.ID, "result": map[string]any{"tools": ts}})
+			_ = json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": *req.ID, "result": map[string]any{"tools": ts}})
 		case "tools/call":
 			if a.rpcErr != "" {
-				json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": *req.ID, "error": map[string]any{"code": -32000, "message": a.rpcErr}})
+				_ = json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": *req.ID, "error": map[string]any{"code": -32000, "message": a.rpcErr}})
 				return
 			}
-			json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": *req.ID, "result": map[string]any{
-				"content": []map[string]any{{"type": "text", "text": a.result}}}})
+			_ = json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": *req.ID, "result": map[string]any{
+				"content": []map[string]any{{"type": "text", "text": a.result}},
+			}})
 		}
 	})
 	a.srv = httptest.NewServer(mux)
@@ -115,7 +115,8 @@ func saveAlice(t *testing.T, e *svcEnv, token string) {
 	t.Helper()
 	exp := time.Now().Add(time.Hour)
 	require.NoError(t, e.store.Save(context.Background(), alice, connectedapps.Account{
-		AppID: "aaru", AccessToken: token, RefreshToken: "r", ExpiresAt: &exp}))
+		AppID: "aaru", AccessToken: token, RefreshToken: "r", ExpiresAt: &exp,
+	}))
 }
 
 func TestSplitName(t *testing.T) {

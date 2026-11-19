@@ -51,7 +51,7 @@ func (o *OAuth) send(ctx context.Context, method, rawURL, contentType string, bo
 		}
 		return 0, nil, fmt.Errorf("connectedapps: oauth request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	b, err := io.ReadAll(io.LimitReader(resp.Body, maxOAuthBody))
 	if err != nil {
 		return 0, nil, fmt.Errorf("connectedapps: oauth read failed: %w", err)

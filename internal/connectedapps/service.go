@@ -62,8 +62,10 @@ func NewService(reg Registry, store *Store, oauth *OAuth, client *Client, log *s
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Service{reg: reg, store: store, oauth: oauth, client: client, log: log,
-		now: time.Now, cache: map[cacheKey]cacheEntry{}}
+	return &Service{
+		reg: reg, store: store, oauth: oauth, client: client, log: log,
+		now: time.Now, cache: map[cacheKey]cacheEntry{},
+	}
 }
 
 // SplitName splits "<app>__<tool>" on the first "__"; both parts must be non-empty.

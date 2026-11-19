@@ -54,8 +54,10 @@ func newStub(t *testing.T, reqFn func(w http.ResponseWriter, id int, r rpcReq)) 
 		var req rpcReq
 		_ = json.NewDecoder(r.Body).Decode(&req)
 		s.mu.Lock()
-		s.seen = append(s.seen, seen{req.Method, r.Header.Get("Mcp-Session-Id"), r.Header.Get("Authorization"),
-			r.Header.Get("Accept"), req.ID != nil, string(req.Params)})
+		s.seen = append(s.seen, seen{
+			req.Method, r.Header.Get("Mcp-Session-Id"), r.Header.Get("Authorization"),
+			r.Header.Get("Accept"), req.ID != nil, string(req.Params),
+		})
 		s.mu.Unlock()
 		switch req.Method {
 		case "initialize":

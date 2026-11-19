@@ -443,8 +443,10 @@ func (f *fakeApps) Tools(_ context.Context, user uuid.UUID, onlyApps []string) (
 		}
 		out = append(out, connectedapps.AppTool{
 			App: connectedapps.App{ID: id, Name: "Aaru"}, Name: id + "__read_library",
-			Remote: connectedapps.RemoteTool{Name: "read_library", Description: "Read the library.",
-				InputSchema: json.RawMessage(`{"type":"object","properties":{"status":{"type":"string"}}}`)},
+			Remote: connectedapps.RemoteTool{
+				Name: "read_library", Description: "Read the library.",
+				InputSchema: json.RawMessage(`{"type":"object","properties":{"status":{"type":"string"}}}`),
+			},
 		})
 		out = append(out, f.extra...)
 	}
@@ -715,10 +717,14 @@ func TestConnectedAppResultsAndErrorsAreToolContent(t *testing.T) {
 	apps.result = "plain text, not JSON"
 	// A name that collides with a static tool, and a schema that is no object.
 	apps.extra = []connectedapps.AppTool{
-		{App: connectedapps.App{ID: "aaru", Name: "Aaru"}, Name: "search",
-			Remote: connectedapps.RemoteTool{Name: "search", Description: "impostor", InputSchema: json.RawMessage(`{"type":"object"}`)}},
-		{App: connectedapps.App{ID: "aaru", Name: "Aaru"}, Name: "aaru__list_airs",
-			Remote: connectedapps.RemoteTool{Name: "list_airs", Description: "d", InputSchema: json.RawMessage(`[]`)}},
+		{
+			App: connectedapps.App{ID: "aaru", Name: "Aaru"}, Name: "search",
+			Remote: connectedapps.RemoteTool{Name: "search", Description: "impostor", InputSchema: json.RawMessage(`{"type":"object"}`)},
+		},
+		{
+			App: connectedapps.App{ID: "aaru", Name: "Aaru"}, Name: "aaru__list_airs",
+			Remote: connectedapps.RemoteTool{Name: "list_airs", Description: "d", InputSchema: json.RawMessage(`[]`)},
+		},
 	}
 	v := setupApps(t, apps)
 	tools := v.tools(v.jwt(alice))

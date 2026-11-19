@@ -3,6 +3,8 @@ package connectedapps_test
 import (
 	"context"
 	"encoding/json"
+	"lumina/internal/config"
+	"lumina/internal/connectedapps"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -12,9 +14,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-
-	"lumina/internal/config"
-	"lumina/internal/connectedapps"
 )
 
 // permissive allows every URL; client_test.go's allowAll is in the internal
@@ -47,7 +46,7 @@ func newAS(t *testing.T) *asStub {
 	s := &asStub{}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/.well-known/oauth-protected-resource/mcp", func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]any{"authorization_servers": []string{s.srv.URL}})
+		_ = json.NewEncoder(w).Encode(map[string]any{"authorization_servers": []string{s.srv.URL}})
 	})
 	mux.HandleFunc("/.well-known/oauth-authorization-server", func(w http.ResponseWriter, r *http.Request) {
 		iss := s.srv.URL
@@ -63,7 +62,7 @@ func newAS(t *testing.T) *asStub {
 			meta["revocation_endpoint"] = s.srv.URL + "/revoke"
 		}
 		s.mu.Unlock()
-		json.NewEncoder(w).Encode(meta)
+		_ = json.NewEncoder(w).Encode(meta)
 	})
 	mux.HandleFunc("/revoke", func(w http.ResponseWriter, r *http.Request) {
 		require.NoError(t, r.ParseForm())
@@ -84,7 +83,7 @@ func newAS(t *testing.T) *asStub {
 		s.lastForm = url.Values{"auth": {body["token_endpoint_auth_method"].(string)}, "redir": {body["redirect_uris"].([]any)[0].(string)}}
 		s.mu.Unlock()
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(map[string]any{"client_id": "cid-1"})
+		_ = json.NewEncoder(w).Encode(map[string]any{"client_id": "cid-1"})
 	})
 	mux.HandleFunc("/token", func(w http.ResponseWriter, r *http.Request) {
 		require.NoError(t, r.ParseForm())
@@ -98,10 +97,10 @@ func newAS(t *testing.T) *asStub {
 				s.refreshFn(w)
 				return
 			}
-			json.NewEncoder(w).Encode(map[string]any{"access_token": "acc-2", "expires_in": 3600})
+			_ = json.NewEncoder(w).Encode(map[string]any{"access_token": "acc-2", "expires_in": 3600})
 			return
 		}
-		json.NewEncoder(w).Encode(map[string]any{"access_token": "acc-1", "refresh_token": "ref-1", "expires_in": 10, "scope": "read"})
+		_ = json.NewEncoder(w).Encode(map[string]any{"access_token": "acc-1", "refresh_token": "ref-1", "expires_in": 10, "scope": "read"})
 	})
 	s.srv = httptest.NewServer(mux)
 	t.Cleanup(s.srv.Close)
@@ -247,7 +246,8 @@ func TestFreshSkipsRefreshWhenValid(t *testing.T) {
 	o, store := newOAuth(t, s)
 	exp := time.Now().Add(time.Hour)
 	require.NoError(t, store.Save(context.Background(), alice, connectedapps.Account{
-		AppID: "aaru", AccessToken: "live", RefreshToken: "r", ExpiresAt: &exp}))
+		AppID: "aaru", AccessToken: "live", RefreshToken: "r", ExpiresAt: &exp,
+	}))
 	tok, err := o.Fresh(context.Background(), alice, "aaru")
 	require.NoError(t, err)
 	require.Equal(t, "live", tok)
@@ -260,7 +260,7 @@ func TestCallMarksNeedsReauth(t *testing.T) {
 	s := newAS(t)
 	s.refreshFn = func(w http.ResponseWriter) {
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]any{"error": "invalid_grant"})
+		_ = json.NewEncoder(w).Encode(map[string]any{"error": "invalid_grant"})
 	}
 	o, store := newOAuth(t, s)
 	finish(t, o)
@@ -305,7 +305,8 @@ func TestRefreshForcesOnceThenReusesRotatedToken(t *testing.T) {
 	ctx := context.Background()
 	exp := time.Now().Add(time.Hour)
 	require.NoError(t, store.Save(ctx, alice, connectedapps.Account{
-		AppID: "aaru", AccessToken: "live", RefreshToken: "r", ExpiresAt: &exp}))
+		AppID: "aaru", AccessToken: "live", RefreshToken: "r", ExpiresAt: &exp,
+	}))
 
 	tok, err := o.Refresh(ctx, alice, "aaru", "live")
 	require.NoError(t, err)
@@ -384,7 +385,7 @@ func TestTokenEndpointRedirectIsRefused(t *testing.T) {
 	var hits atomic.Int32
 	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hits.Add(1)
-		json.NewEncoder(w).Encode(map[string]any{"access_token": "stolen", "expires_in": 3600})
+		_ = json.NewEncoder(w).Encode(map[string]any{"access_token": "stolen", "expires_in": 3600})
 	}))
 	defer other.Close()
 	s := newAS(t)

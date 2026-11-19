@@ -222,7 +222,7 @@ func (c *Client) post(ctx context.Context, endpoint, bearer, session string, id 
 		// Do not wrap err: url.Error text is safe but keep it terse.
 		return nil, nil, false, errors.New("connectedapps: request failed")
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusUnauthorized {
 		return nil, nil, false, ErrUnauthorized

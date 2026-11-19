@@ -1,17 +1,16 @@
 package main
 
 import (
+	"lumina/internal/config"
+	"lumina/internal/connectedapps"
+	"lumina/internal/httpserver"
+	"lumina/internal/modules/mcp"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/labstack/echo/v5"
 	"github.com/stretchr/testify/require"
-
-	"lumina/internal/config"
-	"lumina/internal/connectedapps"
-	"lumina/internal/httpserver"
-	"lumina/internal/modules/mcp"
 )
 
 // 32 zero bytes, base64: a test-only master key.
