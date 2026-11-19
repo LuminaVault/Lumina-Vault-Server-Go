@@ -55,5 +55,14 @@ func Erase(ctx context.Context, q *db.Queries, tenant uuid.UUID) error {
 	if err := q.AnonymizeBillingEvents(ctx, tenant); err != nil {
 		return err
 	}
-	return q.AnonymizeVaultActivity(ctx, db.AnonymizeVaultActivityParams{ActorName: DeletedActorName, ActorUserID: tenant})
+	if err := q.AnonymizeVaultActivity(ctx, db.AnonymizeVaultActivityParams{ActorName: DeletedActorName, ActorUserID: tenant}); err != nil {
+		return err
+	}
+	// vault_memberships.created_by_user_id is ON DELETE RESTRICT: clear every
+	// row that names the user before the users delete. Not in Swift's eraser,
+	// which had the same bug (every registered account answered 500).
+	if err := q.EraseOwnVaultMemberships(ctx, tenant); err != nil {
+		return err
+	}
+	return q.CreditMembershipsToMembers(ctx, tenant)
 }

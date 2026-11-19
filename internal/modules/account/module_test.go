@@ -430,3 +430,47 @@ func TestResponsesConformToSpec(t *testing.T) {
 	out.SetBodyBytes([]byte(r.body))
 	require.NoError(t, openapi3filter.ValidateResponse(ctx, out))
 }
+
+// Every registered user has the membership ensurePersonalVault writes: their
+// own personal vault, created_by_user_id = themselves. That FK is ON DELETE
+// RESTRICT and Postgres checks it before the user_id cascade removes the row,
+// so before the eraser handled memberships every real account answered 500
+// (Swift too; the parity seed users have no memberships, so nothing caught it).
+// Memberships the user granted in vaults they don't own outlive them, credited
+// to the member, so nobody loses access to a team vault.
+func TestDeleteUserWithVaultMemberships(t *testing.T) {
+	v := setup(t)
+	ctx := context.Background()
+	u, friend, teamOwner := v.newUser(), v.newUser(), v.newUser()
+	exec := func(q string, args ...any) {
+		t.Helper()
+		_, err := v.pool.Exec(ctx, q, args...)
+		require.NoError(t, err)
+	}
+	member := func(vault, user, createdBy uuid.UUID, role string) {
+		t.Helper()
+		exec(`INSERT INTO vault_memberships (id, vault_id, user_id, role, can_use_ai, created_by_user_id, created_at, updated_at)
+			VALUES (gen_random_uuid(), $1, $2, $3, TRUE, $4, now(), now())`, vault, user, role, createdBy)
+	}
+	// As registration writes it.
+	exec(`INSERT INTO vaults (id, personal_owner_user_id, name, created_at, updated_at) VALUES ($1, $1, 'mine', now(), now())`, u)
+	member(u, u, u, "admin")
+	// A friend the user shared their personal vault with: goes with the vault.
+	member(u, friend, u, "viewer")
+	// A team vault the user is in, where they also added the friend.
+	team, teamVault := uuid.New(), uuid.New()
+	exec(`INSERT INTO teams (id, name, owner_user_id, billing_sponsor_user_id, created_at, updated_at) VALUES ($1, 't', $2, $2, now(), now())`, team, teamOwner)
+	exec(`INSERT INTO vaults (id, team_id, name, created_at, updated_at) VALUES ($1, $2, 'team', now(), now())`, teamVault, team)
+	member(teamVault, u, teamOwner, "admin")
+	member(teamVault, friend, u, "editor")
+
+	r := v.do(u, `{"password":"`+password+`"}`)
+	require.Equal(t, http.StatusNoContent, r.code, string(r.body))
+	require.False(t, v.userExists(u))
+	require.Zero(t, v.count(`SELECT COUNT(*)::int FROM vaults WHERE id = $1`, u))
+	require.Zero(t, v.count(`SELECT COUNT(*)::int FROM vault_memberships WHERE user_id = $1 OR created_by_user_id = $1`, u))
+	require.Zero(t, v.count(`SELECT COUNT(*)::int FROM vault_memberships WHERE vault_id = $1`, u))
+	require.Equal(t, 1, v.count(`SELECT COUNT(*)::int FROM vault_memberships
+		WHERE vault_id = $1 AND user_id = $2 AND created_by_user_id = $2 AND role = 'editor'`, teamVault, friend),
+		"the friend keeps their team-vault access, credited to themselves")
+}

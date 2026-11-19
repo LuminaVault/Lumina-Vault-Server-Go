@@ -50,6 +50,23 @@ WHERE e.actor_user_id = sqlc.arg(actor_user_id)::uuid
     WHERE v.id = e.vault_id AND v.personal_owner_user_id = sqlc.arg(actor_user_id)::uuid
   );
 
+-- name: EraseOwnVaultMemberships :exec
+-- vault_memberships.created_by_user_id is ON DELETE RESTRICT, checked before
+-- any cascade runs, and registration writes the user's own personal-vault
+-- membership with created_by_user_id = the user. Without this every account
+-- with a vault answered 500. Removes the user's memberships and every
+-- membership in their personal vault (that vault cascades away anyway).
+DELETE FROM vault_memberships m
+WHERE m.user_id = sqlc.arg(user_id)::uuid
+   OR m.vault_id IN (SELECT v.id FROM vaults v WHERE v.personal_owner_user_id = sqlc.arg(user_id)::uuid);
+
+-- name: CreditMembershipsToMembers :exec
+-- Memberships the user granted in vaults that outlive them (team vaults):
+-- kept, credited to the member, so nobody loses access. The column is NOT NULL,
+-- so SET NULL is not an option.
+UPDATE vault_memberships SET created_by_user_id = user_id, updated_at = now()
+WHERE created_by_user_id = sqlc.arg(user_id)::uuid;
+
 -- name: DeleteUser :exec
 -- Every other per-tenant table cascades from here.
 DELETE FROM users WHERE id = $1;
