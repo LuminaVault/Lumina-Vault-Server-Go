@@ -46,7 +46,11 @@ var Instructions = strings.Join([]string{
 	"Google) and Reminders. They work only when the user allowed that domain,",
 	"and only for agent keys the user granted personal data. The two create",
 	"tools change the user's phone: confirm with the user first.",
-	"",
+}, "\n")
+
+// ConnectedAppInstructions is the paragraph initialize adds after Instructions
+// when connected apps are on. Off, the server says what it always said.
+var ConnectedAppInstructions = strings.Join([]string{
 	"Tools named <app>__* (for example aaru__read_library) are read-only.",
 	"They come from the user's own connected apps, and appear only when the",
 	"user has connected that app and this key has that app's grant (Settings,",

@@ -98,6 +98,12 @@ func swiftValue(v any) any {
 // varies per process, so the text is not contract; parity ignores it.
 func toolContent(result map[string]any) map[string]any {
 	isError, _ := result["isError"].(bool)
+	return toolContentWith(result, isError)
+}
+
+// toolContentWith is toolContent with the error flag given by the caller, for
+// a result whose own fields must not decide it.
+func toolContentWith(result map[string]any, isError bool) map[string]any {
 	text := "{}"
 	if b, err := wire.MarshalFoundation(swiftValue(result)); err == nil {
 		text = string(b)

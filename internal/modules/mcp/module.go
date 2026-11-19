@@ -195,6 +195,15 @@ func writeRPC(c *echo.Context, r response) error {
 	return c.Blob(http.StatusOK, "application/json", b)
 }
 
+// instructions is initialize's text: Instructions as it always was, plus the
+// connected-apps paragraph only when this server offers those tools.
+func (m *Module) instructions() string {
+	if m.opt.ConnectedApps == nil {
+		return Instructions
+	}
+	return Instructions + "\n\n" + ConnectedAppInstructions
+}
+
 // dispatch returns nil for a notification that is accepted and ignored.
 func (m *Module) dispatch(c *echo.Context, rpc *request) (any, error) {
 	switch rpc.method {
@@ -203,7 +212,7 @@ func (m *Module) dispatch(c *echo.Context, rpc *request) (any, error) {
 			"protocolVersion": ProtocolVersion,
 			"capabilities":    map[string]any{"tools": map[string]any{"listChanged": false}},
 			"serverInfo":      map[string]any{"name": ServerName, "title": ServerTitle, "version": ServerVersion},
-			"instructions":    Instructions,
+			"instructions":    m.instructions(),
 		}, nil
 	case "notifications/initialized", "notifications/cancelled":
 		return nil, nil
@@ -417,7 +426,9 @@ func (m *Module) callConnectedApp(c *echo.Context, appID, name string, args map[
 		// The service's errors are fixed sentences with no remote text.
 		return toolContent(map[string]any{"isError": true, "message": err.Error()}), nil
 	}
-	return toolContent(connectedAppResult(out)), nil
+	// The app's answer is data, not this server's verdict: a field named
+	// isError in it stays in structuredContent and cannot set the MCP flag.
+	return toolContentWith(connectedAppResult(out), false), nil
 }
 
 // connectedAppResult wraps an app tool's text as personalResult wraps a

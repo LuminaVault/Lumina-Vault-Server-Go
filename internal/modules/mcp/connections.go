@@ -211,28 +211,27 @@ func (s *Connections) Revoke(ctx context.Context, tenant, id uuid.UUID) error {
 }
 
 // Update applies whichever grants are non-nil, to a live key of this tenant
-// only. appGrants replaces the key's connected-app grants: nil leaves them, an
-// empty list clears them. The caller validates the ids.
+// only, in one statement: a field left nil keeps whatever the row holds when
+// the statement runs, so two updates of different fields cannot undo each
+// other. appGrants replaces the key's connected-app grants: nil leaves them,
+// an empty list clears them. The caller validates the ids.
 func (s *Connections) Update(ctx context.Context, tenant, id uuid.UUID, allowPersonal *bool, acc *string, appGrants *[]string) (ConnectionDTO, error) {
-	c, err := s.live(ctx, tenant, id)
+	// A nil slice is SQL NULL (keep); a non-nil empty one is '{}' (clear).
+	var grants []string
+	if appGrants != nil {
+		grants = append([]string{}, *appGrants...)
+	}
+	c, err := scanConnection(s.pool.QueryRow(ctx, `UPDATE agent_connections SET
+			allow_personal_data = COALESCE($3, allow_personal_data),
+			access = COALESCE($4, access),
+			connected_app_grants = COALESCE($5, connected_app_grants)
+		WHERE id = $1 AND tenant_id = $2 AND revoked_at IS NULL
+		RETURNING `+connectionColumns, id, tenant, allowPersonal, acc, grants))
 	if err != nil {
 		return ConnectionDTO{}, err
 	}
 	if c == nil {
 		return ConnectionDTO{}, errNotFound
-	}
-	if allowPersonal != nil {
-		c.AllowPersonalData = *allowPersonal
-	}
-	if acc != nil {
-		c.Access = *acc
-	}
-	if appGrants != nil {
-		c.ConnectedAppGrants = append([]string{}, *appGrants...)
-	}
-	if _, err := s.pool.Exec(ctx, `UPDATE agent_connections SET allow_personal_data = $2, access = $3, connected_app_grants = $4 WHERE id = $1`,
-		c.ID, c.AllowPersonalData, c.Access, c.ConnectedAppGrants); err != nil {
-		return ConnectionDTO{}, err
 	}
 	return c.dto(), nil
 }

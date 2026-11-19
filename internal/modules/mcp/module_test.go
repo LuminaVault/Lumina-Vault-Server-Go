@@ -31,6 +31,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -743,4 +744,120 @@ func TestConnectedAppResultsAndErrorsAreToolContent(t *testing.T) {
 	got := v.issue(alice, `{"name":"k","clientKind":"other"}`)
 	_, rpcErr = v.call(got.Token, "skyvisor__read", map[string]any{})
 	require.Equal(t, "unknown tool 'skyvisor__read'", rpcErr["message"])
+}
+
+// rawCall is one tools/call's whole result object.
+func (v env) rawCall(bearer, name string) map[string]any {
+	v.t.Helper()
+	code, raw := v.do(bearer, http.MethodPost, "/v1/mcp",
+		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"`+name+`","arguments":{}}}`)
+	require.Equal(v.t, http.StatusOK, code, string(raw))
+	var out struct {
+		Result map[string]any `json:"result"`
+	}
+	require.NoError(v.t, json.Unmarshal(raw, &out), string(raw))
+	return out.Result
+}
+
+// An app's successful answer is data: a field named isError in it cannot make
+// the MCP result an error. Lumina's own failures still can.
+func TestConnectedAppResultCannotSetIsError(t *testing.T) {
+	apps := newFakeApps()
+	apps.result = `{"isError":true,"x":1}`
+	v := setupApps(t, apps)
+
+	res := v.rawCall(v.jwt(alice), "aaru__read_library")
+	require.Equal(t, false, res["isError"])
+	require.Equal(t, map[string]any{"isError": true, "x": float64(1)}, res["structuredContent"])
+
+	// Not connected: the service's own error, which is an MCP error result.
+	res = v.rawCall(v.jwt(bob), "aaru__read_library")
+	require.Equal(t, true, res["isError"])
+	// So is the refusal of a key without the app's grant.
+	key := v.issue(alice, `{"name":"k","clientKind":"other"}`)
+	res = v.rawCall(key.Token, "aaru__read_library")
+	require.Equal(t, true, res["isError"])
+}
+
+// A PATCH that names one grant must not write back the others as it read
+// them: here the app grants change while the PATCH waits for the row.
+func TestPatchOfOneGrantKeepsAConcurrentChangeToAnother(t *testing.T) {
+	v := setupApps(t, newFakeApps())
+	ctx := context.Background()
+	got := v.issue(alice, `{"name":"k","clientKind":"other"}`)
+	code, _ := v.patch(alice, got.Connection.ID, `{"connectedAppGrants":["aaru"]}`)
+	require.Equal(t, http.StatusOK, code)
+
+	// Another writer holds the row with new grants, not yet committed.
+	tx, err := v.pool.Begin(ctx)
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(ctx) }()
+	_, err = tx.Exec(ctx, `UPDATE agent_connections SET connected_app_grants = '{norviq,loci}' WHERE id = $1`, got.Connection.ID)
+	require.NoError(t, err)
+
+	type result struct {
+		code int
+		conn map[string]any
+	}
+	done := make(chan result, 1)
+	go func() {
+		code, conn := v.patch(alice, got.Connection.ID, `{"allowPersonalData":true}`)
+		done <- result{code, conn}
+	}()
+	select {
+	case <-done:
+		t.Fatal("the PATCH did not wait for the row")
+	case <-time.After(400 * time.Millisecond):
+	}
+	require.NoError(t, tx.Commit(ctx))
+
+	r := <-done
+	require.Equal(t, http.StatusOK, r.code)
+	require.Equal(t, true, r.conn["allowPersonalData"])
+	require.Equal(t, []any{"norviq", "loci"}, r.conn["connectedAppGrants"])
+	var stored []string
+	require.NoError(t, v.pool.QueryRow(ctx,
+		`SELECT connected_app_grants FROM agent_connections WHERE id = $1`, got.Connection.ID).Scan(&stored))
+	require.Equal(t, []string{"norviq", "loci"}, stored)
+
+	// A revoked key, another tenant's key and an unknown id are all 404.
+	code, _ = v.patch(bob, got.Connection.ID, `{"allowPersonalData":false}`)
+	require.Equal(t, http.StatusNotFound, code)
+	code, _ = v.patch(alice, uuid.NewString(), `{"allowPersonalData":false}`)
+	require.Equal(t, http.StatusNotFound, code)
+	code, _ = v.do(v.jwt(alice), http.MethodDelete, "/v1/me/agent-connections/"+got.Connection.ID, "")
+	require.Less(t, code, 300)
+	code, _ = v.patch(alice, got.Connection.ID, `{"allowPersonalData":false}`)
+	require.Equal(t, http.StatusNotFound, code)
+}
+
+func (v env) instructions(bearer string) string {
+	v.t.Helper()
+	code, raw := v.do(bearer, http.MethodPost, "/v1/mcp", `{"jsonrpc":"2.0","id":1,"method":"initialize"}`)
+	require.Equal(v.t, http.StatusOK, code, string(raw))
+	var out struct {
+		Result struct {
+			Instructions string `json:"instructions"`
+		} `json:"result"`
+	}
+	require.NoError(v.t, json.Unmarshal(raw, &out), string(raw))
+	return out.Result.Instructions
+}
+
+// With connected apps off, initialize says exactly what it said before they
+// existed. On, it adds the paragraph about <app>__ tools.
+func TestInstructionsNameConnectedAppsOnlyWhenTheyAreOn(t *testing.T) {
+	require.NotContains(t, mcp.Instructions, "__")
+	require.NotContains(t, mcp.Instructions, "connected app")
+	require.True(t, strings.HasSuffix(mcp.Instructions, "tools change the user's phone: confirm with the user first."))
+
+	off := setup(t)
+	require.Equal(t, mcp.Instructions, off.instructions(off.jwt(alice)))
+
+	on := setupApps(t, newFakeApps())
+	got := on.instructions(on.jwt(alice))
+	require.Equal(t, mcp.Instructions+"\n\n"+mcp.ConnectedAppInstructions, got)
+	require.Contains(t, got, "aaru__read_library")
+	require.Contains(t, got, "read-only")
+	require.NotContains(t, mcp.ConnectedAppInstructions, "`")
 }
