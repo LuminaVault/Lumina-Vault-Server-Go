@@ -45,6 +45,9 @@ const (
 	maxNotionAttachment = 25 << 20
 	// maxNotionText caps a page or a CSV, which is read into memory.
 	maxNotionText = 16 << 20
+	// maxNotionCSVTotal caps the CSVs of one import together: their tables
+	// stay in memory until the rows are written.
+	maxNotionCSVTotal = 48 << 20
 	// A batch of notes is flushed to bulk ingest at either bound.
 	notionBatchBytes = 4 << 20
 	notionBatchFiles = 200
@@ -254,15 +257,19 @@ func (r *notionRun) planDatabases(entries []notionimport.Entry) error {
 			pagesIn[path.Dir(to)] = append(pagesIn[path.Dir(to)], e)
 		}
 	}
+	csvBytes := int64(0)
 	for _, found := range r.m.Databases {
 		d := &notionDB{Database: found}
 		r.dbs = append(r.dbs, d)
-		data, err := r.entries[found.CSV].Read(maxNotionText)
-		if errors.Is(err, notionimport.ErrEntryTooLarge) {
+		csvEntry := r.entries[found.CSV]
+		data, err := csvEntry.Read(maxNotionText)
+		if errors.Is(err, notionimport.ErrEntryTooLarge) || csvBytes+csvEntry.Size > maxNotionCSVTotal {
 			d.status = VaultNotionImportFileStatusTooLarge
-			r.warn("%s: the CSV is over %d MB; its rows were imported as plain pages", d.Name, maxNotionText>>20)
+			r.warn("%s: the CSV is too large (%d MB each, %d MB for all databases); its rows were imported as plain pages",
+				d.Name, maxNotionText>>20, maxNotionCSVTotal>>20)
 			continue
 		}
+		csvBytes += csvEntry.Size
 		if err == nil {
 			d.table, err = notionimport.ParseCSV(data)
 		}
