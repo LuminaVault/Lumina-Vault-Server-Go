@@ -101,7 +101,7 @@ Move the state to the database before scaling out.
 
 ## Deploy order
 
-Migrations `00007_connected_apps.sql` and `00008` (nullable origin column on
+Migrations `00009_connected_apps.sql` and `00010` (nullable origin column on
 pending actions) are expand-only. They run as the ArgoCD PreSync goose job
 (`platform/infra/charts/app/templates/migrate-job.yaml`, enabled by
 `migrate.enabled` in `apps/api/values-common.yaml`), with `backoffLimit: 0`: a
@@ -109,13 +109,13 @@ failed migration leaves the old ReplicaSet serving.
 
 - **Both migrations must succeed before the new image serves, flag on or off.**
   Every `lv_` agent key lookup selects `agent_connections.connected_app_grants`
-  (added by 00007), even with the flag off. If the column is missing, all
+  (added by 00009), even with the flag off. If the column is missing, all
   agent-key auth breaks. Every pending-action insert, claim and cancel names
-  the origin column (added by 00008), also with the flag off. If it is missing,
+  the origin column (added by 00010), also with the flag off. If it is missing,
   every Quick Assistant confirm card breaks.
 - **Rolling the image back is safe.** The columns and tables are additive and
   the old image ignores them.
-- **Do NOT run goose Down on 00007 while the new image is running.** It drops
+- **Do NOT run goose Down on 00009 while the new image is running.** It drops
   `connected_app_grants`, which the new image selects on every key lookup, and
   drops the tables holding users' sealed tokens. Roll the image back first.
 - Merging this repo does not deploy; the infra repo's `main` does.
@@ -194,4 +194,4 @@ Record request IDs for each step.
    OAuth, so there is no consent screen to check; confirm they are not
    reachable through any redirect flow either. If any OAuth app auto-approves,
    stop and escalate to the owner before enabling in production.
-6. Confirm `00007` and `00008` ran in the PreSync job before the pod served.
+6. Confirm `00009` and `00010` ran in the PreSync job before the pod served.
