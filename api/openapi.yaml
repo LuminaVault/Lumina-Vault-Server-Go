@@ -7615,7 +7615,7 @@ paths:
 
         Limits: 200 MB compressed, 1 GB unpacked, 20,000 files, no entry
         compressed more than 100 times, entry paths inside the archive, nested
-        ZIPs one level deep, and 5,000 notes per import (split a larger
+        ZIPs one level deep, and 2,000 notes per import (split a larger
         export). The work is synchronous: the response is the report.
       security: [{ bearerJWT: [] }]
       parameters:

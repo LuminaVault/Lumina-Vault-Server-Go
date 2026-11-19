@@ -35,8 +35,12 @@ import (
 
 const (
 	// MaxNotionNotes is the most notes one import writes; a larger export is
-	// refused and the user splits it (spec, owner question 2).
-	MaxNotionNotes = 5000
+	// refused and the user splits it (spec, owner question 2). The import is one
+	// synchronous request and each note costs two embedding round trips, so the
+	// cap keeps it within minutes: 2,000 at notionIngestConcurrency.
+	MaxNotionNotes = 2000
+	// notionIngestConcurrency is how many notes are written and embedded at once.
+	notionIngestConcurrency = 8
 	// maxNotionReportFiles and maxNotionUnresolved are the wire contract's caps.
 	maxNotionReportFiles = 5000
 	maxNotionUnresolved  = 50
@@ -637,6 +641,7 @@ func (r *notionRun) flush() error {
 	provenance := notionProvenance
 	result, err := r.i.IngestBatchWith(r.ctx, r.tenant, r.space, r.batch, IngestOptions{
 		Provenance: &provenance, OnConflict: r.opts.OnConflict, SpaceDescription: notionSpaceAbout, DeferReresolve: true,
+		Concurrency: notionIngestConcurrency,
 	})
 	if err != nil {
 		return err

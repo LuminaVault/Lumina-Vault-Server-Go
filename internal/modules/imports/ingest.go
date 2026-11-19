@@ -15,6 +15,7 @@ import (
 	"lumina/internal/vaultfiles"
 	"lumina/internal/vaultpaths"
 	"strings"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -124,6 +125,11 @@ type IngestOptions struct {
 	// DeferReresolve skips the pending-wikilink pass after the writes: a caller
 	// that ingests in several batches runs it once at the end.
 	DeferReresolve bool
+	// Concurrency is how many files are written and embedded at once. Each file
+	// waits on two embedding round trips (the note, then its chunks), so a large
+	// import is bound by provider latency, not by the database. 0 or 1 is one at
+	// a time, as before.
+	Concurrency int
 }
 
 // textExtensions are the inputs bulk import writes; anything else (images,
@@ -165,30 +171,61 @@ func (i *Ingest) IngestBatchWith(ctx context.Context, tenant uuid.UUID, spaceNam
 		return IngestResult{}, err
 	}
 	result := IngestResult{SpaceID: spaceID, SpaceSlug: slug, Files: make([]FileResult, 0, len(files))}
+	entries := make([]FileResult, len(files))
+	saved := make([]*uuid.UUID, len(files))
+	// Classify in order first, so collisions are decided by input order whatever
+	// the concurrency; then write the files that passed.
+	var work []int
 	claimed := make(map[string]bool, len(files))
-	for _, file := range files {
-		entry := FileResult{Path: file.Path}
+	for n, file := range files {
+		entries[n] = FileResult{Path: file.Path}
 		switch {
 		case isHiddenPath(file.Path):
-			entry.Status = FileHidden
+			entries[n].Status = FileHidden
 		case !isTextPath(file.Path):
-			entry.Status = FileUnsupported
+			entries[n].Status = FileUnsupported
 		default:
 			safe := SafePath(slug, file.Path)
-			entry.SavedPath = &safe
+			entries[n].SavedPath = &safe
 			if claimed[safe] {
-				entry.Status = FileCollision
+				entries[n].Status = FileCollision
 				break
 			}
 			claimed[safe] = true
-			saved, status, err := i.ingestOne(ctx, tenant, spaceID, safe, file, opts)
-			entry.Status = status
-			if err != nil {
-				entry.Status = FileFailed
-				slog.ErrorContext(ctx, "vault ingest failed", "tenant", tenant, "path", file.Path, "error", err)
-			} else if saved != nil {
-				result.VaultFileIDs = append(result.VaultFileIDs, *saved)
-			}
+			work = append(work, n)
+		}
+	}
+	ingest := func(n int) {
+		file := files[n]
+		id, status, err := i.ingestOne(ctx, tenant, spaceID, *entries[n].SavedPath, file, opts)
+		entries[n].Status = status
+		if err != nil {
+			entries[n].Status = FileFailed
+			slog.ErrorContext(ctx, "vault ingest failed", "tenant", tenant, "path", file.Path, "error", err)
+		} else {
+			saved[n] = id
+		}
+	}
+	if opts.Concurrency <= 1 {
+		for _, n := range work {
+			ingest(n)
+		}
+	} else {
+		sem := make(chan struct{}, opts.Concurrency)
+		var wg sync.WaitGroup
+		for _, n := range work {
+			sem <- struct{}{}
+			wg.Add(1)
+			go func() {
+				defer func() { <-sem; wg.Done() }()
+				ingest(n)
+			}()
+		}
+		wg.Wait()
+	}
+	for n, entry := range entries {
+		if saved[n] != nil {
+			result.VaultFileIDs = append(result.VaultFileIDs, *saved[n])
 		}
 		switch entry.Status {
 		case FileImported, FileUpdated:

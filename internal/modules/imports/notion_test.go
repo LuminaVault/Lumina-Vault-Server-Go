@@ -422,7 +422,7 @@ func TestNotionRefusals(t *testing.T) {
 		{"dot dot entry", "", notiontest.Zip(notiontest.Text("a.md", "x"), notiontest.Text("../b.md", "x")), http.StatusBadRequest, "points outside it"},
 		{"zip bomb", "", notiontest.Zip(notiontest.File{Name: "zeros.png", Data: make([]byte, 4<<20)}), http.StatusBadRequest, "ZIP bomb"},
 		{"too many notes", "", notiontest.Zip(tooMany...), http.StatusBadRequest, "Split the export"},
-		{"too many notes on a dry run", "?dryRun=true", notiontest.Zip(tooMany...), http.StatusBadRequest, "at most 5000"},
+		{"too many notes on a dry run", "?dryRun=true", notiontest.Zip(tooMany...), http.StatusBadRequest, "at most 2000"},
 		{"bad onConflict", "?onConflict=merge", ok, http.StatusBadRequest, "invalid_on_conflict"},
 		{"bad dryRun", "?dryRun=maybe", ok, http.StatusBadRequest, "invalid_dry_run"},
 	} {
