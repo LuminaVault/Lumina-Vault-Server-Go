@@ -52,6 +52,16 @@ type scriptedTransport struct {
 	picks     int
 	// pickPayload is what PickDecision was given.
 	pickPayload []byte
+	// customEndpoint: the user's own Anthropic credential names another host.
+	customEndpoint bool
+	endpointChecks []llm.Decision
+}
+
+func (s *scriptedTransport) DispatchesToProviderEndpoint(_ context.Context, decision llm.Decision) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.endpointChecks = append(s.endpointChecks, decision)
+	return !s.customEndpoint
 }
 
 func newTransport(picked llm.Decision, steps ...step) *scriptedTransport {
@@ -1655,23 +1665,180 @@ func TestAnthropicFailureDoesNotFallOver(t *testing.T) {
 	}
 }
 
-// Round 1 failing is the loop's usual hand-back to the classic path: nothing
-// ran, so no app data exists, and the classic path offers no tools.
-func TestAnthropicFailureOnRoundOneGoesClassicWithNothingRun(t *testing.T) {
-	tr := newTransport(mixedDecision(), failStep())
-	extra := &recordingRunner{}
+// A pinned turn whose first round fails has run nothing, so it starts over as
+// an ordinary turn: the decision from before the pin, no connected-app tools.
+func TestAnthropicFailureOnRoundOneRerunsWithoutExtras(t *testing.T) {
+	picked := mixedDecision()
+	tr := newTransport(picked,
+		failStep(),
+		toolsStep(call("c1", "search", `{"query":"dune"}`), call("c2", "aaru__read_library", "{}")),
+		textStep("Found it."))
+	base, extra := &recordingRunner{}, &recordingRunner{}
+	h := newHarness(tr)
 
-	outcome := newHarness(tr).answerWith(&recordingRunner{}, aaruOptions(extra))
+	reply := mustReply(t, h.answerWith(base, aaruOptions(extra)))
+
+	if reply.Text != "Found it." || !reply.IsAnswer || reply.UsedConnectedApp || reply.RanPersonalTool || reply.ToolCallCount != 1 {
+		t.Errorf("reply = %+v", reply)
+	}
+	if len(extra.names()) != 0 || !reflect.DeepEqual(base.names(), []string{"search"}) {
+		t.Errorf("ran extra %v, base %v", extra.names(), base.names())
+	}
+	seen, sent := tr.seen(), tr.sent()
+	if len(seen) != 3 {
+		t.Fatalf("transport calls = %d, want 3", len(seen))
+	}
+	// The failed round was the pinned one, and it settled the reservation.
+	if seen[0].Primary.Provider != llm.Anthropic || seen[0].Fallbacks != nil || seen[0].Cerberus.BudgetReservationUsdMicros != 1000 {
+		t.Errorf("pinned round decision = %+v", seen[0])
+	}
+	if got := connectedNames(offeredNames(t, sent[0])); len(got) != len(aaruTools) {
+		t.Errorf("pinned round offered %v", got)
+	}
+	for i := 1; i < len(seen); i++ {
+		d := seen[i]
+		if d.Primary != picked.Primary || !reflect.DeepEqual(d.Fallbacks, picked.Fallbacks) {
+			t.Errorf("rerun call %d decision = %+v", i, d)
+		}
+		if d.Cerberus.BudgetReservationUsdMicros != 0 {
+			t.Errorf("rerun call %d carries a reservation of %d", i, d.Cerberus.BudgetReservationUsdMicros)
+		}
+		if got := offeredNames(t, sent[i]); !reflect.DeepEqual(got, names(h.service.Tools)) {
+			t.Errorf("rerun call %d offered %v", i, got)
+		}
+	}
+	// The model asking for the dropped tool anyway is refused.
+	if got := lastToolContent(t, sent[2]); got != refusal {
+		t.Errorf("model read %v", got)
+	}
+	if got := h.logs.outcomes(); !reflect.DeepEqual(got, []string{"answer"}) {
+		t.Errorf("outcomes = %v", got)
+	}
+	if len(h.releases.all()) != 0 {
+		t.Errorf("released %v", h.releases.all())
+	}
+}
+
+// The rerun happens once: it is not pinned, so its own round-1 failure is the
+// ordinary hand-back to the classic path.
+func TestRerunWithoutExtrasCannotPinAgainOrLoop(t *testing.T) {
+	picked := mixedDecision()
+	tr := newTransport(picked, failStep())
+	extra := &recordingRunner{}
+	h := newHarness(tr)
+
+	outcome := h.answerWith(&recordingRunner{}, aaruOptions(extra))
 
 	if outcome.Reply != nil || outcome.PreDecided != nil {
 		t.Errorf("outcome = %+v", outcome)
 	}
-	seen := tr.seen()
-	if len(seen) != 1 || seen[0].Primary.Provider != llm.Anthropic || seen[0].Fallbacks != nil {
-		t.Errorf("decisions = %+v", seen)
+	seen, sent := tr.seen(), tr.sent()
+	if len(seen) != 2 {
+		t.Fatalf("transport calls = %d, want 2", len(seen))
+	}
+	if seen[0].Primary.Provider != llm.Anthropic || seen[0].Fallbacks != nil {
+		t.Errorf("first decision = %+v", seen[0])
+	}
+	if seen[1].Primary != picked.Primary || !reflect.DeepEqual(seen[1].Fallbacks, picked.Fallbacks) {
+		t.Errorf("rerun decision = %+v", seen[1])
+	}
+	if got := connectedNames(offeredNames(t, sent[1])); len(got) != 0 {
+		t.Errorf("rerun offered %v", got)
 	}
 	if len(extra.names()) != 0 {
 		t.Errorf("extra ran %v", extra.names())
+	}
+	if tr.picks != 1 || len(tr.endpointChecks) != 1 {
+		t.Errorf("picks = %d, endpoint checks = %d", tr.picks, len(tr.endpointChecks))
+	}
+	if got := h.logs.outcomes(); !reflect.DeepEqual(got, []string{"fallback"}) {
+		t.Errorf("outcomes = %v", got)
+	}
+}
+
+// A turn that is not pinned keeps the old round-1 behaviour: no rerun.
+func TestRoundOneFailureWithoutExtrasDoesNotRerun(t *testing.T) {
+	tr := newTransport(mixedDecision(), failStep())
+	if outcome := newHarness(tr).answerWith(&recordingRunner{}, TurnOptions{}); outcome.Reply != nil {
+		t.Errorf("outcome = %+v", outcome)
+	}
+	if len(tr.seen()) != 1 {
+		t.Errorf("transport calls = %d, want 1", len(tr.seen()))
+	}
+}
+
+// byokAnthropicDecision is a user spending their own Anthropic key.
+func byokAnthropicDecision() llm.Decision {
+	d := paidDecision(1000)
+	d.Primary = llm.Route{Provider: llm.Anthropic, ModelID: "claude-sonnet-4-6"}
+	d.Fallbacks = []llm.Route{{Provider: llm.OpenAI, ModelID: "gpt-5"}}
+	d.Cerberus.Mode = llm.ModeBYOK
+	d.CredentialMode = llm.ModeBYOK
+	return d
+}
+
+// "Anthropic only" is Anthropic's endpoint: a key stored with another base URL
+// would carry the app's tools and data to that host.
+func TestExtraToolsDroppedWhenAnthropicKeyNamesAnotherHost(t *testing.T) {
+	picked := byokAnthropicDecision()
+	tr := newTransport(picked, toolsStep(call("c1", "aaru__read_library", "{}")), textStep("No library here."))
+	tr.customEndpoint = true
+	base, extra := &recordingRunner{}, &recordingRunner{}
+
+	reply := mustReply(t, newHarness(tr).answerWith(base, aaruOptions(extra)))
+
+	if reply.UsedConnectedApp || reply.RanPersonalTool || reply.ToolCallCount != 0 {
+		t.Errorf("reply = %+v", reply)
+	}
+	if len(extra.names()) != 0 || len(base.names()) != 0 {
+		t.Errorf("ran extra %v, base %v", extra.names(), base.names())
+	}
+	sent := tr.sent()
+	if len(sent) != 2 {
+		t.Fatalf("rounds = %d", len(sent))
+	}
+	for i, payload := range sent {
+		if got := connectedNames(offeredNames(t, payload)); len(got) != 0 {
+			t.Errorf("round %d offered %v", i+1, got)
+		}
+	}
+	if got := lastToolContent(t, sent[1]); got != refusal {
+		t.Errorf("model read %v", got)
+	}
+	// The turn ran on the decision as picked, fallbacks and all.
+	for i, d := range tr.seen() {
+		if d.Primary != picked.Primary || !reflect.DeepEqual(d.Fallbacks, picked.Fallbacks) {
+			t.Errorf("round %d decision = %+v", i+1, d)
+		}
+	}
+	// What was checked is the route the pin chose.
+	if len(tr.endpointChecks) != 1 || tr.endpointChecks[0].Primary != picked.Primary || tr.endpointChecks[0].Fallbacks != nil {
+		t.Errorf("endpoint checks = %+v", tr.endpointChecks)
+	}
+}
+
+func TestExtraToolsRunOnAnOwnKeyAtTheDefaultEndpoint(t *testing.T) {
+	tr := newTransport(byokAnthropicDecision(), toolsStep(call("c1", "aaru__read_library", "{}")), textStep("Done."))
+	extra := &recordingRunner{}
+
+	reply := mustReply(t, newHarness(tr).answerWith(&recordingRunner{}, aaruOptions(extra)))
+
+	if !reply.UsedConnectedApp || !reflect.DeepEqual(extra.names(), []string{"aaru__read_library"}) {
+		t.Errorf("reply = %+v, extra ran %v", reply, extra.names())
+	}
+	for i, d := range tr.seen() {
+		if d.Primary.Provider != llm.Anthropic || d.Fallbacks != nil || d.CredentialMode != llm.ModeBYOK {
+			t.Errorf("round %d decision = %+v", i+1, d)
+		}
+	}
+}
+
+// A turn with nothing to protect does not look the credential up.
+func TestNoEndpointCheckWithoutExtraTools(t *testing.T) {
+	tr := newTransport(paidDecision(1000), textStep("ok"))
+	mustReply(t, newHarness(tr).answer(context.Background(), &recordingRunner{}, nil))
+	if len(tr.endpointChecks) != 0 {
+		t.Errorf("endpoint checks = %d", len(tr.endpointChecks))
 	}
 }
 

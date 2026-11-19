@@ -103,9 +103,10 @@ type Outcome struct {
 // TurnOptions is what one turn adds to the service's own tools: the caller's
 // connected-app tools.
 //
-// A turn that offers them goes to Anthropic and nowhere else. When the route
-// has no Anthropic candidate, or is the free lane, the turn runs as if no
-// options were given: the extras are not offered and cannot run.
+// A turn that offers them goes to Anthropic's own endpoint and nowhere else.
+// When the route has no Anthropic candidate, is the free lane, or would send
+// the request to a base URL the user stored with their own key, the turn runs
+// as if no options were given: the extras are not offered and cannot run.
 type TurnOptions struct {
 	// ExtraTools are offered after the service's tools. Each is named
 	// "<app>__<tool>"; a name without "__" is dropped, so an extra can never
@@ -188,11 +189,20 @@ func (s *Service) AnswerWith(ctx context.Context, msgs []llm.ChatMessage, sessio
 	// When it cannot hold, decision stays exactly as it was: a free-lane or
 	// other-provider turn never carries an extra.
 	extras := opts.extras()
+	var unpinned *llm.Decision
 	if opts.AnthropicOnly || len(extras) > 0 {
 		pinned, canPin := decision.OnlyProvider(llm.Anthropic)
 		// preDecided is set exactly for a free-lane pick, which carries no
 		// extras even when a trial route sits in front of it.
-		if freeLane := preDecided != nil; canPin && !freeLane {
+		freeLane := preDecided != nil
+		// "Anthropic" means Anthropic's endpoint: a user's own key can carry a
+		// base URL of their choosing, and app data must not go there.
+		if canPin && !freeLane && len(extras) > 0 && !s.Transport.DispatchesToProviderEndpoint(ctx, pinned) {
+			canPin = false
+		}
+		if canPin && !freeLane {
+			before := decision
+			unpinned = &before
 			decision = pinned
 		} else {
 			extras = nil
@@ -206,6 +216,7 @@ func (s *Service) AnswerWith(ctx context.Context, msgs []llm.ChatMessage, sessio
 		service: s, ctx: ctx, sessionKey: sessionKey, sessionID: sessionID,
 		tools: tools, emit: emit, turnStart: turnStart,
 		transcript: transcript, finishedWrites: map[string]string{},
+		unpinned: unpinned,
 	}
 	if len(extras) > 0 {
 		t.extraTools, t.extraRunner = extras, opts.ExtraRunner
@@ -243,6 +254,9 @@ type turn struct {
 	extraNames       map[string]bool
 	extraRunner      ToolRunner
 	usedConnectedApp bool
+	// unpinned is the decision as it was before the Anthropic pin, kept until
+	// round 1 answers; nil on a turn that is not pinned.
+	unpinned *llm.Decision
 	// finishedWrites is the first result of each write that took effect, so a
 	// repeat of the same call (a retry, or the model saying it twice) does not
 	// do it twice (ruling 19).
@@ -292,6 +306,9 @@ func (t *turn) run(decision llm.Decision) *Reply {
 				"duration_ms", time.Since(roundStart).Milliseconds())
 			// On round 1 the transport already settled the reservation.
 			if round == 1 {
+				if t.unpinned != nil && t.ctx.Err() == nil {
+					return t.rerunUnpinned()
+				}
 				return t.fallBack(1)
 			}
 			if t.ctx.Err() != nil {
@@ -388,6 +405,20 @@ func (t *turn) runCall(index int, c wireToolCall) string {
 		}
 	}
 	return result.ModelContent
+}
+
+// rerunUnpinned is a pinned turn whose first round failed: nothing has run and
+// no app data exists, so the question starts over as an ordinary turn, on the
+// decision from before the pin and with no connected-app tools. Round 1
+// settled the reservation, so the rerun carries none. It happens once: with
+// unpinned cleared, a second round-1 failure falls back to the classic path.
+// From round 2 on a pinned turn never gets here; it fails (failedLead).
+func (t *turn) rerunUnpinned() *Reply {
+	decision := t.unpinned.WithoutBudgetReservation()
+	t.unpinned = nil
+	t.extraTools, t.extraNames, t.extraRunner = nil, nil, nil
+	t.service.logger().InfoContext(t.ctx, "quick assistant rerun without connected apps")
+	return t.run(decision)
 }
 
 func (t *turn) fallBack(rounds int) *Reply {

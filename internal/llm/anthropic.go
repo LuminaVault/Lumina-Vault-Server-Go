@@ -198,6 +198,20 @@ func (a *AnthropicAdapter) resolveCredentials(ctx context.Context) (anthropicCre
 	return a.platformCredentials(), nil
 }
 
+// usesProviderEndpoint reports whether a request under ctx would go to the
+// deployment's Anthropic endpoint, not to a base URL stored with the user's
+// own credential (a proxy, say). False when the credentials do not resolve.
+func (a *AnthropicAdapter) usesProviderEndpoint(ctx context.Context) bool {
+	creds, err := a.resolveCredentials(ctx)
+	if err != nil || creds.baseURL == nil {
+		return false
+	}
+	own := a.baseURL()
+	return strings.EqualFold(creds.baseURL.Scheme, own.Scheme) &&
+		strings.EqualFold(creds.baseURL.Host, own.Host) &&
+		strings.TrimRight(creds.baseURL.Path, "/") == strings.TrimRight(own.Path, "/")
+}
+
 // platformCredentials: the registry key when the deployment has one, otherwise
 // the trial key.
 func (a *AnthropicAdapter) platformCredentials() anthropicCredentials {

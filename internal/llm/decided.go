@@ -8,6 +8,10 @@ import "context"
 type DecidedCompletionTransport interface {
 	PickDecision(ctx context.Context, payload []byte) Decision
 	ChatCompletionsDecided(ctx context.Context, payload []byte, sessionKey, sessionID string, decision Decision) (Metadata, error)
+	// DispatchesToProviderEndpoint reports whether ChatCompletionsDecided
+	// would send decision's primary to its provider's own endpoint, as opposed
+	// to a base URL the user stored with their credential.
+	DispatchesToProviderEndpoint(ctx context.Context, decision Decision) bool
 }
 
 var _ DecidedCompletionTransport = (*Transport)(nil)
@@ -26,6 +30,32 @@ func (t *Transport) PickDecision(ctx context.Context, payload []byte) Decision {
 // WithoutBudgetReservation.
 func (t *Transport) ChatCompletionsDecided(ctx context.Context, payload []byte, sessionKey, sessionID string, decision Decision) (Metadata, error) {
 	return t.completeDecided(ctx, payload, sessionKey, sessionID, ApplyingForcedRoute(decision, RoutingValues(ctx).ForcedRoute), false)
+}
+
+// providerEndpointChecker is an adapter that can say where a request under ctx
+// would go without sending it.
+type providerEndpointChecker interface {
+	usesProviderEndpoint(ctx context.Context) bool
+}
+
+// DispatchesToProviderEndpoint resolves the primary exactly as
+// ChatCompletionsDecided would dispatch it: the same forced route, the same
+// credential mode, the adapter's own credential resolution. It answers false
+// whenever it cannot tell, so a caller that must keep data on the provider's
+// endpoint fails closed. Only the Anthropic adapter can answer true.
+func (t *Transport) DispatchesToProviderEndpoint(ctx context.Context, decision Decision) bool {
+	values := RoutingValues(ctx)
+	decision = ApplyingForcedRoute(decision, values.ForcedRoute)
+	adapter, ok := t.Registry.Adapter(decision.Primary.Provider)
+	if !ok {
+		return false
+	}
+	checker, ok := adapter.(providerEndpointChecker)
+	if !ok {
+		return false
+	}
+	mode := dispatchMode(decision, values)
+	return checker.usesProviderEndpoint(WithValues(ctx, func(v *Values) { v.CredentialMode = mode }))
 }
 
 // Removing is RouteDecision.removing(_:): the same decision without kind's

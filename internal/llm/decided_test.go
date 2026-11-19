@@ -2,6 +2,7 @@ package llm
 
 import (
 	"context"
+	"net/url"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -370,4 +371,44 @@ func TestOnlyProviderKeepsTrialRoute(t *testing.T) {
 	assert.True(t, pinned.ManagedTrialPrepended)
 	assert.Same(t, paid.Cerberus, pinned.Cerberus)
 	assert.Equal(t, ModeManaged, pinned.CredentialMode)
+}
+
+// MARK: - DispatchesToProviderEndpoint
+
+func TestDispatchesToProviderEndpoint(t *testing.T) {
+	key := "user-key"
+	user := &User{ID: uuid.New()}
+	custom := mustParseURL("https://proxy.example.com/anthropic")
+	ownKey := func(base *url.URL) CredentialSource {
+		return stubCredentials{creds: &ResolvedCredential{APIKey: &key, BaseURL: base}}
+	}
+	transport := func(credentials CredentialSource) *Transport {
+		return &Transport{Registry: NewRegistry(nil,
+			&AnthropicAdapter{APIKey: "platform-key", Credentials: credentials},
+			namedAdapter{OpenAI})}
+	}
+	anthropic := func(mode CredentialMode) Decision {
+		return Decision{Primary: Route{Anthropic, "claude-sonnet-4-6"}, CredentialMode: mode}
+	}
+	ctx := WithValues(context.Background(), func(v *Values) { v.CurrentUser = user })
+
+	// The user's own key at a host of their choosing.
+	assert.False(t, transport(ownKey(custom)).DispatchesToProviderEndpoint(ctx, anthropic(ModeBYOK)))
+	assert.False(t, transport(ownKey(custom)).DispatchesToProviderEndpoint(ctx, anthropic(ModeUnset)))
+	// Their own key with no base URL, or with Anthropic's spelled out.
+	assert.True(t, transport(ownKey(nil)).DispatchesToProviderEndpoint(ctx, anthropic(ModeBYOK)))
+	assert.True(t, transport(ownKey(mustParseURL("https://API.anthropic.com/"))).DispatchesToProviderEndpoint(ctx, anthropic(ModeBYOK)))
+	// Managed spends the platform key at the platform's endpoint, whatever the
+	// user has stored. The decision's mode wins over the context's.
+	byokCtx := WithValues(ctx, func(v *Values) { v.CredentialMode = ModeBYOK })
+	assert.True(t, transport(ownKey(custom)).DispatchesToProviderEndpoint(byokCtx, anthropic(ModeManaged)))
+	// Fail closed: no usable credential, a failed lookup, a provider that
+	// cannot say, a provider that is not registered.
+	assert.False(t, transport(stubCredentials{}).DispatchesToProviderEndpoint(ctx, anthropic(ModeBYOK)))
+	assert.False(t, transport(stubCredentials{err: assert.AnError}).DispatchesToProviderEndpoint(ctx, anthropic(ModeBYOK)))
+	assert.False(t, transport(ownKey(nil)).DispatchesToProviderEndpoint(ctx, Decision{Primary: Route{OpenAI, "gpt-5"}}))
+	assert.False(t, transport(ownKey(nil)).DispatchesToProviderEndpoint(ctx, Decision{Primary: Route{Groq, "llama"}}))
+	// A forced route is applied first, as the dispatch does.
+	forced := WithValues(ctx, func(v *Values) { v.ForcedRoute = &WireRoute{Provider: "openai", Model: "gpt-5"} })
+	assert.False(t, transport(ownKey(nil)).DispatchesToProviderEndpoint(forced, anthropic(ModeManaged)))
 }
