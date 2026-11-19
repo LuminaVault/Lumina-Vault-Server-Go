@@ -92,27 +92,72 @@ func TestRefreshRotationIsAtomicAndDetectsReuse(t *testing.T) {
 		require.NoError(t, err, "the other session is untouched")
 	})
 
-	t.Run("reuse after the grace revokes every refresh token of the tenant", func(t *testing.T) {
+	ageRevoked := func(t *testing.T, email string) {
+		t.Helper()
+		_, err := pool.Exec(ctx, `UPDATE refresh_tokens SET revoked_at = now() - interval '1 minute' WHERE revoked_at IS NOT NULL
+			AND tenant_id = (SELECT id FROM users WHERE email = $1)`, email)
+		require.NoError(t, err)
+	}
+
+	// Owner decision 2026-11-18: reuse revokes the reused token's login chain, not
+	// every session of the tenant (it used to; #162 left the scope open).
+	t.Run("reuse after the grace revokes only that login chain", func(t *testing.T) {
 		h := build(t, pool, harness{})
 		email, reg := signUp(t, h)
 		other, err := h.svc.Login(ctx, email, password, false)
 		require.NoError(t, err)
 		rotated, err := h.svc.Refresh(ctx, reg.RefreshToken)
 		require.NoError(t, err)
-		_, err = pool.Exec(ctx, `UPDATE refresh_tokens SET revoked_at = now() - interval '1 minute' WHERE revoked_at IS NOT NULL
-			AND tenant_id = (SELECT id FROM users WHERE email = $1)`, email)
+		again, err := h.svc.Refresh(ctx, rotated.RefreshToken)
 		require.NoError(t, err)
+		ageRevoked(t, email)
 		require.Equal(t, 2, live(t, email))
 
 		_, err = h.svc.Refresh(ctx, reg.RefreshToken)
 		require.ErrorIs(t, err, authservice.ErrInvalidRefresh)
-		assert.Zero(t, live(t, email), "the revocation is committed though the refresh failed")
+		assert.Equal(t, 1, live(t, email), "only the other device's session is left; the revocation is committed though the refresh failed")
+		_, err = h.svc.Refresh(ctx, again.RefreshToken)
+		assert.ErrorIs(t, err, authservice.ErrInvalidRefresh, "the chain's newest token, two rotations on, is revoked too")
+		_, err = h.svc.Refresh(ctx, other.RefreshToken)
+		require.NoError(t, err, "the other sign-in is a different chain and stays signed in")
+		_, err = h.svc.Login(ctx, email, password, false)
+		require.NoError(t, err, "signing in again works")
+	})
+
+	t.Run("a token without a family revokes every refresh token of the tenant", func(t *testing.T) {
+		// Rows issued before goose 00009, or by the Swift rollback image, have no family.
+		h := build(t, pool, harness{})
+		email, reg := signUp(t, h)
+		other, err := h.svc.Login(ctx, email, password, false)
+		require.NoError(t, err)
+		_, err = pool.Exec(ctx, `UPDATE refresh_tokens SET family_id = NULL WHERE tenant_id = (SELECT id FROM users WHERE email = $1)`, email)
+		require.NoError(t, err)
+		rotated, err := h.svc.Refresh(ctx, reg.RefreshToken)
+		require.NoError(t, err)
+		ageRevoked(t, email)
+		require.Equal(t, 2, live(t, email))
+
+		_, err = h.svc.Refresh(ctx, reg.RefreshToken)
+		require.ErrorIs(t, err, authservice.ErrInvalidRefresh)
+		assert.Zero(t, live(t, email))
 		_, err = h.svc.Refresh(ctx, rotated.RefreshToken)
 		assert.ErrorIs(t, err, authservice.ErrInvalidRefresh)
 		_, err = h.svc.Refresh(ctx, other.RefreshToken)
 		assert.ErrorIs(t, err, authservice.ErrInvalidRefresh)
-		_, err = h.svc.Login(ctx, email, password, false)
-		require.NoError(t, err, "signing in again works")
+	})
+
+	t.Run("sign-ins start families and rotation keeps them", func(t *testing.T) {
+		h := build(t, pool, harness{})
+		email, reg := signUp(t, h)
+		_, err := h.svc.Login(ctx, email, password, false)
+		require.NoError(t, err)
+		_, err = h.svc.Refresh(ctx, reg.RefreshToken)
+		require.NoError(t, err)
+		var families, nulls int
+		require.NoError(t, pool.QueryRow(ctx, `SELECT count(DISTINCT family_id), count(*) FILTER (WHERE family_id IS NULL)
+			FROM refresh_tokens WHERE tenant_id = (SELECT id FROM users WHERE email = $1)`, email).Scan(&families, &nulls))
+		assert.Equal(t, 2, families, "sign-up and login are two chains; the rotation stayed in sign-up's")
+		assert.Zero(t, nulls)
 	})
 
 	t.Run("a failure while issuing leaves the old token usable", func(t *testing.T) {
