@@ -289,6 +289,8 @@ type qaOptions struct {
 	service *quickassistant.Service
 	// appActions turns CHAT_APP_ACTIONS_ENABLED on.
 	appActions bool
+	// connectedApps is the connected-apps service; nil is the feature off.
+	connectedApps ConnectedApps
 }
 
 type qa struct {
@@ -346,6 +348,12 @@ func newQA(t *testing.T, pool *pgxpool.Pool, o qaOptions) *qa {
 	analytics := newAnalytics(t)
 	followUps := &countingTransport{}
 	paths := vaultpaths.Paths{Root: t.TempDir()}
+	// The loop's transport. With connected apps it answers the endpoint check
+	// for the scripted Anthropic adapter, which cannot answer it itself.
+	var loopTransport llm.DecidedCompletionTransport = transport
+	if o.connectedApps != nil {
+		loopTransport = ownEndpointTransport{transport}
+	}
 	opts := Options{
 		Identify: auth.Identify(testKeys, auth.PGUsers(pool)), Hermes: o.hermes, Limits: ratelimit.NewStore(),
 		Stream:      stream,
@@ -360,11 +368,14 @@ func newQA(t *testing.T, pool *pgxpool.Pool, o qaOptions) *qa {
 		Soul:        soul.New(paths, t.TempDir()),
 		Runs:        o.runs,
 	}
+	if o.connectedApps != nil {
+		opts.ConnectedApps = o.connectedApps
+	}
 	if !o.off {
 		service := o.service
 		if service == nil {
 			service = &quickassistant.Service{
-				Transport: transport, Release: telemetry.Release,
+				Transport: loopTransport, Release: telemetry.Release,
 				Tools: quickassistant.Definitions(quickassistant.DefinitionOptions{DeviceWrites: o.devices != nil}),
 			}
 		}
@@ -376,7 +387,7 @@ func newQA(t *testing.T, pool *pgxpool.Pool, o qaOptions) *qa {
 			deps.Files = vault.NewFiles(pool, appPaths)
 			opts.QuickAssistant.AppActions = &AppActions{
 				Service: &quickassistant.Service{
-					Transport: transport, Release: telemetry.Release,
+					Transport: loopTransport, Release: telemetry.Release,
 					Tools: quickassistant.Definitions(quickassistant.DefinitionOptions{DeviceWrites: o.devices != nil, AppActions: true}),
 				},
 				Deps: deps,
