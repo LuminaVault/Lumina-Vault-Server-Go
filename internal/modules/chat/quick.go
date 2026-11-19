@@ -88,9 +88,9 @@ func (m *Module) connectedAppOptions(ctx context.Context, t turn) quickassistant
 	if len(tools) == 0 {
 		return quickassistant.TurnOptions{}
 	}
-	return quickassistant.TurnOptions{
-		ExtraTools: tools, ExtraRunner: connectedAppRunner{apps: apps, actor: t.actor}, AnthropicOnly: true,
-	}
+	// Offering the tools is what pins the turn. AnthropicOnly is left unset: it
+	// would pin a turn whose tools the loop dropped at its own entry guard.
+	return quickassistant.TurnOptions{ExtraTools: tools, ExtraRunner: connectedAppRunner{apps: apps, actor: t.actor}}
 }
 
 // quickTurn is QuickAssistantLoop: one Quick Assistant turn, ready to run

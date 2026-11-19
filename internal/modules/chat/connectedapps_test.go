@@ -330,6 +330,29 @@ func TestSharedVaultMemberGetsNoOwnersTools(t *testing.T) {
 	assert.Equal(t, []string{"user:", "assistant:"}, q.origins(conversation))
 }
 
+// A member's own tools work in a shared vault, and the flag lands on their
+// own conversation: the rows are scoped by the asker, not by the vault.
+func TestSharedVaultMemberUsesTheirOwnToolsAndBothRowsAreFlagged(t *testing.T) {
+	adapter := newAdapter(llm.Anthropic, call("aaru__read_library", "{}"), say("Your library."))
+	apps := &stubApps{result: libraryResult}
+	q := newQA(t, qaPool(t), qaOptions{router: &fixedRouter{decision: decision(haikuRoute)}, adapters: []llm.Adapter{adapter}, connectedApps: apps})
+	alice, _ := q.seed("pro")
+	bob, conversation := q.seed("free")
+	apps.tools = map[uuid.UUID][]connectedapps.AppTool{bob: {aaruTool("read_library", objectSchema)}}
+	team, vault := uuid.New(), uuid.New()
+	q.exec(`INSERT INTO teams (id, name, owner_user_id, billing_sponsor_user_id, created_at, updated_at) VALUES ($1, 'qa-team', $2, $2, now(), now())`, team, alice)
+	q.exec(`INSERT INTO vaults (id, team_id, name, created_at, updated_at) VALUES ($1, $2, 'shared', now(), now())`, vault, team)
+	q.exec(`INSERT INTO vault_memberships (id, vault_id, user_id, role, can_use_ai, created_by_user_id, created_at, updated_at)
+		VALUES ($1, $2, $3, 'viewer', true, $4, now(), now())`, uuid.New(), vault, bob, alice)
+
+	q.send(bob, conversation, body(qaBody{content: "what am I watching"}), "X-Vault-ID", strings.ToUpper(vault.String()))
+
+	asked, calls := apps.seen()
+	assert.Equal(t, []uuid.UUID{bob}, asked)
+	assert.Equal(t, []appCall{{bob, "aaru__read_library"}}, calls)
+	assert.Equal(t, []string{"user:connected_app", "assistant:connected_app"}, q.origins(conversation))
+}
+
 func TestConnectedAppTurnNeverReachesNonAnthropicAdapter(t *testing.T) {
 	groq := newAdapter(llm.Groq, say("From Groq."))
 	anthropic := newAdapter(llm.Anthropic, call("aaru__read_library", "{}"), say("From Anthropic."))
