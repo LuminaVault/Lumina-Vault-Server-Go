@@ -60,7 +60,7 @@ func (m *Module) runSkill(c *echo.Context) error {
 	if body.Arguments != nil {
 		arguments = *body.Arguments
 	}
-	return m.run(c, tenant, name, body.Input, arguments)
+	return m.run(c, tenant, name, body.Input, arguments, body.Save != nil && *body.Save)
 }
 
 func (m *Module) slash(c *echo.Context) error {
@@ -98,11 +98,13 @@ func (m *Module) slash(c *echo.Context) error {
 			Markdown: inv.HelpMarkdown, StartedAt: now, EndedAt: &now,
 		})
 	}
-	return m.run(c, tenant, inv.SkillName, inv.Input, inv.Arguments)
+	// A slash command has no save flag: its autosave: false memos are not written.
+	return m.run(c, tenant, inv.SkillName, inv.Input, inv.Arguments, false)
 }
 
-// run is SkillsController.runSkill(name:user:input:arguments:).
-func (m *Module) run(c *echo.Context, tenant uuid.UUID, name string, input *string, arguments map[string]string) error {
+// run is SkillsController.runSkill(name:user:input:arguments:). save is
+// SkillRunRequest.save, which Swift decoded and ignored.
+func (m *Module) run(c *echo.Context, tenant uuid.UUID, name string, input *string, arguments map[string]string, save bool) error {
 	if strings.HasPrefix(name, hermesSkillPrefix) {
 		return wire.NewError(http.StatusBadRequest, "hermes_skill_runs_on_hermes")
 	}
@@ -111,7 +113,7 @@ func (m *Module) run(c *echo.Context, tenant uuid.UUID, name string, input *stri
 		return wire.NewError(http.StatusNotFound, "no skill named "+name)
 	}
 	ctx := c.Request().Context()
-	user := runUser{tenant: tenant}
+	user := runUser{tenant: tenant, save: save}
 	if err := m.pool.QueryRow(ctx, `SELECT tier, tier_override, username FROM users WHERE id = $1`, tenant).
 		Scan(&user.tier, &user.override, &user.username); err != nil {
 		return err

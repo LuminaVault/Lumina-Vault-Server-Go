@@ -119,6 +119,9 @@ type runUser struct {
 	tenant                   uuid.UUID
 	tier, override, username string
 	trigger                  string
+	// save is SkillRunRequest.save on POST /v1/skills/:name/run: write memo
+	// outputs marked `autosave: false`. Slash, cron and workflow runs never set it.
+	save bool
 }
 
 // Run is SkillRunner.run. The trigger is user.trigger, .manual when empty.
@@ -152,7 +155,7 @@ func (r *Runner) Run(ctx context.Context, mf skills.Manifest, user runUser, inpu
 
 	summary, blocks, err := r.runAgent(routed, mf, tenant, user.trigger, input, arguments, &res)
 	if err == nil {
-		err = r.dispatchOutputs(ctx, mf, tenant, user.username, summary)
+		err = r.dispatchOutputs(ctx, mf, tenant, user, arguments, summary)
 	}
 	if err == nil {
 		ok := res
@@ -414,7 +417,8 @@ var errChatNotWired = wire.NewError(http.StatusInternalServerError, "chat_messag
 
 // dispatchOutputs is SkillRunner.dispatchOutputs for a manual run (no event
 // payload, so memory_emit has no source file and vault_rewrite fails).
-func (r *Runner) dispatchOutputs(ctx context.Context, mf skills.Manifest, tenant uuid.UUID, username, content string) error {
+func (r *Runner) dispatchOutputs(ctx context.Context, mf skills.Manifest, tenant uuid.UUID, user runUser, arguments map[string]string, content string) error {
+	username := user.username
 	// Wave 4: the daily brief becomes cards first; its chat message is then a
 	// one-line pointer to them. A failed compose falls back to the full text.
 	briefCards := -1
@@ -429,7 +433,10 @@ func (r *Runner) dispatchOutputs(ctx context.Context, mf skills.Manifest, tenant
 	for _, out := range mf.Outputs {
 		switch out.Kind {
 		case skills.OutputMemo:
-			path, used := memoOutputPath(mf.Name, out.Path, r.now())
+			if !out.Saves() && !user.save {
+				continue
+			}
+			path, used := memoOutputPath(mf.Name, out.Path, memoSlug(mf.Name, arguments), r.now())
 			if out.Path != nil && !used {
 				r.log.WarnContext(ctx, fmt.Sprintf("skills.runner memo path %q unusable for skill %s; wrote %s", *out.Path, mf.Name, path))
 			}
@@ -582,22 +589,23 @@ func (r *Runner) fileJobResult(ctx context.Context, res runResult, mf skills.Man
 // memoPlaceholders are the tokens a memo output's manifest path may carry.
 // Swift documented `memos/{date}/daily-brief.md` (SkillManifest.swift) but
 // never expanded it, and neither did the first Go port, so daily-brief wrote
-// one file literally named {date} that every vault reader rejects.
-func memoPlaceholders(skill string, now time.Time) *strings.Replacer {
-	return strings.NewReplacer("{date}", dateStamp(now), "{slug}", skillSlug(skill))
+// one file literally named {date} that every vault reader rejects. slug is
+// memoSlug's.
+func memoPlaceholders(slug string, now time.Time) *strings.Replacer {
+	return strings.NewReplacer("{date}", dateStamp(now), "{slug}", slug)
 }
 
 // memoOutputPath is where a memo output is written. A manifest path has its
-// placeholders expanded and must then pass vaultfiles.SanitizePath, the check
-// every reader applies; otherwise the default memos/<date>/<slug>.md is used,
-// so a run never writes a note the vault cannot open. used reports whether the
-// manifest's path was taken.
-func memoOutputPath(skill string, manifestPath *string, now time.Time) (path string, used bool) {
+// placeholders expanded ({slug} to slug) and must then pass
+// vaultfiles.SanitizePath, the check every reader applies; otherwise the
+// default memos/<date>/<skill slug>.md is used, so a run never writes a note
+// the vault cannot open. used reports whether the manifest's path was taken.
+func memoOutputPath(skill string, manifestPath *string, slug string, now time.Time) (path string, used bool) {
 	fallback := "memos/" + dateStamp(now) + "/" + skillSlug(skill) + ".md"
 	if manifestPath == nil {
 		return fallback, false
 	}
-	expanded := memoPlaceholders(skill, now).Replace(*manifestPath)
+	expanded := memoPlaceholders(slug, now).Replace(*manifestPath)
 	safe, err := vaultfiles.SanitizePath(expanded)
 	if err != nil {
 		return fallback, false
@@ -608,8 +616,47 @@ func memoOutputPath(skill string, manifestPath *string, now time.Time) (path str
 // dateStamp is yyyy-MM-dd in UTC.
 func dateStamp(t time.Time) string { return t.UTC().Format("2006-01-02") }
 
+// memoSlug is what {slug} means in a memo path. For the reflection skills
+// (/patterns, /contradict, /beliefs) it is the run's topic, so two runs on one
+// day on different topics write two notes, as their SKILL.md promises; for every
+// other skill it stays the skill's slug.
+func memoSlug(skill string, arguments map[string]string) string {
+	if skills.IsTopicSkill(skill) {
+		return topicSlug(arguments["topic"])
+	}
+	return skillSlug(skill)
+}
+
+// maxTopicSlug is the reflection SKILL.md's "truncated to 32 chars".
+const maxTopicSlug = 32
+
+// topicSlug is the topic kebab-cased and cut to 32 Characters without a trailing
+// hyphen, or "untargeted" when there's nothing to slug.
+func topicSlug(topic string) string {
+	out := kebab(topic)
+	out = out[:min(maxTopicSlug, len(out))]
+	for len(out) > 0 && out[len(out)-1] == "-" {
+		out = out[:len(out)-1]
+	}
+	if len(out) == 0 {
+		return "untargeted"
+	}
+	return strings.Join(out, "")
+}
+
 // skillSlug is SkillRunner.slug.
 func skillSlug(value string) string {
+	out := kebab(value)
+	if len(out) == 0 {
+		return "skill"
+	}
+	return strings.Join(out[:min(64, len(out))], "")
+}
+
+// kebab is SkillRunner.slug before its fallback and cut: lowercased letters and
+// numbers, each run of spaces, hyphens and underscores one hyphen, none at
+// either end. One element per Character.
+func kebab(value string) []string {
 	var out []string
 	for _, ch := range swiftstr.Characters(strings.ToLower(value)) {
 		switch {
@@ -624,8 +671,5 @@ func skillSlug(value string) string {
 	for len(out) > 0 && out[len(out)-1] == "-" {
 		out = out[:len(out)-1]
 	}
-	if len(out) == 0 {
-		return "skill"
-	}
-	return strings.Join(out[:min(64, len(out))], "")
+	return out
 }
