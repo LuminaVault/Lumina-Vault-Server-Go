@@ -14,6 +14,7 @@ import (
 	"lumina/internal/wire"
 	"net/http"
 	"reflect"
+	"slices"
 	"strings"
 	"time"
 
@@ -85,6 +86,9 @@ type ConnectionDTO struct {
 	LastUsedAt        *wire.Time `json:"lastUsedAt,omitempty"`
 	AllowPersonalData bool       `json:"allowPersonalData"`
 	Access            string     `json:"access"`
+	// ConnectedAppGrants is the connected apps this key may read. It is nil,
+	// and so left out, when connected apps are off; the module fills it.
+	ConnectedAppGrants []string `json:"connectedAppGrants,omitzero"`
 }
 
 // connection is an agent_connections row.
@@ -98,6 +102,8 @@ type connection struct {
 	LastUsedAt        *time.Time
 	AllowPersonalData bool
 	Access            string
+	// ConnectedAppGrants is never nil for a scanned row. No grant is the default.
+	ConnectedAppGrants []string
 }
 
 // dto is AgentConnection.asDTO. Fluent sets createdAt on save, so it is never
@@ -106,6 +112,7 @@ func (c connection) dto() ConnectionDTO {
 	d := ConnectionDTO{
 		ID: wire.UUID{UUID: c.ID}, Name: c.Name, ClientKind: c.ClientKind, TokenPrefix: c.TokenPrefix,
 		AllowPersonalData: c.AllowPersonalData, Access: c.Access,
+		ConnectedAppGrants: c.ConnectedAppGrants,
 	}
 	if c.CreatedAt != nil {
 		d.CreatedAt = wire.Time{Time: *c.CreatedAt}
@@ -116,16 +123,19 @@ func (c connection) dto() ConnectionDTO {
 	return d
 }
 
-const connectionColumns = `id, tenant_id, name, client_kind, token_prefix, created_at, last_used_at, allow_personal_data, access`
+const connectionColumns = `id, tenant_id, name, client_kind, token_prefix, created_at, last_used_at, allow_personal_data, access, connected_app_grants`
 
 func scanConnection(row pgx.Row) (*connection, error) {
 	var c connection
-	err := row.Scan(&c.ID, &c.TenantID, &c.Name, &c.ClientKind, &c.TokenPrefix, &c.CreatedAt, &c.LastUsedAt, &c.AllowPersonalData, &c.Access)
+	err := row.Scan(&c.ID, &c.TenantID, &c.Name, &c.ClientKind, &c.TokenPrefix, &c.CreatedAt, &c.LastUsedAt, &c.AllowPersonalData, &c.Access, &c.ConnectedAppGrants)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
+	}
+	if c.ConnectedAppGrants == nil {
+		c.ConnectedAppGrants = []string{}
 	}
 	return &c, nil
 }
@@ -200,8 +210,10 @@ func (s *Connections) Revoke(ctx context.Context, tenant, id uuid.UUID) error {
 	return err
 }
 
-// Update applies whichever grants are non-nil.
-func (s *Connections) Update(ctx context.Context, tenant, id uuid.UUID, allowPersonal *bool, acc *string) (ConnectionDTO, error) {
+// Update applies whichever grants are non-nil, to a live key of this tenant
+// only. appGrants replaces the key's connected-app grants: nil leaves them, an
+// empty list clears them. The caller validates the ids.
+func (s *Connections) Update(ctx context.Context, tenant, id uuid.UUID, allowPersonal *bool, acc *string, appGrants *[]string) (ConnectionDTO, error) {
 	c, err := s.live(ctx, tenant, id)
 	if err != nil {
 		return ConnectionDTO{}, err
@@ -215,8 +227,11 @@ func (s *Connections) Update(ctx context.Context, tenant, id uuid.UUID, allowPer
 	if acc != nil {
 		c.Access = *acc
 	}
-	if _, err := s.pool.Exec(ctx, `UPDATE agent_connections SET allow_personal_data = $2, access = $3 WHERE id = $1`,
-		c.ID, c.AllowPersonalData, c.Access); err != nil {
+	if appGrants != nil {
+		c.ConnectedAppGrants = append([]string{}, *appGrants...)
+	}
+	if _, err := s.pool.Exec(ctx, `UPDATE agent_connections SET allow_personal_data = $2, access = $3, connected_app_grants = $4 WHERE id = $1`,
+		c.ID, c.AllowPersonalData, c.Access, c.ConnectedAppGrants); err != nil {
 		return ConnectionDTO{}, err
 	}
 	return c.dto(), nil
@@ -242,6 +257,24 @@ func (s *Connections) AllowsPersonalData(ctx context.Context, token string) (boo
 func (s *Connections) AllowsWrites(ctx context.Context, token string) (bool, error) {
 	c, err := s.byToken(ctx, token)
 	return c != nil && c.Access == AccessReadWrite, err
+}
+
+// AllowsConnectedApp reports whether the key was granted the app. Unknown and
+// revoked keys are false, and so is every key by default. It is independent of
+// AllowsPersonalData. A JWT session has no key and is not asked.
+func (s *Connections) AllowsConnectedApp(ctx context.Context, token, appID string) (bool, error) {
+	c, err := s.byToken(ctx, token)
+	return c != nil && slices.Contains(c.ConnectedAppGrants, appID), err
+}
+
+// connectedAppGrants is the apps a key was granted: empty, never nil, for a
+// key with none and for an unknown or revoked key.
+func (s *Connections) connectedAppGrants(ctx context.Context, token string) ([]string, error) {
+	c, err := s.byToken(ctx, token)
+	if err != nil || c == nil {
+		return []string{}, err
+	}
+	return c.ConnectedAppGrants, nil
 }
 
 // Authenticate is authenticate: the user a live key acts as, touching

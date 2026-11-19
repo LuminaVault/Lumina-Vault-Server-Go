@@ -9,7 +9,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"lumina/internal/config"
+	"lumina/internal/connectedapps"
 	"lumina/internal/httpserver"
+	"lumina/internal/modules/mcp"
 )
 
 // 32 zero bytes, base64: a test-only master key.
@@ -75,4 +77,16 @@ func TestConnectedAppsCallbackURL(t *testing.T) {
 	require.Equal(t, "https://in.test/v1/connected-apps/oauth/callback",
 		connectedAppsCallbackURL(config.Config{IngestionPublicBaseURL: "https://in.test"}))
 	require.Empty(t, connectedAppsCallbackURL(config.Config{}))
+}
+
+// /v1/mcp gets connected apps only when the service exists. A nil service
+// must leave the interface nil, not hold a typed nil that passes `!= nil`.
+func TestMCPOptionsConnectedApps(t *testing.T) {
+	off := (&agent{}).mcpOptions(mcp.Options{})
+	require.True(t, off.ConnectedApps == nil)
+	require.Empty(t, off.ConnectedAppIDs)
+
+	on := (&agent{connectedApps: connectedapps.NewService(connectedapps.Registry{}, nil, nil, nil, nil)}).mcpOptions(mcp.Options{})
+	require.NotNil(t, on.ConnectedApps)
+	require.Equal(t, []string{"norviq", "aaru", "khepri", "loci"}, on.ConnectedAppIDs)
 }

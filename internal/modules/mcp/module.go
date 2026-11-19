@@ -8,17 +8,21 @@
 package mcp
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"lumina/internal/auth"
+	"lumina/internal/connectedapps"
 	"lumina/internal/httpserver"
 	"lumina/internal/ratelimit"
 	"lumina/internal/swiftstr"
 	"lumina/internal/vaultaccess"
 	"lumina/internal/wire"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/google/uuid"
@@ -41,6 +45,20 @@ type Options struct {
 	Service     *Service
 	// PublicBaseURL is mcpPublicBaseURL, resolved by cmd/App.
 	PublicBaseURL string
+	// ConnectedApps proxies the caller's connected-app tools. Nil (connected
+	// apps off) means no app tools and no grants on the wire. Never assign a
+	// typed nil.
+	ConnectedApps ConnectedApps
+	// ConnectedAppIDs is the registry's app ids: the only values a key's
+	// connectedAppGrants may hold.
+	ConnectedAppIDs []string
+}
+
+// ConnectedApps is the user's connected first-party apps as tool sources
+// (connectedapps.Service). user is always the caller's identity, never a vault.
+type ConnectedApps interface {
+	Tools(ctx context.Context, user uuid.UUID, onlyApps []string) ([]connectedapps.AppTool, error)
+	Call(ctx context.Context, user uuid.UUID, name string, args map[string]any) (string, error)
 }
 
 // Module is the two route groups.
@@ -192,7 +210,7 @@ func (m *Module) dispatch(c *echo.Context, rpc *request) (any, error) {
 	case "ping":
 		return map[string]any{}, nil
 	case "tools/list":
-		return map[string]any{"tools": toolListing()}, nil
+		return map[string]any{"tools": append(toolListing(), m.connectedAppListing(c)...)}, nil
 	case "tools/call":
 		return m.callTool(c, rpc)
 	}
@@ -205,13 +223,17 @@ func (m *Module) callTool(c *echo.Context, rpc *request) (any, error) {
 	if params == nil || !ok {
 		return nil, invalidParams("tools/call requires a `name`")
 	}
-	t, ok := lookupTool(name)
-	if !ok {
-		return nil, methodNotFound("unknown tool '" + name + "'")
-	}
 	args, _ := params["arguments"].(map[string]any)
 	if args == nil {
 		args = map[string]any{}
+	}
+	// Lumina's own tools come first, so an app tool can never shadow one.
+	t, ok := lookupTool(name)
+	if !ok {
+		if appID, isApp := m.connectedApp(name); isApp {
+			return m.callConnectedApp(c, appID, name, args)
+		}
+		return nil, methodNotFound("unknown tool '" + name + "'")
 	}
 	if unknown, found := unknownArgument(t, args); found {
 		return nil, invalidParams("unknown argument '" + unknown + "' for tool '" + name + "'")
@@ -279,6 +301,135 @@ func (m *Module) callPersonal(c *echo.Context, t tool, args map[string]any) (any
 	return toolContent(result), nil
 }
 
+// connectedApp is the registry app a "<app>__<tool>" name belongs to. It is
+// false for every name when connected apps are off.
+func (m *Module) connectedApp(name string) (string, bool) {
+	if m.opt.ConnectedApps == nil {
+		return "", false
+	}
+	appID, _, ok := connectedapps.SplitName(name)
+	if !ok || !slices.Contains(m.opt.ConnectedAppIDs, appID) {
+		return "", false
+	}
+	return appID, true
+}
+
+// connectedAppListing is the caller's connected-app tools for tools/list: for
+// an agent key only the apps the user granted that key, for a JWT session all
+// of the user's own. The user is the caller's identity; X-Vault-ID plays no
+// part. A failure lists no app tools and leaves Lumina's own list intact.
+func (m *Module) connectedAppListing(c *echo.Context) []any {
+	user, ok := auth.Identity(c)
+	if m.opt.ConnectedApps == nil || !ok {
+		return nil
+	}
+	ctx := c.Request().Context()
+	// nil means every app the user connected; that is for JWT sessions only.
+	var only []string
+	if token, ok := agentToken(c.Request()); ok {
+		grants, err := m.opt.Connections.connectedAppGrants(ctx, token)
+		if err != nil {
+			slog.WarnContext(ctx, "mcp: connected-app grants lookup failed")
+			return nil
+		}
+		if len(grants) == 0 {
+			return nil
+		}
+		only = grants
+	}
+	tools, err := m.opt.ConnectedApps.Tools(ctx, user, only)
+	if err != nil {
+		slog.WarnContext(ctx, "mcp: connected-app tools unavailable")
+		return nil
+	}
+	out := []any{}
+	for _, t := range tools {
+		if l, ok := m.connectedAppToolListing(t, only); ok {
+			out = append(out, l)
+		}
+	}
+	return out
+}
+
+// connectedAppToolListing is one app tool as tools/list shows it, or false for
+// a tool that must not be listed: a name that is not "<app>__<tool>" for a
+// registry app (and, for a key, a granted one), a name Lumina's own catalog
+// has, or an input schema that is not a JSON object schema.
+func (m *Module) connectedAppToolListing(t connectedapps.AppTool, only []string) (map[string]any, bool) {
+	appID, isApp := m.connectedApp(t.Name)
+	if !isApp || appID != t.App.ID || (only != nil && !slices.Contains(only, appID)) {
+		return nil, false
+	}
+	if _, static := lookupTool(t.Name); static {
+		return nil, false
+	}
+	var schema map[string]any
+	if err := json.Unmarshal(t.Remote.InputSchema, &schema); err != nil || schema["type"] != "object" {
+		return nil, false
+	}
+	description := "From the user's connected " + t.App.Name + " account (read-only)."
+	if t.Remote.Description != "" {
+		description += " " + t.Remote.Description
+	}
+	return map[string]any{
+		"name":        t.Name,
+		"title":       t.App.Name + ": " + t.Remote.Name,
+		"description": description,
+		"inputSchema": schema,
+		"annotations": map[string]any{
+			"readOnlyHint":    true,
+			"destructiveHint": false,
+			"idempotentHint":  true,
+		},
+	}, true
+}
+
+// callConnectedApp runs one connected-app tool as the caller. An agent key
+// needs the user's grant for that app, checked here on every call whether or
+// not the key ever listed the tool; a JWT session is the user and needs none.
+// The grant is separate from allowPersonalData. The refusal is decided before
+// the service is asked anything, so it says nothing about whether the user
+// connected the app. Arguments and results are never logged.
+func (m *Module) callConnectedApp(c *echo.Context, appID, name string, args map[string]any) (any, error) {
+	user, ok := auth.Identity(c)
+	if !ok {
+		return nil, auth.ErrUnauthorized
+	}
+	ctx := c.Request().Context()
+	if token, ok := agentToken(c.Request()); ok {
+		allowed, err := m.opt.Connections.AllowsConnectedApp(ctx, token, appID)
+		if err != nil {
+			return nil, err
+		}
+		if !allowed {
+			return toolContent(map[string]any{
+				"isError": true,
+				"message": "this agent key is not allowed to use connected apps it was not granted — " +
+					"the user can grant it an app in LuminaVault Settings → Agent connections",
+			}), nil
+		}
+	}
+	out, err := m.opt.ConnectedApps.Call(ctx, user, name, args)
+	if errors.Is(err, connectedapps.ErrToolNotAllowed) {
+		return nil, methodNotFound("unknown tool '" + name + "'")
+	}
+	if err != nil {
+		// The service's errors are fixed sentences with no remote text.
+		return toolContent(map[string]any{"isError": true, "message": err.Error()}), nil
+	}
+	return toolContent(connectedAppResult(out)), nil
+}
+
+// connectedAppResult wraps an app tool's text as personalResult wraps a
+// device's: a JSON object is the structured result, anything else is {"text"}.
+func connectedAppResult(raw string) map[string]any {
+	var object map[string]any
+	if err := json.Unmarshal([]byte(raw), &object); err != nil || object == nil {
+		return map[string]any{"text": raw}
+	}
+	return object
+}
+
 func (m *Module) caller(c *echo.Context) (caller, error) {
 	user, ok := auth.Identity(c)
 	if !ok {
@@ -310,6 +461,33 @@ type issueRequest struct {
 type updateRequest struct {
 	AllowPersonalData *bool   `json:"allowPersonalData,omitempty"`
 	Access            *access `json:"access,omitempty"`
+	// ConnectedAppGrants replaces the key's grants: omitted or null leaves
+	// them, [] clears them.
+	ConnectedAppGrants *[]string `json:"connectedAppGrants,omitempty"`
+}
+
+// surface is a connection as this server shows it: with connected apps off,
+// its grants are not on the wire.
+func (m *Module) surface(d ConnectionDTO) ConnectionDTO {
+	if m.opt.ConnectedApps == nil {
+		d.ConnectedAppGrants = nil
+	}
+	return d
+}
+
+// appGrants checks a PATCH's connectedAppGrants: registry ids only, each once,
+// in the order given. With connected apps off no id is valid.
+func (m *Module) appGrants(in []string) ([]string, error) {
+	out := []string{}
+	for _, id := range in {
+		if m.opt.ConnectedApps == nil || !slices.Contains(m.opt.ConnectedAppIDs, id) {
+			return nil, wire.NewError(http.StatusBadRequest, "invalid_connected_app")
+		}
+		if !slices.Contains(out, id) {
+			out = append(out, id)
+		}
+	}
+	return out, nil
 }
 
 func (m *Module) tenant(c *echo.Context) (uuid.UUID, error) {
@@ -328,6 +506,9 @@ func (m *Module) list(c *echo.Context) error {
 	conns, err := m.opt.Connections.List(c.Request().Context(), tenant)
 	if err != nil {
 		return err
+	}
+	for i := range conns {
+		conns[i] = m.surface(conns[i])
 	}
 	return wire.JSON(c, http.StatusOK, map[string]any{"connections": conns})
 }
@@ -351,7 +532,7 @@ func (m *Module) issue(c *echo.Context) error {
 		return err
 	}
 	return wire.JSON(c, http.StatusOK, map[string]any{
-		"connection": conn,
+		"connection": m.surface(conn),
 		"token":      token,
 		"setup":      setupInstructions(string(body.ClientKind), m.opt.PublicBaseURL, token),
 	})
@@ -397,19 +578,32 @@ func (m *Module) update(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if body.AllowPersonalData == nil && body.Access == nil {
+	if m.opt.ConnectedApps == nil {
+		// Connected apps are off: the field is not part of the API, and is
+		// ignored like any other unknown field.
+		body.ConnectedAppGrants = nil
+	}
+	if body.AllowPersonalData == nil && body.Access == nil && body.ConnectedAppGrants == nil {
 		return wire.NewError(http.StatusBadRequest, "nothing_to_update")
+	}
+	var grants *[]string
+	if body.ConnectedAppGrants != nil {
+		checked, err := m.appGrants(*body.ConnectedAppGrants)
+		if err != nil {
+			return err
+		}
+		grants = &checked
 	}
 	var acc *string
 	if body.Access != nil {
 		s := string(*body.Access)
 		acc = &s
 	}
-	conn, err := m.opt.Connections.Update(c.Request().Context(), tenant, id, body.AllowPersonalData, acc)
+	conn, err := m.opt.Connections.Update(c.Request().Context(), tenant, id, body.AllowPersonalData, acc, grants)
 	if err != nil {
 		return err
 	}
-	return wire.JSON(c, http.StatusOK, conn)
+	return wire.JSON(c, http.StatusOK, m.surface(conn))
 }
 
 func (m *Module) revoke(c *echo.Context) error {
