@@ -102,6 +102,52 @@ func TestEveryUnconfirmedWriteIsGated(t *testing.T) {
 	}
 }
 
+// Every tool that runs without a tap is classified for a turn that read a
+// connected app: a write (refused, R28), embed-gated (refused, R31) or a read
+// that sends none of the model's text to the embedding provider. A new
+// Run-class tool fails here until someone decides which it is.
+func TestEveryRunToolIsClassifiedForConnectedAppTurns(t *testing.T) {
+	// Checked against mcp/tools.go and the runner: none of these embeds.
+	embedsNothing := map[string]bool{
+		"browse": true, "read": true, "recent": true, "health_query": true,
+		"calendar_query": true, "reminders_list": true, "app_reminders_list": true,
+		"space_list": true,
+	}
+	gated := map[string]bool{}
+	for _, tool := range Definitions(DefinitionOptions{DeviceWrites: true, AppActions: true}) {
+		name := tool.Name
+		if EmbedGated(name) {
+			gated[name] = true
+			if ActionFor(name) != Run || tool.Writes {
+				t.Errorf("%s is embed-gated but is not a read that runs at once", name)
+			}
+		}
+		if ActionFor(name) != Run {
+			continue
+		}
+		classes := 0
+		for _, in := range []bool{WritesWithoutConfirm(name), EmbedGated(name), embedsNothing[name]} {
+			if in {
+				classes++
+			}
+		}
+		if classes != 1 {
+			t.Errorf("%s is in %d of: unconfirmed write, embed-gated, embeds nothing", name, classes)
+		}
+	}
+	// search embeds its query (mcp.search). memory_context embeds nothing
+	// today; ruling 31 names it, so it is gated with search.
+	want := map[string]bool{"search": true, "memory_context": true}
+	if !reflect.DeepEqual(gated, want) {
+		t.Errorf("embed-gated = %v", gated)
+	}
+	for _, name := range []string{"", "aaru__search", "searches", "memory_save", "memory_update"} {
+		if EmbedGated(name) {
+			t.Errorf("%q is embed-gated", name)
+		}
+	}
+}
+
 func TestRefusedToolsAreNotOffered(t *testing.T) {
 	for _, d := range Definitions(DefinitionOptions{DeviceWrites: true}) {
 		require.NotEqual(t, Refused, ActionFor(d.Name), d.Name)

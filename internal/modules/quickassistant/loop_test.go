@@ -1943,7 +1943,7 @@ func TestWritesAfterAConnectedAppAnswerAreRefused(t *testing.T) {
 		toolsStep(
 			call("c2", "memory_save", `{"content":"SECRET-ARG Severance"}`),
 			call("c3", "space_create", `{"name":"SECRET-ARG Shows"}`),
-			call("c4", "search", `{"query":"dune"}`),
+			call("c4", "browse", `{}`),
 			call("c5", "calendar_create", `{"title":"Finale","start":"2030-01-01T09:00:00"}`)),
 		toolsStep(call("c6", "app_reminder_create", `{"title":"SECRET-ARG"}`), call("c7", "space_update", `{}`), call("c8", "file_move", `{}`)),
 		textStep("Nothing was saved."))
@@ -1955,7 +1955,7 @@ func TestWritesAfterAConnectedAppAnswerAreRefused(t *testing.T) {
 
 	// Reads and the tool that waits for Confirm still reach the runner; no
 	// write that needs no tap does.
-	if got := base.names(); !reflect.DeepEqual(got, []string{"search", "calendar_create"}) {
+	if got := base.names(); !reflect.DeepEqual(got, []string{"browse", "calendar_create"}) {
 		t.Errorf("base runner ran %v", got)
 	}
 	if base.noted != 1 {
@@ -1965,7 +1965,7 @@ func TestWritesAfterAConnectedAppAnswerAreRefused(t *testing.T) {
 	if got, want := toolResults(t, sent[2])[1:], []string{
 		"memory_save: " + connectedAppWriteRefused,
 		"space_create: " + connectedAppWriteRefused,
-		"search: result of search",
+		"browse: result of browse",
 		"calendar_create: result of calendar_create",
 	}; !reflect.DeepEqual(got, want) {
 		t.Errorf("round 2 results = %v", got)
@@ -1983,6 +1983,77 @@ func TestWritesAfterAConnectedAppAnswerAreRefused(t *testing.T) {
 	// The refused calls ran nothing, so they are not counted.
 	if !reply.UsedConnectedApp || reply.ToolCallCount != 3 || reply.RanAppAction {
 		t.Errorf("reply = %+v", reply)
+	}
+}
+
+// Once an app answered, the model's words can carry that app's data, and a
+// tool that embeds them would hand it to the embedding provider (R31).
+func TestEmbeddingToolsAfterAConnectedAppAnswerAreRefused(t *testing.T) {
+	tr := newTransport(paidDecision(1000),
+		toolsStep(call("c1", "search", `{"query":"mine"}`), call("c2", "memory_context", `{}`)),
+		toolsStep(
+			call("c3", "search", `{"query":"before"}`),
+			call("c4", "aaru__read_library", `{}`),
+			call("c5", "search", `{"query":"SECRET-ARG Severance"}`)),
+		toolsStep(
+			call("c6", "search", `{"query":"SECRET-ARG Dune"}`),
+			call("c7", "memory_context", `{"space":"SECRET-ARG"}`),
+			call("c8", "recent", `{}`),
+			call("c9", "read", `{"path":"a.md"}`)),
+		textStep("Here is your library."))
+	base := &recordingRunner{}
+	extra := &recordingRunner{results: map[string]ToolResult{"aaru__read_library": {ModelContent: "LIBRARY"}}}
+	h := newHarness(tr)
+
+	reply := mustReply(t, h.answerWith(base, aaruOptions(extra)))
+
+	// Before the app answered both run. After it, the base runner never sees
+	// either; reads that embed nothing still run.
+	if got := base.names(); !reflect.DeepEqual(got, []string{"search", "memory_context", "search", "recent", "read"}) {
+		t.Errorf("base runner ran %v", got)
+	}
+	for _, c := range base.calls {
+		if q, _ := c.args["query"].(string); strings.Contains(q, "SECRET-ARG") {
+			t.Errorf("a search ran with app-era text: %v", c.args)
+		}
+	}
+	sent := tr.sent()
+	if got, want := toolResults(t, sent[2]), []string{
+		"search: result of search",
+		"aaru__read_library: LIBRARY",
+		"search: " + connectedAppEmbedRefused,
+	}; !reflect.DeepEqual(got[len(got)-3:], want) {
+		t.Errorf("round 2 results = %v", got)
+	}
+	if got, want := toolResults(t, sent[3]), []string{
+		"search: " + connectedAppEmbedRefused,
+		"memory_context: " + connectedAppEmbedRefused,
+		"recent: result of recent",
+		"read: result of read",
+	}; !reflect.DeepEqual(got[len(got)-4:], want) {
+		t.Errorf("round 3 results = %v", got)
+	}
+	if strings.Contains(connectedAppEmbedRefused, "SECRET-ARG") {
+		t.Error("the refusal repeats an argument")
+	}
+	// The refused calls ran nothing, so they are not counted.
+	if !reply.UsedConnectedApp || reply.ToolCallCount != 6 {
+		t.Errorf("reply = %+v", reply)
+	}
+}
+
+// Offering the app tools gates nothing: only one having answered does.
+func TestSearchInATurnThatRanNoConnectedAppStillRuns(t *testing.T) {
+	tr := newTransport(paidDecision(1000),
+		toolsStep(call("c1", "search", `{"query":"dune"}`), call("c2", "memory_context", `{}`)),
+		textStep("Done."))
+	base := &recordingRunner{}
+	h := newHarness(tr)
+
+	mustReply(t, h.answerWith(base, aaruOptions(&recordingRunner{})))
+
+	if got := base.names(); !reflect.DeepEqual(got, []string{"search", "memory_context"}) {
+		t.Errorf("base runner ran %v", got)
 	}
 }
 

@@ -31,6 +31,9 @@ const (
 	// asked for after a connected app's data entered the turn. Fixed text: it
 	// never repeats the arguments.
 	connectedAppWriteRefused = "The tool did not run: nothing is saved or changed in a turn that read a connected app. Tell the user it was not saved."
+	// connectedAppEmbedRefused answers a search asked for after a connected
+	// app's data entered the turn. Fixed text: it never repeats the arguments.
+	connectedAppEmbedRefused = "The tool did not run: the user's notes and memories cannot be searched in a turn that read a connected app. Answer from what you already have."
 )
 
 // ToolResult is QuickAssistantToolResult: what the model reads back, and the
@@ -396,6 +399,12 @@ func (t *turn) runCall(index int, c wireToolCall) string {
 	// tools that wait for Confirm are unaffected.
 	if t.usedConnectedApp && !extra && WritesWithoutConfirm(name) {
 		return connectedAppWriteRefused
+	}
+	// The same data must not reach the embedding provider, which is not
+	// Anthropic: a search embeds the query the model wrote, and by now that
+	// query can quote the app. Searches from before the app answered stand.
+	if t.usedConnectedApp && !extra && EmbedGated(name) {
+		return connectedAppEmbedRefused
 	}
 	writeKey := ""
 	if IsWrite(name) {
