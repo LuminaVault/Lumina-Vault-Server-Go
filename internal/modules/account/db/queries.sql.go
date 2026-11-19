@@ -45,6 +45,19 @@ func (q *Queries) AnonymizeVaultActivity(ctx context.Context, arg AnonymizeVault
 	return err
 }
 
+const creditMembershipsToMembers = `-- name: CreditMembershipsToMembers :exec
+UPDATE vault_memberships SET created_by_user_id = user_id, updated_at = now()
+WHERE created_by_user_id = $1::uuid
+`
+
+// Memberships the user granted in vaults that outlive them (team vaults):
+// kept, credited to the member, so nobody loses access. The column is NOT NULL,
+// so SET NULL is not an option.
+func (q *Queries) CreditMembershipsToMembers(ctx context.Context, userID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, creditMembershipsToMembers, userID)
+	return err
+}
+
 const deleteUser = `-- name: DeleteUser :exec
 DELETE FROM users WHERE id = $1
 `
@@ -90,6 +103,22 @@ DELETE FROM idempotency_keys WHERE tenant_id = $1
 
 func (q *Queries) EraseIdempotencyKeys(ctx context.Context, tenantID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, eraseIdempotencyKeys, tenantID)
+	return err
+}
+
+const eraseOwnVaultMemberships = `-- name: EraseOwnVaultMemberships :exec
+DELETE FROM vault_memberships m
+WHERE m.user_id = $1::uuid
+   OR m.vault_id IN (SELECT v.id FROM vaults v WHERE v.personal_owner_user_id = $1::uuid)
+`
+
+// vault_memberships.created_by_user_id is ON DELETE RESTRICT, checked before
+// any cascade runs, and registration writes the user's own personal-vault
+// membership with created_by_user_id = the user. Without this every account
+// with a vault answered 500. Removes the user's memberships and every
+// membership in their personal vault (that vault cascades away anyway).
+func (q *Queries) EraseOwnVaultMemberships(ctx context.Context, userID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, eraseOwnVaultMemberships, userID)
 	return err
 }
 
