@@ -29,17 +29,28 @@ var (
 	ErrBadPAT = errors.New("connectedapps: bad token format")
 	// ErrUnknownApp means the app id is not in the registry.
 	ErrUnknownApp = errors.New("connectedapps: unknown app")
-	// ErrUpstream marks a failure on the remote app's side while starting a
-	// flow: discovery, client registration, a transport error or metadata the
-	// guard rejects. Anything Start returns without it failed locally.
+	// ErrUpstream marks a failure on the remote app's side while starting or
+	// completing a flow: discovery, client registration, the code exchange, a
+	// transport error or metadata the guard rejects. Anything Start or Complete
+	// returns without it failed locally.
 	ErrUpstream = errors.New("connectedapps: upstream failure")
 	// ErrNoCode means the callback carried no code: the user declined, or the
 	// authorization server reported an error.
 	ErrNoCode = errors.New("connectedapps: no authorization code")
+	// ErrBadCompletion means the completion handle is unknown, used, expired
+	// or for another app.
+	ErrBadCompletion = errors.New("connectedapps: bad completion handle")
+	// ErrWrongUser means the flow was started by another Lumina account than
+	// the one completing it (R19). Nothing is exchanged or stored.
+	ErrWrongUser = errors.New("connectedapps: flow started by another account")
 )
 
 const (
-	sessionTTL    = 600 * time.Second
+	sessionTTL = 600 * time.Second
+	// completionTTL bounds how long a parked code waits for the signed-in
+	// client to complete. Aaru and Khepri codes live 60 s, so a slower
+	// completion would fail at the token endpoint anyway.
+	completionTTL = 60 * time.Second
 	refreshAhead  = 120 * time.Second
 	revokeTimeout = 5 * time.Second
 	deleteTimeout = 5 * time.Second
@@ -51,44 +62,59 @@ func isNoRows(err error) bool { return errors.Is(err, pgx.ErrNoRows) }
 func upstream(err error) error { return fmt.Errorf("%w: %w", ErrUpstream, err) }
 
 type oauthSession struct {
-	user      uuid.UUID
-	appID     string
-	verifier  string
-	clientID  string
-	tokenURL  string
-	returnTo  *string
-	startedAt time.Time
+	user     uuid.UUID
+	appID    string
+	verifier string
+	clientID string
+	tokenURL string
+	returnTo *string
 }
 
-// sessionStore mirrors calendar's: in-memory, per process, one-shot take,
-// pruned by sessionTTL.
-type sessionStore struct {
-	mu       sync.Mutex
-	sessions map[string]oauthSession
-	now      func() time.Time
+// parked is a callback's code waiting for the signed-in client to complete.
+type parked struct {
+	sess oauthSession
+	code string
 }
 
-func (s *sessionStore) put(state string, sess oauthSession) {
+// onceStore mirrors calendar's session store: in-memory, per process, one-shot
+// take, entries pruned after ttl.
+type onceStore[V any] struct {
+	mu    sync.Mutex
+	items map[string]stamped[V]
+	ttl   time.Duration
+	now   func() time.Time
+}
+
+type stamped[V any] struct {
+	v  V
+	at time.Time
+}
+
+func newOnceStore[V any](ttl time.Duration, now func() time.Time) *onceStore[V] {
+	return &onceStore[V]{items: map[string]stamped[V]{}, ttl: ttl, now: now}
+}
+
+func (s *onceStore[V]) put(key string, v V) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.prune()
-	s.sessions[state] = sess
+	s.items[key] = stamped[V]{v: v, at: s.now()}
 }
 
-func (s *sessionStore) take(state string) (oauthSession, bool) {
+func (s *onceStore[V]) take(key string) (V, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.prune()
-	sess, ok := s.sessions[state]
-	delete(s.sessions, state)
-	return sess, ok
+	it, ok := s.items[key]
+	delete(s.items, key)
+	return it.v, ok
 }
 
-func (s *sessionStore) prune() {
-	cutoff := s.now().Add(-sessionTTL)
-	for k, v := range s.sessions {
-		if v.startedAt.Before(cutoff) {
-			delete(s.sessions, k)
+func (s *onceStore[V]) prune() {
+	cutoff := s.now().Add(-s.ttl)
+	for k, v := range s.items {
+		if v.at.Before(cutoff) {
+			delete(s.items, k)
 		}
 	}
 }
@@ -102,7 +128,8 @@ type OAuth struct {
 	pool        *pgxpool.Pool
 	http        *http.Client
 	guard       Validator
-	sessions    *sessionStore
+	sessions    *onceStore[oauthSession]
+	parked      *onceStore[parked]
 	callbackURL string
 	now         func() time.Time
 
@@ -117,7 +144,9 @@ func NewOAuth(pool *pgxpool.Pool, reg Registry, store *Store, httpc *http.Client
 		registry: reg, store: store, pool: pool, http: noRedirects(httpc), guard: guard,
 		callbackURL: callbackURL, now: time.Now, locks: map[string]*sync.Mutex{},
 	}
-	o.sessions = &sessionStore{sessions: map[string]oauthSession{}, now: func() time.Time { return o.now() }}
+	clock := func() time.Time { return o.now() }
+	o.sessions = newOnceStore[oauthSession](sessionTTL, clock)
+	o.parked = newOnceStore[parked](completionTTL, clock)
 	return o
 }
 
@@ -187,7 +216,7 @@ func (o *OAuth) Start(ctx context.Context, user uuid.UUID, appID string, returnT
 	}
 	o.sessions.put(state, oauthSession{
 		user: user, appID: appID, verifier: verifier, clientID: clientID,
-		tokenURL: meta.TokenEndpoint, returnTo: returnTo, startedAt: o.now(),
+		tokenURL: meta.TokenEndpoint, returnTo: returnTo,
 	})
 	return au.String(), nil
 }
@@ -212,24 +241,52 @@ func (o *OAuth) tokenRequest(ctx context.Context, tokenURL string, form url.Valu
 	return status, tr, nil
 }
 
-// Finish completes the flow: it exchanges the code and stores the tokens. The
-// state is taken first and works once, whatever follows. Once it is known, the
-// app id and returnTo come back even with an error, so the caller can send the
-// browser to the right place. An empty code (the user declined) is ErrNoCode
-// and makes no request.
-func (o *OAuth) Finish(ctx context.Context, state, code string) (string, *string, error) {
+// Park is the unauthenticated half of the callback. It takes the state (once,
+// whatever follows), keeps the code and answers a fresh single-use completion
+// handle for the redirect. It makes no request and stores no token: only
+// Complete, called with the signed-in user's own session, does (R19). Once the
+// state is known, the app id and returnTo come back even with an error, so the
+// caller can send the browser to the right place. An empty code (the user
+// declined) is ErrNoCode.
+func (o *OAuth) Park(state, code string) (appID, handle string, returnTo *string, err error) {
 	sess, ok := o.sessions.take(state)
 	if !ok {
-		return "", nil, ErrBadState
+		return "", "", nil, ErrBadState
 	}
 	app, err := o.app(sess.appID)
 	if err != nil {
-		return "", nil, err
+		return "", "", nil, err
 	}
 	if code == "" {
-		return app.ID, sess.returnTo, ErrNoCode
+		return app.ID, "", sess.returnTo, ErrNoCode
 	}
-	return app.ID, sess.returnTo, o.exchange(ctx, sess, app, code)
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		return app.ID, "", sess.returnTo, err
+	}
+	handle = base64.RawURLEncoding.EncodeToString(raw)
+	o.parked.put(handle, parked{sess: sess, code: code})
+	return app.ID, handle, sess.returnTo, nil
+}
+
+// Complete finishes a parked flow for the signed-in user: it exchanges the
+// code and stores the tokens. The handle works once, whatever follows. A
+// handle for another app is ErrBadCompletion; a flow another account started
+// is ErrWrongUser, and then the code is never exchanged, so the app's tokens
+// are never minted.
+func (o *OAuth) Complete(ctx context.Context, user uuid.UUID, appID, handle string) error {
+	p, ok := o.parked.take(handle)
+	if !ok || p.sess.appID != appID {
+		return ErrBadCompletion
+	}
+	if p.sess.user != user {
+		return ErrWrongUser
+	}
+	app, err := o.app(appID)
+	if err != nil {
+		return err
+	}
+	return o.exchange(ctx, p.sess, app, p.code)
 }
 
 func (o *OAuth) exchange(ctx context.Context, sess oauthSession, app App, code string) error {
@@ -242,10 +299,10 @@ func (o *OAuth) exchange(ctx context.Context, sess oauthSession, app App, code s
 		"resource":      {app.MCPURL},
 	})
 	if err != nil {
-		return err
+		return upstream(err)
 	}
 	if status != http.StatusOK || tr.AccessToken == "" {
-		return fmt.Errorf("connectedapps: token exchange failed (%d)", status)
+		return upstream(fmt.Errorf("connectedapps: token exchange failed (%d)", status))
 	}
 	acct := Account{AppID: app.ID, AccessToken: tr.AccessToken, RefreshToken: tr.RefreshToken}
 	if tr.ExpiresIn > 0 {

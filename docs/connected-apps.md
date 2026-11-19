@@ -70,9 +70,10 @@ so with no row there the refresh token is left to expire at the app. The local
 row is still deleted.
 
 **OAuth state lives in memory.** The `state` of a connect in flight (10 minute
-lifetime) is held in the pod, not the database. A pod restart drops every
-in-flight connect (the user sees the error status and starts again), and a
-callback that lands on another pod would not find its state. The service must
+lifetime) and the parked code waiting for `.../complete` (60 seconds) are held
+in the pod, not the database. A pod restart drops every in-flight connect (the
+user sees the error status and starts again), and a callback or completion
+that lands on another pod would not find its state. The service must
 therefore stay at **one replica** (staging and prod are both `replicaCount: 1`).
 Move the state to the database before scaling out.
 
@@ -143,6 +144,12 @@ failed migration leaves the old ReplicaSet serving.
   data cannot be saved to memory, reminders or spaces.** Confirm-class writes
   (for example calendar_create) are still allowed, because the user's tap is an
   explicit ask.
+- **A confirmed memory update still embeds** (R35, owner-accepted 2026-11-19).
+  `memory_update` is Confirm-class, so after app data it runs once the user
+  taps confirm, and its text goes to the embedding provider, which is not
+  Anthropic. The tap counts as consent, as in R30. This is the only path by
+  which app-derived text can reach a non-Anthropic provider, and only text the
+  user chose to save.
 - **Searches after app data** (R31). Once an app answered in a turn, `search`
   and `memory_context` are refused with fixed text for the rest of the turn. A
   search embeds the query the model wrote, the embedding provider is not
@@ -162,20 +169,50 @@ failed migration leaves the old ReplicaSet serving.
   posthog, telemetry or llm packages reference `connected_app_accounts` or
   `connectedapps.Store`.
 
-## Known risk: cross-user OAuth completion (R19), owner decision pending
+## OAuth completion is bound to the signed-in user (R19)
 
-The OAuth callback is unauthenticated: it finishes the flow from the `state`
-alone, because the iOS web-auth session cannot carry the user's JWT and
-cross-site web cookies are unreliable. So an attacker could start a connect on
-their own Lumina account and send the resulting authorize link to a victim; if
-the victim approves, the victim's app tokens bind to the attacker's Lumina
-account, and the attacker could then read the victim's app data through Lumina.
+The OAuth callback is unauthenticated, because the iOS web-auth session cannot
+carry the user's JWT and cross-site web cookies are unreliable. Before the fix,
+the callback finished the flow from the `state` alone. An attacker could start
+a connect on their own Lumina account and send the authorize link to a victim.
+If the victim approved, the victim's app tokens bound to the attacker's
+account.
 
-Mitigations: the app's own first-party consent screen names Lumina, and the
-state is single-use with a 10-minute lifetime.
+The flow now has two halves (owner decision 2026-11-19: fix rather than
+accept):
 
-**Status: PROVISIONALLY ACCEPTED for v1, pending the owner's decision.** Do not
-enable in production before that decision. Staging checklist item below.
+1. **Callback** (`GET /v1/connected-apps/oauth/callback`, public). It takes the
+   state, parks the code in memory for 60 seconds, and redirects with
+   `status=authorized&completion=<handle>`. The handle is a fresh 32-byte
+   random value, used once. The callback makes no outbound request and stores
+   no token.
+2. **Complete** (`POST /v1/me/connected-apps/:app/complete`, authenticated,
+   body `{"completion": "<handle>"}`). The handle is spent on arrival. The
+   server exchanges the code and saves the tokens only when the session's user
+   started the flow, and answers 204. Other outcomes:
+   - Another account: **403**. The code is never exchanged and nothing is
+     stored.
+   - Unknown, used, expired or another app's handle: **400**.
+   - Token exchange failed: **502**.
+
+The attacker holds the state but never sees the handle: it goes to the
+victim's browser. The victim holds the handle but the wrong session. Under
+attack the victim's tokens are never minted.
+
+Aaru and Khepri codes live 60 seconds, so the client must post `complete` as
+soon as the redirect arrives. iOS: the `luminavault://connected-apps/<app>`
+deep link. Web: the allowed `returnTo` page.
+
+**Residual risk:** the handle is a bearer value for the account that started
+the flow. If it leaks from the victim's device within 60 seconds (for example
+from browser history, or a referer from the `returnTo` page) to the attacker
+who started the flow, the attacker can still complete. Whoever starts the
+flow picks the `returnTo` path, so every page on an allowed web origin must
+strip `completion` from the URL after reading it, not just the settings page.
+
+**Client contract** (not built yet): an `authorized` status means "post the
+handle to complete". `error` means the flow failed or was declined. Add both
+to the OpenAPI spec and the client plan.
 
 ## Staging verification checklist
 
@@ -183,15 +220,17 @@ Run after the owner deploys with `CONNECTED_APPS_ENABLED=true` on staging only.
 Record request IDs for each step.
 
 1. Connect your own Aaru with OAuth: `POST /v1/me/connected-apps/aaru/connect`,
-   then open the returned URL and approve.
+   open the returned URL and approve. Then, within 60 s, post the redirect's
+   `completion` value to `POST /v1/me/connected-apps/aaru/complete` with the
+   same account (204). Repeat with a second account's token: it must answer 403
+   and connect nobody.
 2. Ask Quick Assistant "what am I watching?" and get a live answer.
 3. `DELETE /v1/me/connected-apps/aaru`, then ask again: there must be no Aaru
    tool.
 4. A second staging account lists `aaru` as `disconnected`.
-5. (R19) Verify the Aaru and Khepri consent screens always prompt for the
-   Lumina DCR client and never auto-approve (including when the user is already
-   signed in and has approved before). Norviq and Loci use pasted tokens, not
-   OAuth, so there is no consent screen to check; confirm they are not
-   reachable through any redirect flow either. If any OAuth app auto-approves,
-   stop and escalate to the owner before enabling in production.
+5. (R19, defence in depth, no longer a gate) Check that the Aaru and Khepri
+   consent screens prompt for the Lumina DCR client instead of auto-approving.
+   With completion bound to the user, an auto-approve can no longer bind a
+   victim's tokens to another account. A consent screen still stops a user's
+   app being authorized without them seeing it.
 6. Confirm `00010` and `00011` ran in the PreSync job before the pod served.

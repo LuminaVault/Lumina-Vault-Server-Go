@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -169,16 +170,25 @@ func TestStartRejectsIssuerMismatch(t *testing.T) {
 	require.EqualValues(t, 0, s.regs.Load())
 }
 
+// park runs Start and the callback half for user and answers the handle.
+func park(t *testing.T, o *connectedapps.OAuth, user uuid.UUID, returnTo *string) string {
+	t.Helper()
+	au, err := o.Start(context.Background(), user, "aaru", returnTo)
+	require.NoError(t, err)
+	st, _ := stateOf(t, au)
+	app, handle, ret, err := o.Park(st, "the-code")
+	require.NoError(t, err)
+	require.Equal(t, "aaru", app)
+	require.NotEmpty(t, handle)
+	require.Equal(t, returnTo, ret)
+	return handle
+}
+
 func finish(t *testing.T, o *connectedapps.OAuth) {
 	t.Helper()
 	rt := "/lists"
-	au, err := o.Start(context.Background(), alice, "aaru", &rt)
-	require.NoError(t, err)
-	st, _ := stateOf(t, au)
-	app, ret, err := o.Finish(context.Background(), st, "the-code")
-	require.NoError(t, err)
-	require.Equal(t, "aaru", app)
-	require.Equal(t, "/lists", *ret)
+	handle := park(t, o, alice, &rt)
+	require.NoError(t, o.Complete(context.Background(), alice, "aaru", handle))
 }
 
 func TestFinishExchangesAndSeals(t *testing.T) {
@@ -203,18 +213,94 @@ func TestFinishExchangesAndSeals(t *testing.T) {
 	require.NotNil(t, a.ExpiresAt)
 }
 
-func TestFinishRejectsUnknownOrReusedState(t *testing.T) {
+func TestParkRejectsUnknownOrReusedState(t *testing.T) {
 	s := newAS(t)
 	o, _ := newOAuth(t, s)
-	_, _, err := o.Finish(context.Background(), "nope", "c")
+	_, _, _, err := o.Park("nope", "c")
 	require.ErrorIs(t, err, connectedapps.ErrBadState)
 	au, err := o.Start(context.Background(), alice, "aaru", nil)
 	require.NoError(t, err)
 	st, _ := stateOf(t, au)
-	_, _, err = o.Finish(context.Background(), st, "c")
+	_, _, _, err = o.Park(st, "c")
 	require.NoError(t, err)
-	_, _, err = o.Finish(context.Background(), st, "c")
+	_, _, _, err = o.Park(st, "c")
 	require.ErrorIs(t, err, connectedapps.ErrBadState)
+}
+
+// R19: the unauthenticated half exchanges nothing and stores nothing.
+func TestParkMakesNoRequestAndStoresNothing(t *testing.T) {
+	s := newAS(t)
+	o, store := newOAuth(t, s)
+	au, err := o.Start(context.Background(), alice, "aaru", nil)
+	require.NoError(t, err)
+	st, _ := stateOf(t, au)
+	s.mu.Lock()
+	s.lastForm = nil
+	s.mu.Unlock()
+	_, handle, _, err := o.Park(st, "the-code")
+	require.NoError(t, err)
+	require.NotContains(t, handle, "the-code")
+	s.mu.Lock()
+	require.Nil(t, s.lastForm, "no token request before completion")
+	s.mu.Unlock()
+	_, err = store.Get(context.Background(), alice, "aaru")
+	require.ErrorIs(t, err, connectedapps.ErrNotConnected)
+}
+
+// R19: an authorize link alice started, approved and completed by bob's
+// session, connects nobody, never exchanges the code and burns the handle.
+func TestCompleteByAnotherAccountIsRefused(t *testing.T) {
+	s := newAS(t)
+	o, store := newOAuth(t, s)
+	handle := park(t, o, alice, nil)
+	s.mu.Lock()
+	s.lastForm = nil
+	s.mu.Unlock()
+	require.ErrorIs(t, o.Complete(context.Background(), bob, "aaru", handle), connectedapps.ErrWrongUser)
+	s.mu.Lock()
+	require.Nil(t, s.lastForm, "the code is never exchanged")
+	s.mu.Unlock()
+	for _, u := range []uuid.UUID{alice, bob} {
+		_, err := store.Get(context.Background(), u, "aaru")
+		require.ErrorIs(t, err, connectedapps.ErrNotConnected)
+	}
+	// Burnt: not even the account that started it can use it now.
+	require.ErrorIs(t, o.Complete(context.Background(), alice, "aaru", handle), connectedapps.ErrBadCompletion)
+}
+
+// The state alone, a wrong handle, another app's path or a replay never
+// complete.
+func TestCompleteNeedsTheHandle(t *testing.T) {
+	s := newAS(t)
+	o, store := newOAuth(t, s)
+	au, err := o.Start(context.Background(), alice, "aaru", nil)
+	require.NoError(t, err)
+	st, _ := stateOf(t, au)
+	_, handle, _, err := o.Park(st, "the-code")
+	require.NoError(t, err)
+	for _, bad := range []string{"", st, "nope", handle + "x"} {
+		require.ErrorIs(t, o.Complete(context.Background(), alice, "aaru", bad), connectedapps.ErrBadCompletion, bad)
+	}
+	require.NoError(t, o.Complete(context.Background(), alice, "aaru", handle))
+	require.ErrorIs(t, o.Complete(context.Background(), alice, "aaru", handle), connectedapps.ErrBadCompletion, "replay")
+
+	other := park(t, o, alice, nil)
+	require.ErrorIs(t, o.Complete(context.Background(), alice, "norviq", other), connectedapps.ErrBadCompletion)
+	require.ErrorIs(t, o.Complete(context.Background(), alice, "aaru", other), connectedapps.ErrBadCompletion, "burnt by the wrong app")
+	_, err = store.Get(context.Background(), alice, "aaru")
+	require.NoError(t, err, "only the first completion connected")
+}
+
+func TestCompletionExpires(t *testing.T) {
+	s := newAS(t)
+	o, store := newOAuth(t, s)
+	now := time.Now()
+	o.SetNow(func() time.Time { return now })
+	handle := park(t, o, alice, nil)
+	now = now.Add(61 * time.Second)
+	require.ErrorIs(t, o.Complete(context.Background(), alice, "aaru", handle), connectedapps.ErrBadCompletion)
+	_, err := store.Get(context.Background(), alice, "aaru")
+	require.ErrorIs(t, err, connectedapps.ErrNotConnected)
 }
 
 func TestCallRefreshesOnce(t *testing.T) {
@@ -367,16 +453,16 @@ func TestRevokeSkipsWhenNothingToRevoke(t *testing.T) {
 	require.ErrorIs(t, o.Revoke(context.Background(), alice, "nope"), connectedapps.ErrUnknownApp)
 }
 
-func TestFinishFailureNamesTheApp(t *testing.T) {
+// A failed exchange is the app's side: it matches ErrUpstream and stores nothing.
+func TestCompleteExchangeFailureIsUpstream(t *testing.T) {
 	s := newAS(t)
-	o, _ := newOAuth(t, s)
-	au, err := o.Start(context.Background(), alice, "aaru", nil)
-	require.NoError(t, err)
-	st, _ := stateOf(t, au)
+	o, store := newOAuth(t, s)
+	handle := park(t, o, alice, nil)
 	s.srv.Close() // the exchange cannot reach the token endpoint
-	app, _, err := o.Finish(context.Background(), st, "c")
-	require.Error(t, err)
-	require.Equal(t, "aaru", app)
+	err := o.Complete(context.Background(), alice, "aaru", handle)
+	require.ErrorIs(t, err, connectedapps.ErrUpstream)
+	_, err = store.Get(context.Background(), alice, "aaru")
+	require.ErrorIs(t, err, connectedapps.ErrNotConnected)
 }
 
 // R17: a 307 would make Go re-send the form (refresh token included) to the
@@ -408,9 +494,9 @@ func TestTokenEndpointRedirectIsRefused(t *testing.T) {
 	require.Equal(t, "acc-1", a.AccessToken)
 }
 
-// A decline: the state is taken, the app and returnTo come back, and the
-// token endpoint is never asked.
-func TestFinishWithoutCodeConsumesState(t *testing.T) {
+// A decline: the state is taken, the app and returnTo come back, no handle,
+// and the token endpoint is never asked.
+func TestParkWithoutCodeConsumesState(t *testing.T) {
 	s := newAS(t)
 	o, _ := newOAuth(t, s)
 	rt := "https://app.test/settings"
@@ -420,14 +506,15 @@ func TestFinishWithoutCodeConsumesState(t *testing.T) {
 	s.mu.Lock()
 	s.lastForm = nil
 	s.mu.Unlock()
-	app, ret, err := o.Finish(context.Background(), st, "")
+	app, handle, ret, err := o.Park(st, "")
 	require.ErrorIs(t, err, connectedapps.ErrNoCode)
 	require.Equal(t, "aaru", app)
+	require.Empty(t, handle)
 	require.Equal(t, rt, *ret)
 	s.mu.Lock()
 	require.Nil(t, s.lastForm, "no token request for a decline")
 	s.mu.Unlock()
-	_, _, err = o.Finish(context.Background(), st, "c")
+	_, _, _, err = o.Park(st, "c")
 	require.ErrorIs(t, err, connectedapps.ErrBadState)
 }
 

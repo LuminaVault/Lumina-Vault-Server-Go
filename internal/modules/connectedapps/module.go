@@ -4,9 +4,12 @@
 // HTTP surface.
 //
 // Every route acts on the user id of the session token (auth.Identity), never
-// on a vault id. Only the OAuth callback is unauthenticated: its state names
-// the user. No response, redirect or log line carries a token, an OAuth code
-// or text from a remote server.
+// on a vault id. Only the OAuth callback is unauthenticated, and it stores
+// nothing: it parks the code and sends the browser back with a single-use
+// completion handle. The signed-in client then posts that handle to complete,
+// which connects the app only when its session is the account that started the
+// flow (R19). No response, redirect or log line carries a token, an OAuth code
+// or text from a remote server, and no log line carries a completion handle.
 package connectedapps
 
 import (
@@ -31,6 +34,9 @@ const (
 	statusConnected    = "connected"
 	statusDisconnected = "disconnected"
 	statusError        = "error"
+	// statusAuthorized means the app approved and the client must now post
+	// the completion handle to .../complete.
+	statusAuthorized = "authorized"
 
 	// appCallbackBase is where the callback sends the iOS app.
 	appCallbackBase = "luminavault://connected-apps"
@@ -80,6 +86,7 @@ func (m *Module) Register(r httpserver.Router, authMW echo.MiddlewareFunc) {
 	r.GET("/v1/me/connected-apps", m.list, authMW)
 	r.POST("/v1/me/connected-apps/:app/connect", m.connect, authMW)
 	r.DELETE("/v1/me/connected-apps/:app", m.disconnect, authMW)
+	r.POST("/v1/me/connected-apps/:app/complete", m.complete, authMW)
 	r.GET("/v1/connected-apps/oauth/callback", m.oauthCallback)
 }
 
@@ -271,58 +278,125 @@ func errorKind(err error) string {
 	return "failed"
 }
 
+// MARK: POST /v1/me/connected-apps/:app/complete
+
+type completeRequest struct {
+	Completion string `json:"completion"`
+}
+
+var (
+	errBadCompletion = wire.NewError(http.StatusBadRequest, "This connection request expired. Connect the app again.")
+	errWrongUser     = wire.NewError(http.StatusForbidden, "This connection was started from a different Lumina account. Connect the app again from this account.")
+)
+
+// complete connects the app for the signed-in user from the handle the
+// callback redirect carried. The handle works once, whatever the outcome.
+func (m *Module) complete(c *echo.Context) error {
+	user, err := userOf(c)
+	if err != nil {
+		return err
+	}
+	app, err := m.appOf(c)
+	if err != nil {
+		return err
+	}
+	raw, err := wire.ReadBody(c)
+	if err != nil {
+		return err
+	}
+	req, err := wire.Decode[completeRequest](raw)
+	if err != nil {
+		return err
+	}
+	if req.Completion == "" {
+		return errBadCompletion
+	}
+	// The handle is spent on arrival; a client leaving must not abandon an
+	// exchange the app already consumed.
+	ctx := context.WithoutCancel(c.Request().Context())
+	switch err := m.oauth.Complete(ctx, user, app.ID, req.Completion); {
+	case errors.Is(err, core.ErrBadCompletion):
+		return errBadCompletion
+	case errors.Is(err, core.ErrWrongUser):
+		// Someone else's authorize link reached this user (R19). Nothing was
+		// exchanged or stored.
+		m.log.WarnContext(ctx, "connected app completion from another account refused", "app", app.ID)
+		return errWrongUser
+	case errors.Is(err, core.ErrUnknownApp):
+		return errUnknownApp
+	case errors.Is(err, core.ErrUpstream):
+		m.log.ErrorContext(ctx, "connected app oauth exchange failed", "app", app.ID, "kind", errorKind(err))
+		return wire.NewError(http.StatusBadGateway, "Could not finish connecting "+app.Name+". Connect it again.")
+	case err != nil:
+		m.log.ErrorContext(ctx, "connected app completion failed locally", "app", app.ID, "kind", errorKind(err))
+		return errInternal
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
 // MARK: GET /v1/connected-apps/oauth/callback
 
-// oauthCallback finishes the flow the app's authorization server sent back.
-// Every outcome is a redirect: to the web page that started the flow when it
-// gave an allowed returnTo, else into the iOS app. The redirect carries a
-// status only: never the provider's error, the code or a token.
+// oauthCallback takes the flow the app's authorization server sent back. It
+// is unauthenticated, so it stores nothing: an approval parks the code and the
+// redirect carries status=authorized plus a single-use completion handle for
+// the signed-in client to post to .../complete (R19). Every outcome is a
+// redirect: to the web page that started the flow when it gave an allowed
+// returnTo, else into the iOS app. The redirect never carries the provider's
+// error, the code or a token.
 func (m *Module) oauthCallback(c *echo.Context) error {
 	state, _ := wire.QueryParam(c, "state")
 	if state == "" {
-		return c.Redirect(http.StatusFound, appRedirect("", statusError))
+		return c.Redirect(http.StatusFound, appRedirect("", statusError, ""))
 	}
-	// A decline arrives without a code. Finish still takes the state, so it
+	// A decline arrives without a code. Park still takes the state, so it
 	// cannot be replayed and the browser goes back where it came from.
 	code, _ := wire.QueryParam(c, "code")
-	// The browser leaving must not abandon an exchange the app already consumed.
-	ctx := context.WithoutCancel(c.Request().Context())
-	appID, returnTo, err := m.oauth.Finish(ctx, state, code)
+	appID, handle, returnTo, err := m.oauth.Park(state, code)
 	if _, known := m.registry.Get(appID); !known {
 		appID = ""
 	}
-	status := statusConnected
+	status := statusAuthorized
 	if err != nil {
-		status = statusError
+		status, handle = statusError, ""
 		if !errors.Is(err, core.ErrBadState) && !errors.Is(err, core.ErrNoCode) {
-			m.log.ErrorContext(ctx, "connected app oauth exchange failed", "app", appID, "kind", errorKind(err))
+			m.log.ErrorContext(c.Request().Context(), "connected app oauth callback failed", "app", appID, "kind", errorKind(err))
 		}
 	}
 	if returnTo != nil {
 		// Checked at connect; checked again so a bad value can never leave here.
 		if valid, ok := calendar.ValidReturn(*returnTo, m.webReturn); ok {
-			return c.Redirect(http.StatusFound, withStatus(valid, status))
+			return c.Redirect(http.StatusFound, withStatus(valid, status, handle))
 		}
 	}
-	return c.Redirect(http.StatusFound, appRedirect(appID, status))
+	return c.Redirect(http.StatusFound, appRedirect(appID, status, handle))
 }
 
-// withStatus appends status= to a validated returnTo (which has no fragment),
-// keeping any query it already has.
-func withStatus(returnTo, status string) string {
+// withStatus appends status= (and completion= when there is a handle) to a
+// validated returnTo (which has no fragment), keeping any query it already has.
+func withStatus(returnTo, status, handle string) string {
 	sep := "?"
 	if strings.Contains(returnTo, "?") {
 		sep = "&"
 	}
-	return returnTo + sep + "status=" + status
+	return returnTo + sep + statusQuery(status, handle)
 }
 
 // appRedirect is the deep link back into the iOS app. appID is a registry id
 // (lowercase letters) or empty when the app is unknown.
-func appRedirect(appID, status string) string {
+func appRedirect(appID, status, handle string) string {
 	base := appCallbackBase
 	if appID != "" {
 		base += "/" + appID
 	}
-	return base + "?status=" + status
+	return base + "?" + statusQuery(status, handle)
+}
+
+// statusQuery is status=<status>, then completion=<handle> when there is one.
+// The handle is base64url, so it needs no escaping.
+func statusQuery(status, handle string) string {
+	q := "status=" + status
+	if handle != "" {
+		q += "&completion=" + handle
+	}
+	return q
 }
