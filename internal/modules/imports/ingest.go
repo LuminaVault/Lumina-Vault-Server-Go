@@ -25,6 +25,10 @@ import (
 type FileInput struct {
 	Path    string `json:"path"`
 	Content string `json:"content"`
+	// Title, when set, is the note's title instead of its first H1 or its file
+	// name. Server-side callers only: a note that opens with a long
+	// frontmatter block has its heading past the lines Title reads.
+	Title string `json:"-"`
 }
 
 // Ingest is VaultIngestService: each file becomes a blob, a row and an embedded memory
@@ -114,6 +118,12 @@ type IngestOptions struct {
 	// Provenance is stamped on every written row's metadata.
 	Provenance *string
 	OnConflict OnConflict
+	// SpaceDescription describes the Space when this batch creates it; empty
+	// is the Hermes import's.
+	SpaceDescription string
+	// DeferReresolve skips the pending-wikilink pass after the writes: a caller
+	// that ingests in several batches runs it once at the end.
+	DeferReresolve bool
 }
 
 // textExtensions are the inputs bulk import writes; anything else (images,
@@ -147,7 +157,7 @@ func (i *Ingest) IngestBatchWith(ctx context.Context, tenant uuid.UUID, spaceNam
 			return IngestResult{}, err
 		}
 	}
-	spaceID, slug, err := i.ensureSpace(ctx, tenant, spaceName)
+	spaceID, slug, err := i.ensureSpace(ctx, tenant, spaceName, opts.SpaceDescription)
 	if err != nil {
 		return IngestResult{}, err
 	}
@@ -190,7 +200,7 @@ func (i *Ingest) IngestBatchWith(ctx context.Context, tenant uuid.UUID, spaceNam
 		}
 		result.Files = append(result.Files, entry)
 	}
-	if result.Imported > 0 {
+	if result.Imported > 0 && !opts.DeferReresolve {
 		i.indexer.ReresolvePendingBestEffort(ctx, tenant)
 	}
 	return result, nil
@@ -215,7 +225,7 @@ func isTextPath(rawPath string) bool {
 	return ext == "" || textExtensions[vaultfiles.Lowercased(ext)]
 }
 
-func (i *Ingest) ensureSpace(ctx context.Context, tenant uuid.UUID, name string) (uuid.UUID, string, error) {
+func (i *Ingest) ensureSpace(ctx context.Context, tenant uuid.UUID, name, describe string) (uuid.UUID, string, error) {
 	slug := Slugify(name)
 	id, err := i.q.SpaceIDBySlug(ctx, db.SpaceIDBySlugParams{TenantID: tenant, Slug: slug})
 	if err == nil {
@@ -225,6 +235,9 @@ func (i *Ingest) ensureSpace(ctx context.Context, tenant uuid.UUID, name string)
 		return uuid.Nil, "", err
 	}
 	description, icon := "Imported from your Hermes vault.", "tray.and.arrow.down"
+	if describe != "" {
+		description = describe
+	}
 	return i.imports.spaces.CreateSpace(ctx, tenant, name, slug, &description, &icon)
 }
 
@@ -261,7 +274,10 @@ func (i *Ingest) ingestOne(ctx context.Context, tenant, spaceID uuid.UUID, safe 
 	if err := vaultfiles.WriteAtomic(target, data); err != nil {
 		return nil, FileFailed, err
 	}
-	title := Title(content, vaultfiles.LastPathComponent(input.Path))
+	title := input.Title
+	if title == "" {
+		title = Title(content, vaultfiles.LastPathComponent(input.Path))
+	}
 	metadata := &vaultfiles.Metadata{Title: &title, Provenance: opts.Provenance}
 	var saved uuid.UUID
 	status := FileImported

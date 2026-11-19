@@ -127,37 +127,37 @@ func (e StructuredAPIErrorBodyCta) Valid() bool {
 
 // Defines values for VaultBulkImportFileResultStatus.
 const (
-	Collision   VaultBulkImportFileResultStatus = "collision"
-	Empty       VaultBulkImportFileResultStatus = "empty"
-	Exists      VaultBulkImportFileResultStatus = "exists"
-	Failed      VaultBulkImportFileResultStatus = "failed"
-	Hidden      VaultBulkImportFileResultStatus = "hidden"
-	Imported    VaultBulkImportFileResultStatus = "imported"
-	Unchanged   VaultBulkImportFileResultStatus = "unchanged"
-	Unsupported VaultBulkImportFileResultStatus = "unsupported"
-	Updated     VaultBulkImportFileResultStatus = "updated"
+	VaultBulkImportFileResultStatusCollision   VaultBulkImportFileResultStatus = "collision"
+	VaultBulkImportFileResultStatusEmpty       VaultBulkImportFileResultStatus = "empty"
+	VaultBulkImportFileResultStatusExists      VaultBulkImportFileResultStatus = "exists"
+	VaultBulkImportFileResultStatusFailed      VaultBulkImportFileResultStatus = "failed"
+	VaultBulkImportFileResultStatusHidden      VaultBulkImportFileResultStatus = "hidden"
+	VaultBulkImportFileResultStatusImported    VaultBulkImportFileResultStatus = "imported"
+	VaultBulkImportFileResultStatusUnchanged   VaultBulkImportFileResultStatus = "unchanged"
+	VaultBulkImportFileResultStatusUnsupported VaultBulkImportFileResultStatus = "unsupported"
+	VaultBulkImportFileResultStatusUpdated     VaultBulkImportFileResultStatus = "updated"
 )
 
 // Valid indicates whether the value is a known member of the VaultBulkImportFileResultStatus enum.
 func (e VaultBulkImportFileResultStatus) Valid() bool {
 	switch e {
-	case Collision:
+	case VaultBulkImportFileResultStatusCollision:
 		return true
-	case Empty:
+	case VaultBulkImportFileResultStatusEmpty:
 		return true
-	case Exists:
+	case VaultBulkImportFileResultStatusExists:
 		return true
-	case Failed:
+	case VaultBulkImportFileResultStatusFailed:
 		return true
-	case Hidden:
+	case VaultBulkImportFileResultStatusHidden:
 		return true
-	case Imported:
+	case VaultBulkImportFileResultStatusImported:
 		return true
-	case Unchanged:
+	case VaultBulkImportFileResultStatusUnchanged:
 		return true
-	case Unsupported:
+	case VaultBulkImportFileResultStatusUnsupported:
 		return true
-	case Updated:
+	case VaultBulkImportFileResultStatusUpdated:
 		return true
 	default:
 		return false
@@ -166,16 +166,139 @@ func (e VaultBulkImportFileResultStatus) Valid() bool {
 
 // Defines values for VaultBulkImportRequestOnConflict.
 const (
-	Overwrite VaultBulkImportRequestOnConflict = "overwrite"
-	Skip      VaultBulkImportRequestOnConflict = "skip"
+	VaultBulkImportRequestOnConflictOverwrite VaultBulkImportRequestOnConflict = "overwrite"
+	VaultBulkImportRequestOnConflictSkip      VaultBulkImportRequestOnConflict = "skip"
 )
 
 // Valid indicates whether the value is a known member of the VaultBulkImportRequestOnConflict enum.
 func (e VaultBulkImportRequestOnConflict) Valid() bool {
 	switch e {
-	case Overwrite:
+	case VaultBulkImportRequestOnConflictOverwrite:
 		return true
-	case Skip:
+	case VaultBulkImportRequestOnConflictSkip:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for VaultNotionImportColumnType.
+const (
+	Checkbox    VaultNotionImportColumnType = "checkbox"
+	Date        VaultNotionImportColumnType = "date"
+	Datetime    VaultNotionImportColumnType = "datetime"
+	Multiselect VaultNotionImportColumnType = "multiselect"
+	Number      VaultNotionImportColumnType = "number"
+	Select      VaultNotionImportColumnType = "select"
+	Text        VaultNotionImportColumnType = "text"
+	Url         VaultNotionImportColumnType = "url"
+)
+
+// Valid indicates whether the value is a known member of the VaultNotionImportColumnType enum.
+func (e VaultNotionImportColumnType) Valid() bool {
+	switch e {
+	case Checkbox:
+		return true
+	case Date:
+		return true
+	case Datetime:
+		return true
+	case Multiselect:
+		return true
+	case Number:
+		return true
+	case Select:
+		return true
+	case Text:
+		return true
+	case Url:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for VaultNotionImportFileKind.
+const (
+	Attachment VaultNotionImportFileKind = "attachment"
+	Database   VaultNotionImportFileKind = "database"
+	Other      VaultNotionImportFileKind = "other"
+	Page       VaultNotionImportFileKind = "page"
+	Row        VaultNotionImportFileKind = "row"
+)
+
+// Valid indicates whether the value is a known member of the VaultNotionImportFileKind enum.
+func (e VaultNotionImportFileKind) Valid() bool {
+	switch e {
+	case Attachment:
+		return true
+	case Database:
+		return true
+	case Other:
+		return true
+	case Page:
+		return true
+	case Row:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for VaultNotionImportFileStatus.
+const (
+	VaultNotionImportFileStatusEmpty       VaultNotionImportFileStatus = "empty"
+	VaultNotionImportFileStatusExists      VaultNotionImportFileStatus = "exists"
+	VaultNotionImportFileStatusFailed      VaultNotionImportFileStatus = "failed"
+	VaultNotionImportFileStatusHidden      VaultNotionImportFileStatus = "hidden"
+	VaultNotionImportFileStatusImported    VaultNotionImportFileStatus = "imported"
+	VaultNotionImportFileStatusPlanned     VaultNotionImportFileStatus = "planned"
+	VaultNotionImportFileStatusTooLarge    VaultNotionImportFileStatus = "tooLarge"
+	VaultNotionImportFileStatusUnchanged   VaultNotionImportFileStatus = "unchanged"
+	VaultNotionImportFileStatusUnsupported VaultNotionImportFileStatus = "unsupported"
+	VaultNotionImportFileStatusUpdated     VaultNotionImportFileStatus = "updated"
+)
+
+// Valid indicates whether the value is a known member of the VaultNotionImportFileStatus enum.
+func (e VaultNotionImportFileStatus) Valid() bool {
+	switch e {
+	case VaultNotionImportFileStatusEmpty:
+		return true
+	case VaultNotionImportFileStatusExists:
+		return true
+	case VaultNotionImportFileStatusFailed:
+		return true
+	case VaultNotionImportFileStatusHidden:
+		return true
+	case VaultNotionImportFileStatusImported:
+		return true
+	case VaultNotionImportFileStatusPlanned:
+		return true
+	case VaultNotionImportFileStatusTooLarge:
+		return true
+	case VaultNotionImportFileStatusUnchanged:
+		return true
+	case VaultNotionImportFileStatusUnsupported:
+		return true
+	case VaultNotionImportFileStatusUpdated:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for VaultImportNotionParamsOnConflict.
+const (
+	VaultImportNotionParamsOnConflictOverwrite VaultImportNotionParamsOnConflict = "overwrite"
+	VaultImportNotionParamsOnConflictSkip      VaultImportNotionParamsOnConflict = "skip"
+)
+
+// Valid indicates whether the value is a known member of the VaultImportNotionParamsOnConflict enum.
+func (e VaultImportNotionParamsOnConflict) Valid() bool {
+	switch e {
+	case VaultImportNotionParamsOnConflictOverwrite:
+		return true
+	case VaultImportNotionParamsOnConflictSkip:
 		return true
 	default:
 		return false
@@ -365,6 +488,117 @@ type VaultBulkImportResponse struct {
 	SpaceSlug string    `json:"spaceSlug"`
 }
 
+// VaultNotionImportCollision defines model for VaultNotionImportCollision.
+type VaultNotionImportCollision struct {
+	// From The entry's path in the ZIP.
+	From string `json:"from"`
+
+	// To The vault path it was given.
+	To string `json:"to"`
+}
+
+// VaultNotionImportColumn defines model for VaultNotionImportColumn.
+type VaultNotionImportColumn struct {
+	Database string                      `json:"database"`
+	Name     string                      `json:"name"`
+	Type     VaultNotionImportColumnType `json:"type"`
+}
+
+// VaultNotionImportColumnType defines model for VaultNotionImportColumn.Type.
+type VaultNotionImportColumnType string
+
+// VaultNotionImportFile defines model for VaultNotionImportFile.
+type VaultNotionImportFile struct {
+	// Entry The file's path in the ZIP. A database row without a page of its own reports its CSV.
+	Entry string                    `json:"entry"`
+	Kind  VaultNotionImportFileKind `json:"kind"`
+
+	// SavedPath The vault path the entry maps to; a database's is its folder. Absent for `hidden` entries.
+	SavedPath *string `json:"savedPath,omitempty"`
+
+	// Status As `VaultBulkImportFileResult.status`, plus `tooLarge` (an
+	// attachment over 25 MB, or a page or CSV over 16 MB) and `planned`
+	// (a dry run would write it).
+	Status VaultNotionImportFileStatus `json:"status"`
+}
+
+// VaultNotionImportFileKind defines model for VaultNotionImportFile.Kind.
+type VaultNotionImportFileKind string
+
+// VaultNotionImportFileStatus As `VaultBulkImportFileResult.status`, plus `tooLarge` (an
+// attachment over 25 MB, or a page or CSV over 16 MB) and `planned`
+// (a dry run would write it).
+type VaultNotionImportFileStatus string
+
+// VaultNotionImportLinks defines model for VaultNotionImportLinks.
+type VaultNotionImportLinks struct {
+	// External Links with a scheme that point outside the export
+	External int `json:"external"`
+
+	// Resolved Links to something in the export
+	Resolved int `json:"resolved"`
+
+	// Unresolved Relative links that match nothing in the export.
+	Unresolved     int                               `json:"unresolved"`
+	UnresolvedList []VaultNotionImportUnresolvedLink `json:"unresolvedList"`
+}
+
+// VaultNotionImportReport defines model for VaultNotionImportReport.
+type VaultNotionImportReport struct {
+	Attachments int `json:"attachments"`
+
+	// Collisions Entries renamed because an earlier sibling maps to the same path.
+	Collisions []VaultNotionImportCollision `json:"collisions"`
+
+	// Columns The type of each database column. Empty while properties are off.
+	Columns   []VaultNotionImportColumn `json:"columns"`
+	Databases int                       `json:"databases"`
+	DryRun    bool                      `json:"dryRun"`
+	Failed    int                       `json:"failed"`
+
+	// Files One entry per file of the export, in ZIP order; at most 5,000.
+	Files []VaultNotionImportFile `json:"files"`
+	Links VaultNotionImportLinks  `json:"links"`
+
+	// Pages Pages in the export that are not database rows.
+	Pages int `json:"pages"`
+
+	// Rows Database rows; 0 while properties are off.
+	Rows int `json:"rows"`
+
+	// Skipped Files `unchanged`, `exists`, `empty`, `tooLarge`, `hidden` or `unsupported`.
+	Skipped int `json:"skipped"`
+
+	// SpaceId Absent on a dry run when the Space doesn't exist yet.
+	SpaceId   *wire.UUID `json:"spaceId,omitempty"`
+	SpaceSlug string     `json:"spaceSlug"`
+
+	// Views One saved view per database. Empty while properties are off.
+	Views    []VaultNotionImportView `json:"views"`
+	Warnings []string                `json:"warnings"`
+
+	// Written Files `imported` or `updated`. Always 0 on a dry run.
+	Written int `json:"written"`
+}
+
+// VaultNotionImportUnresolvedLink defines model for VaultNotionImportUnresolvedLink.
+type VaultNotionImportUnresolvedLink struct {
+	// Page The vault path of the note the link is on.
+	Page string `json:"page"`
+
+	// Target The link target as written, URL-decoded.
+	Target string `json:"target"`
+}
+
+// VaultNotionImportView defines model for VaultNotionImportView.
+type VaultNotionImportView struct {
+	Folder string `json:"folder"`
+
+	// Id Absent on a dry run.
+	Id   *wire.UUID `json:"id,omitempty"`
+	Name string     `json:"name"`
+}
+
 // InvitationID defines model for InvitationID.
 type InvitationID = wire.UUID
 
@@ -382,6 +616,21 @@ type VaultID = wire.UUID
 
 // InsufficientStorage defines model for InsufficientStorage.
 type InsufficientStorage = StructuredAPIErrorEnvelope
+
+// VaultImportNotionParams defines parameters for VaultImportNotion.
+type VaultImportNotionParams struct {
+	// Space Target Space name (created if missing).
+	Space  *string `form:"space,omitempty" json:"space,omitempty"`
+	DryRun *bool   `form:"dryRun,omitempty" json:"dryRun,omitempty"`
+
+	// OnConflict What a file does to a different one already at its vault path.
+	// `skip` (the default) leaves it and reports `exists`; `overwrite`
+	// replaces it.
+	OnConflict *VaultImportNotionParamsOnConflict `form:"onConflict,omitempty" json:"onConflict,omitempty"`
+}
+
+// VaultImportNotionParamsOnConflict defines parameters for VaultImportNotion.
+type VaultImportNotionParamsOnConflict string
 
 // ImportLinksJSONRequestBody defines body for ImportLinks for application/json ContentType.
 type ImportLinksJSONRequestBody = ImportCreateRequest

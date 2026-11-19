@@ -23,8 +23,8 @@ import (
 
 const (
 	viewsPath       = "/v1/vault/views"
-	maxViews        = 200
-	maxViewColumns  = 100
+	maxViews        = vaultfiles.MaxViews
+	maxViewColumns  = vaultfiles.MaxViewColumns
 	maxViewName     = 200
 	minColumnWidth  = 40
 	maxColumnWidth  = 2000

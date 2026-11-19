@@ -1,7 +1,10 @@
 package vaultfiles
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -37,6 +40,31 @@ func WriteAtomic(path string, data []byte) error {
 		return err
 	}
 	return nil
+}
+
+// SpoolBeside streams r into a hidden file beside path, as WriteAtomic does,
+// and returns that file with its size and SHA-256. The caller renames it over
+// path to finish the write, or removes it. It is WriteAtomic for content too
+// large to hold in memory; the parent must exist.
+func SpoolBeside(path string, r io.Reader) (aux string, size int64, sha256hex string, err error) {
+	aux = filepath.Join(filepath.Dir(path), "."+filepath.Base(path)+".aux-"+shortID())
+	f, err := os.OpenFile(aux, os.O_WRONLY|os.O_CREATE|os.O_EXCL, filePerm) //nolint:gosec // aux sits beside a path from ResolveInside
+	if err != nil {
+		return "", 0, "", err
+	}
+	sum := sha256.New()
+	size, err = io.Copy(io.MultiWriter(f, sum), r)
+	if err == nil {
+		err = f.Sync()
+	}
+	if closeErr := f.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		_ = os.Remove(aux)
+		return "", 0, "", err
+	}
+	return aux, size, hex.EncodeToString(sum.Sum(nil)), nil
 }
 
 // ReplaceFile is the write in VaultController.upload: create the parent, write

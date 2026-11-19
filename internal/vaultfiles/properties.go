@@ -197,6 +197,40 @@ func (s *Store) recordTypes(ctx context.Context, tenant uuid.UUID, props vaultpr
 	return err
 }
 
+// DeclarePropertyTypes adds a registry row for each name the vault doesn't
+// have yet, with the given type and options: the Notion import's column types,
+// written before its notes so the first note doesn't infer something else. A
+// name the registry already has (any case) keeps its type, and reserved names
+// are skipped: their types are fixed.
+func (s *Store) DeclarePropertyTypes(ctx context.Context, tenant uuid.UUID, types []PropertyType) error {
+	var names, kinds, options []string
+	seen := map[string]bool{}
+	for _, t := range types {
+		key := strings.ToLower(t.Name)
+		if _, reserved := vaultprops.Reserved[key]; reserved || seen[key] || t.Name == "" || !t.Type.Valid() {
+			continue
+		}
+		seen[key] = true
+		opts := t.Options
+		if opts == nil {
+			opts = []string{}
+		}
+		encoded, err := json.Marshal(opts)
+		if err != nil {
+			return err
+		}
+		names, kinds, options = append(names, t.Name), append(kinds, string(t.Type)), append(options, string(encoded))
+	}
+	if len(names) == 0 {
+		return nil
+	}
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO vault_property_types (tenant_id, name, type, options)
+		SELECT $1, n, t, o::jsonb FROM unnest($2::text[], $3::text[], $4::text[]) AS x(n, t, o)
+		ON CONFLICT (tenant_id, lower(name)) DO NOTHING`, tenant, names, kinds, options)
+	return err
+}
+
 // PropertyType is one vault_property_types row.
 type PropertyType struct {
 	Name    string
