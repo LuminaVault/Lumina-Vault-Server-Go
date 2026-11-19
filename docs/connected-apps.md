@@ -64,14 +64,29 @@ registers anew:
 Existing users' refresh tokens were issued to the old client; after clearing,
 those users will move to `needs_reauth` on the next refresh and must reconnect.
 
+Clearing the cache also makes later disconnects skip the upstream revoke: a
+disconnect revokes with the cached client only and never registers a new one,
+so with no row there the refresh token is left to expire at the app. The local
+row is still deleted.
+
+**OAuth state lives in memory.** The `state` of a connect in flight (10 minute
+lifetime) is held in the pod, not the database. A pod restart drops every
+in-flight connect (the user sees the error status and starts again), and a
+callback that lands on another pod would not find its state. The service must
+therefore stay at **one replica** (staging and prod are both `replicaCount: 1`).
+Move the state to the database before scaling out.
+
 ## Revoking
 
 - **User:** `DELETE /v1/me/connected-apps/:app` (authenticated). For an OAuth
   app it first makes a best-effort RFC 7009 revocation of the refresh token at
   the app's authorization server (5 s limit; skipped when the app advertises no
-  revocation endpoint), then deletes the local account row, then drops the
-  in-memory client. A failed upstream revoke is logged (kind only) and does not
-  block the local delete. Pasted-token apps (Norviq, Loci) have no upstream
+  revocation endpoint or no client is cached), then deletes the local account
+  row, then drops the cached tool list. Revoke and delete run under the same
+  per-user, per-app lock as a token refresh, and a refresh only ever updates an
+  existing row, so a refresh in flight cannot bring a deleted row back. The
+  delete has its own 5 s limit and still runs if the client goes away. A failed
+  upstream revoke is logged (kind only) and does not block the local delete. Pasted-token apps (Norviq, Loci) have no upstream
   revoke: the user must also delete the token in that app. A failed local
   delete answers 500.
 - **Operator:** delete the user's row directly, which is equivalent to the
@@ -92,9 +107,12 @@ pending actions) are expand-only. They run as the ArgoCD PreSync goose job
 `migrate.enabled` in `apps/api/values-common.yaml`), with `backoffLimit: 0`: a
 failed migration leaves the old ReplicaSet serving.
 
-- **The migration must succeed before the new image serves.** Every `lv_` agent
-  key lookup selects `agent_connections.connected_app_grants` (added by 00007),
-  even with the flag off. If the column is missing, all agent-key auth breaks.
+- **Both migrations must succeed before the new image serves, flag on or off.**
+  Every `lv_` agent key lookup selects `agent_connections.connected_app_grants`
+  (added by 00007), even with the flag off. If the column is missing, all
+  agent-key auth breaks. Every pending-action insert, claim and cancel names
+  the origin column (added by 00008), also with the flag off. If it is missing,
+  every Quick Assistant confirm card breaks.
 - **Rolling the image back is safe.** The columns and tables are additive and
   the old image ignores them.
 - **Do NOT run goose Down on 00007 while the new image is running.** It drops
@@ -106,8 +124,9 @@ failed migration leaves the old ReplicaSet serving.
 
 - **Key = user id** (`auth.Identity`), never the vault id or `X-Vault-ID`.
 - **Tokens are sealed per user** with secretbox (`Seal/Open` bound to the user
-  id), never logged, never returned. Logs and metering record only
-  `(user, app, tool, latency_ms, ok)`: no arguments, no results.
+  id), never logged, never returned. Logs record only
+  `(app, tool, ms, ok, error kind)`: no user, no arguments, no results. Calls
+  are not metered.
 - **Anthropic only** (R21, R22, R24, R25). A turn that offers app tools runs on
   Anthropic's own endpoint, pinned to the trial model. Free-lane users, and
   users whose Anthropic route points at a tenant custom base URL, get the turn
@@ -115,8 +134,8 @@ failed migration leaves the old ReplicaSet serving.
   the turn reruns on its original route with no app tools. App data never
   reaches another provider.
 - **Flagged history is never replayed** (R27). User and assistant rows of a
-  turn that ran an app tool carry `origin = 'connected_app'`; every reader of
-  chat history for an LLM skips them. Follow-up questions therefore do not see
+  turn that ran an app tool carry `origin = 'connected_app'`; every path that
+  builds a model prompt skips them. Follow-up questions therefore do not see
   earlier app answers (accepted v1 UX loss).
 - **Writes after app data** (R28, R30). Once an app answered in a turn, Run-class
   write tools (memory_save, app_reminder_create, space_create, space_update,
@@ -124,6 +143,16 @@ failed migration leaves the old ReplicaSet serving.
   data cannot be saved to memory, reminders or spaces.** Confirm-class writes
   (for example calendar_create) are still allowed, because the user's tap is an
   explicit ask.
+- **Searches after app data** (R31). Once an app answered in a turn, `search`
+  and `memory_context` are refused with fixed text for the rest of the turn. A
+  search embeds the query the model wrote, the embedding provider is not
+  Anthropic, and by then the query can quote the app. Searches made before the
+  app answered stand; `browse`, `read` and `recent` embed nothing and still
+  run.
+- **Tool load is bounded** (R32). A Quick Assistant turn waits at most 4 s for
+  the user's app tools; past that, or on any error, the turn runs without them
+  (kind logged only). An app whose tool list failed to load is not asked again
+  for 30 s for that user; calls are not held back by this.
 - **Confirm lines are flagged** (R29): a pending action carries the proposing
   turn's origin, so its confirm line is flagged too.
 - **`/v1/mcp` grants default off.** An agent key sees `<app>__*` tools only

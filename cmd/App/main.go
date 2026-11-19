@@ -134,8 +134,9 @@ func run(args []string) error {
 	}
 }
 
-// migrate runs goose. Until Phase 12 the chart's migrate job still runs the
-// Swift image, so on a Fluent database this refuses unless --adopt-fluent.
+// migrate runs goose. The chart's migrate job runs this Go image's `migrate`
+// as an ArgoCD PreSync hook, so migrations finish before the new image
+// serves. On a Fluent database it refuses unless --adopt-fluent.
 func migrate(ctx context.Context, cfg config.Config, cmd Command) error {
 	pool, err := db.Open(ctx, db.DSN(cfg))
 	if err != nil {
