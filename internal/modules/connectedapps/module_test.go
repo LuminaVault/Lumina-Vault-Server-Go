@@ -365,7 +365,50 @@ func TestCallbackHonoursAllowedReturnTo(t *testing.T) {
 	state := v.connectAaru(alice, string(body))
 	code, loc := v.callback(state, "the-code")
 	require.Equal(t, http.StatusFound, code)
-	require.Equal(t, back, loc)
+	require.Equal(t, back+"?status=connected", loc)
+
+	// A returnTo that already has a query keeps it.
+	withQuery := webOrigin + "/settings/apps?tab=apps"
+	body, _ = json.Marshal(map[string]string{"returnTo": withQuery})
+	code, loc = v.callback(v.connectAaru(alice, string(body)), "the-code")
+	require.Equal(t, http.StatusFound, code)
+	require.Equal(t, withQuery+"&status=connected", loc)
+}
+
+// A provider decline has a state and no code. It consumes the state and sends
+// the browser back with a status only.
+func TestCallbackDeclineConsumesStateAndReturns(t *testing.T) {
+	v := setup(t, true)
+	back := webOrigin + "/settings/apps"
+	body, _ := json.Marshal(map[string]string{"returnTo": back})
+	state := v.connectAaru(alice, string(body))
+	decline := callbackPath + "?error=access_denied&error_description=user+said+no&state=" + url.QueryEscape(state)
+	rec := v.do("", http.MethodGet, decline, "")
+	require.Equal(t, http.StatusFound, rec.Code)
+	require.Equal(t, back+"?status=error", rec.Header().Get("Location"))
+
+	// The state is gone: a later code for it is rejected, and nothing connected.
+	code, loc := v.callback(state, "the-code")
+	require.Equal(t, http.StatusFound, code)
+	require.Equal(t, "luminavault://connected-apps?status=error", loc)
+	byID, _, _ := v.list(alice)
+	require.Equal(t, "disconnected", byID["aaru"].Status)
+
+	// Without a returnTo the decline lands in the iOS app, naming the app.
+	state = v.connectAaru(alice, "")
+	rec = v.do("", http.MethodGet, callbackPath+"?error=access_denied&state="+url.QueryEscape(state), "")
+	require.Equal(t, http.StatusFound, rec.Code)
+	require.Equal(t, "luminavault://connected-apps/aaru?status=error", rec.Header().Get("Location"))
+}
+
+// A local failure while starting the flow is ours (500), not the app's (502).
+func TestConnectLocalFailureIs500(t *testing.T) {
+	v := setup(t, true)
+	_, err := v.pool.Exec(context.Background(), `DROP TABLE connected_app_clients`)
+	require.NoError(t, err)
+	rec := v.do(v.jwt(alice), http.MethodPost, listPath+"/aaru/connect", `{}`)
+	require.Equal(t, http.StatusInternalServerError, rec.Code)
+	require.JSONEq(t, `{"error":{"message":"Something went wrong. Try again later."}}`, rec.Body.String())
 }
 
 // The session's returnTo is checked again at the callback: a value that got
@@ -384,11 +427,15 @@ func TestCallbackRevalidatesReturnTo(t *testing.T) {
 
 func TestCallbackExchangeFailureRedirectsErrorForApp(t *testing.T) {
 	v := setup(t, true)
-	state := v.connectAaru(alice, `{"returnTo":"`+webOrigin+`/settings"}`)
+	webState := v.connectAaru(alice, `{"returnTo":"`+webOrigin+`/settings"}`)
+	appState := v.connectAaru(alice, "")
 	v.as.mu.Lock()
 	v.as.tokenStatus = http.StatusBadRequest
 	v.as.mu.Unlock()
-	code, loc := v.callback(state, "secret-code")
+	code, loc := v.callback(webState, "secret-code")
+	require.Equal(t, http.StatusFound, code)
+	require.Equal(t, webOrigin+"/settings?status=error", loc)
+	code, loc = v.callback(appState, "secret-code")
 	require.Equal(t, http.StatusFound, code)
 	require.Equal(t, "luminavault://connected-apps/aaru?status=error", loc)
 	byID, _, _ := v.list(alice)

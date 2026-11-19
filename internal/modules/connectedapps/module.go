@@ -15,6 +15,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v5"
@@ -29,6 +30,7 @@ import (
 const (
 	statusConnected    = "connected"
 	statusDisconnected = "disconnected"
+	statusError        = "error"
 
 	// appCallbackBase is where the callback sends the iOS app.
 	appCallbackBase = "luminavault://connected-apps"
@@ -156,6 +158,7 @@ var (
 	errBadToken        = wire.NewError(http.StatusBadRequest, "That token is not in this app's format")
 	errInvalidReturn   = wire.NewError(http.StatusBadRequest, "invalid_return_to")
 	errOAuthNotReady   = wire.NewError(http.StatusServiceUnavailable, "Connecting apps is not configured on this server")
+	errInternal        = wire.NewError(http.StatusInternalServerError, "Something went wrong. Try again later.")
 )
 
 // connect stores a pasted token for a PAT app, or starts the OAuth flow and
@@ -218,11 +221,15 @@ func (m *Module) connect(c *echo.Context) error {
 		return errUnknownApp
 	case errors.Is(err, core.ErrNotOAuth):
 		return errTokenRequired
-	case err != nil:
-		// Discovery or registration failed. OAuth errors hold no token and no
-		// remote body, but none of their text goes to the client.
-		m.log.ErrorContext(ctx, "connected app connect failed", "app", app.ID, "error", err)
+	case errors.Is(err, core.ErrUpstream):
+		// The app's side failed: discovery, registration or its metadata. The
+		// error may name a remote host, so only its kind is logged.
+		m.log.ErrorContext(ctx, "connected app connect failed", "app", app.ID, "kind", errorKind(err))
 		return wire.NewError(http.StatusBadGateway, "Could not reach "+app.Name+". Try again later.")
+	case err != nil:
+		// Ours: the database or the random source.
+		m.log.ErrorContext(ctx, "connected app connect failed locally", "app", app.ID, "kind", errorKind(err))
+		return errInternal
 	}
 	return wire.JSON(c, http.StatusOK, connectResponse{AuthorizeURL: authorizeURL})
 }
@@ -267,33 +274,47 @@ func errorKind(err error) string {
 // MARK: GET /v1/connected-apps/oauth/callback
 
 // oauthCallback finishes the flow the app's authorization server sent back.
-// Every outcome is a redirect, and the redirect carries a status only: never
-// the error, the code or a token.
+// Every outcome is a redirect: to the web page that started the flow when it
+// gave an allowed returnTo, else into the iOS app. The redirect carries a
+// status only: never the provider's error, the code or a token.
 func (m *Module) oauthCallback(c *echo.Context) error {
 	state, _ := wire.QueryParam(c, "state")
-	code, _ := wire.QueryParam(c, "code")
-	if state == "" || code == "" {
-		return c.Redirect(http.StatusFound, appRedirect("", "error"))
+	if state == "" {
+		return c.Redirect(http.StatusFound, appRedirect("", statusError))
 	}
+	// A decline arrives without a code. Finish still takes the state, so it
+	// cannot be replayed and the browser goes back where it came from.
+	code, _ := wire.QueryParam(c, "code")
 	// The browser leaving must not abandon an exchange the app already consumed.
 	ctx := context.WithoutCancel(c.Request().Context())
 	appID, returnTo, err := m.oauth.Finish(ctx, state, code)
 	if _, known := m.registry.Get(appID); !known {
 		appID = ""
 	}
+	status := statusConnected
 	if err != nil {
-		if !errors.Is(err, core.ErrBadState) {
+		status = statusError
+		if !errors.Is(err, core.ErrBadState) && !errors.Is(err, core.ErrNoCode) {
 			m.log.ErrorContext(ctx, "connected app oauth exchange failed", "app", appID, "kind", errorKind(err))
 		}
-		return c.Redirect(http.StatusFound, appRedirect(appID, "error"))
 	}
 	if returnTo != nil {
 		// Checked at connect; checked again so a bad value can never leave here.
 		if valid, ok := calendar.ValidReturn(*returnTo, m.webReturn); ok {
-			return c.Redirect(http.StatusFound, valid)
+			return c.Redirect(http.StatusFound, withStatus(valid, status))
 		}
 	}
-	return c.Redirect(http.StatusFound, appRedirect(appID, statusConnected))
+	return c.Redirect(http.StatusFound, appRedirect(appID, status))
+}
+
+// withStatus appends status= to a validated returnTo (which has no fragment),
+// keeping any query it already has.
+func withStatus(returnTo, status string) string {
+	sep := "?"
+	if strings.Contains(returnTo, "?") {
+		sep = "&"
+	}
+	return returnTo + sep + "status=" + status
 }
 
 // appRedirect is the deep link back into the iOS app. appID is a registry id

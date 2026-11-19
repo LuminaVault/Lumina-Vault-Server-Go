@@ -30,6 +30,13 @@ var (
 	ErrBadPAT = errors.New("connectedapps: bad token format")
 	// ErrUnknownApp means the app id is not in the registry.
 	ErrUnknownApp = errors.New("connectedapps: unknown app")
+	// ErrUpstream marks a failure on the remote app's side while starting a
+	// flow: discovery, client registration, a transport error or metadata the
+	// guard rejects. Anything Start returns without it failed locally.
+	ErrUpstream = errors.New("connectedapps: upstream failure")
+	// ErrNoCode means the callback carried no code: the user declined, or the
+	// authorization server reported an error.
+	ErrNoCode = errors.New("connectedapps: no authorization code")
 )
 
 const (
@@ -39,6 +46,9 @@ const (
 )
 
 func isNoRows(err error) bool { return errors.Is(err, pgx.ErrNoRows) }
+
+// upstream tags err with ErrUpstream, keeping err for errors.Is.
+func upstream(err error) error { return fmt.Errorf("%w: %w", ErrUpstream, err) }
 
 type oauthSession struct {
 	user      uuid.UUID
@@ -133,7 +143,8 @@ func (o *OAuth) app(appID string) (App, error) {
 }
 
 // Start discovers the app's authorization server, registers a client once and
-// returns the URL to send the user to.
+// returns the URL to send the user to. A failure of the remote side matches
+// ErrUpstream; any other error (database, randomness) is local.
 func (o *OAuth) Start(ctx context.Context, user uuid.UUID, appID string, returnTo *string) (string, error) {
 	app, err := o.app(appID)
 	if err != nil {
@@ -144,9 +155,9 @@ func (o *OAuth) Start(ctx context.Context, user uuid.UUID, appID string, returnT
 	}
 	meta, err := o.discover(ctx, app)
 	if err != nil {
-		return "", err
+		return "", upstream(err)
 	}
-	clientID, err := o.clientID(ctx, app, meta)
+	clientID, err := o.clientID(ctx, app, meta) // tags its own upstream failures
 	if err != nil {
 		return "", err
 	}
@@ -160,7 +171,7 @@ func (o *OAuth) Start(ctx context.Context, user uuid.UUID, appID string, returnT
 
 	au, err := url.Parse(meta.AuthorizationEndpoint)
 	if err != nil || meta.AuthorizationEndpoint == "" {
-		return "", errors.New("connectedapps: bad authorization endpoint")
+		return "", upstream(errors.New("connectedapps: bad authorization endpoint"))
 	}
 	q := au.Query()
 	q.Set("response_type", "code")
@@ -172,7 +183,7 @@ func (o *OAuth) Start(ctx context.Context, user uuid.UUID, appID string, returnT
 	q.Set("resource", app.MCPURL)
 	au.RawQuery = q.Encode()
 	if _, err := o.guard.Validate(ctx, au.String()); err != nil {
-		return "", fmt.Errorf("connectedapps: url rejected: %w", err)
+		return "", upstream(fmt.Errorf("connectedapps: url rejected: %w", err))
 	}
 	o.sessions.put(state, oauthSession{
 		user: user, appID: appID, verifier: verifier, clientID: clientID,
@@ -201,9 +212,11 @@ func (o *OAuth) tokenRequest(ctx context.Context, tokenURL string, form url.Valu
 	return status, tr, nil
 }
 
-// Finish completes the flow: it exchanges the code and stores the tokens. Once
-// the state is known the app id comes back even with an error, so the caller
-// can say which app failed; returnTo comes back only on success.
+// Finish completes the flow: it exchanges the code and stores the tokens. The
+// state is taken first and works once, whatever follows. Once it is known, the
+// app id and returnTo come back even with an error, so the caller can send the
+// browser to the right place. An empty code (the user declined) is ErrNoCode
+// and makes no request.
 func (o *OAuth) Finish(ctx context.Context, state, code string) (string, *string, error) {
 	sess, ok := o.sessions.take(state)
 	if !ok {
@@ -213,11 +226,13 @@ func (o *OAuth) Finish(ctx context.Context, state, code string) (string, *string
 	if err != nil {
 		return "", nil, err
 	}
-	returnTo, err := o.exchange(ctx, sess, app, code)
-	return app.ID, returnTo, err
+	if code == "" {
+		return app.ID, sess.returnTo, ErrNoCode
+	}
+	return app.ID, sess.returnTo, o.exchange(ctx, sess, app, code)
 }
 
-func (o *OAuth) exchange(ctx context.Context, sess oauthSession, app App, code string) (*string, error) {
+func (o *OAuth) exchange(ctx context.Context, sess oauthSession, app App, code string) error {
 	status, tr, err := o.tokenRequest(ctx, sess.tokenURL, url.Values{
 		"grant_type":    {"authorization_code"},
 		"code":          {code},
@@ -227,10 +242,10 @@ func (o *OAuth) exchange(ctx context.Context, sess oauthSession, app App, code s
 		"resource":      {app.MCPURL},
 	})
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if status != http.StatusOK || tr.AccessToken == "" {
-		return nil, fmt.Errorf("connectedapps: token exchange failed (%d)", status)
+		return fmt.Errorf("connectedapps: token exchange failed (%d)", status)
 	}
 	acct := Account{AppID: app.ID, AccessToken: tr.AccessToken, RefreshToken: tr.RefreshToken}
 	if tr.ExpiresIn > 0 {
@@ -240,10 +255,7 @@ func (o *OAuth) exchange(ctx context.Context, sess oauthSession, app App, code s
 	if tr.Scope != "" {
 		acct.Scope = &tr.Scope
 	}
-	if err := o.store.Save(ctx, sess.user, acct); err != nil {
-		return nil, err
-	}
-	return sess.returnTo, nil
+	return o.store.Save(ctx, sess.user, acct)
 }
 
 // Fresh returns a usable access token, refreshing when under 120s remain.

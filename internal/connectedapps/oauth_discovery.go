@@ -103,7 +103,8 @@ func (o *OAuth) discover(ctx context.Context, app App) (asMeta, error) {
 }
 
 // clientID returns the cached DCR client id for the app, registering a public
-// client (no secret) on first use.
+// client (no secret) on first use. Registration failures match ErrUpstream;
+// database errors do not.
 func (o *OAuth) clientID(ctx context.Context, app App, meta asMeta) (string, error) {
 	var id string
 	err := o.pool.QueryRow(ctx, `SELECT client_id FROM connected_app_clients WHERE app_id = $1`, app.ID).Scan(&id)
@@ -114,7 +115,7 @@ func (o *OAuth) clientID(ctx context.Context, app App, meta asMeta) (string, err
 		return "", err
 	}
 	if meta.RegistrationEndpoint == "" {
-		return "", errors.New("connectedapps: authorization server has no registration endpoint")
+		return "", upstream(errors.New("connectedapps: authorization server has no registration endpoint"))
 	}
 	reqBody, _ := json.Marshal(map[string]any{
 		"client_name":                "LuminaVault",
@@ -125,16 +126,16 @@ func (o *OAuth) clientID(ctx context.Context, app App, meta asMeta) (string, err
 	})
 	status, b, err := o.send(ctx, http.MethodPost, meta.RegistrationEndpoint, "application/json", reqBody)
 	if err != nil {
-		return "", err
+		return "", upstream(err)
 	}
 	if status != http.StatusOK && status != http.StatusCreated {
-		return "", fmt.Errorf("connectedapps: registration returned %d", status)
+		return "", upstream(fmt.Errorf("connectedapps: registration returned %d", status))
 	}
 	var reg struct {
 		ClientID string `json:"client_id"`
 	}
 	if json.Unmarshal(b, &reg) != nil || reg.ClientID == "" {
-		return "", errors.New("connectedapps: registration returned no client_id")
+		return "", upstream(errors.New("connectedapps: registration returned no client_id"))
 	}
 	// Two concurrent first starts may both register; the first row wins.
 	if _, err := o.pool.Exec(ctx, `

@@ -406,3 +406,44 @@ func TestTokenEndpointRedirectIsRefused(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "acc-1", a.AccessToken)
 }
+
+// A decline: the state is taken, the app and returnTo come back, and the
+// token endpoint is never asked.
+func TestFinishWithoutCodeConsumesState(t *testing.T) {
+	s := newAS(t)
+	o, _ := newOAuth(t, s)
+	rt := "https://app.test/settings"
+	au, err := o.Start(context.Background(), alice, "aaru", &rt)
+	require.NoError(t, err)
+	st, _ := stateOf(t, au)
+	s.mu.Lock()
+	s.lastForm = nil
+	s.mu.Unlock()
+	app, ret, err := o.Finish(context.Background(), st, "")
+	require.ErrorIs(t, err, connectedapps.ErrNoCode)
+	require.Equal(t, "aaru", app)
+	require.Equal(t, rt, *ret)
+	s.mu.Lock()
+	require.Nil(t, s.lastForm, "no token request for a decline")
+	s.mu.Unlock()
+	_, _, err = o.Finish(context.Background(), st, "c")
+	require.ErrorIs(t, err, connectedapps.ErrBadState)
+}
+
+// R20: Start says whether the remote side or this server failed.
+func TestStartTagsUpstreamFailuresOnly(t *testing.T) {
+	s := newAS(t)
+	o, _ := newOAuth(t, s)
+	// The guard rejecting the app's metadata URL is an upstream failure.
+	bad := connectedapps.NewOAuth(nil, connectedapps.NewRegistry(config.Config{ConnectedAppsAaruMCPURL: s.srv.URL + "/mcp"}),
+		nil, s.srv.Client(), rejecting{}, "https://lumina.test/cb")
+	_, err := bad.Start(context.Background(), alice, "aaru", nil)
+	require.ErrorIs(t, err, connectedapps.ErrUpstream)
+
+	// A database failure while caching the client is local.
+	_, err = o.Pool().Exec(context.Background(), `DROP TABLE connected_app_clients`)
+	require.NoError(t, err)
+	_, err = o.Start(context.Background(), alice, "aaru", nil)
+	require.Error(t, err)
+	require.NotErrorIs(t, err, connectedapps.ErrUpstream)
+}
