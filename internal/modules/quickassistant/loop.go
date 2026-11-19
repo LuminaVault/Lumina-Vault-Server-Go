@@ -81,10 +81,15 @@ type Reply struct {
 	// ShouldPersist is false only for a stopped turn with nothing done: nobody
 	// saw it, and there is nothing to keep a record of.
 	ShouldPersist bool
+	// UsedConnectedApp: a connected-app tool ran, so the reply can quote
+	// another app's data. It always comes with RanPersonalTool.
+	UsedConnectedApp bool
 }
 
 // Indexable reports whether the reply may be turned into a memory.
-func (r Reply) Indexable() bool { return r.IsAnswer && !r.RanPersonalTool && !r.RanAppAction }
+func (r Reply) Indexable() bool {
+	return r.IsAnswer && !r.RanPersonalTool && !r.RanAppAction && !r.UsedConnectedApp
+}
 
 // Outcome is QuickAssistantTurn. Reply nil means answer through the classic
 // path; PreDecided is then the free-lane decision this question already paid
@@ -95,15 +100,63 @@ type Outcome struct {
 	PreDecided *llm.Decision
 }
 
+// TurnOptions is what one turn adds to the service's own tools: the caller's
+// connected-app tools.
+//
+// A turn that offers them goes to Anthropic and nowhere else. When the route
+// has no Anthropic candidate, or is the free lane, the turn runs as if no
+// options were given: the extras are not offered and cannot run.
+type TurnOptions struct {
+	// ExtraTools are offered after the service's tools. Each is named
+	// "<app>__<tool>"; a name without "__" is dropped, so an extra can never
+	// stand in for one of the service's tools.
+	ExtraTools []Tool
+	// ExtraRunner runs the ExtraTools names and nothing else. Nil drops them.
+	ExtraRunner ToolRunner
+	// AnthropicOnly pins the turn to its Anthropic route. Offering extras pins
+	// the turn whether or not this is set.
+	AnthropicOnly bool
+}
+
+// connectedToolSeparator is what an extra tool's name has and none of the
+// service's tools do.
+const connectedToolSeparator = "__"
+
+// extras is the offerable ExtraTools, first of each name.
+func (o TurnOptions) extras() []Tool {
+	if o.ExtraRunner == nil {
+		return nil
+	}
+	var out []Tool
+	seen := map[string]bool{}
+	for _, tool := range o.ExtraTools {
+		if !strings.Contains(tool.Name, connectedToolSeparator) || ActionFor(tool.Name) != Refused || seen[tool.Name] {
+			continue
+		}
+		seen[tool.Name] = true
+		out = append(out, tool)
+	}
+	return out
+}
+
 // Answer picks the route once and runs the loop on it. It must run under the
 // turn's llm.WithValues binding, since picking reads it.
 func (s *Service) Answer(ctx context.Context, msgs []llm.ChatMessage, sessionKey, sessionID string, tools ToolRunner, emit func(memoryagent.StreamEvent)) Outcome {
+	return s.AnswerWith(ctx, msgs, sessionKey, sessionID, tools, emit, TurnOptions{})
+}
+
+// AnswerWith is Answer with this turn's connected-app tools. It must run under
+// the same llm.WithValues binding as the pick: the transport applies the
+// binding's forced route again on every round.
+func (s *Service) AnswerWith(ctx context.Context, msgs []llm.ChatMessage, sessionKey, sessionID string, tools ToolRunner, emit func(memoryagent.StreamEvent), opts TurnOptions) Outcome {
 	turnStart := time.Now()
 	transcript := make([]wireMessage, 0, len(msgs))
 	for _, m := range msgs {
 		transcript = append(transcript, wireMessage{Role: m.Role, Content: &m.Content})
 	}
-	payload, err := s.payload(transcript)
+	// The pick reads the model and the prompt only, and the pin is not known
+	// yet, so this payload carries no extras.
+	payload, err := s.payload(transcript, nil)
 	if err != nil {
 		s.logTurn(ctx, "fallback", 0, turnStart)
 		return Outcome{}
@@ -130,6 +183,22 @@ func (s *Service) Answer(ctx context.Context, msgs []llm.ChatMessage, sessionKey
 		return Outcome{PreDecided: preDecided}
 	}
 
+	// Connected-app tools go to Anthropic or are not offered. The pin comes
+	// after the removals above and before the loop, so every round runs on it.
+	// When it cannot hold, decision stays exactly as it was: a free-lane or
+	// other-provider turn never carries an extra.
+	extras := opts.extras()
+	if opts.AnthropicOnly || len(extras) > 0 {
+		pinned, canPin := decision.OnlyProvider(llm.Anthropic)
+		// preDecided is set exactly for a free-lane pick, which carries no
+		// extras even when a trial route sits in front of it.
+		if freeLane := preDecided != nil; canPin && !freeLane {
+			decision = pinned
+		} else {
+			extras = nil
+		}
+	}
+
 	if emit == nil {
 		emit = func(memoryagent.StreamEvent) {}
 	}
@@ -137,6 +206,13 @@ func (s *Service) Answer(ctx context.Context, msgs []llm.ChatMessage, sessionKey
 		service: s, ctx: ctx, sessionKey: sessionKey, sessionID: sessionID,
 		tools: tools, emit: emit, turnStart: turnStart,
 		transcript: transcript, finishedWrites: map[string]string{},
+	}
+	if len(extras) > 0 {
+		t.extraTools, t.extraRunner = extras, opts.ExtraRunner
+		t.extraNames = make(map[string]bool, len(extras))
+		for _, tool := range extras {
+			t.extraNames[tool.Name] = true
+		}
 	}
 	if reply := t.run(decision); reply != nil {
 		return Outcome{Reply: reply}
@@ -160,6 +236,13 @@ type turn struct {
 	toolCallCount   int
 	ranPersonalTool bool
 	ranAppAction    bool
+	// extraTools is the turn's connected-app tools as they are really offered:
+	// empty unless the turn is pinned to Anthropic. extraNames is their names,
+	// the one set the offer, the policy check and the dispatch all read.
+	extraTools       []Tool
+	extraNames       map[string]bool
+	extraRunner      ToolRunner
+	usedConnectedApp bool
 	// finishedWrites is the first result of each write that took effect, so a
 	// repeat of the same call (a retry, or the model saying it twice) does not
 	// do it twice (ruling 19).
@@ -180,7 +263,7 @@ func (t *turn) run(decision llm.Decision) *Reply {
 		var payload []byte
 		err := t.ctx.Err()
 		if err == nil {
-			payload, err = s.payload(t.transcript)
+			payload, err = s.payload(t.transcript, t.extraTools)
 		}
 		if err != nil {
 			// Round 1 never reached the transport, so nothing settled.
@@ -269,7 +352,8 @@ func (t *turn) run(decision llm.Decision) *Reply {
 func (t *turn) runCall(index int, c wireToolCall) string {
 	name := c.Function.Name
 	args, ok := parseArguments(c.Function.Arguments)
-	if rejection := rejection(index, name, ok); rejection != "" {
+	extra := t.extraNames[name]
+	if rejection := rejection(index, name, ok, extra); rejection != "" {
 		return rejection
 	}
 	writeKey := ""
@@ -282,10 +366,16 @@ func (t *turn) runCall(index int, c wireToolCall) string {
 	t.toolCallCount++
 	t.ranPersonalTool = t.ranPersonalTool || TouchesPersonalData(name)
 	t.ranAppAction = t.ranAppAction || ChangesApp(name)
+	runner := t.tools
+	if extra {
+		// Another app's data about the caller: personal, whatever the tool.
+		t.ranPersonalTool, t.usedConnectedApp = true, true
+		runner = t.extraRunner
+	}
 	// A started tool runs to its result, as under Swift's cooperative
 	// cancellation: a disconnect must not abort a write half-way or let it
 	// commit without its chip. Cancellation is checked between calls instead.
-	result := t.tools.Run(context.WithoutCancel(t.ctx), name, args)
+	result := runner.Run(context.WithoutCancel(t.ctx), name, args)
 	if a := result.Action; a != nil {
 		t.actionEmitted = true
 		t.emit(Frame(*a))
@@ -311,12 +401,13 @@ func (t *turn) reply(text string, isAnswer bool, outcome string, rounds int, sho
 	}
 	t.service.logTurn(t.ctx, outcome, rounds, t.turnStart)
 	return &Reply{
-		Text:            text,
-		IsAnswer:        isAnswer,
-		ToolCallCount:   t.toolCallCount,
-		RanPersonalTool: t.ranPersonalTool,
-		RanAppAction:    t.ranAppAction,
-		ShouldPersist:   shouldPersist,
+		Text:             text,
+		IsAnswer:         isAnswer,
+		ToolCallCount:    t.toolCallCount,
+		RanPersonalTool:  t.ranPersonalTool,
+		RanAppAction:     t.ranAppAction,
+		ShouldPersist:    shouldPersist,
+		UsedConnectedApp: t.usedConnectedApp,
 	}
 }
 
@@ -373,12 +464,14 @@ func isWhitespaceCharacter(character string) bool {
 }
 
 // rejection is why a call must not run, or "". The policy is checked here, not
-// trusted to the offer: the model can name a tool it was never offered.
-func rejection(index int, name string, argsOK bool) string {
+// trusted to the offer: the model can name a tool it was never offered. extra
+// says the name is one of this turn's offered connected-app tools, which the
+// policy does not know; any other "<app>__<tool>" name is refused with the rest.
+func rejection(index int, name string, argsOK, extra bool) string {
 	switch {
 	case index >= maxToolCallsPerRound:
 		return tooManyCalls
-	case ActionFor(name) == Refused:
+	case !extra && ActionFor(name) == Refused:
 		return refusal
 	case !argsOK:
 		return badArguments
@@ -453,11 +546,13 @@ type wireRequest struct {
 	Stream     bool             `json:"stream"`
 }
 
-func (s *Service) payload(transcript []wireMessage) ([]byte, error) {
+// payload offers the service's tools, then extras, the turn's connected-app
+// tools.
+func (s *Service) payload(transcript []wireMessage, extras []Tool) ([]byte, error) {
 	return json.Marshal(wireRequest{
 		Model:      s.Model,
 		Messages:   transcript,
-		Tools:      OpenAITools(s.Tools),
+		Tools:      append(OpenAITools(s.Tools), OpenAITools(extras)...),
 		ToolChoice: "auto",
 		Stream:     false,
 	})

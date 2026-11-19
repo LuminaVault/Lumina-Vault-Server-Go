@@ -51,6 +51,28 @@ func (d Decision) Removing(kind ProviderKind) (Decision, bool) {
 	}, true
 }
 
+// OnlyProvider pins a decision to one provider: the first of kind's candidates
+// becomes the primary and there are no fallbacks, so a failing step fails
+// instead of moving to another provider. False when kind has no candidate.
+//
+// It takes the first route, never "the best" one: after ApplyTrial that is the
+// trial route, the only model the platform trial key may pay for
+// (guardTrialKeyModel). The trial flag survives on the same terms as Removing.
+func (d Decision) OnlyProvider(kind ProviderKind) (Decision, bool) {
+	for _, route := range d.Candidates() {
+		if route.Provider != kind {
+			continue
+		}
+		return Decision{
+			Primary:               route,
+			Cerberus:              d.Cerberus,
+			CredentialMode:        d.CredentialMode,
+			ManagedTrialPrepended: d.ManagedTrialPrepended && route == d.Primary,
+		}, true
+	}
+	return Decision{}, false
+}
+
 // WithoutBudgetReservation is RouteDecision.withoutBudgetReservation(): the
 // same decision with the budget reservation zeroed. The transport settles a
 // decision's reservation on every completion, against the tenant's one monthly

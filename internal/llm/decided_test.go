@@ -311,3 +311,63 @@ func TestReservationIsSubtractedOnce(t *testing.T) {
 		assert.Equal(t, int64(2), end.requests)
 	})
 }
+
+// MARK: - OnlyProvider
+
+func TestOnlyProviderPicksAnthropicDropsFallbacks(t *testing.T) {
+	cerberus := &CerberusMetadata{TenantID: uuid.New(), BudgetReservationUsdMicros: 7}
+	d := Decision{
+		Primary:        Route{OpenRouter, "free-model"},
+		Fallbacks:      []Route{{Anthropic, "claude-haiku-5-5"}, {Groq, "llama"}},
+		Cerberus:       cerberus,
+		CredentialMode: ModeManaged,
+	}
+	pinned, ok := d.OnlyProvider(Anthropic)
+	require.True(t, ok)
+	assert.Equal(t, Route{Anthropic, "claude-haiku-5-5"}, pinned.Primary)
+	assert.Nil(t, pinned.Fallbacks)
+	assert.Same(t, cerberus, pinned.Cerberus)
+	assert.Equal(t, ModeManaged, pinned.CredentialMode)
+	// The route in front was not the one a trial prepended.
+	assert.False(t, pinned.ManagedTrialPrepended)
+
+	// The first of several, never "the best".
+	two := Decision{Primary: Route{Anthropic, "claude-sonnet-4-6"}, Fallbacks: []Route{{Anthropic, "claude-opus-4-7"}, {OpenAI, "gpt-5"}}}
+	pinned, ok = two.OnlyProvider(Anthropic)
+	require.True(t, ok)
+	assert.Equal(t, Route{Anthropic, "claude-sonnet-4-6"}, pinned.Primary)
+	assert.Nil(t, pinned.Fallbacks)
+
+	// The free lane's table routes: nothing to pin to.
+	free := Decision{
+		Primary:   Route{OpenRouter, FreeLaneOpenRouterModel},
+		Fallbacks: []Route{{OpenRouter, FreeLaneOpenRouterSecondaryModel}, {Nvidia, FreeLaneNvidiaModel}},
+	}
+	_, ok = free.OnlyProvider(Anthropic)
+	assert.False(t, ok)
+}
+
+// The platform trial key answers 401 for any model but the trial's
+// (guardTrialKeyModel), so the pin has to land on the route ApplyTrial put in
+// front, not on another Anthropic route further down.
+func TestOnlyProviderKeepsTrialRoute(t *testing.T) {
+	cfg := TrialConfig{APIKey: "test-key", Model: "claude-haiku-5-5", Thinking: ThinkingAdaptive, Scope: ScopePaid}
+	paid := Decision{
+		Primary:        Route{Anthropic, "claude-sonnet-4-6"},
+		Fallbacks:      []Route{{OpenAI, "gpt-5"}},
+		Cerberus:       &CerberusMetadata{Mode: ModeManaged},
+		CredentialMode: ModeManaged,
+	}
+	trialled := ApplyTrial(cfg, paid, ModeManaged, false)
+	require.Equal(t, cfg.Route(), trialled.Primary)
+	require.Contains(t, trialled.Fallbacks, Route{Anthropic, "claude-sonnet-4-6"})
+
+	pinned, ok := trialled.OnlyProvider(Anthropic)
+	require.True(t, ok)
+	assert.Equal(t, cfg.Route(), pinned.Primary)
+	assert.Equal(t, cfg.Model, pinned.Primary.ModelID)
+	assert.Nil(t, pinned.Fallbacks)
+	assert.True(t, pinned.ManagedTrialPrepended)
+	assert.Same(t, paid.Cerberus, pinned.Cerberus)
+	assert.Equal(t, ModeManaged, pinned.CredentialMode)
+}
