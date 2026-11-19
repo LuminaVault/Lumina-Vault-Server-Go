@@ -53,7 +53,15 @@ type Output struct {
 	Kind     OutputKind
 	Path     *string
 	Category *string
+	// Autosave is a memo output's `autosave`, nil when absent or not a plain
+	// YAML boolean. Swift never read the key, so it is Go-only and never fails a
+	// manifest. See Saves.
+	Autosave *bool
 }
+
+// Saves reports whether the output is written on every run. `autosave: false`
+// writes a memo only when the run asked to save (SkillRunRequest.save).
+func (o Output) Saves() bool { return o.Autosave == nil || *o.Autosave }
 
 // DailyRunCap is metadata.daily_run_cap. 0 means unlimited for that tier.
 type DailyRunCap struct {
@@ -187,7 +195,7 @@ func build(source Source, raw rawManifest, body string) (Manifest, error) {
 		default:
 			return Manifest{}, &ManifestError{Kind: InvalidOutputKind, Detail: o.kind}
 		}
-		outputs = append(outputs, Output{Kind: kind, Path: o.path, Category: o.category})
+		outputs = append(outputs, Output{Kind: kind, Path: o.path, Category: o.category, Autosave: o.autosave})
 	}
 	schedule := raw.schedule
 	if schedule != nil && swiftstr.TrimWhitespaces(*schedule) == "" {
@@ -230,6 +238,7 @@ type rawManifest struct {
 type rawOutput struct {
 	kind           string
 	path, category *string
+	autosave       *bool
 }
 
 // decodeFrontmatter is YAMLDecoder().decode(RawManifest.self, from:) from Yams
@@ -326,9 +335,30 @@ func decodeOutputs(meta []pair, budget *int) ([]rawOutput, error) {
 		if out.category, err = optionalString(fields, "category"); err != nil {
 			return nil, err
 		}
+		out.autosave = lenientBool(lookup(fields, "autosave"))
 		outputs = append(outputs, out)
 	}
 	return outputs, nil
+}
+
+// lenientBool reads a Go-only key Swift's RawManifest never declared: a plain
+// scalar Yams' Bool.construct accepts is that value, and anything else (absent,
+// null, quoted, a collection, other text) is nil rather than an error, so every
+// manifest the Swift oracle accepts still parses.
+func lenientBool(n *yaml.Node) *bool {
+	if n == nil || n.Kind != yaml.ScalarNode || !isPlain(n) {
+		return nil
+	}
+	var v bool
+	switch n.Value {
+	case "true", "True", "TRUE", "yes", "Yes", "YES", "on", "On", "ON":
+		v = true
+	case "false", "False", "FALSE", "no", "No", "NO", "off", "Off", "OFF":
+		v = false
+	default:
+		return nil
+	}
+	return &v
 }
 
 func decodeDailyRunCap(meta []pair, budget *int) (*DailyRunCap, error) {

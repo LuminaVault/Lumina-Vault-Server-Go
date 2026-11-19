@@ -127,8 +127,8 @@ func TestMemoOutputPath(t *testing.T) {
 		{"default when the manifest names no path", "daily-brief", nil, "memos/2026-11-18/daily-brief.md", false},
 		{"expands {date}", "daily-brief", p("memos/{date}/daily-brief.md"), "memos/2026-11-18/daily-brief.md", true},
 		{
-			"expands {slug} to the skill's slug", "Pattern Detector", p("reflections/{date}/patterns-{slug}.md"),
-			"reflections/2026-11-18/patterns-pattern-detector.md", true,
+			"expands {slug} to the given slug", "pattern-detector", p("reflections/{date}/patterns-{slug}.md"),
+			"reflections/2026-11-18/patterns-sleep.md", true,
 		},
 		{"a literal path is kept", "daily-brief", p("memos/brief.md"), "memos/brief.md", true},
 		{
@@ -141,9 +141,43 @@ func TestMemoOutputPath(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got, used := memoOutputPath(tc.skill, tc.path, now)
+			got, used := memoOutputPath(tc.skill, tc.path, "sleep", now)
 			require.Equal(t, tc.want, got)
 			require.Equal(t, tc.usedPath, used)
 		})
 	}
+}
+
+// The reflection SKILL.md files promise reflections/<date>/patterns-<slug>.md
+// with <slug> the topic kebab-cased and cut to 32 chars, or `untargeted`.
+func TestTopicSlug(t *testing.T) {
+	for _, tc := range []struct{ topic, want string }{
+		{"", "untargeted"},
+		{"  ", "untargeted"},
+		{`"?!"`, "untargeted"},
+		{"Sleep", "sleep"},
+		{"Work  stress_and-burnout", "work-stress-and-burnout"},
+		{"Ünï códe 日本語", "ünï-códe-日本語"},
+		// 40 letters: the first 32 are kept.
+		{"abcdefghijklmnopqrstuvwxyzabcdefghijklmn", "abcdefghijklmnopqrstuvwxyzabcdef"},
+		// The cut lands just after a separator, which is dropped, not kept.
+		{"abcdefghijklmnopqrstuvwxyzabcde fghij", "abcdefghijklmnopqrstuvwxyzabcde"},
+	} {
+		got := topicSlug(tc.topic)
+		require.Equal(t, tc.want, got, "topic %q", tc.topic)
+		require.LessOrEqual(t, len([]rune(got)), 32)
+	}
+}
+
+// {slug} is the topic only for the three reflection skills; every other skill
+// keeps the skill slug it has had since {slug} was first expanded.
+func TestMemoSlug(t *testing.T) {
+	topic := map[string]string{"topic": "Deep Work"}
+	require.Equal(t, "deep-work", memoSlug("pattern-detector", topic))
+	require.Equal(t, "deep-work", memoSlug("contradiction-detector", topic))
+	require.Equal(t, "deep-work", memoSlug("belief-evolution", topic))
+	require.Equal(t, "untargeted", memoSlug("pattern-detector", nil))
+	require.Equal(t, "untargeted", memoSlug("pattern-detector", map[string]string{"topic": ""}))
+	require.Equal(t, "daily-brief", memoSlug("daily-brief", topic))
+	require.Equal(t, "my-skill", memoSlug("My Skill", nil))
 }

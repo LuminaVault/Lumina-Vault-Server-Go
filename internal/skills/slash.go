@@ -60,6 +60,17 @@ func ParseSlash(raw string) (inv Invocation, ok bool) {
 	return Invocation{Kind: KindSkill, SkillName: command, Input: input, Arguments: arguments}, true
 }
 
+// IsTopicSkill reports whether name is one of the reflection skills /patterns,
+// /contradict and /beliefs run with a `topic` argument. Their memo paths carry
+// {slug}, which for them is the topic's slug rather than the skill's.
+func IsTopicSkill(name string) bool {
+	switch name {
+	case "pattern-detector", "contradiction-detector", "belief-evolution":
+		return true
+	}
+	return false
+}
+
 func topicSkill(name string, topic *string) Invocation {
 	arguments := map[string]string{}
 	if topic != nil {

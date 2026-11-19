@@ -383,3 +383,47 @@ Domain: weather.
 		assert.Contains(t, m.AllowedTools, "session_search")
 	})
 }
+
+// `autosave` is Go-only: Swift's RawManifest never declared it, so it is read
+// leniently and never rejects a manifest the oracle accepts.
+func TestManifestOutputAutosave(t *testing.T) {
+	parse := func(t *testing.T, output string) Output {
+		t.Helper()
+		m, err := Parse(SourceBuiltin, "---\nname: x\ndescription: d\nmetadata:\n  capability: low\n  outputs:\n    - kind: memo\n      path: memos/a.md\n"+output+"---\nbody")
+		require.NoError(t, err)
+		require.Len(t, m.Outputs, 1)
+		return m.Outputs[0]
+	}
+	for _, tc := range []struct {
+		name, yaml string
+		want       *bool
+	}{
+		{"absent", "", nil},
+		{"false", "      autosave: false\n", boolPtr(false)},
+		{"true", "      autosave: true\n", boolPtr(true)},
+		{"Yams spellings", "      autosave: OFF\n", boolPtr(false)},
+		{"yes", "      autosave: yes\n", boolPtr(true)},
+		{"null", "      autosave: ~\n", nil},
+		{"quoted is not a bool", "      autosave: \"false\"\n", nil},
+		{"other text", "      autosave: sometimes\n", nil},
+		{"a collection", "      autosave: [false]\n", nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			o := parse(t, tc.yaml)
+			require.Equal(t, tc.want, o.Autosave)
+			require.Equal(t, tc.want == nil || *tc.want, o.Saves())
+		})
+	}
+
+	for _, name := range []string{"pattern-detector", "contradiction-detector", "belief-evolution"} {
+		m, err := Parse(SourceBuiltin, loadBuiltin(t, name))
+		require.NoError(t, err)
+		require.Len(t, m.Outputs, 1, name)
+		require.False(t, m.Outputs[0].Saves(), "%s declares autosave: false", name)
+	}
+	m, err := Parse(SourceBuiltin, loadBuiltin(t, "daily-brief"))
+	require.NoError(t, err)
+	require.True(t, m.Outputs[0].Saves(), "daily-brief has no autosave and keeps saving every run")
+}
+
+func boolPtr(b bool) *bool { return &b }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"io/fs"
 	"log/slog"
 	"lumina/internal/apns"
 	"lumina/internal/auth"
@@ -32,6 +33,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/labstack/echo/v5"
 	"github.com/stretchr/testify/require"
@@ -336,6 +338,84 @@ func testSkillRunner(t *testing.T, v dbEnv) {
 		require.Equal(t, "error", status)
 	})
 
+	// The reflection skills' memo: {slug} is the run's topic, and autosave: false
+	// writes it only when the run asked to save.
+	t.Run("reflection memos are per topic and only saved on request", func(t *testing.T) {
+		tenant := v.user()
+		day := time.Date(2026, 11, 19, 9, 0, 0, 0, time.UTC)
+		path, no := "reflections/{date}/patterns-{slug}.md", false
+		mf := testManifest("pattern-detector", nil, []skills.Output{{Kind: skills.OutputMemo, Path: &path, Autosave: &no}})
+		run := func(t *testing.T, save bool, arguments map[string]string, reply string) {
+			t.Helper()
+			r := v.runner(runnerDeps{transport: &scriptedTransport{steps: []string{contentStep(reply)}}})
+			r.now = func() time.Time { return day }
+			res, err := r.Run(ctx, mf, runUser{tenant: tenant, tier: "ultimate", username: "u", save: save}, nil, arguments)
+			require.NoError(t, err)
+			require.Equal(t, "ok", res.status)
+			require.Equal(t, reply, res.markdown)
+		}
+		vaultRows := func(t *testing.T) []string {
+			t.Helper()
+			rows, err := v.pool.Query(ctx, `SELECT path FROM vault_files WHERE tenant_id = $1 ORDER BY path`, tenant)
+			require.NoError(t, err)
+			paths, err := pgx.CollectRows(rows, pgx.RowTo[string])
+			require.NoError(t, err)
+			return paths
+		}
+		requireFile := func(t *testing.T, rel, content string) {
+			t.Helper()
+			written, err := os.ReadFile(filepath.Join(v.paths.Raw(tenant), rel))
+			require.NoError(t, err)
+			require.Equal(t, content, string(written))
+		}
+
+		run(t, false, map[string]string{"topic": "sleep"}, "Not saved.")
+		require.Empty(t, vaultRows(t), "autosave: false without save writes no vault_files row")
+		_, err := os.Stat(filepath.Join(v.paths.Raw(tenant), "reflections"))
+		require.ErrorIs(t, err, fs.ErrNotExist, "nor a file")
+
+		run(t, true, map[string]string{"topic": "Sleep"}, "Sleep patterns.")
+		run(t, true, map[string]string{"topic": "Work stress"}, "Work patterns.")
+		run(t, true, nil, "Everything.")
+		run(t, true, map[string]string{"topic": "A very long topic about sleep and work balance"}, "Long.")
+		requireFile(t, "reflections/2026-11-19/patterns-sleep.md", "Sleep patterns.")
+		requireFile(t, "reflections/2026-11-19/patterns-work-stress.md", "Work patterns.")
+		requireFile(t, "reflections/2026-11-19/patterns-untargeted.md", "Everything.")
+		requireFile(t, "reflections/2026-11-19/patterns-a-very-long-topic-about-sleep-an.md", "Long.")
+		require.Equal(t, []string{
+			"reflections/2026-11-19/patterns-a-very-long-topic-about-sleep-an.md",
+			"reflections/2026-11-19/patterns-sleep.md",
+			"reflections/2026-11-19/patterns-untargeted.md",
+			"reflections/2026-11-19/patterns-work-stress.md",
+		}, vaultRows(t))
+	})
+
+	// POST /v1/skills/:name/run's `save` is the only save signal; a slash
+	// command has none.
+	t.Run("the run body's save reaches the runner", func(t *testing.T) {
+		tenant := v.user()
+		day := time.Date(2026, 11, 19, 9, 0, 0, 0, time.UTC)
+		transport := &scriptedTransport{steps: []string{contentStep("slash"), contentStep("unsaved"), contentStep("saved")}}
+		runner := v.runner(runnerDeps{transport: transport})
+		runner.now = func() time.Time { return day }
+		e := skillsServerWith(v.pool, v.paths, runner)
+		dir := filepath.Join(v.paths.Raw(tenant), "reflections", "2026-11-19")
+
+		rec := call(t, e, tenant, http.MethodPost, "/v1/skills/slash", `{"command":"/patterns deep work"}`)
+		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+		rec = call(t, e, tenant, http.MethodPost, "/v1/skills/pattern-detector/run", `{"arguments":{"topic":"deep work"}}`)
+		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+		_, err := os.Stat(dir)
+		require.ErrorIs(t, err, fs.ErrNotExist, "neither slash nor a run without save writes the memo")
+
+		rec = call(t, e, tenant, http.MethodPost, "/v1/skills/pattern-detector/run", `{"arguments":{"topic":"deep work"},"save":true}`)
+		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+		written, err := os.ReadFile(filepath.Join(dir, "patterns-deep-work.md"))
+		require.NoError(t, err)
+		require.Equal(t, "saved", string(written))
+		require.Len(t, transport.payloads(), 3, "three runs, three completions")
+	})
+
 	// SkillRunnerTests: "records usage counters from provider metadata".
 	t.Run("records usage counters from provider metadata", func(t *testing.T) {
 		tenant := v.user()
@@ -354,10 +434,14 @@ func testSkillRunner(t *testing.T, v dbEnv) {
 // MARK: - JobOriginTests
 
 func skillsServer(pool *pgxpool.Pool, paths vaultpaths.Paths) *echo.Echo {
+	return skillsServerWith(pool, paths, nil)
+}
+
+func skillsServerWith(pool *pgxpool.Pool, paths vaultpaths.Paths, runner *Runner) *echo.Echo {
 	users := auth.PGUsers(pool)
 	module := New(pool, Options{
 		Identify: auth.Identify(testKeys, users), Limits: ratelimit.NewStore(),
-		Catalog: skills.NewCatalog(paths), Paths: paths,
+		Catalog: skills.NewCatalog(paths), Paths: paths, Runner: runner,
 		Log: slog.New(slog.NewTextHandler(io.Discard, nil)),
 	})
 	return httpserver.New(config.Config{}, httpserver.Deps{Auth: auth.Middleware(testKeys, users), Modules: []httpserver.Module{module}})
