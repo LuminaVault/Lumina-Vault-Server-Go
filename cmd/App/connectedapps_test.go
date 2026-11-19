@@ -34,6 +34,7 @@ func connectedAppsStatuses(t *testing.T, cfg config.Config) (svcNil bool, status
 		{http.MethodGet, "/v1/me/connected-apps"},
 		{http.MethodPost, "/v1/me/connected-apps/norviq/connect"},
 		{http.MethodDelete, "/v1/me/connected-apps/norviq"},
+		{http.MethodPost, "/v1/me/connected-apps/aaru/complete"},
 		{http.MethodGet, "/v1/connected-apps/oauth/callback"},
 	} {
 		rec := httptest.NewRecorder()
@@ -49,7 +50,7 @@ func TestDisabledFlagRegistersNothing(t *testing.T) {
 			ConnectedAppsEnabled: flag, LVSecretMasterKey: connectedAppsTestKey, MCPPublicBaseURL: "https://api.lumina.test",
 		})
 		require.True(t, svcNil, "flag %q", flag)
-		require.Equal(t, []int{404, 404, 404, 404}, statuses, "flag %q", flag)
+		require.Equal(t, []int{404, 404, 404, 404, 404}, statuses, "flag %q", flag)
 	}
 }
 
@@ -58,16 +59,16 @@ func TestEnabledFlagRegistersRoutes(t *testing.T) {
 		ConnectedAppsEnabled: "TRUE", LVSecretMasterKey: connectedAppsTestKey, MCPPublicBaseURL: "https://api.lumina.test",
 	})
 	require.False(t, svcNil)
-	// The three settings routes sit behind auth; the callback is public and
+	// The four settings routes sit behind auth; the callback is public and
 	// answers a missing state with its error redirect.
-	require.Equal(t, []int{401, 401, 401, 302}, statuses)
+	require.Equal(t, []int{401, 401, 401, 401, 302}, statuses)
 }
 
 // Tokens cannot be sealed without the master key, so the feature stays off.
 func TestEnabledFlagWithoutMasterKeyRegistersNothing(t *testing.T) {
 	svcNil, statuses := connectedAppsStatuses(t, config.Config{ConnectedAppsEnabled: "true"})
 	require.True(t, svcNil)
-	require.Equal(t, []int{404, 404, 404, 404}, statuses)
+	require.Equal(t, []int{404, 404, 404, 404, 404}, statuses)
 }
 
 func TestConnectedAppsCallbackURL(t *testing.T) {

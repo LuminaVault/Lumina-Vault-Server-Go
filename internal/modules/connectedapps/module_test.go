@@ -54,6 +54,7 @@ type asStub struct {
 	revokeForms  []url.Values
 	revokeStatus int // 0 means 200
 	tokenStatus  int // 0 means 200
+	tokenCalls   int
 	down         bool
 }
 
@@ -83,6 +84,7 @@ func newAS(t *testing.T) *asStub {
 	})
 	mux.HandleFunc("/token", func(w http.ResponseWriter, _ *http.Request) {
 		s.mu.Lock()
+		s.tokenCalls++
 		status := s.tokenStatus
 		s.mu.Unlock()
 		if status != 0 {
@@ -236,6 +238,34 @@ func (v env) callback(state, code string) (int, string) {
 	return rec.Code, rec.Header().Get("Location")
 }
 
+// completionOf parses a callback redirect and answers its completion handle,
+// requiring status=authorized.
+func completionOf(t *testing.T, loc string) string {
+	t.Helper()
+	u, err := url.Parse(loc)
+	require.NoError(t, err, loc)
+	require.Equal(t, "authorized", u.Query().Get("status"), loc)
+	h := u.Query().Get("completion")
+	require.NotEmpty(t, h, loc)
+	require.NotContains(t, loc, "the-code")
+	return h
+}
+
+func (v env) complete(user uuid.UUID, appID, handle string) *httptest.ResponseRecorder {
+	v.t.Helper()
+	body, _ := json.Marshal(map[string]string{"completion": handle})
+	return v.do(v.jwt(user), http.MethodPost, listPath+"/"+appID+"/complete", string(body))
+}
+
+// connectAaruFully runs connect, the callback and complete for user.
+func (v env) connectAaruFully(user uuid.UUID) {
+	v.t.Helper()
+	code, loc := v.callback(v.connectAaru(user, ""), "the-code")
+	require.Equal(v.t, http.StatusFound, code)
+	rec := v.complete(user, "aaru", completionOf(v.t, loc))
+	require.Equal(v.t, http.StatusNoContent, rec.Code, rec.Body.String())
+}
+
 func TestListShowsRegistryWithStatus(t *testing.T) {
 	v := setup(t, true)
 	require.Equal(t, http.StatusUnauthorized, v.do("", http.MethodGet, listPath, "").Code)
@@ -338,7 +368,15 @@ func TestOAuthConnectThenCallback(t *testing.T) {
 	state := v.connectAaru(alice, "")
 	code, loc := v.callback(state, "the-code")
 	require.Equal(t, http.StatusFound, code)
-	require.Equal(t, "luminavault://connected-apps/aaru?status=connected", loc)
+	require.True(t, strings.HasPrefix(loc, "luminavault://connected-apps/aaru?status=authorized&completion="), loc)
+	handle := completionOf(t, loc)
+
+	// R19: the unauthenticated callback connects nothing on its own.
+	byID, _, _ := v.list(alice)
+	require.Equal(t, "disconnected", byID["aaru"].Status)
+
+	rec := v.complete(alice, "aaru", handle)
+	require.Equal(t, http.StatusNoContent, rec.Code, rec.Body.String())
 	byID, _, raw := v.list(alice)
 	require.Equal(t, "connected", byID["aaru"].Status)
 	require.NotNil(t, byID["aaru"].ConnectedAt)
@@ -347,10 +385,46 @@ func TestOAuthConnectThenCallback(t *testing.T) {
 	byID, _, _ = v.list(bob)
 	require.Equal(t, "disconnected", byID["aaru"].Status)
 
-	// A state works once.
+	// A state works once, and so does a handle.
 	code, loc = v.callback(state, "the-code")
 	require.Equal(t, http.StatusFound, code)
 	require.Equal(t, "luminavault://connected-apps?status=error", loc)
+	require.Equal(t, http.StatusBadRequest, v.complete(alice, "aaru", handle).Code)
+}
+
+// R19: alice starts a connect and sends bob the authorize link. Bob approves,
+// and his signed-in client completes. Nobody is connected, the code is never
+// exchanged, and the handle is gone for alice too.
+func TestCompleteFromAnotherAccountIsRefused(t *testing.T) {
+	v := setup(t, true)
+	_, loc := v.callback(v.connectAaru(alice, ""), "the-code")
+	handle := completionOf(t, loc)
+	rec := v.complete(bob, "aaru", handle)
+	require.Equal(t, http.StatusForbidden, rec.Code)
+	require.JSONEq(t, `{"error":{"message":"This connection was started from a different Lumina account. Connect the app again from this account."}}`, rec.Body.String())
+	v.as.mu.Lock()
+	require.Zero(t, v.as.tokenCalls, "the code is never exchanged")
+	v.as.mu.Unlock()
+	for _, u := range []uuid.UUID{alice, bob} {
+		byID, _, _ := v.list(u)
+		require.Equal(t, "disconnected", byID["aaru"].Status)
+	}
+	require.Equal(t, http.StatusBadRequest, v.complete(alice, "aaru", handle).Code)
+}
+
+func TestCompleteRequiresAuthAndAHandle(t *testing.T) {
+	v := setup(t, true)
+	_, loc := v.callback(v.connectAaru(alice, ""), "the-code")
+	handle := completionOf(t, loc)
+	body, _ := json.Marshal(map[string]string{"completion": handle})
+	require.Equal(t, http.StatusUnauthorized, v.do("", http.MethodPost, listPath+"/aaru/complete", string(body)).Code)
+	for _, b := range []string{`{}`, `{"completion":""}`, `{"completion":"nope"}`} {
+		rec := v.do(v.jwt(alice), http.MethodPost, listPath+"/aaru/complete", b)
+		require.Equal(t, http.StatusBadRequest, rec.Code, b)
+	}
+	require.Equal(t, http.StatusNotFound, v.complete(alice, "nope", handle).Code)
+	// None of that spent the handle.
+	require.Equal(t, http.StatusNoContent, v.complete(alice, "aaru", handle).Code)
 }
 
 func TestCallbackHonoursAllowedReturnTo(t *testing.T) {
@@ -365,14 +439,15 @@ func TestCallbackHonoursAllowedReturnTo(t *testing.T) {
 	state := v.connectAaru(alice, string(body))
 	code, loc := v.callback(state, "the-code")
 	require.Equal(t, http.StatusFound, code)
-	require.Equal(t, back+"?status=connected", loc)
+	require.True(t, strings.HasPrefix(loc, back+"?status=authorized&completion="), loc)
+	completionOf(t, loc)
 
 	// A returnTo that already has a query keeps it.
 	withQuery := webOrigin + "/settings/apps?tab=apps"
 	body, _ = json.Marshal(map[string]string{"returnTo": withQuery})
 	code, loc = v.callback(v.connectAaru(alice, string(body)), "the-code")
 	require.Equal(t, http.StatusFound, code)
-	require.Equal(t, withQuery+"&status=connected", loc)
+	require.True(t, strings.HasPrefix(loc, withQuery+"&status=authorized&completion="), loc)
 }
 
 // A provider decline has a state and no code. It consumes the state and sends
@@ -422,22 +497,20 @@ func TestCallbackRevalidatesReturnTo(t *testing.T) {
 	require.NoError(t, err)
 	code, loc := v.callback(u.Query().Get("state"), "the-code")
 	require.Equal(t, http.StatusFound, code)
-	require.Equal(t, "luminavault://connected-apps/aaru?status=connected", loc)
+	require.True(t, strings.HasPrefix(loc, "luminavault://connected-apps/aaru?status=authorized&completion="), loc)
 }
 
-func TestCallbackExchangeFailureRedirectsErrorForApp(t *testing.T) {
+func TestCompleteExchangeFailureIs502WithoutRemoteText(t *testing.T) {
 	v := setup(t, true)
-	webState := v.connectAaru(alice, `{"returnTo":"`+webOrigin+`/settings"}`)
-	appState := v.connectAaru(alice, "")
+	_, loc := v.callback(v.connectAaru(alice, ""), "secret-code")
+	handle := completionOf(t, loc)
 	v.as.mu.Lock()
 	v.as.tokenStatus = http.StatusBadRequest
 	v.as.mu.Unlock()
-	code, loc := v.callback(webState, "secret-code")
-	require.Equal(t, http.StatusFound, code)
-	require.Equal(t, webOrigin+"/settings?status=error", loc)
-	code, loc = v.callback(appState, "secret-code")
-	require.Equal(t, http.StatusFound, code)
-	require.Equal(t, "luminavault://connected-apps/aaru?status=error", loc)
+	rec := v.complete(alice, "aaru", handle)
+	require.Equal(t, http.StatusBadGateway, rec.Code)
+	require.JSONEq(t, `{"error":{"message":"Could not finish connecting Aaru. Connect it again."}}`, rec.Body.String())
+	require.NotContains(t, rec.Body.String(), v.as.srv.URL)
 	byID, _, _ := v.list(alice)
 	require.Equal(t, "disconnected", byID["aaru"].Status)
 }
@@ -462,8 +535,7 @@ func TestOAuthConnectWithoutPublicBaseURLIs503(t *testing.T) {
 func TestDeleteRevokesDeletesAndForgets(t *testing.T) {
 	v := setup(t, true)
 	ctx := context.Background()
-	code, _ := v.callback(v.connectAaru(alice, ""), "the-code")
-	require.Equal(t, http.StatusFound, code)
+	v.connectAaruFully(alice)
 	require.Equal(t, http.StatusUnauthorized, v.do("", http.MethodDelete, listPath+"/aaru", "").Code)
 
 	rec := v.do(v.jwt(alice), http.MethodDelete, listPath+"/aaru", "")
@@ -482,8 +554,7 @@ func TestDeleteRevokesDeletesAndForgets(t *testing.T) {
 	require.Len(t, v.as.revoked(), 1)
 
 	// A failing revocation endpoint does not block the disconnect.
-	code, _ = v.callback(v.connectAaru(alice, ""), "the-code")
-	require.Equal(t, http.StatusFound, code)
+	v.connectAaruFully(alice)
 	v.as.mu.Lock()
 	v.as.revokeStatus = http.StatusInternalServerError
 	v.as.mu.Unlock()
