@@ -17,7 +17,7 @@ import (
 // that ran a connected-app tool. Such a turn can quote another app's data, so
 // it is never replayed to a model: historyMessages skips it. The user still
 // reads it in their own history.
-const OriginConnectedApp = "connected_app"
+const OriginConnectedApp = quickassistant.OriginConnectedApp
 
 // ConnectedApps is the user's connected first-party apps as tool sources
 // (connectedapps.Service). user is always the person asking, never a vault.

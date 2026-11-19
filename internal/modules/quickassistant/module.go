@@ -152,7 +152,7 @@ func (m *Module) confirmAction(ctx context.Context, id, user uuid.UUID) (Resolut
 			m.log.WarnContext(ctx, "quick assistant action not marked failed", "error_type", fmt.Sprintf("%T", err))
 		}
 	}
-	m.appendLine(ctx, claimed.ConversationID, message)
+	m.appendLine(ctx, claimed.ConversationID, message, claimed.Origin)
 	status := StatusConfirmed
 	if !ok {
 		status = StatusFailed
@@ -191,15 +191,15 @@ func (m *Module) cancel(c *echo.Context) error {
 		return errActionNotFound
 	}
 	ctx := c.Request().Context()
-	conversation, err := m.store.Cancel(ctx, id, user)
+	cancelled, err := m.store.CancelAction(ctx, id, user)
 	if err != nil {
 		return err
 	}
-	if conversation != nil {
+	if cancelled != nil {
 		// The conversation must not end on "waiting for your confirmation",
 		// which invites the model to propose it again. The row already says
 		// cancelled, so a hang-up must not drop the line (ruling 55).
-		m.appendLine(context.WithoutCancel(ctx), *conversation, cancelledLine)
+		m.appendLine(context.WithoutCancel(ctx), cancelled.ConversationID, cancelledLine, cancelled.Origin)
 		return wire.JSON(c, http.StatusOK, Resolution{Status: StatusCancelled, Message: cancelledLine})
 	}
 	_, found, err := m.store.Status(ctx, id, user)
@@ -288,10 +288,12 @@ func (m *Module) forgetMemory(ctx context.Context, args map[string]any, vault, u
 
 // appendLine is the line the conversation keeps. Written straight to the
 // transcript, so it never goes through the indexing a chat reply gets (ruling
-// 28). A failure is logged: the action has already been resolved.
-func (m *Module) appendLine(ctx context.Context, conversation uuid.UUID, text string) {
+// 28). A failure is logged: the action has already been resolved. origin is
+// the proposing turn's: a line from a connected-app turn can name that app's
+// data ("Added <title> to your calendar"), so it is flagged as the turn was.
+func (m *Module) appendLine(ctx context.Context, conversation uuid.UUID, text string, origin *string) {
 	if err := m.q.AppendAssistantMessage(ctx, db.AppendAssistantMessageParams{
-		ID: uuid.New(), ConversationID: conversation, Content: text,
+		ID: uuid.New(), ConversationID: conversation, Content: text, Origin: origin,
 	}); err != nil {
 		m.log.WarnContext(ctx, "quick assistant confirmation line not saved", "error_type", fmt.Sprintf("%T", err))
 	}

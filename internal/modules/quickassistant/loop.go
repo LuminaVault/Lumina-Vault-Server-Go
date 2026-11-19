@@ -27,6 +27,10 @@ const (
 	refusal      = "That tool is not available. Do not try it again."
 	badArguments = "The tool did not run: its arguments were not valid JSON."
 	tooManyCalls = "The tool did not run: too many tools were called in one step."
+	// connectedAppWriteRefused answers a write that would run without a tap,
+	// asked for after a connected app's data entered the turn. Fixed text: it
+	// never repeats the arguments.
+	connectedAppWriteRefused = "The tool did not run: nothing is saved or changed in a turn that read a connected app. Tell the user it was not saved."
 )
 
 // ToolResult is QuickAssistantToolResult: what the model reads back, and the
@@ -98,6 +102,17 @@ func (r Reply) Indexable() bool {
 type Outcome struct {
 	Reply      *Reply
 	PreDecided *llm.Decision
+}
+
+// OriginConnectedApp is conversation_messages.origin for everything a turn
+// that ran a connected-app tool leaves in the conversation: its two rows and
+// the line a confirm or cancel of one of its cards writes later.
+const OriginConnectedApp = "connected_app"
+
+// connectedAppNoter is a base runner that wants to know a connected app's
+// data has entered the turn (Runner does, to mark what it proposes after).
+type connectedAppNoter interface {
+	NoteConnectedApp()
 }
 
 // TurnOptions is what one turn adds to the service's own tools: the caller's
@@ -373,6 +388,15 @@ func (t *turn) runCall(index int, c wireToolCall) string {
 	if rejection := rejection(index, name, ok, extra); rejection != "" {
 		return rejection
 	}
+	// Once a connected app has answered, the model holds another app's data.
+	// A write that needs no tap could copy it into a memory, a reminder, a
+	// space or a file, which later prompts on any provider would read. None
+	// of those tools has a confirm path, so they are refused for the rest of
+	// the turn. Calls that ran before the app answered stand; reads and the
+	// tools that wait for Confirm are unaffected.
+	if t.usedConnectedApp && !extra && WritesWithoutConfirm(name) {
+		return connectedAppWriteRefused
+	}
 	writeKey := ""
 	if IsWrite(name) {
 		writeKey = writeKeyFor(name, args)
@@ -388,6 +412,9 @@ func (t *turn) runCall(index int, c wireToolCall) string {
 		// Another app's data about the caller: personal, whatever the tool.
 		t.ranPersonalTool, t.usedConnectedApp = true, true
 		runner = t.extraRunner
+		if noter, ok := t.tools.(connectedAppNoter); ok {
+			noter.NoteConnectedApp()
+		}
 	}
 	// A started tool runs to its result, as under Swift's cooperative
 	// cancellation: a disconnect must not abort a write half-way or let it

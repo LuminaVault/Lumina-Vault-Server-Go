@@ -63,6 +63,12 @@ func IsWrite(name string) bool {
 	}
 }
 
+// WritesWithoutConfirm reports whether the tool changes something the moment
+// the model asks, with no tap from the user: a Run-class write.
+func WritesWithoutConfirm(name string) bool {
+	return ActionFor(name) == Run && IsWrite(name)
+}
+
 // ChangesApp reports whether the tool changes spaces, files or a memory's
 // text. A reply from a turn where one was asked for describes that change
 // ("Created the space Health"), which is not something to remember.

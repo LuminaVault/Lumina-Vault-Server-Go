@@ -1914,3 +1914,117 @@ func TestExtraToolArgumentsAndResultsAreNotLogged(t *testing.T) {
 		}
 	}
 }
+
+// MARK: - No silent writes once a connected app has answered (R28)
+
+// toolResults is each tool message of a payload, as "name: content".
+func toolResults(t *testing.T, payload []byte) []string {
+	t.Helper()
+	var out []string
+	for _, m := range toolMessages(t, payload) {
+		name, _ := m["name"].(string)
+		content, _ := m["content"].(string)
+		out = append(out, name+": "+content)
+	}
+	return out
+}
+
+// notingRunner is a base runner that is told when a connected app ran.
+type notingRunner struct {
+	recordingRunner
+	noted int
+}
+
+func (r *notingRunner) NoteConnectedApp() { r.noted++ }
+
+func TestWritesAfterAConnectedAppAnswerAreRefused(t *testing.T) {
+	tr := newTransport(paidDecision(1000),
+		toolsStep(call("c1", "aaru__read_library", `{}`)),
+		toolsStep(
+			call("c2", "memory_save", `{"content":"SECRET-ARG Severance"}`),
+			call("c3", "space_create", `{"name":"SECRET-ARG Shows"}`),
+			call("c4", "search", `{"query":"dune"}`),
+			call("c5", "calendar_create", `{"title":"Finale","start":"2030-01-01T09:00:00"}`)),
+		toolsStep(call("c6", "app_reminder_create", `{"title":"SECRET-ARG"}`), call("c7", "space_update", `{}`), call("c8", "file_move", `{}`)),
+		textStep("Nothing was saved."))
+	base := &notingRunner{}
+	extra := &recordingRunner{results: map[string]ToolResult{"aaru__read_library": {ModelContent: "LIBRARY"}}}
+	h := newHarness(tr)
+
+	reply := mustReply(t, h.answerWith(base, aaruOptions(extra)))
+
+	// Reads and the tool that waits for Confirm still reach the runner; no
+	// write that needs no tap does.
+	if got := base.names(); !reflect.DeepEqual(got, []string{"search", "calendar_create"}) {
+		t.Errorf("base runner ran %v", got)
+	}
+	if base.noted != 1 {
+		t.Errorf("the base runner was told %d times", base.noted)
+	}
+	sent := tr.sent()
+	if got, want := toolResults(t, sent[2])[1:], []string{
+		"memory_save: " + connectedAppWriteRefused,
+		"space_create: " + connectedAppWriteRefused,
+		"search: result of search",
+		"calendar_create: result of calendar_create",
+	}; !reflect.DeepEqual(got, want) {
+		t.Errorf("round 2 results = %v", got)
+	}
+	if got := toolResults(t, sent[3]); !reflect.DeepEqual(got[len(got)-3:], []string{
+		"app_reminder_create: " + connectedAppWriteRefused,
+		"space_update: " + connectedAppWriteRefused,
+		"file_move: " + connectedAppWriteRefused,
+	}) {
+		t.Errorf("round 3 results = %v", got)
+	}
+	if strings.Contains(connectedAppWriteRefused, "SECRET-ARG") {
+		t.Error("the refusal repeats an argument")
+	}
+	// The refused calls ran nothing, so they are not counted.
+	if !reply.UsedConnectedApp || reply.ToolCallCount != 3 || reply.RanAppAction {
+		t.Errorf("reply = %+v", reply)
+	}
+}
+
+// A write asked for before the app answered holds no app data: it runs.
+func TestAWriteBeforeTheConnectedAppAnswerStillRuns(t *testing.T) {
+	tr := newTransport(paidDecision(1000),
+		toolsStep(
+			call("c1", "memory_save", `{"content":"mine"}`),
+			call("c2", "aaru__read_library", `{}`),
+			call("c3", "memory_save", `{"content":"theirs"}`)),
+		textStep("Done."))
+	base := &recordingRunner{}
+	h := newHarness(tr)
+
+	mustReply(t, h.answerWith(base, aaruOptions(&recordingRunner{})))
+
+	if got := base.names(); !reflect.DeepEqual(got, []string{"memory_save"}) {
+		t.Fatalf("base runner ran %v", got)
+	}
+	if got := base.calls[0].args["content"]; got != "mine" {
+		t.Errorf("the write that ran had %v", got)
+	}
+	if got := toolResults(t, tr.sent()[1]); got[len(got)-1] != "memory_save: "+connectedAppWriteRefused {
+		t.Errorf("results = %v", got)
+	}
+}
+
+// Offering the tools changes nothing: only one having run does.
+func TestAWriteInATurnThatRanNoConnectedAppStillRuns(t *testing.T) {
+	for name, opts := range map[string]TurnOptions{"no extras": {}, "extras offered": aaruOptions(&recordingRunner{})} {
+		tr := newTransport(paidDecision(1000),
+			toolsStep(call("c1", "memory_save", `{"content":"mine"}`), call("c2", "space_create", `{"name":"Shows"}`)),
+			textStep("Saved."))
+		base := &notingRunner{}
+
+		reply := mustReply(t, newHarness(tr).answerWith(base, opts))
+
+		if got := base.names(); !reflect.DeepEqual(got, []string{"memory_save", "space_create"}) {
+			t.Errorf("%s: base runner ran %v", name, got)
+		}
+		if base.noted != 0 || reply.UsedConnectedApp {
+			t.Errorf("%s: noted %d, reply %+v", name, base.noted, reply)
+		}
+	}
+}

@@ -4,8 +4,8 @@
 
 -- name: InsertPendingAction :exec
 INSERT INTO assistant_pending_actions
-    (id, tenant_id, vault_id, conversation_id, tool, args, summary, status, expires_at, created_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8, NOW());
+    (id, tenant_id, vault_id, conversation_id, tool, args, summary, status, expires_at, origin, created_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8, $9, NOW());
 
 -- name: ClaimPendingAction :one
 -- RETURNING sees the row after the UPDATE, whose args are already cleared, so
@@ -21,12 +21,12 @@ UPDATE assistant_pending_actions AS a
 SET status = 'confirmed', args = '{}'::jsonb, summary = ''
 FROM claimed
 WHERE a.id = claimed.id
-RETURNING a.tool, a.vault_id, a.conversation_id, claimed.args AS claimed_args;
+RETURNING a.tool, a.vault_id, a.conversation_id, a.origin, claimed.args AS claimed_args;
 
 -- name: CancelPendingAction :one
 UPDATE assistant_pending_actions SET status = 'cancelled', args = '{}'::jsonb, summary = ''
 WHERE id = $1 AND tenant_id = $2 AND status = 'pending'
-RETURNING conversation_id;
+RETURNING conversation_id, origin;
 
 -- name: MarkPendingActionFailed :exec
 UPDATE assistant_pending_actions SET status = 'failed', args = '{}'::jsonb, summary = ''
@@ -45,10 +45,12 @@ WHERE id = $1 AND tenant_id = $2;
 -- QuickAssistantActionsController.appendMessage). Written straight to the
 -- transcript, so it is never indexed (ruling 28); the conversation moves up
 -- the inbox, which sorts by updated_at. Columns as chat's insertMessage.
+-- origin is the proposing turn's: 'connected_app' keeps the line out of every
+-- later prompt, as it keeps the turn itself out.
 WITH inserted AS (
     INSERT INTO conversation_messages
-        (id, conversation_id, role, content, source_memory_ids, parallel_execution_id, local_execution_id, tool_call_count, created_at)
-    VALUES (@id, @conversation_id, 'assistant', @content, '{}'::uuid[], NULL, NULL, 0, NOW())
+        (id, conversation_id, role, content, source_memory_ids, parallel_execution_id, local_execution_id, tool_call_count, origin, created_at)
+    VALUES (@id, @conversation_id, 'assistant', @content, '{}'::uuid[], NULL, NULL, 0, sqlc.narg('origin'), NOW())
     RETURNING conversation_id
 )
 UPDATE conversations SET updated_at = NOW()

@@ -23,6 +23,8 @@ type PendingAction struct {
 	Args                                  map[string]any
 	Summary                               string
 	ExpiresAt                             time.Time
+	// Origin is the proposing turn's origin (OriginConnectedApp), or nil.
+	Origin *string
 }
 
 // ClaimedAction is what a claimed row held, read in the statement that claimed
@@ -32,6 +34,14 @@ type ClaimedAction struct {
 	VaultID        uuid.UUID
 	ConversationID uuid.UUID
 	Args           map[string]any
+	// Origin is the proposing turn's origin, for the line the confirm leaves.
+	Origin *string
+}
+
+// CancelledAction is where a cancelled action's line goes, and its origin.
+type CancelledAction struct {
+	ConversationID uuid.UUID
+	Origin         *string
 }
 
 // Store is the pending-action table. Every transition out of pending is one
@@ -59,7 +69,7 @@ func (s *Store) Insert(ctx context.Context, a PendingAction) error {
 	}
 	return s.q.InsertPendingAction(ctx, db.InsertPendingActionParams{
 		ID: a.ID, TenantID: a.TenantID, VaultID: a.VaultID, ConversationID: a.ConversationID,
-		Tool: a.Tool, Args: raw, Summary: a.Summary, ExpiresAt: a.ExpiresAt,
+		Tool: a.Tool, Args: raw, Summary: a.Summary, ExpiresAt: a.ExpiresAt, Origin: a.Origin,
 	})
 }
 
@@ -77,12 +87,21 @@ func (s *Store) Claim(ctx context.Context, id, tenant uuid.UUID) (*ClaimedAction
 	if err := json.Unmarshal(row.ClaimedArgs, &args); err != nil || args == nil {
 		args = map[string]any{} // unreadable args behave as none, as Swift's `?? [:]`
 	}
-	return &ClaimedAction{Tool: row.Tool, VaultID: row.VaultID, ConversationID: row.ConversationID, Args: args}, nil
+	return &ClaimedAction{Tool: row.Tool, VaultID: row.VaultID, ConversationID: row.ConversationID, Args: args, Origin: row.Origin}, nil
 }
 
 // Cancel moves a pending action to cancelled and returns its conversation. Nil
 // when it was not pending (or is not this tenant's).
 func (s *Store) Cancel(ctx context.Context, id, tenant uuid.UUID) (conversation *uuid.UUID, err error) {
+	c, err := s.CancelAction(ctx, id, tenant)
+	if c == nil || err != nil {
+		return nil, err
+	}
+	return &c.ConversationID, nil
+}
+
+// CancelAction is Cancel that also returns the proposing turn's origin.
+func (s *Store) CancelAction(ctx context.Context, id, tenant uuid.UUID) (*CancelledAction, error) {
 	c, err := s.q.CancelPendingAction(ctx, db.CancelPendingActionParams{ID: id, TenantID: tenant})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
@@ -90,7 +109,7 @@ func (s *Store) Cancel(ctx context.Context, id, tenant uuid.UUID) (conversation 
 	if err != nil {
 		return nil, err
 	}
-	return &c, nil
+	return &CancelledAction{ConversationID: c.ConversationID, Origin: c.Origin}, nil
 }
 
 // MarkFailed moves a confirmed action whose execution did not happen or did not

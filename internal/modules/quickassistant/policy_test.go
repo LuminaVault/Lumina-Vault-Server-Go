@@ -3,6 +3,7 @@ package quickassistant
 import (
 	"encoding/json"
 	"os"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -76,6 +77,28 @@ func TestEveryCatalogToolIsClassifiedDeliberately(t *testing.T) {
 		default:
 			require.Equal(t, Refused, ActionFor(n), n)
 		}
+	}
+}
+
+// R28: every offered tool that writes and is not parked for Confirm is one
+// the loop refuses once a connected app has answered. A new write tool that
+// is classified Run but left out of IsWrite would slip past that gate.
+func TestEveryUnconfirmedWriteIsGated(t *testing.T) {
+	gated := map[string]bool{}
+	for _, tool := range Definitions(DefinitionOptions{DeviceWrites: true, AppActions: true}) {
+		if tool.Writes && ActionFor(tool.Name) == Run && !WritesWithoutConfirm(tool.Name) {
+			t.Errorf("%s writes without Confirm and is not gated", tool.Name)
+		}
+		if !tool.Writes && WritesWithoutConfirm(tool.Name) {
+			t.Errorf("%s is gated as a write but its definition says it never writes", tool.Name)
+		}
+		if WritesWithoutConfirm(tool.Name) {
+			gated[tool.Name] = true
+		}
+	}
+	want := map[string]bool{"memory_save": true, "app_reminder_create": true, "space_create": true, "space_update": true, "file_move": true}
+	if !reflect.DeepEqual(gated, want) {
+		t.Errorf("gated = %v", gated)
 	}
 }
 

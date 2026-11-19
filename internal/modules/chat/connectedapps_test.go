@@ -4,9 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"lumina/internal/auth"
+	"lumina/internal/config"
 	"lumina/internal/connectedapps"
+	"lumina/internal/entitlement"
+	"lumina/internal/httpserver"
 	"lumina/internal/llm"
 	"lumina/internal/modules/quickassistant"
+	"lumina/internal/ratelimit"
 	"net/http"
 	"strings"
 	"sync"
@@ -373,6 +378,102 @@ func TestConnectedAppTurnNeverReachesNonAnthropicAdapter(t *testing.T) {
 	_, calls := apps.seen()
 	assert.Len(t, calls, 1)
 	assert.Equal(t, []string{"user:connected_app", "assistant:connected_app"}, q.origins(conversation))
+}
+
+// MARK: - What a connected-app turn may leave behind (R28, R29)
+
+func (q *qa) memories(tenant uuid.UUID) int {
+	return q.count(`SELECT count(*) FROM memories WHERE tenant_id = $1`, tenant)
+}
+
+// After the app has answered, a save needs no tap, so it does not happen:
+// a saved memory would be read back into later prompts on any provider.
+func TestMemorySaveAfterAConnectedAppAnswerWritesNothing(t *testing.T) {
+	q, _, adapter, _, user, conversation := connectedQA(t,
+		call("aaru__read_library", "{}"),
+		call("memory_save", `{"content":"LIBRARY-ROW Severance season 2"}`),
+		say("I could not save that."))
+
+	fs := q.send(user, conversation, body(qaBody{content: "save what I am watching"}))
+
+	assert.Equal(t, "I could not save that.", tokens(fs))
+	assert.False(t, hasFrame(fs, "assistant_action"))
+	assert.Equal(t, 0, q.memories(user))
+	assert.Equal(t, 0, q.indexJobs(user))
+	payloads := adapter.completionPayloads()
+	require.Len(t, payloads, 3)
+	_, lastTool := parts(t, payloads[2])
+	require.NotNil(t, lastTool)
+	assert.Contains(t, *lastTool, "did not run")
+	assert.NotContains(t, *lastTool, "LIBRARY-ROW")
+	assert.Equal(t, []string{"user:connected_app", "assistant:connected_app"}, q.origins(conversation))
+}
+
+// The same save in a turn where no app tool ran is what it always was.
+func TestMemorySaveWithoutAConnectedAppAnswerStillWrites(t *testing.T) {
+	q, apps, _, _, user, conversation := connectedQA(t,
+		call("memory_save", `{"content":"I like slow television"}`), say("Saved."))
+
+	q.send(user, conversation, body(qaBody{content: "remember that I like slow television"}))
+
+	_, calls := apps.seen()
+	assert.Empty(t, calls)
+	assert.Equal(t, 1, q.memories(user))
+	assert.Equal(t, []string{"user:", "assistant:"}, q.origins(conversation))
+}
+
+// A card proposed in a connected-app turn, confirmed later: its line is
+// flagged like the turn and no later prompt reads it.
+func TestAConfirmLineFromAConnectedAppTurnIsFlaggedAndNotReplayed(t *testing.T) {
+	q, _, adapter, router, user, conversation := connectedQA(t, say("unused"))
+	deps := q.module.opts.QuickAssistant.Deps
+	saved := quickassistant.NewRunner(deps, user, user, nil, nil, nil).
+		Run(context.Background(), "memory_save", map[string]any{"content": "an old note"})
+	require.NotContains(t, saved.ModelContent, "did not run")
+	var memoryID uuid.UUID
+	require.NoError(t, q.pool.QueryRow(context.Background(), `SELECT id FROM memories WHERE tenant_id = $1`, user).Scan(&memoryID))
+	adapter.steps = []qaStep{
+		call("aaru__read_library", "{}"),
+		call("memory_forget", `{"memoryID":"`+memoryID.String()+`"}`),
+		say("Confirm below."),
+	}
+
+	fs := q.send(user, conversation, body(qaBody{content: "forget my note about this show"}))
+
+	require.True(t, hasFrame(fs, "assistant_action"))
+	var actionID uuid.UUID
+	var origin *string
+	require.NoError(t, q.pool.QueryRow(context.Background(),
+		`SELECT id, origin FROM assistant_pending_actions WHERE tenant_id = $1`, user).Scan(&actionID, &origin))
+	require.NotNil(t, origin)
+	assert.Equal(t, OriginConnectedApp, *origin)
+
+	// The confirm route, as cmd/App mounts it beside chat.
+	users := auth.PGUsers(q.pool)
+	actions, err := quickassistant.New(q.pool, deps, quickassistant.Options{
+		Identify: auth.Identify(testKeys, users),
+		Gate:     entitlement.Middleware(q.pool, entitlement.MemoryQuery, false, nil),
+		Limits:   ratelimit.NewStore(),
+	})
+	require.NoError(t, err)
+	confirm := env{t: t, pool: q.pool, e: httpserver.New(config.Config{}, httpserver.Deps{Auth: auth.Middleware(testKeys, users), Modules: []httpserver.Module{actions}})}
+	rec := confirm.do(user, http.MethodPost, "/v1/assistant/actions/"+actionID.String()+"/confirm", "")
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.Contains(t, rec.Body.String(), "Forgot that memory.")
+
+	assert.Equal(t, []string{"user:connected_app", "assistant:connected_app", "assistant:connected_app"}, q.origins(conversation))
+	assert.Equal(t, "Forgot that memory.", contents(q.stored(conversation))[2])
+
+	router.decision = decision(gatewayRoute)
+	q.send(user, conversation, `{"content":"classic follow up"}`)
+
+	requests := q.gateway.all()
+	require.Len(t, requests, 1)
+	var history []string
+	for _, m := range requests[0].Messages[1:] {
+		history = append(history, m.Role+":"+m.Content)
+	}
+	assert.Equal(t, []string{"user:classic follow up"}, history)
 }
 
 // MARK: - Mapping
