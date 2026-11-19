@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"lumina/internal/connectedapps"
 	"lumina/internal/llm"
@@ -69,19 +70,24 @@ func (r connectedAppRunner) Run(ctx context.Context, name string, args map[strin
 	return quickassistant.ToolResult{ModelContent: out}
 }
 
+// connectedAppToolsDeadline bounds the load of the turn's connected-app tools
+// (R32): an app that is slow or down costs the turn at most this long, and
+// then only its app tools.
+const connectedAppToolsDeadline = 4 * time.Second
+
 // connectedAppOptions is the turn's connected-app tools, loaded for the
 // person asking (t.actor), whichever vault the turn reads. No service, no
-// connected app or a failed load all give the zero options: an ordinary turn,
-// not pinned to Anthropic.
+// connected app, a failed load or one that passes the deadline all give the
+// zero options: an ordinary turn, not pinned to Anthropic.
 func (m *Module) connectedAppOptions(ctx context.Context, t turn) quickassistant.TurnOptions {
 	apps := m.opts.ConnectedApps
 	if apps == nil {
 		return quickassistant.TurnOptions{}
 	}
-	loaded, err := apps.Tools(ctx, t.actor, nil)
-	if err != nil {
+	loaded, kind := m.loadConnectedTools(ctx, apps, t.actor)
+	if kind != "" {
 		// The kind only: the error text can hold store or network detail.
-		m.log.WarnContext(ctx, "connected app tools not loaded; turn runs without them", "kind", fmt.Sprintf("%T", err))
+		m.log.WarnContext(ctx, "connected app tools not loaded; turn runs without them", "kind", kind)
 		return quickassistant.TurnOptions{}
 	}
 	tools := connectedTools(loaded)
@@ -91,6 +97,47 @@ func (m *Module) connectedAppOptions(ctx context.Context, t turn) quickassistant
 	// Offering the tools is what pins the turn. AnthropicOnly is left unset: it
 	// would pin a turn whose tools the loop dropped at its own entry guard.
 	return quickassistant.TurnOptions{ExtraTools: tools, ExtraRunner: connectedAppRunner{apps: apps, actor: t.actor}}
+}
+
+// loadConnectedTools asks the service for the actor's tools and waits no
+// longer than the deadline. It does not trust the service to honour the
+// context (a refresh waits on a lock that knows no deadline), so the load
+// runs beside the wait; a late answer is dropped. kind is "" on success, else
+// a word for the log: never the error's text.
+func (m *Module) loadConnectedTools(ctx context.Context, apps ConnectedApps, actor uuid.UUID) (tools []connectedapps.AppTool, kind string) {
+	deadline := connectedAppToolsDeadline
+	if m.appToolsDeadline > 0 {
+		deadline = m.appToolsDeadline
+	}
+	ctx, cancel := context.WithTimeout(ctx, deadline)
+	defer cancel()
+	type result struct {
+		tools []connectedapps.AppTool
+		kind  string
+	}
+	done := make(chan result, 1) // buffered: a late answer has nobody waiting
+	go func() {
+		defer func() {
+			if recover() != nil {
+				done <- result{kind: "panic"}
+			}
+		}()
+		loaded, err := apps.Tools(ctx, actor, nil)
+		if err != nil {
+			done <- result{kind: fmt.Sprintf("%T", err)}
+			return
+		}
+		done <- result{tools: loaded}
+	}()
+	select {
+	case r := <-done:
+		return r.tools, r.kind
+	case <-ctx.Done():
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return nil, "timeout"
+		}
+		return nil, "cancelled"
+	}
 }
 
 // quickTurn is QuickAssistantLoop: one Quick Assistant turn, ready to run

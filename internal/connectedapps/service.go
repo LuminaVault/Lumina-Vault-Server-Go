@@ -13,7 +13,16 @@ import (
 	"github.com/google/uuid"
 )
 
-const toolCacheTTL = 5 * time.Minute
+const (
+	toolCacheTTL = 5 * time.Minute
+	// toolFailureTTL is how long an app whose tool list could not be loaded
+	// is left alone, so a down app is not asked again on every turn.
+	toolFailureTTL = 30 * time.Second
+)
+
+// errRecentFailure is remoteTools' answer while an app's last failed tool
+// load is younger than toolFailureTTL. No request is made.
+var errRecentFailure = errors.New("connectedapps: tools failed to load recently")
 
 // ErrToolNotAllowed means the tool name is malformed, names an unknown app or
 // is not on the app's read-only allowlist.
@@ -56,6 +65,8 @@ type Service struct {
 
 	mu    sync.Mutex
 	cache map[cacheKey]cacheEntry
+	// failed is, per (user, app), when a failed tool load stops counting.
+	failed map[cacheKey]time.Time
 }
 
 func NewService(reg Registry, store *Store, oauth *OAuth, client *Client, log *slog.Logger) *Service {
@@ -64,7 +75,7 @@ func NewService(reg Registry, store *Store, oauth *OAuth, client *Client, log *s
 	}
 	return &Service{
 		reg: reg, store: store, oauth: oauth, client: client, log: log,
-		now: time.Now, cache: map[cacheKey]cacheEntry{},
+		now: time.Now, cache: map[cacheKey]cacheEntry{}, failed: map[cacheKey]time.Time{},
 	}
 }
 
@@ -77,10 +88,12 @@ func SplitName(name string) (appID, tool string, ok bool) {
 	return appID, tool, true
 }
 
-// Forget drops the cached tool list for a user's app (call on disconnect).
+// Forget drops the cached tool list for a user's app, and any remembered
+// failure to load it (call on disconnect).
 func (s *Service) Forget(user uuid.UUID, appID string) {
 	s.mu.Lock()
 	delete(s.cache, cacheKey{user, appID})
+	delete(s.failed, cacheKey{user, appID})
 	s.mu.Unlock()
 }
 
@@ -121,6 +134,8 @@ func errKind(err error) string {
 		return "unauthorized"
 	case errors.Is(err, ErrNotConnected):
 		return "not_connected"
+	case errors.Is(err, errRecentFailure):
+		return "recent_failure"
 	case isTimeout(err):
 		return "timeout"
 	}
@@ -204,7 +219,7 @@ func (s *Service) Call(ctx context.Context, user uuid.UUID, name string, args ma
 
 // Tools lists the allowlisted tools of the user's connected apps, sorted by
 // app then tool. onlyApps limits the apps when non-nil. An app that fails is
-// skipped.
+// skipped, and not asked again for toolFailureTTL.
 func (s *Service) Tools(ctx context.Context, user uuid.UUID, onlyApps []string) ([]AppTool, error) {
 	rows, err := s.store.List(ctx, user)
 	if err != nil {
@@ -258,6 +273,13 @@ func (s *Service) remoteTools(ctx context.Context, user uuid.UUID, app App) ([]R
 		s.mu.Unlock()
 		return e.tools, nil
 	}
+	if until, ok := s.failed[key]; ok {
+		if s.now().Before(until) {
+			s.mu.Unlock()
+			return nil, errRecentFailure
+		}
+		delete(s.failed, key)
+	}
 	s.mu.Unlock()
 	var tools []RemoteTool
 	err := s.withToken(ctx, user, app, func(token string) error {
@@ -266,6 +288,14 @@ func (s *Service) remoteTools(ctx context.Context, user uuid.UUID, app App) ([]R
 		return lerr
 	})
 	if err != nil {
+		// The app, or the way to it, failed. Two things are not that: the
+		// caller going away, and a row that needs reconnecting, which Tools
+		// already skips by its status without a request.
+		if !errors.Is(err, context.Canceled) && !errors.Is(err, ErrNotConnected) {
+			s.mu.Lock()
+			s.failed[key] = s.now().Add(toolFailureTTL)
+			s.mu.Unlock()
+		}
 		return nil, err
 	}
 	s.mu.Lock()

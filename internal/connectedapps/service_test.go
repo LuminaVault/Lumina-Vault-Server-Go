@@ -30,6 +30,9 @@ type mcpApp struct {
 	tools     []string
 	result    string
 	rpcErr    string // when set, tools/call answers a JSON-RPC error with this message
+	// listHang, when set, makes tools/list wait until it is closed or the
+	// caller gives up: an app that is up but does not answer.
+	listHang chan struct{}
 }
 
 func newMCPApp(t *testing.T, ok ...string) *mcpApp {
@@ -69,6 +72,13 @@ func newMCPApp(t *testing.T, ok ...string) *mcpApp {
 			w.WriteHeader(http.StatusAccepted)
 		case "tools/list":
 			a.listCalls.Add(1)
+			if a.listHang != nil {
+				select {
+				case <-a.listHang:
+				case <-r.Context().Done():
+					return
+				}
+			}
 			var ts []map[string]any
 			for _, n := range a.tools {
 				ts = append(ts, map[string]any{"name": n, "description": "d", "inputSchema": map[string]any{"type": "object"}})
@@ -345,4 +355,98 @@ func TestCallHidesRemoteErrorText(t *testing.T) {
 	require.Error(t, err)
 	require.NotContains(t, err.Error(), "SECRET-REMOTE-DETAIL")
 	require.Equal(t, "Aaru could not answer right now.", err.Error())
+}
+
+// An app that does not answer costs one bounded wait, then is left alone for
+// 30s: the next turns neither wait for it nor call it.
+func TestToolsRemembersAFailedAppFor30s(t *testing.T) {
+	app := newMCPApp(t, "alice-token")
+	app.listHang = make(chan struct{})
+	var hang sync.Once
+	release := func() { hang.Do(func() { close(app.listHang) }) }
+	t.Cleanup(release)
+	e := newSvc(t, app, nil)
+	saveAlice(t, e, "alice-token")
+	now := time.Now()
+	e.svc.SetNow(func() time.Time { return now })
+
+	deadline, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	got, err := e.svc.Tools(deadline, alice, nil)
+	require.NoError(t, err, "a failing app never fails the call")
+	require.Empty(t, got)
+	require.Less(t, time.Since(start), 2*time.Second, "bounded by the caller's deadline")
+	require.EqualValues(t, 1, app.listCalls.Load())
+
+	// The app works again, but within 30s it is not asked.
+	release()
+	before := app.count()
+	now = now.Add(29 * time.Second)
+	got, err = e.svc.Tools(context.Background(), alice, nil)
+	require.NoError(t, err)
+	require.Empty(t, got)
+	require.Equal(t, before, app.count(), "no request at all to the app")
+
+	// The failure is per user: bob's own connection is asked.
+	exp := time.Now().Add(time.Hour)
+	require.NoError(t, e.store.Save(context.Background(), bob, connectedapps.Account{
+		AppID: "aaru", AccessToken: "alice-token", RefreshToken: "r", ExpiresAt: &exp,
+	}))
+	got, err = e.svc.Tools(context.Background(), bob, nil)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+
+	// A call is never held back by it.
+	out, err := e.svc.Call(context.Background(), alice, "aaru__read_library", nil)
+	require.NoError(t, err)
+	require.Equal(t, "the-secret-result", out)
+
+	// After 30s the app is asked again.
+	now = now.Add(2 * time.Second)
+	got, err = e.svc.Tools(context.Background(), alice, nil)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+}
+
+func TestForgetClearsARememberedFailure(t *testing.T) {
+	app := newMCPApp(t, "alice-token")
+	app.listHang = make(chan struct{})
+	e := newSvc(t, app, nil)
+	saveAlice(t, e, "alice-token")
+	deadline, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	got, err := e.svc.Tools(deadline, alice, nil)
+	require.NoError(t, err)
+	require.Empty(t, got)
+	close(app.listHang)
+
+	e.svc.Forget(alice, "aaru")
+	got, err = e.svc.Tools(context.Background(), alice, nil)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+}
+
+// The caller going away says nothing about the app: it is asked next time.
+func TestToolsDoesNotRememberACancelledLoad(t *testing.T) {
+	app := newMCPApp(t, "alice-token")
+	app.listHang = make(chan struct{})
+	e := newSvc(t, app, nil)
+	saveAlice(t, e, "alice-token")
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		for app.listCalls.Load() == 0 {
+			time.Sleep(5 * time.Millisecond)
+		}
+		cancel()
+	}()
+	got, err := e.svc.Tools(ctx, alice, nil)
+	require.NoError(t, err)
+	require.Empty(t, got)
+	close(app.listHang)
+
+	got, err = e.svc.Tools(context.Background(), alice, nil)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	require.EqualValues(t, 2, app.listCalls.Load())
 }

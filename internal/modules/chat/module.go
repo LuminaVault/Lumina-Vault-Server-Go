@@ -128,6 +128,9 @@ type Module struct {
 	// afterTurn runs when a stream's turn has finished, persistence included.
 	// Tests use it to wait for a turn whose client went away.
 	afterTurn func()
+	// appToolsDeadline replaces connectedAppToolsDeadline when positive. Tests
+	// set it to avoid a four second wait.
+	appToolsDeadline time.Duration
 }
 
 // New builds the module.

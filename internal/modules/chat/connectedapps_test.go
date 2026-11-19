@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"lumina/internal/auth"
 	"lumina/internal/config"
 	"lumina/internal/connectedapps"
@@ -16,6 +17,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -47,16 +49,25 @@ type stubApps struct {
 	mu       sync.Mutex
 	tools    map[uuid.UUID][]connectedapps.AppTool
 	toolsErr error
-	result   string
-	callErr  error
-	asked    []uuid.UUID
-	calls    []appCall
+	// toolsHang, when set, makes Tools wait until it is closed, whatever the
+	// context says: an app, or a lock, that does not answer.
+	toolsHang chan struct{}
+	result    string
+	callErr   error
+	asked     []uuid.UUID
+	calls     []appCall
 }
 
 func (s *stubApps) Tools(_ context.Context, user uuid.UUID, _ []string) ([]connectedapps.AppTool, error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.asked = append(s.asked, user)
+	hang := s.toolsHang
+	s.mu.Unlock()
+	if hang != nil {
+		<-hang
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.toolsErr != nil {
 		return nil, s.toolsErr
 	}
@@ -303,6 +314,52 @@ func TestConnectedAppToolLoadFailureRunsTheTurnWithoutThem(t *testing.T) {
 	assert.False(t, hasFrame(fs, "error"))
 	assert.Empty(t, appToolNames(adapter.completionPayloads()))
 	assert.Equal(t, []string{"user:", "assistant:"}, q.origins(conversation))
+}
+
+// A tool load that does not come back costs the turn a bounded wait and its
+// app tools, never its answer (R32). The stub ignores its context, as a held
+// lock would.
+func TestConnectedAppToolLoadPastTheDeadlineRunsTheTurnWithoutThem(t *testing.T) {
+	assert.Equal(t, 4*time.Second, connectedAppToolsDeadline)
+
+	q, apps, adapter, _, user, conversation := connectedQA(t, say("Still answered."))
+	apps.toolsHang = make(chan struct{})
+	t.Cleanup(func() { close(apps.toolsHang) })
+	q.module.appToolsDeadline = 150 * time.Millisecond
+
+	start := time.Now()
+	fs := q.send(user, conversation, body(qaBody{content: "hello there"}))
+
+	assert.Less(t, time.Since(start), 3*time.Second, "the turn waited about the deadline, not for the app")
+	assert.Equal(t, "Still answered.", tokens(fs))
+	assert.False(t, hasFrame(fs, "error"))
+	assert.Empty(t, appToolNames(adapter.completionPayloads()))
+	assert.Equal(t, []string{"user:", "assistant:"}, q.origins(conversation))
+	asked, calls := apps.seen()
+	assert.Equal(t, []uuid.UUID{user}, asked)
+	assert.Empty(t, calls)
+}
+
+// The deadline alone: the options come back empty at about the deadline, and
+// in time when the load is quick.
+func TestConnectedAppOptionsGivesUpAtTheDeadline(t *testing.T) {
+	user := uuid.New()
+	apps := &stubApps{tools: map[uuid.UUID][]connectedapps.AppTool{user: {aaruTool("read_library", objectSchema)}}}
+	m := &Module{opts: Options{ConnectedApps: apps}, log: slog.New(slog.DiscardHandler), appToolsDeadline: 100 * time.Millisecond}
+
+	got := m.connectedAppOptions(context.Background(), turn{actor: user})
+	require.Len(t, got.ExtraTools, 1)
+	require.NotNil(t, got.ExtraRunner)
+
+	apps.toolsHang = make(chan struct{})
+	defer close(apps.toolsHang)
+	start := time.Now()
+	got = m.connectedAppOptions(context.Background(), turn{actor: user})
+	elapsed := time.Since(start)
+	require.Empty(t, got.ExtraTools)
+	require.Nil(t, got.ExtraRunner)
+	require.GreaterOrEqual(t, elapsed, 100*time.Millisecond)
+	require.Less(t, elapsed, 2*time.Second)
 }
 
 // The tools belong to whoever is asking, never to the vault the turn reads.
