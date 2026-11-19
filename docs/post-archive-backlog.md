@@ -17,6 +17,9 @@ Read this before you pick up server work. When an item lands, strike it here in 
   test of the fixed behaviour.
 - Tests never use real API keys; use stub servers.
 - Staging talks to `hermes-stub-staging` and never to production Hermes.
+- No Hermes work of any kind, security fixes included (owner, 2026-11-18): Hermes is being retired and Lumina's AI
+  moves to Anthropic directly from this server. The CVE-2026-10221 upgrade was dropped; its fork PR
+  (LuminaVaultHermesAgent #23) was closed unmerged.
 
 ## Next: queued in this order
 
@@ -50,14 +53,16 @@ Found during the port, same batch:
   - ~~The lockout counter is not reset after expiry, and failure counters are racy.~~ Done (login; see
     "Login: timing, lock answer and failure count" in `docs/migration/cutover-log.md`).
   - ~~`mfa/resend` enumerates accounts.~~ Done (see "`mfa/resend` answers an unknown email like a known one" in
-    `docs/migration/cutover-log.md`). Register 409s enumerate emails and usernames: open, needs an owner decision.
+    `docs/migration/cutover-log.md`). Register 409s enumerate emails and usernames:
+    kept on purpose (owner decision 2026-11-18).
   - ~~Requesting a new code bypasses the per-row reset and verify locks.~~ Done.
   - ~~Codes are compared in non-constant time, and the logging sender writes OTP codes to logs.~~ Done (see
     "OTP codes: locks, comparison and logs" in `docs/migration/cutover-log.md`).
   - ~~A password reset does not invalidate access tokens.~~ Done (see "Password reset invalidates access tokens"
     in `docs/migration/cutover-log.md`).
   - ~~Refresh has no reuse detection and is not transactional.~~ Done (see "Refresh: atomic rotation, reuse
-    detection, one transaction" in `docs/migration/cutover-log.md`).
+    detection, one transaction" in `docs/migration/cutover-log.md`). Reuse revokes the login chain, not the tenant
+    (owner decision 2026-11-18; see "Refresh reuse revokes the login chain, not the tenant").
 - ~~**MCP `browse` `pathPrefix`.** The `path >= p AND path < p || U+FFFF` range matches nothing under en_US.utf8
   collation. Use `starts_with` or `COLLATE "C"`.~~ Done: see "MCP `browse` `pathPrefix`" in
   `docs/migration/cutover-log.md`.
@@ -66,25 +71,6 @@ Found during the port, same batch:
   Already true in Go: `usage_meter` has the primary key `(tenant_id, day, model)` (`schema-swift.sql`), and
   `internal/usagemeter` writes with `INSERT … ON CONFLICT (tenant_id, day, model) DO UPDATE` (since wave 4,
   `953181e`), so concurrent calls add to one row. Nothing to change.
-
-### 2. Hermes upgrade for CVE-2026-10221
-
-`hermes-production` runs the LuminaVaultHermesAgent fork 0.18.2 (image `ghcr.io/luminavault/hermes@sha256:9892ad09…`),
-which is affected. The image chain now runs:
-
-1. The fork's `luminavault-image.yml` publishes `ghcr.io/luminavault/luminavault-hermes-agent:sha-*`.
-2. In this repo, `docker/hermes.Dockerfile` pins that base by digest.
-3. This repo's `.github/workflows/hermes-image.yml` publishes `ghcr.io/luminavault/hermes`. It moved here from
-   LuminaVaultServer in #115; GHCR Actions access is granted.
-4. LuminaVaultInfra `apps/hermes/hermes.yaml` pins the digest in two containers. That is an owner-merged infra PR.
-
-Steps:
-
-1. Bump the fork to a patched release.
-2. Bump the `FROM` digest here, and confirm the Hermes Image run is green.
-3. Open the infra PR with the new digest.
-4. Smoke production: run a chat completion and an ingestion through Hermes.
-5. Rollback is reverting the infra PR.
 
 ### 3. ~~Knowledge extraction self-edge~~ Done
 
@@ -117,7 +103,7 @@ purpose.
 **What is left:**
 
 1. **Hand-written SQL.** About 108 non-test files still call `pool.Query`, `pool.QueryRow` or `pool.Exec` with
-   inline SQL. Examples: `internal/hermesmirror`, `internal/llm`, `internal/authservice`, `internal/workers`,
+   inline SQL. Examples: `internal/llm`, `internal/authservice`, `internal/workers`,
    `internal/modules/skills`, `internal/modules/workflows`, `internal/modules/ingestion/worker.go` and
    `internal/modules/knowledge/extraction.go`.
 2. **Schema source.** Every package points `schema:` at the `schema-swift.sql` snapshot, plus individual migrations

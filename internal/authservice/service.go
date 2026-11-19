@@ -72,6 +72,10 @@ type Service struct {
 	// dummyHash is a bcrypt hash at the service's cost, checked when a login names
 	// no account so that an unknown email costs as much as a wrong password.
 	dummyHash func() string
+	// families probes once for refresh_tokens.family_id (goose 00009); a
+	// database Swift migrated (parity) has none. Call it before opening a
+	// transaction: it reads through the pool.
+	families func() bool
 }
 
 // New returns the service. Senders default to the logging sender.
@@ -103,7 +107,16 @@ func New(pool *pgxpool.Pool, opt Options) *Service {
 		}
 		return h
 	})
-	return &Service{pool: pool, opt: opt, mfa: NewMFA(pool, opt.MFASender, opt.MFACodes, opt.Now), dummyHash: dummy}
+	log := opt.Log
+	families := sync.OnceValue(func() bool {
+		ok, err := auth.RefreshFamilyColumn(context.Background(), pool)
+		if err != nil {
+			log.Warn("could not probe refresh_tokens.family_id; refresh reuse revokes the whole tenant", "error", err)
+			return false
+		}
+		return ok
+	})
+	return &Service{pool: pool, opt: opt, mfa: NewMFA(pool, opt.MFASender, opt.MFACodes, opt.Now), dummyHash: dummy, families: families}
 }
 
 // User is the users row as AuthService reads it.
@@ -578,8 +591,9 @@ func (s *Service) ConfirmEmail(ctx context.Context, email, code string) error {
 
 // Refresh is DefaultAuthService.refresh: rotate (revoke, then issue), in one
 // transaction, so a failure part way leaves the old token usable rather than
-// the user signed out. A token reused after revocation revokes the tenant's
-// refresh tokens (auth.ConsumeRefreshToken) and is the usual 401. Swift was not
+// the user signed out. A token reused after revocation revokes its login chain,
+// or every refresh token of the tenant when it has none
+// (auth.ConsumeRefreshTokenFamily), and is the usual 401. Swift was not
 // transactional and had no reuse detection; fixed after the archive.
 func (s *Service) Refresh(ctx context.Context, refreshToken string) (*AuthResponse, error) {
 	// Whatever reads through the pool runs before the transaction opens, and
@@ -590,17 +604,22 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (*AuthRespon
 	if err != nil {
 		return nil, err
 	}
+	families := s.families()
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
-	tenant, err := auth.ConsumeRefreshToken(ctx, tx, refreshToken, s.opt.Now())
+	tenant, family, err := auth.ConsumeRefreshTokenFamily(ctx, tx, refreshToken, s.opt.Now(), families)
 	if errors.Is(err, auth.ErrRefreshReused) {
 		if err := tx.Commit(ctx); err != nil {
 			return nil, err
 		}
-		s.opt.Log.Warn("refresh token reused after revocation; revoked the tenant's refresh tokens", "tenant_id", ids.Upper(tenant))
+		scope := "tenant"
+		if family != uuid.Nil {
+			scope = "login chain"
+		}
+		s.opt.Log.Warn("refresh token reused after revocation; revoked its refresh tokens", "tenant_id", ids.Upper(tenant), "scope", scope)
 		return nil, ErrInvalidRefresh
 	}
 	if errors.Is(err, auth.ErrInvalidRefresh) {
@@ -616,7 +635,7 @@ func (s *Service) Refresh(ctx context.Context, refreshToken string) (*AuthRespon
 	if u == nil {
 		return nil, ErrInvalidRefresh
 	}
-	resp, err := s.issueTokensFor(ctx, tx, u, hpid)
+	resp, err := s.issueTokensFor(ctx, tx, u, hpid, family, families)
 	if err != nil {
 		return nil, err
 	}
@@ -706,13 +725,14 @@ func (s *Service) issueTokens(ctx context.Context, db auth.DB, u *User) (*AuthRe
 	if err != nil {
 		return nil, err
 	}
-	return s.issueTokensFor(ctx, db, u, hpid)
+	// A sign-in: uuid.Nil starts a new login chain.
+	return s.issueTokensFor(ctx, db, u, hpid, uuid.Nil, s.families())
 }
 
 // issueTokensFor is issueTokens with the hpid already looked up. Every query
 // goes through db, so Refresh can run it in its transaction without taking a
 // second pool connection.
-func (s *Service) issueTokensFor(ctx context.Context, db auth.DB, u *User, hpid string) (*AuthResponse, error) {
+func (s *Service) issueTokensFor(ctx context.Context, db auth.DB, u *User, hpid string, family uuid.UUID, families bool) (*AuthResponse, error) {
 	if err := s.applyTierOverrideAllowlist(ctx, db, u); err != nil {
 		return nil, err
 	}
@@ -725,7 +745,7 @@ func (s *Service) issueTokensFor(ctx context.Context, db auth.DB, u *User, hpid 
 	if err != nil {
 		return nil, err
 	}
-	refresh, err := auth.IssueRefreshToken(ctx, db, u.ID, s.opt.Now())
+	refresh, err := auth.IssueRefreshTokenInFamily(ctx, db, u.ID, family, families, s.opt.Now())
 	if err != nil {
 		return nil, err
 	}

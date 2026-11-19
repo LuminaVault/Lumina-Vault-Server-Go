@@ -46,18 +46,45 @@ type DB interface {
 }
 
 // IssueRefreshToken is the refresh half of issueTokens: a new token and its
-// row, expiring RefreshTokenLifetime from now.
+// row, expiring RefreshTokenLifetime from now. The row has no family.
 func IssueRefreshToken(ctx context.Context, db DB, tenant uuid.UUID, now time.Time) (string, error) {
+	return IssueRefreshTokenInFamily(ctx, db, tenant, uuid.Nil, false, now)
+}
+
+// IssueRefreshTokenInFamily is IssueRefreshToken for a login chain. families
+// says refresh_tokens.family_id exists (RefreshFamilyColumn); without it the
+// family is ignored. uuid.Nil starts a new family: sign-in passes it, and only
+// a rotation passes the family of the token it consumed.
+func IssueRefreshTokenInFamily(ctx context.Context, db DB, tenant, family uuid.UUID, families bool, now time.Time) (string, error) {
 	raw, err := NewRefreshToken()
 	if err != nil {
 		return "", err
 	}
-	_, err = db.Exec(ctx, `INSERT INTO refresh_tokens (id, tenant_id, token_hash, expires_at, revoked_at, created_at)
-		VALUES ($1, $2, $3, $4, NULL, $5)`, uuid.New(), tenant, HashRefreshToken(raw), now.Add(RefreshTokenLifetime), now)
+	if !families {
+		_, err = db.Exec(ctx, `INSERT INTO refresh_tokens (id, tenant_id, token_hash, expires_at, revoked_at, created_at)
+			VALUES ($1, $2, $3, $4, NULL, $5)`, uuid.New(), tenant, HashRefreshToken(raw), now.Add(RefreshTokenLifetime), now)
+	} else {
+		if family == uuid.Nil {
+			family = uuid.New()
+		}
+		_, err = db.Exec(ctx, `INSERT INTO refresh_tokens (id, tenant_id, token_hash, expires_at, revoked_at, created_at, family_id)
+			VALUES ($1, $2, $3, $4, NULL, $5, $6)`, uuid.New(), tenant, HashRefreshToken(raw), now.Add(RefreshTokenLifetime), now, family)
+	}
 	if err != nil {
 		return "", err
 	}
 	return raw, nil
+}
+
+// RefreshFamilyColumn reports whether refresh_tokens.family_id exists. goose
+// migration 00009 adds it; a database Swift migrated (parity) has none, and
+// there reuse keeps revoking the whole tenant. Probe it outside any
+// transaction: it reads through the pool.
+func RefreshFamilyColumn(ctx context.Context, pool DB) (bool, error) {
+	var ok bool
+	err := pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM information_schema.columns
+		WHERE table_schema = current_schema() AND table_name = 'refresh_tokens' AND column_name = 'family_id')`).Scan(&ok)
+	return ok, err
 }
 
 // RefreshReuseGrace is how long after its revocation a refresh token may be
@@ -66,45 +93,73 @@ func IssueRefreshToken(ctx context.Context, db DB, tenant uuid.UUID, now time.Ti
 // logged-out or reset token means it leaked.
 const RefreshReuseGrace = 30 * time.Second
 
-// ConsumeRefreshToken is the first half of AuthService.refresh: the matching
-// unrevoked row must be unexpired and its user must exist; it is revoked in the
-// same statement and its tenant returned for issueTokens. Two refreshes of one
-// token cannot both win.
-//
-// A token revoked more than RefreshReuseGrace ago is reuse: every live refresh
-// token of the tenant is revoked, so whoever holds the stolen chain has to sign
-// in again (and so does the user). Swift read, then revoked, with no reuse
-// detection; both fixed after the archive. db may be a transaction.
+// ConsumeRefreshToken is ConsumeRefreshTokenFamily without families: reuse
+// revokes every live refresh token of the tenant.
 func ConsumeRefreshToken(ctx context.Context, db DB, raw string, now time.Time) (uuid.UUID, error) {
+	tenant, _, err := ConsumeRefreshTokenFamily(ctx, db, raw, now, false)
+	return tenant, err
+}
+
+// ConsumeRefreshTokenFamily is the first half of AuthService.refresh: the
+// matching unrevoked row must be unexpired and its user must exist; it is
+// revoked in the same statement and its tenant and family (uuid.Nil when it has
+// none) returned for issueTokens. Two refreshes of one token cannot both win.
+//
+// A token revoked more than RefreshReuseGrace ago is reuse, and whoever holds
+// the stolen chain has to sign in again. With families (RefreshFamilyColumn),
+// only the reused token's login chain is revoked and the tenant's other
+// sessions stay signed in; a token without a family, or no families at all,
+// revokes every live refresh token of the tenant. Swift read, then revoked,
+// with no reuse detection; both fixed after the archive. db may be a
+// transaction.
+func ConsumeRefreshTokenFamily(ctx context.Context, db DB, raw string, now time.Time, families bool) (uuid.UUID, uuid.UUID, error) {
 	hash := HashRefreshToken(raw)
+	familyCol := "NULL::uuid"
+	if families {
+		familyCol = "r.family_id"
+	}
 	var tenant uuid.UUID
+	var family *uuid.UUID
 	err := db.QueryRow(ctx, `UPDATE refresh_tokens r SET revoked_at = $2
 		WHERE r.token_hash = $1 AND r.revoked_at IS NULL AND r.expires_at > $2
 		  AND EXISTS (SELECT 1 FROM users u WHERE u.id = r.tenant_id)
-		RETURNING r.tenant_id`, hash, now).Scan(&tenant)
+		RETURNING r.tenant_id, `+familyCol, hash, now).Scan(&tenant, &family)
 	if err == nil {
-		return tenant, nil
+		return tenant, deref(family), nil
 	}
 	if !errors.Is(err, pgx.ErrNoRows) {
-		return uuid.Nil, err
+		return uuid.Nil, uuid.Nil, err
 	}
 	var revokedAt *time.Time
-	err = db.QueryRow(ctx, `SELECT tenant_id, revoked_at FROM refresh_tokens WHERE token_hash = $1
-		ORDER BY revoked_at DESC NULLS LAST LIMIT 1`, hash).Scan(&tenant, &revokedAt)
+	err = db.QueryRow(ctx, `SELECT r.tenant_id, r.revoked_at, `+familyCol+` FROM refresh_tokens r WHERE r.token_hash = $1
+		ORDER BY r.revoked_at DESC NULLS LAST LIMIT 1`, hash).Scan(&tenant, &revokedAt, &family)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return uuid.Nil, ErrInvalidRefresh
+		return uuid.Nil, uuid.Nil, ErrInvalidRefresh
 	}
 	if err != nil {
-		return uuid.Nil, err
+		return uuid.Nil, uuid.Nil, err
 	}
 	if revokedAt != nil && revokedAt.Before(now.Add(-RefreshReuseGrace)) {
-		if _, err := db.Exec(ctx, `UPDATE refresh_tokens SET revoked_at = $2 WHERE tenant_id = $1 AND revoked_at IS NULL`,
-			tenant, now); err != nil {
-			return uuid.Nil, err
+		if family != nil {
+			_, err = db.Exec(ctx, `UPDATE refresh_tokens SET revoked_at = $3 WHERE tenant_id = $1 AND family_id = $2 AND revoked_at IS NULL`,
+				tenant, *family, now)
+		} else {
+			_, err = db.Exec(ctx, `UPDATE refresh_tokens SET revoked_at = $2 WHERE tenant_id = $1 AND revoked_at IS NULL`,
+				tenant, now)
 		}
-		return uuid.Nil, ErrRefreshReused
+		if err != nil {
+			return uuid.Nil, uuid.Nil, err
+		}
+		return tenant, deref(family), ErrRefreshReused
 	}
-	return uuid.Nil, ErrInvalidRefresh
+	return uuid.Nil, uuid.Nil, ErrInvalidRefresh
+}
+
+func deref(id *uuid.UUID) uuid.UUID {
+	if id == nil {
+		return uuid.Nil
+	}
+	return *id
 }
 
 // RefreshTokenTenant is the tenant a refresh token was issued to, whatever its
@@ -123,7 +178,7 @@ func RefreshTokenTenant(ctx context.Context, db DB, raw string) (uuid.UUID, bool
 }
 
 // ErrRefreshReused is ErrInvalidRefresh after reuse was detected and the
-// tenant's refresh tokens were revoked. errors.Is(ErrRefreshReused,
+// reused token's family (or, without one, the tenant's refresh tokens) was revoked. errors.Is(ErrRefreshReused,
 // ErrInvalidRefresh) holds, so callers answer the same 401.
 var ErrRefreshReused = fmt.Errorf("%w: reused after revocation", ErrInvalidRefresh)
 

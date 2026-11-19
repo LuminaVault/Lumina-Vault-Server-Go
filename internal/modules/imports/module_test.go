@@ -80,6 +80,13 @@ type env struct {
 
 func setup(t *testing.T) env {
 	t.Helper()
+	return setupWithGuard(t, nil)
+}
+
+// setupWithGuard is setup with a disk guard of the test's own; nil is one that
+// never refuses.
+func setupWithGuard(t *testing.T, guard *diskguard.Guard) env {
+	t.Helper()
 	pool := dbtest.Postgres(t)
 	require.NoError(t, migrations.Up(context.Background(), pool, migrations.SQL()))
 	root := t.TempDir()
@@ -93,7 +100,10 @@ func setup(t *testing.T) env {
 	})
 	service := imports.NewService(pool, noLinks{}, spaces.New(pool, paths, identify), paths, compile, nil)
 	indexer := chunkindex.NewIndexer(chunkindex.NewChunkRepository(pool), embedding.Deterministic{}, chunkindex.NewLinkRepository(pool))
-	ingest := imports.NewIngest(pool, service, repo, embedding.Deterministic{}, indexer, diskguard.New(root, 0, 0, diskguard.Options{}))
+	if guard == nil {
+		guard = diskguard.New(root, 0, 0, diskguard.Options{})
+	}
+	ingest := imports.NewIngest(pool, service, repo, embedding.Deterministic{}, indexer, guard)
 	module := imports.New(service, &imports.Categorizer{Service: service, Transport: transport, DefaultModel: "test"}, ingest, identify)
 	e := httpserver.New(config.Config{}, httpserver.Deps{Auth: auth.Middleware(keys, users), Modules: []httpserver.Module{module}})
 	return env{t: t, e: e, pool: pool, root: root, transport: transport}

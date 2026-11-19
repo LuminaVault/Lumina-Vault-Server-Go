@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"lumina/internal/memorycompile"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -107,4 +108,42 @@ func TestSwiftFloat(t *testing.T) {
 
 func TestToolErrorJSON(t *testing.T) {
 	require.JSONEq(t, `{"status":"error","reason":"nope"}`, toolErrorJSON("nope"))
+}
+
+// A memo output's manifest path may carry {date} and {slug}, as the bundled
+// daily-brief and reflection skills do. Unexpanded, daily-brief wrote
+// memos/{date}/daily-brief.md every day: a path the vault readers reject
+// (SanitizePath forbids braces), so the note could be neither read nor
+// trashed.
+func TestMemoOutputPath(t *testing.T) {
+	now := time.Date(2026, 11, 18, 7, 0, 0, 0, time.UTC)
+	p := func(s string) *string { return &s }
+	for _, tc := range []struct {
+		name, skill string
+		path        *string
+		want        string
+		usedPath    bool
+	}{
+		{"default when the manifest names no path", "daily-brief", nil, "memos/2026-11-18/daily-brief.md", false},
+		{"expands {date}", "daily-brief", p("memos/{date}/daily-brief.md"), "memos/2026-11-18/daily-brief.md", true},
+		{
+			"expands {slug} to the skill's slug", "Pattern Detector", p("reflections/{date}/patterns-{slug}.md"),
+			"reflections/2026-11-18/patterns-pattern-detector.md", true,
+		},
+		{"a literal path is kept", "daily-brief", p("memos/brief.md"), "memos/brief.md", true},
+		{
+			"an unknown placeholder falls back to the default", "daily-brief", p("memos/{week}/brief.md"),
+			"memos/2026-11-18/daily-brief.md", false,
+		},
+		{
+			"a path the readers reject falls back", "daily-brief", p("memos/../brief.md"),
+			"memos/2026-11-18/daily-brief.md", false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, used := memoOutputPath(tc.skill, tc.path, now)
+			require.Equal(t, tc.want, got)
+			require.Equal(t, tc.usedPath, used)
+		})
+	}
 }

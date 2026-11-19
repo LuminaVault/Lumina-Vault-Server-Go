@@ -1171,6 +1171,8 @@ func TestResponsesConformToSpec(t *testing.T) {
 		{http.MethodGet, "/v1/vault/property-types", nil, ""},
 		{http.MethodPut, "/v1/vault/property-types/status", jsonHeader, `{"type":"select","options":["Doing"]}`},
 		{http.MethodPost, "/v1/vault/query", jsonHeader, `{"scope":{"folder":"inbox"},"group":"status","limit":1}`},
+		{http.MethodPost, "/v1/vault/views", jsonHeader, `{"name":"Board","scope":{"folder":"inbox"},"columns":[{"property":"status","width":120}],"group":"status"}`},
+		{http.MethodGet, "/v1/vault/views", nil, ""},
 	} {
 		r := v.do(u, c.method, c.path, c.headers, []byte(c.body))
 		require.Contains(t, []int{http.StatusOK, http.StatusCreated}, r.code, "%s %s: %s", c.method, c.path, r.body)
