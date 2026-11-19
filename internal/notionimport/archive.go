@@ -215,8 +215,7 @@ func (a *Archive) openNested(f *zip.File, tmpDir string) ([]*zip.File, error) {
 
 // checkEntryPath refuses a name that would leave the export's root.
 func checkEntryPath(name string) error {
-	if name == "" || strings.HasPrefix(name, "/") || strings.ContainsRune(name, 0) ||
-		(len(name) > 1 && name[1] == ':') {
+	if name == "" || strings.HasPrefix(name, "/") || strings.ContainsRune(name, 0) || hasDrive(name) {
 		return limitf("the ZIP has an entry with an absolute path: %q", name)
 	}
 	for _, seg := range strings.Split(name, "/") {
@@ -225,4 +224,14 @@ func checkEntryPath(name string) error {
 		}
 	}
 	return nil
+}
+
+// hasDrive reports a Windows drive path, "C:/…". A page called "Q: notes" is
+// not one.
+func hasDrive(name string) bool {
+	if len(name) < 3 || name[1] != ':' || name[2] != '/' {
+		return false
+	}
+	c := name[0] | 0x20
+	return c >= 'a' && c <= 'z'
 }

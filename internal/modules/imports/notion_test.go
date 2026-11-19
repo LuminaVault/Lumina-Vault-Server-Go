@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"lumina/internal/chunkindex"
+	"lumina/internal/diskguard"
 	"lumina/internal/ids"
 	"lumina/internal/modules/imports"
 	"lumina/internal/notionimport/notiontest"
@@ -15,6 +16,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -491,4 +493,64 @@ func TestNotionReportConformsToSpec(t *testing.T) {
 		out.SetBodyBytes(rec.Body.Bytes())
 		require.NoError(t, openapi3filter.ValidateResponse(ctx, out), "%s: %s", c.query, rec.Body.String())
 	}
+}
+
+func TestNotionBodyOverTheLimitIs413(t *testing.T) {
+	v := setup(t)
+	user := v.user()
+	req := httptest.NewRequest(http.MethodPost, notionRoute, strings.NewReader("PK"))
+	req.ContentLength = 200<<20 + 1
+	token, err := scenario.Mint(keys, user)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	v.e.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusRequestEntityTooLarge, rec.Code)
+	v.spoolIsEmpty()
+}
+
+func TestNotionFullDiskIs507(t *testing.T) {
+	full := diskguard.New("/", 1<<60, 0, diskguard.Options{Provider: func(string) (diskguard.Space, error) {
+		return diskguard.Space{FreeBytes: 1, TotalBytes: 1 << 40}, nil
+	}})
+	v := setupWithGuard(t, full)
+	user := v.user()
+	rec := v.notionRaw(user, "", notiontest.Export())
+	require.Equal(t, http.StatusInsufficientStorage, rec.Code, rec.Body.String())
+	assert.Contains(t, rec.Body.String(), "insufficient_storage")
+	assert.Zero(t, v.count(`SELECT count(*) FROM vault_files WHERE tenant_id = $1`, user))
+	v.spoolIsEmpty()
+}
+
+// TestNotionImportScale times a larger import: pages in folders of 20, each
+// linking to its neighbour and its folder's first page. NOTION_SCALE sets the
+// page count (default 200). The embedder is the deterministic stub, so the
+// figure is everything but embedding.
+func TestNotionImportScale(t *testing.T) {
+	pages := 200
+	if raw := os.Getenv("NOTION_SCALE"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		require.NoError(t, err)
+		pages = n
+	}
+	id := func(n int) string { return fmt.Sprintf("%032x", n+1) }
+	name := func(n int) string { return fmt.Sprintf("Section %d %s/Page %d %s.md", n/20, id(100000+n/20), n, id(n)) }
+	files := make([]notiontest.File, 0, pages)
+	for n := range pages {
+		next, first := (n+1)%pages, n/20*20
+		body := fmt.Sprintf("# Page %d\n\n%s\n\n[next](../%s) and [first](%s)\n", n, strings.Repeat("Some text for the page. ", 40),
+			strings.ReplaceAll(name(next), " ", "%20"), strings.ReplaceAll(name(first)[strings.Index(name(first), "/")+1:], " ", "%20"))
+		files = append(files, notiontest.Text(name(n), body))
+	}
+	v := setup(t)
+	user := v.user()
+	export := notiontest.Zip(files...)
+	start := time.Now()
+	report := v.notion(user, "", export)
+	elapsed := time.Since(start)
+	require.Equal(t, []int{pages, 0, 0}, []int{report.Written, report.Skipped, report.Failed})
+	assert.Equal(t, []int{2 * pages, 0, 0}, []int{report.Links.Resolved, report.Links.External, report.Links.Unresolved})
+	assert.Zero(t, v.count(`SELECT count(*) FROM vault_links WHERE tenant_id = $1 AND resolution_state <> 'resolved'`, user))
+	t.Logf("notion import at scale: %d notes in %s, %.1f ms per note (deterministic embedder, local Postgres)",
+		pages, elapsed.Round(time.Millisecond), float64(elapsed.Milliseconds())/float64(pages))
 }

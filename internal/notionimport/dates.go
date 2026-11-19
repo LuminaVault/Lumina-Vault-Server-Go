@@ -24,7 +24,10 @@ func (d Date) ISO() string {
 	return d.Time.Format(time.DateOnly)
 }
 
-var zoneSuffix = regexp.MustCompile(`\s*\(([A-Za-z]{2,5})\s*([+-])?\s*(\d{1,2})?(?::?(\d{2}))?\)$`)
+// zoneSuffix is Notion's "(GMT)", "(UTC)", "(GMT+1)" or "(GMT+5:30)". Any other
+// abbreviation is left on the string, which then is no date: guessing a named
+// zone's offset would store the wrong moment.
+var zoneSuffix = regexp.MustCompile(`\s*\((?:GMT|UTC)\s*(?:([+-])\s*(\d{1,2})(?::?(\d{2}))?)?\)$`)
 
 var (
 	dateLayouts     = []string{"January 2, 2006", "Jan 2, 2006", time.DateOnly, "2006/01/02"}
@@ -47,11 +50,11 @@ func ParseNotionDate(s string) (Date, bool) {
 	offset := 0
 	if m := zoneSuffix.FindStringSubmatch(s); m != nil {
 		s = strings.TrimSpace(s[:len(s)-len(m[0])])
-		if m[3] != "" {
-			hours, _ := strconv.Atoi(m[3])
-			minutes, _ := strconv.Atoi(m[4])
+		if m[2] != "" {
+			hours, _ := strconv.Atoi(m[2])
+			minutes, _ := strconv.Atoi(m[3])
 			offset = hours*3600 + minutes*60
-			if m[2] == "-" {
+			if m[1] == "-" {
 				offset = -offset
 			}
 		}

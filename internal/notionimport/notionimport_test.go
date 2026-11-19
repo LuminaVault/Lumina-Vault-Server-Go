@@ -67,6 +67,7 @@ func TestUnpackLimits(t *testing.T) {
 		{name: "dot dot", data: buildZip(t, text("ok.md", "x"), text("../evil.md", "x")), limit: "outside"},
 		{name: "dot dot inside", data: buildZip(t, text("a/../../evil.md", "x")), limit: "outside"},
 		{name: "absolute", data: buildZip(t, text("/etc/passwd", "x")), limit: "absolute"},
+		{name: "windows drive", data: buildZip(t, text("C:/Windows/x.md", "x")), limit: "absolute"},
 		{name: "bomb ratio", data: buildZip(t, zipFile{Name: "zeros.bin", Data: make([]byte, 4<<20)}), limit: "ZIP bomb"},
 		{name: "bomb in nested", data: buildZip(t, zipFile{Name: "part.zip", Data: buildZip(t, zipFile{Name: "zeros.bin", Data: make([]byte, 4<<20)})}), limit: "ZIP bomb"},
 		{name: "dot dot in nested", data: buildZip(t, zipFile{Name: "part.zip", Data: buildZip(t, text("../x.md", "x"))}), limit: "outside"},
@@ -84,6 +85,11 @@ func TestUnpackLimits(t *testing.T) {
 			assert.Contains(t, err.Error(), c.limit)
 		})
 	}
+
+	t.Run("a colon in a page name is not a drive", func(t *testing.T) {
+		a := unpack(t, buildZip(t, text("Q: notes "+idQ4+".md", "x"), text("a:b.md", "x")))
+		assert.Len(t, a.Entries, 2)
+	})
 
 	t.Run("nested one level only", func(t *testing.T) {
 		data := buildZip(t, zipFile{Name: "outer.zip", Data: middle})
@@ -268,6 +274,8 @@ func TestParseNotionDate(t *testing.T) {
 		{"Nov 8, 2026", Date{Time: utc(2026, 11, 8, 0, 0)}, "2026-11-08", true},
 		{"2026-11-18", Date{Time: utc(2026, 11, 18, 0, 0)}, "2026-11-18", true},
 		{"  March 1, 2027  ", Date{Time: utc(2027, 3, 1, 0, 0)}, "2027-03-01", true},
+		{"November 18, 2026 10:00 AM (EST)", Date{}, "", false},
+		{"November 18, 2026 10:00 AM (GMT+0530)", Date{Time: utc(2026, 11, 18, 4, 30), HasTime: true}, "2026-11-18T04:30:00Z", true},
 		{"November 31, 2026", Date{}, "", false},
 		{"tomorrow", Date{}, "", false},
 		{"2026", Date{}, "", false},
