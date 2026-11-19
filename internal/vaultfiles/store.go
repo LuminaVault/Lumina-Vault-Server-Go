@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"lumina/internal/vaultgit"
 	"lumina/internal/vaultpaths"
 	"lumina/internal/vaultprops"
 	"lumina/internal/wire"
@@ -291,6 +292,7 @@ func (s *Store) MoveFile(ctx context.Context, row *VaultFile, to string, tenant 
 		if err := moveItem(src, dst); err != nil {
 			return err
 		}
+		vaultgit.Touch(tenant, "move", "", "")
 	}
 	spaceID, err := s.SpaceIDForPath(ctx, tenant, to)
 	if err != nil {

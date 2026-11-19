@@ -19,6 +19,7 @@ import (
 	"lumina/internal/migrations"
 	"lumina/internal/ratelimit"
 	"lumina/internal/skills"
+	"lumina/internal/vaultgit/vaultgittest"
 	"lumina/internal/vaultpaths"
 	"net/http"
 	"net/http/httptest"
@@ -309,9 +310,11 @@ func testSkillRunner(t *testing.T, v dbEnv) {
 			{Kind: skills.OutputAPNSNudge},
 			{Kind: skills.OutputMemoryEmit},
 		})
+		touches := vaultgittest.Record(t)
 		res, err := r.Run(ctx, mf, runUser{tenant: tenant, tier: "trial", username: "u"}, nil, nil)
 		require.NoError(t, err)
 		require.Equal(t, "ok", res.status)
+		require.Equal(t, []string{"skill"}, touches.Reasons(tenant), "the memo write signals history")
 
 		written, err := os.ReadFile(filepath.Join(v.paths.Raw(tenant), memo))
 		require.NoError(t, err)

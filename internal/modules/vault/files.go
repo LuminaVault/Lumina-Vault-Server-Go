@@ -17,6 +17,7 @@ import (
 	"lumina/internal/onboardlatch"
 	"lumina/internal/vaultaccess"
 	"lumina/internal/vaultfiles"
+	"lumina/internal/vaultgit"
 	"lumina/internal/wire"
 	"net/http"
 	"os"
@@ -249,6 +250,7 @@ func (m *Module) writeFile(c *echo.Context, actor, tenant uuid.UUID, safe string
 	if err != nil {
 		return err
 	}
+	vaultgit.Touch(tenant, "upload", ids.Upper(actor), "")
 
 	sum := sha256.Sum256(data)
 	digest := hex.EncodeToString(sum[:])

@@ -13,6 +13,7 @@ import (
 	"lumina/internal/ssrfguard"
 	"lumina/internal/swiftstr"
 	"lumina/internal/vaultfiles"
+	"lumina/internal/vaultgit"
 	"lumina/internal/vaultpaths"
 	"net/http"
 	"os"
@@ -170,6 +171,7 @@ func (s *EnrichmentService) enrichAndRewrite(ctx context.Context, fileID uuid.UU
 	if err := vaultfiles.WriteAtomic(target, data); err != nil {
 		return err
 	}
+	vaultgit.Touch(tenant, "capture", "", "")
 	sum := sha256.Sum256(data)
 	if err := s.store.UpdateContent(ctx, row.ID, int64(len(data)), hex.EncodeToString(sum[:]), withEnrichmentStatus(row.Metadata, "done")); err != nil {
 		return err

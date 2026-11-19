@@ -13,6 +13,7 @@ import (
 	"lumina/internal/modules/imports/db"
 	"lumina/internal/swiftstr"
 	"lumina/internal/vaultfiles"
+	"lumina/internal/vaultgit"
 	"lumina/internal/vaultpaths"
 	"strings"
 	"sync"
@@ -311,6 +312,7 @@ func (i *Ingest) ingestOne(ctx context.Context, tenant, spaceID uuid.UUID, safe 
 	if err := vaultfiles.WriteAtomic(target, data); err != nil {
 		return nil, FileFailed, err
 	}
+	vaultgit.Touch(tenant, "import", "", "")
 	title := input.Title
 	if title == "" {
 		title = Title(content, vaultfiles.LastPathComponent(input.Path))

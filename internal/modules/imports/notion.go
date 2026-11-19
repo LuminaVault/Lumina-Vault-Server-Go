@@ -14,6 +14,7 @@ import (
 	"lumina/internal/notionimport"
 	"lumina/internal/swiftstr"
 	"lumina/internal/vaultfiles"
+	"lumina/internal/vaultgit"
 	"lumina/internal/vaultprops"
 	"lumina/internal/wire"
 	"net/http"
@@ -739,6 +740,7 @@ func (r *notionRun) attachment(item *notionItem) (VaultNotionImportFileStatus, e
 		return "", err
 	}
 	keep = true
+	vaultgit.Touch(r.tenant, "import", "", "")
 	provenance := notionProvenance
 	if _, err := r.i.store.Upsert(r.ctx, vaultfiles.UpsertParams{
 		TenantID: r.tenant, SpaceID: &r.spaceID, Path: item.saved, ContentType: contentType,

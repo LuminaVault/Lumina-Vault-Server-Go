@@ -12,6 +12,7 @@ import (
 	"lumina/internal/modules/spaces"
 	"lumina/internal/swiftstr"
 	"lumina/internal/vaultfiles"
+	"lumina/internal/vaultgit"
 	"lumina/internal/vaultpaths"
 	"lumina/internal/wire"
 	"net/http"
@@ -271,7 +272,9 @@ func (s *Service) Approve(ctx context.Context, tenant, session uuid.UUID, overri
 				if vaultfiles.Exists(dst) {
 					_ = os.RemoveAll(dst)
 				}
-				_ = os.Rename(src, dst)
+				if os.Rename(src, dst) == nil {
+					vaultgit.Touch(tenant, "move", "", "")
+				}
 			}
 		}
 		if err := s.store.UpdateFiled(ctx, file.ID, newRel, spaceID); err != nil {

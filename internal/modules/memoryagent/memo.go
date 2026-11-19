@@ -12,6 +12,7 @@ import (
 	"lumina/internal/memorystore"
 	"lumina/internal/swiftstr"
 	"lumina/internal/vaultfiles"
+	"lumina/internal/vaultgit"
 	"lumina/internal/vaultpaths"
 	"lumina/internal/wire"
 	"net/http"
@@ -244,6 +245,7 @@ func (s *MemoService) persist(ctx context.Context, tenant uuid.UUID, topic, memo
 	if err := vaultfiles.WriteAtomic(target, data); err != nil {
 		return "", err
 	}
+	vaultgit.Touch(tenant, "memo", "", "")
 	sum := sha256.Sum256(data)
 	if _, err := s.opt.Store.Insert(ctx, vaultfiles.UpsertParams{
 		TenantID: tenant, Path: finalRelative, ContentType: "text/markdown",

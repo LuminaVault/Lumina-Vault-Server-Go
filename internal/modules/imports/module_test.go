@@ -19,6 +19,7 @@ import (
 	"lumina/internal/migrations"
 	"lumina/internal/modules/imports"
 	"lumina/internal/modules/spaces"
+	"lumina/internal/vaultgit/vaultgittest"
 	"lumina/internal/vaultpaths"
 	"lumina/parity/scenario"
 	"net/http"
@@ -259,6 +260,7 @@ func TestApproveFilesCompilesAndIsTenantScoped(t *testing.T) {
 	user, other := v.user(), v.user()
 	file := v.file(user, "inbox/x.md", "A note about tea.")
 	session := v.stage(user, file)
+	touches := vaultgittest.Record(t)
 	v.transport.reply = func([]byte) string { return `{"memories":["Likes tea."]}` }
 	assert.Equal(t, http.StatusNotFound, v.do(other, http.MethodPost, "/v1/import/"+session+"/approve", "").Code)
 
@@ -273,6 +275,7 @@ func TestApproveFilesCompilesAndIsTenantScoped(t *testing.T) {
 	require.NoError(t, v.pool.QueryRow(context.Background(), `SELECT path, processed_at IS NOT NULL FROM vault_files WHERE id = $1`, file).Scan(&path, &done))
 	assert.True(t, done)
 	assert.True(t, strings.HasPrefix(path, imports.ImportedSlug+"/"), path)
+	assert.Contains(t, touches.Reasons(user), "move", "filing the note signals history")
 	_, err := os.Stat(filepath.Join(v.root, "tenants", ids.Upper(user), "raw", path))
 	require.NoError(t, err)
 	var memories int
@@ -295,8 +298,11 @@ func TestVaultBulkImportsAndSkipsUnchanged(t *testing.T) {
 		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &out))
 		return out
 	}
+	touches := vaultgittest.Record(t)
 	assert.Equal(t, result{Imported: 2}, decode(v.do(user, http.MethodPost, "/v1/import/vault-bulk", body)))
+	assert.Equal(t, []string{"import", "import"}, touches.Reasons(user))
 	assert.Equal(t, result{Skipped: 2}, decode(v.do(user, http.MethodPost, "/v1/import/vault-bulk", body)))
+	assert.Len(t, touches.Reasons(user), 2, "an unchanged file is not a write")
 }
 
 type bulkFile struct {
