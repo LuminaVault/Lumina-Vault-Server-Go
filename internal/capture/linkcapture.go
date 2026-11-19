@@ -22,6 +22,7 @@ import (
 	"lumina/internal/modules/achievements"
 	"lumina/internal/onboardlatch"
 	"lumina/internal/vaultfiles"
+	"lumina/internal/vaultgit"
 	"lumina/internal/vaultpaths"
 	"strings"
 	"time"
@@ -140,6 +141,7 @@ func (s *Service) CaptureLink(ctx context.Context, tenant uuid.UUID, urlString s
 	if err := vaultfiles.WriteAtomic(target, data); err != nil {
 		return CapturedLink{}, err
 	}
+	vaultgit.Touch(tenant, "capture", "", "")
 
 	sum := sha256.Sum256(data)
 	pending := "pending"

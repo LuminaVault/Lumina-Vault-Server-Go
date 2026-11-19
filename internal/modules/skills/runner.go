@@ -19,6 +19,7 @@ import (
 	"lumina/internal/swiftstr"
 	"lumina/internal/usagemeter"
 	"lumina/internal/vaultfiles"
+	"lumina/internal/vaultgit"
 	"lumina/internal/vaultpaths"
 	"lumina/internal/wire"
 	"net/http"
@@ -516,6 +517,7 @@ func (r *Runner) persistVaultFile(ctx context.Context, tenant uuid.UUID, path, c
 	if err := vaultfiles.WriteAtomic(target, data); err != nil {
 		return err
 	}
+	vaultgit.Touch(tenant, "skill", "", "")
 	sum := sha256.Sum256(data)
 	digest := hex.EncodeToString(sum[:])
 	var id uuid.UUID

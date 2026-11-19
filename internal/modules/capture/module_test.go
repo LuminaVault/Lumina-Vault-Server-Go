@@ -22,6 +22,7 @@ import (
 	"lumina/internal/posthog"
 	"lumina/internal/ratelimit"
 	"lumina/internal/vaultfiles"
+	"lumina/internal/vaultgit/vaultgittest"
 	"lumina/internal/vaultpaths"
 	"lumina/parity/scenario"
 	"net/http"
@@ -205,8 +206,10 @@ func article() stubEnricher {
 
 func TestCapturePlaceholderThenEnrichment(t *testing.T) {
 	v := setup(t, options{enricher: article()})
+	touches := vaultgittest.Record(t)
 	a := v.capture(amy, `{"url":"https://example.com/post?x=1","notes":"my note"}`)
 	require.Equal(t, "accepted", a.Status)
+	require.Equal(t, []string{"capture"}, touches.Reasons(amy), "the placeholder write signals history")
 	require.Equal(t, strings.ToUpper(a.ID), a.ID)
 	require.Regexp(t, `^inbox/\d{4}-\d{2}-\d{2}-\d{6}-example-com-[0-9a-f]{8}\.md$`, a.Path)
 
@@ -216,6 +219,7 @@ func TestCapturePlaceholderThenEnrichment(t *testing.T) {
 
 	v.runEnrichment()
 	require.Equal(t, "done", v.enrichmentStatus(a.ID))
+	require.Equal(t, []string{"capture", "capture"}, touches.Reasons(amy), "the enrichment rewrite signals history")
 	got := v.file(amy, a.Path)
 	// Post-archive fix (backlog 1.5): the note survives enrichment. Swift dropped it.
 	require.Equal(t, "---\ntitle: \"Parity\"\nsource: \"https://example.com/post?x=1\"\n---\n\n# Parity\n\n## Description\nAn article.\n\n## Note\nmy note\n", got)

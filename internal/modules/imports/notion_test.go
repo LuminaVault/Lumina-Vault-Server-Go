@@ -11,6 +11,7 @@ import (
 	"lumina/internal/modules/imports"
 	"lumina/internal/notionimport/notiontest"
 	"lumina/internal/vaultfiles"
+	"lumina/internal/vaultgit/vaultgittest"
 	"lumina/parity/scenario"
 	"net/http"
 	"net/http/httptest"
@@ -203,9 +204,11 @@ func TestNotionImportWritesPagesRowsAndAttachments(t *testing.T) {
 	v := setup(t)
 	user := v.user()
 	ctx := context.Background()
+	touches := vaultgittest.Record(t)
 	start := time.Now()
 	report := v.notion(user, "", notiontest.Export())
 	elapsed := time.Since(start)
+	assert.Len(t, touches.Reasons(user), report.Written, "every written page, row and attachment signals history")
 
 	assert.False(t, report.DryRun)
 	require.NotNil(t, report.SpaceID)

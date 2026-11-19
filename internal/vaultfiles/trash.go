@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"lumina/internal/ids"
+	"lumina/internal/vaultgit"
 	"lumina/internal/wire"
 	"net/http"
 	"os"
@@ -98,6 +100,11 @@ func (s *Store) Trash(ctx context.Context, rawRoot, target string, row *VaultFil
 	if err != nil || !moved {
 		return nil, err
 	}
+	actor := ""
+	if deletedBy != nil {
+		actor = ids.Upper(*deletedBy)
+	}
+	vaultgit.Touch(row.TenantID, "delete", actor, "")
 	metadata, err := encodeColumn(row.Metadata)
 	if err == nil {
 		_, err = s.pool.Exec(ctx, `INSERT INTO vault_trash (id, tenant_id, vault_file_id, space_id, original_path,
@@ -227,6 +234,7 @@ func (s *Store) Restore(ctx context.Context, rawRoot string, e *TrashEntry, acto
 	if err := moveItem(src, target); err != nil {
 		return nil, err
 	}
+	vaultgit.Touch(e.TenantID, "restore", ids.Upper(actor), "")
 	spaceID, err := s.SpaceIDForPath(ctx, e.TenantID, path)
 	if err == nil {
 		var id uuid.UUID

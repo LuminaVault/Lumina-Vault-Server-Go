@@ -9,6 +9,7 @@ import (
 	"lumina/internal/ids"
 	"lumina/internal/memorystore"
 	"lumina/internal/vaultfiles"
+	"lumina/internal/vaultgit/vaultgittest"
 	"lumina/internal/vaultpaths"
 	"os"
 	"path/filepath"
@@ -70,8 +71,10 @@ Drinks correlate with energy intent.
 ## Open Questions
 Does this hold on weekends?`),
 	}}
+	touches := vaultgittest.Record(t)
 	result, err := memoService(pool, root, transport).Generate(ctx, tenant, "memo-test", "", "drinks", nil, true)
 	require.NoError(t, err)
+	assert.Equal(t, []string{"memo"}, touches.Reasons(tenant))
 	assert.Contains(t, result.Summary, "## Summary")
 	assert.True(t, strings.HasPrefix(result.Memo, "---\n"))
 	assert.Contains(t, result.Memo, `topic: "drinks"`)

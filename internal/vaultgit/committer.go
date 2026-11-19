@@ -208,18 +208,42 @@ func (c *Committer) Close(ctx context.Context) {
 	c.wg.Wait()
 }
 
-// active is the Committer Touch reports to. Nil (tests, tools, the flag off)
-// makes Touch a no-op.
-var active atomic.Pointer[Committer]
+// Toucher receives the package-level Touch. *Committer is the real one; tests
+// install a recorder through vaultgittest.
+type Toucher interface {
+	Touch(tenant uuid.UUID, reason, actor, source string)
+}
+
+// target wraps the Toucher so atomic.Pointer can hold an interface.
+type target struct{ t Toucher }
+
+// active is what Touch reports to. Nil (tests, tools, the flag off) makes Touch
+// a no-op.
+var active atomic.Pointer[target]
 
 // Start makes c the target of the package-level Touch. Pass nil to stop.
-func Start(c *Committer) { active.Store(c) }
+func Start(c *Committer) {
+	if c == nil {
+		active.Store(nil)
+		return
+	}
+	active.Store(&target{t: c})
+}
+
+// StartToucher is Start for any Toucher. Pass nil to stop.
+func StartToucher(t Toucher) {
+	if t == nil {
+		active.Store(nil)
+		return
+	}
+	active.Store(&target{t: t})
+}
 
 // Touch is the hook every vault writer calls after a write (spec D1). It is
 // cheap and never fails; without a started Committer it does nothing.
 func Touch(tenant uuid.UUID, reason, actor, source string) {
-	if c := active.Load(); c != nil {
-		c.Touch(tenant, reason, actor, source)
+	if a := active.Load(); a != nil {
+		a.t.Touch(tenant, reason, actor, source)
 	}
 }
 

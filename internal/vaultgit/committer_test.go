@@ -166,3 +166,25 @@ func TestBurstMessageMixesReasons(t *testing.T) {
 	require.Equal(t, Message{Reason: "mixed", Actor: "A"}, b.message())
 	require.Equal(t, "sweep", (&burst{reasons: map[string]struct{}{}}).message().Reason)
 }
+
+type recordingToucher struct{ reasons []string }
+
+func (r *recordingToucher) Touch(_ uuid.UUID, reason, _, _ string) {
+	r.reasons = append(r.reasons, reason)
+}
+
+func TestStartToucherRoutesPackageTouch(t *testing.T) {
+	r := &recordingToucher{}
+	StartToucher(r)
+	t.Cleanup(func() { StartToucher(nil) })
+	Touch(uuid.New(), "upload", "", "")
+	Touch(uuid.New(), "move", "", "")
+	require.Equal(t, []string{"upload", "move"}, r.reasons)
+
+	StartToucher(nil)
+	Touch(uuid.New(), "delete", "", "")
+	require.Equal(t, []string{"upload", "move"}, r.reasons, "nil stops routing")
+
+	Start(nil) // a nil *Committer must not install a typed-nil target
+	Touch(uuid.New(), "delete", "", "")
+}
