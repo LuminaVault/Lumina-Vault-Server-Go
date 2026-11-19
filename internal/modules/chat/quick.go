@@ -2,11 +2,143 @@ package chat
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"lumina/internal/connectedapps"
 	"lumina/internal/llm"
 	"lumina/internal/memorystore"
 	"lumina/internal/modules/quickassistant"
 	"time"
+
+	"github.com/google/uuid"
 )
+
+// OriginConnectedApp is conversation_messages.origin for both rows of a turn
+// that ran a connected-app tool. Such a turn can quote another app's data, so
+// it is never replayed to a model: historyMessages skips it. The user still
+// reads it in their own history.
+const OriginConnectedApp = quickassistant.OriginConnectedApp
+
+// ConnectedApps is the user's connected first-party apps as tool sources
+// (connectedapps.Service). user is always the person asking, never a vault.
+type ConnectedApps interface {
+	Tools(ctx context.Context, user uuid.UUID, onlyApps []string) ([]connectedapps.AppTool, error)
+	Call(ctx context.Context, user uuid.UUID, name string, args map[string]any) (string, error)
+}
+
+// connectedTools is the apps' tools as the loop offers them. A tool whose
+// input schema is not a JSON object of type "object" is left out: Anthropic
+// answers 400 to such a tool, which would fail every turn that offers it.
+func connectedTools(tools []connectedapps.AppTool) []quickassistant.Tool {
+	var out []quickassistant.Tool
+	for _, tool := range tools {
+		if !isObjectSchema(tool.Remote.InputSchema) {
+			continue
+		}
+		out = append(out, quickassistant.Tool{
+			Name: tool.Name, Title: tool.App.Name, Description: tool.Remote.Description,
+			InputSchema: tool.Remote.InputSchema, Personal: true,
+		})
+	}
+	return out
+}
+
+func isObjectSchema(raw json.RawMessage) bool {
+	var schema map[string]json.RawMessage
+	if json.Unmarshal(raw, &schema) != nil {
+		return false
+	}
+	var kind string
+	return json.Unmarshal(schema["type"], &kind) == nil && kind == "object"
+}
+
+// connectedAppRunner runs a connected-app tool as the person asking. It hands
+// the model text and nothing else: an app can never put a chip or an "already
+// done" line in Lumina. A failure is the service's own fixed sentence, as
+// content. Nothing is logged here; the service logs app, tool and latency.
+type connectedAppRunner struct {
+	apps  ConnectedApps
+	actor uuid.UUID
+}
+
+func (r connectedAppRunner) Run(ctx context.Context, name string, args map[string]any) quickassistant.ToolResult {
+	out, err := r.apps.Call(ctx, r.actor, name, args)
+	if err != nil {
+		return quickassistant.ToolResult{ModelContent: err.Error()}
+	}
+	return quickassistant.ToolResult{ModelContent: out}
+}
+
+// connectedAppToolsDeadline bounds the load of the turn's connected-app tools
+// (R32): an app that is slow or down costs the turn at most this long, and
+// then only its app tools.
+const connectedAppToolsDeadline = 4 * time.Second
+
+// connectedAppOptions is the turn's connected-app tools, loaded for the
+// person asking (t.actor), whichever vault the turn reads. No service, no
+// connected app, a failed load or one that passes the deadline all give the
+// zero options: an ordinary turn, not pinned to Anthropic.
+func (m *Module) connectedAppOptions(ctx context.Context, t turn) quickassistant.TurnOptions {
+	apps := m.opts.ConnectedApps
+	if apps == nil {
+		return quickassistant.TurnOptions{}
+	}
+	loaded, kind := m.loadConnectedTools(ctx, apps, t.actor)
+	if kind != "" {
+		// The kind only: the error text can hold store or network detail.
+		m.log.WarnContext(ctx, "connected app tools not loaded; turn runs without them", "kind", kind)
+		return quickassistant.TurnOptions{}
+	}
+	tools := connectedTools(loaded)
+	if len(tools) == 0 {
+		return quickassistant.TurnOptions{}
+	}
+	// Offering the tools is what pins the turn. AnthropicOnly is left unset: it
+	// would pin a turn whose tools the loop dropped at its own entry guard.
+	return quickassistant.TurnOptions{ExtraTools: tools, ExtraRunner: connectedAppRunner{apps: apps, actor: t.actor}}
+}
+
+// loadConnectedTools asks the service for the actor's tools and waits no
+// longer than the deadline. It does not trust the service to honour the
+// context (a refresh waits on a lock that knows no deadline), so the load
+// runs beside the wait; a late answer is dropped. kind is "" on success, else
+// a word for the log: never the error's text.
+func (m *Module) loadConnectedTools(ctx context.Context, apps ConnectedApps, actor uuid.UUID) (tools []connectedapps.AppTool, kind string) {
+	deadline := connectedAppToolsDeadline
+	if m.appToolsDeadline > 0 {
+		deadline = m.appToolsDeadline
+	}
+	ctx, cancel := context.WithTimeout(ctx, deadline)
+	defer cancel()
+	type result struct {
+		tools []connectedapps.AppTool
+		kind  string
+	}
+	done := make(chan result, 1) // buffered: a late answer has nobody waiting
+	go func() {
+		defer func() {
+			if recover() != nil {
+				done <- result{kind: "panic"}
+			}
+		}()
+		loaded, err := apps.Tools(ctx, actor, nil)
+		if err != nil {
+			done <- result{kind: fmt.Sprintf("%T", err)}
+			return
+		}
+		done <- result{tools: loaded}
+	}()
+	select {
+	case r := <-done:
+		return r.tools, r.kind
+	case <-ctx.Done():
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return nil, "timeout"
+		}
+		return nil, "cancelled"
+	}
+}
 
 // quickTurn is QuickAssistantLoop: one Quick Assistant turn, ready to run
 // inside the stream's task.
@@ -71,7 +203,8 @@ func (m *Module) newQuickTurn(ctx context.Context, c quickassistant.Context, in 
 // answerQuick runs the loop under the turn's routing binding, plus the BYOK
 // pin on this binding only: ordinary and fallback classic turns keep
 // resolving BYOK in the stream service. Picking happens inside, so a
-// free-lane grant is claimed once for the question.
+// free-lane grant is claimed once for the question. The turn also offers the
+// asker's connected-app tools; the loop then keeps it on Anthropic.
 func (m *Module) answerQuick(ctx context.Context, t turn, bind func(*llm.Values), yield func(StreamEvent) bool) quickassistant.Outcome {
 	loopCtx := llm.WithValues(ctx, func(v *llm.Values) {
 		bind(v)
@@ -79,5 +212,6 @@ func (m *Module) answerQuick(ctx context.Context, t turn, bind func(*llm.Values)
 			v.ForcedRoute = t.qa.pinned
 		}
 	})
-	return t.qa.service.Answer(loopCtx, t.qa.messages, t.sessionKey, t.sessionID, t.qa.runner, func(e StreamEvent) { yield(e) })
+	return t.qa.service.AnswerWith(loopCtx, t.qa.messages, t.sessionKey, t.sessionID, t.qa.runner, func(e StreamEvent) { yield(e) },
+		m.connectedAppOptions(ctx, t))
 }

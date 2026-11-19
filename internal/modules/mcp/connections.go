@@ -14,11 +14,14 @@ import (
 	"lumina/internal/wire"
 	"net/http"
 	"reflect"
+	"slices"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -85,6 +88,9 @@ type ConnectionDTO struct {
 	LastUsedAt        *wire.Time `json:"lastUsedAt,omitempty"`
 	AllowPersonalData bool       `json:"allowPersonalData"`
 	Access            string     `json:"access"`
+	// ConnectedAppGrants is the connected apps this key may read. It is nil,
+	// and so left out, when connected apps are off; the module fills it.
+	ConnectedAppGrants []string `json:"connectedAppGrants,omitzero"`
 }
 
 // connection is an agent_connections row.
@@ -98,6 +104,8 @@ type connection struct {
 	LastUsedAt        *time.Time
 	AllowPersonalData bool
 	Access            string
+	// ConnectedAppGrants is never nil for a scanned row. No grant is the default.
+	ConnectedAppGrants []string
 }
 
 // dto is AgentConnection.asDTO. Fluent sets createdAt on save, so it is never
@@ -106,6 +114,7 @@ func (c connection) dto() ConnectionDTO {
 	d := ConnectionDTO{
 		ID: wire.UUID{UUID: c.ID}, Name: c.Name, ClientKind: c.ClientKind, TokenPrefix: c.TokenPrefix,
 		AllowPersonalData: c.AllowPersonalData, Access: c.Access,
+		ConnectedAppGrants: c.ConnectedAppGrants,
 	}
 	if c.CreatedAt != nil {
 		d.CreatedAt = wire.Time{Time: *c.CreatedAt}
@@ -116,22 +125,62 @@ func (c connection) dto() ConnectionDTO {
 	return d
 }
 
-const connectionColumns = `id, tenant_id, name, client_kind, token_prefix, created_at, last_used_at, allow_personal_data, access`
+const connectionColumns = `id, tenant_id, name, client_kind, token_prefix, created_at, last_used_at, allow_personal_data, access, connected_app_grants`
+
+// legacyConnectionColumns reads a schema without connected_app_grants (added
+// by goose 00010; the parity database is Swift-migrated and never has it):
+// every key then has no app grants, which is also the column's default.
+const legacyConnectionColumns = `id, tenant_id, name, client_kind, token_prefix, created_at, last_used_at, allow_personal_data, access, '{}'::text[] AS connected_app_grants`
+
+// errGrantsUnavailable refuses a grants change the schema cannot store.
+var errGrantsUnavailable = wire.NewError(http.StatusServiceUnavailable, "connected_app_grants_unavailable")
+
+func isMissingGrantsColumn(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "42703" && strings.Contains(pgErr.Message, "connected_app_grants")
+}
 
 func scanConnection(row pgx.Row) (*connection, error) {
 	var c connection
-	err := row.Scan(&c.ID, &c.TenantID, &c.Name, &c.ClientKind, &c.TokenPrefix, &c.CreatedAt, &c.LastUsedAt, &c.AllowPersonalData, &c.Access)
+	err := row.Scan(&c.ID, &c.TenantID, &c.Name, &c.ClientKind, &c.TokenPrefix, &c.CreatedAt, &c.LastUsedAt, &c.AllowPersonalData, &c.Access, &c.ConnectedAppGrants)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
+	if c.ConnectedAppGrants == nil {
+		c.ConnectedAppGrants = []string{}
+	}
 	return &c, nil
 }
 
 // Connections is AgentConnectionService.
-type Connections struct{ pool *pgxpool.Pool }
+type Connections struct {
+	pool *pgxpool.Pool
+	// noGrants latches once the database turns out to lack connected_app_grants.
+	noGrants atomic.Bool
+}
+
+// columns is the select list for this database's schema.
+func (s *Connections) columns() string {
+	if s.noGrants.Load() {
+		return legacyConnectionColumns
+	}
+	return connectionColumns
+}
+
+// one runs a single-row statement built for the current column list. If the
+// grants column is missing it latches legacy mode and retries once.
+func (s *Connections) one(ctx context.Context, build func(cols string) string, args ...any) (*connection, error) {
+	cols := s.columns()
+	c, err := scanConnection(s.pool.QueryRow(ctx, build(cols), args...))
+	if err != nil && cols == connectionColumns && isMissingGrantsColumn(err) {
+		s.noGrants.Store(true)
+		return scanConnection(s.pool.QueryRow(ctx, build(legacyConnectionColumns), args...))
+	}
+	return c, err
+}
 
 // NewConnections returns the service.
 func NewConnections(pool *pgxpool.Pool) *Connections { return &Connections{pool: pool} }
@@ -152,11 +201,12 @@ func (s *Connections) Issue(ctx context.Context, tenant uuid.UUID, name, kind st
 		return ConnectionDTO{}, "", err
 	}
 	hash := hashToken(token)
-	c, err := scanConnection(s.pool.QueryRow(ctx, `
+	c, err := s.one(ctx, func(cols string) string {
+		return `
 		INSERT INTO agent_connections (id, tenant_id, name, client_kind, token_hash, token_prefix, created_at, allow_personal_data, access)
 		VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7, $8)
-		RETURNING `+connectionColumns,
-		uuid.New(), tenant, trimmed, kind, hash[:], token[:displayPrefixLen], allowPersonal, acc))
+		RETURNING ` + cols
+	}, uuid.New(), tenant, trimmed, kind, hash[:], token[:displayPrefixLen], allowPersonal, acc)
 	if err != nil {
 		return ConnectionDTO{}, "", fmt.Errorf("mcp: issue connection: %w", err)
 	}
@@ -165,7 +215,17 @@ func (s *Connections) Issue(ctx context.Context, tenant uuid.UUID, name, kind st
 
 // List is the tenant's live keys, newest first.
 func (s *Connections) List(ctx context.Context, tenant uuid.UUID) ([]ConnectionDTO, error) {
-	rows, err := s.pool.Query(ctx, `SELECT `+connectionColumns+` FROM agent_connections
+	cols := s.columns()
+	out, err := s.list(ctx, tenant, cols)
+	if err != nil && cols == connectionColumns && isMissingGrantsColumn(err) {
+		s.noGrants.Store(true)
+		out, err = s.list(ctx, tenant, legacyConnectionColumns)
+	}
+	return out, err
+}
+
+func (s *Connections) list(ctx context.Context, tenant uuid.UUID, cols string) ([]ConnectionDTO, error) {
+	rows, err := s.pool.Query(ctx, `SELECT `+cols+` FROM agent_connections
 		WHERE tenant_id = $1 AND revoked_at IS NULL ORDER BY created_at DESC`, tenant)
 	if err != nil {
 		return nil, fmt.Errorf("mcp: list connections: %w", err)
@@ -183,8 +243,10 @@ func (s *Connections) List(ctx context.Context, tenant uuid.UUID) ([]ConnectionD
 }
 
 func (s *Connections) live(ctx context.Context, tenant, id uuid.UUID) (*connection, error) {
-	return scanConnection(s.pool.QueryRow(ctx, `SELECT `+connectionColumns+` FROM agent_connections
-		WHERE tenant_id = $1 AND id = $2 AND revoked_at IS NULL LIMIT 1`, tenant, id))
+	return s.one(ctx, func(cols string) string {
+		return `SELECT ` + cols + ` FROM agent_connections
+		WHERE tenant_id = $1 AND id = $2 AND revoked_at IS NULL LIMIT 1`
+	}, tenant, id)
 }
 
 // Revoke marks a live key revoked.
@@ -200,24 +262,44 @@ func (s *Connections) Revoke(ctx context.Context, tenant, id uuid.UUID) error {
 	return err
 }
 
-// Update applies whichever grants are non-nil.
-func (s *Connections) Update(ctx context.Context, tenant, id uuid.UUID, allowPersonal *bool, acc *string) (ConnectionDTO, error) {
-	c, err := s.live(ctx, tenant, id)
+// Update applies whichever grants are non-nil, to a live key of this tenant
+// only, in one statement: a field left nil keeps whatever the row holds when
+// the statement runs, so two updates of different fields cannot undo each
+// other. appGrants replaces the key's connected-app grants: nil leaves them,
+// an empty list clears them. The caller validates the ids.
+func (s *Connections) Update(ctx context.Context, tenant, id uuid.UUID, allowPersonal *bool, acc *string, appGrants *[]string) (ConnectionDTO, error) {
+	// A nil slice is SQL NULL (keep); a non-nil empty one is '{}' (clear).
+	var grants []string
+	if appGrants != nil {
+		grants = append([]string{}, *appGrants...)
+	}
+	if appGrants != nil && s.noGrants.Load() {
+		return ConnectionDTO{}, errGrantsUnavailable
+	}
+	c, err := s.one(ctx, func(cols string) string {
+		grantsSet := `,
+			connected_app_grants = COALESCE($5, connected_app_grants)`
+		guard := ``
+		if cols == legacyConnectionColumns {
+			// No column to write. A grants change must not half-apply, so
+			// the row only matches when none was asked for ($5 IS NULL).
+			grantsSet = ``
+			guard = ` AND $5::text[] IS NULL`
+		}
+		return `UPDATE agent_connections SET
+			allow_personal_data = COALESCE($3, allow_personal_data),
+			access = COALESCE($4, access)` + grantsSet + `
+		WHERE id = $1 AND tenant_id = $2 AND revoked_at IS NULL` + guard + `
+		RETURNING ` + cols
+	}, id, tenant, allowPersonal, acc, grants)
 	if err != nil {
 		return ConnectionDTO{}, err
 	}
 	if c == nil {
+		if appGrants != nil && s.noGrants.Load() {
+			return ConnectionDTO{}, errGrantsUnavailable
+		}
 		return ConnectionDTO{}, errNotFound
-	}
-	if allowPersonal != nil {
-		c.AllowPersonalData = *allowPersonal
-	}
-	if acc != nil {
-		c.Access = *acc
-	}
-	if _, err := s.pool.Exec(ctx, `UPDATE agent_connections SET allow_personal_data = $2, access = $3 WHERE id = $1`,
-		c.ID, c.AllowPersonalData, c.Access); err != nil {
-		return ConnectionDTO{}, err
 	}
 	return c.dto(), nil
 }
@@ -228,8 +310,10 @@ func (s *Connections) byToken(ctx context.Context, token string) (*connection, e
 		return nil, nil
 	}
 	hash := hashToken(token)
-	return scanConnection(s.pool.QueryRow(ctx, `SELECT `+connectionColumns+` FROM agent_connections
-		WHERE token_hash = $1 AND revoked_at IS NULL LIMIT 1`, hash[:]))
+	return s.one(ctx, func(cols string) string {
+		return `SELECT ` + cols + ` FROM agent_connections
+		WHERE token_hash = $1 AND revoked_at IS NULL LIMIT 1`
+	}, hash[:])
 }
 
 // AllowsPersonalData is allowsPersonalData: unknown and revoked keys are false.
@@ -242,6 +326,24 @@ func (s *Connections) AllowsPersonalData(ctx context.Context, token string) (boo
 func (s *Connections) AllowsWrites(ctx context.Context, token string) (bool, error) {
 	c, err := s.byToken(ctx, token)
 	return c != nil && c.Access == AccessReadWrite, err
+}
+
+// AllowsConnectedApp reports whether the key was granted the app. Unknown and
+// revoked keys are false, and so is every key by default. It is independent of
+// AllowsPersonalData. A JWT session has no key and is not asked.
+func (s *Connections) AllowsConnectedApp(ctx context.Context, token, appID string) (bool, error) {
+	c, err := s.byToken(ctx, token)
+	return c != nil && slices.Contains(c.ConnectedAppGrants, appID), err
+}
+
+// connectedAppGrants is the apps a key was granted: empty, never nil, for a
+// key with none and for an unknown or revoked key.
+func (s *Connections) connectedAppGrants(ctx context.Context, token string) ([]string, error) {
+	c, err := s.byToken(ctx, token)
+	if err != nil || c == nil {
+		return []string{}, err
+	}
+	return c.ConnectedAppGrants, nil
 }
 
 // Authenticate is authenticate: the user a live key acts as, touching

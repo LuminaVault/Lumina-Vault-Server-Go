@@ -52,6 +52,16 @@ type scriptedTransport struct {
 	picks     int
 	// pickPayload is what PickDecision was given.
 	pickPayload []byte
+	// customEndpoint: the user's own Anthropic credential names another host.
+	customEndpoint bool
+	endpointChecks []llm.Decision
+}
+
+func (s *scriptedTransport) DispatchesToProviderEndpoint(_ context.Context, decision llm.Decision) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.endpointChecks = append(s.endpointChecks, decision)
+	return !s.customEndpoint
 }
 
 func newTransport(picked llm.Decision, steps ...step) *scriptedTransport {
@@ -1392,5 +1402,700 @@ func TestActionFramesAreEmittedAsToolsReturnThem(t *testing.T) {
 	}
 	if log.text() != "Saved it." {
 		t.Errorf("tokens = %q", log.text())
+	}
+}
+
+// MARK: - Connected-app tools (per-turn extras, Anthropic only)
+
+var aaruTools = []Tool{
+	{Name: "aaru__read_library", Description: "Read the library.", InputSchema: json.RawMessage(`{"type":"object"}`), Personal: true},
+	{Name: "aaru__list_airs", Description: "List airs.", InputSchema: json.RawMessage(`{"type":"object"}`), Personal: true},
+}
+
+func aaruOptions(runner ToolRunner) TurnOptions {
+	return TurnOptions{ExtraTools: aaruTools, ExtraRunner: runner, AnthropicOnly: true}
+}
+
+func (h *harness) answerWith(runner ToolRunner, opts TurnOptions) Outcome {
+	return h.service.AnswerWith(context.Background(), testMessages, "key", "session", runner, (&eventLog{}).emit, opts)
+}
+
+// mixedDecision is a paid decision whose Anthropic route is not in front.
+func mixedDecision() llm.Decision {
+	return llm.Decision{
+		Primary: llm.Route{Provider: llm.OpenRouter, ModelID: "some-model"},
+		Fallbacks: []llm.Route{
+			{Provider: llm.Anthropic, ModelID: "claude-haiku-5-5"},
+			{Provider: llm.Groq, ModelID: "llama"},
+		},
+		Cerberus:       metadata(1000, false),
+		CredentialMode: llm.ModeManaged,
+	}
+}
+
+// realFreeLaneDecision is what the router gives a free-lane user under the
+// paid trial scope: OpenRouter and Nvidia, no Anthropic route.
+func realFreeLaneDecision() llm.Decision {
+	return llm.Decision{
+		Primary: llm.Route{Provider: llm.OpenRouter, ModelID: llm.FreeLaneOpenRouterModel},
+		Fallbacks: []llm.Route{
+			{Provider: llm.OpenRouter, ModelID: llm.FreeLaneOpenRouterSecondaryModel},
+			{Provider: llm.Nvidia, ModelID: llm.FreeLaneNvidiaModel},
+		},
+		Cerberus:       metadata(0, true),
+		CredentialMode: llm.ModeManaged,
+	}
+}
+
+func offeredNames(t *testing.T, payload []byte) []string {
+	t.Helper()
+	var out []string
+	for _, tool := range decode(t, payload)["tools"].([]any) {
+		out = append(out, tool.(map[string]any)["function"].(map[string]any)["name"].(string))
+	}
+	return out
+}
+
+func connectedNames(names []string) []string {
+	var out []string
+	for _, n := range names {
+		if strings.Contains(n, "__") {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+func TestExtraToolsOfferedAndRun(t *testing.T) {
+	tr := newTransport(paidDecision(1000),
+		toolsStep(call("c1", "search", `{"query":"dune"}`), call("c2", "aaru__read_library", `{"status":"watching"}`)),
+		textStep("You are watching Dune."))
+	base := &recordingRunner{}
+	extra := &recordingRunner{results: map[string]ToolResult{"aaru__read_library": {ModelContent: "LIBRARY"}}}
+	h := newHarness(tr)
+
+	reply := mustReply(t, h.answerWith(base, aaruOptions(extra)))
+
+	if !reflect.DeepEqual(extra.names(), []string{"aaru__read_library"}) {
+		t.Errorf("extra runner ran %v", extra.names())
+	}
+	if !reflect.DeepEqual(base.names(), []string{"search"}) {
+		t.Errorf("base runner ran %v", base.names())
+	}
+	if got := extra.calls[0].args["status"]; got != "watching" {
+		t.Errorf("extra args = %v", extra.calls[0].args)
+	}
+	if !reply.UsedConnectedApp || !reply.RanPersonalTool || !reply.IsAnswer || reply.Indexable() || reply.ToolCallCount != 2 {
+		t.Errorf("reply = %+v", reply)
+	}
+	// Every round offers the service's tools, then the extras, each once.
+	want := append(names(h.service.Tools), "aaru__read_library", "aaru__list_airs")
+	for i, payload := range tr.sent() {
+		if got := offeredNames(t, payload); !reflect.DeepEqual(got, want) {
+			t.Errorf("round %d offered %v, want %v", i+1, got, want)
+		}
+	}
+	if got := lastToolContent(t, tr.sent()[1]); got != "LIBRARY" {
+		t.Errorf("model read %v", got)
+	}
+	// The pick happens before the pin is known, so it sees the plain payload.
+	if got := connectedNames(offeredNames(t, tr.pickPayload)); len(got) != 0 {
+		t.Errorf("pick payload offered %v", got)
+	}
+}
+
+func TestAnswerWithoutOptionsNeverSetsUsedConnectedApp(t *testing.T) {
+	tr := newTransport(paidDecision(1000), toolsStep(call("c1", "health_query", "{}")), textStep("Your data."))
+	reply := mustReply(t, newHarness(tr).answer(context.Background(), &recordingRunner{}, nil))
+	if reply.UsedConnectedApp || !reply.RanPersonalTool {
+		t.Errorf("reply = %+v", reply)
+	}
+}
+
+func TestExtraToolsForceAnthropic(t *testing.T) {
+	tr := newTransport(mixedDecision(),
+		toolsStep(call("c1", "aaru__read_library", "{}")),
+		toolsStep(call("c2", "aaru__list_airs", "{}")),
+		textStep("Done."))
+	extra := &recordingRunner{}
+
+	mustReply(t, newHarness(tr).answerWith(&recordingRunner{}, aaruOptions(extra)))
+
+	seen := tr.seen()
+	if len(seen) != 3 {
+		t.Fatalf("rounds = %d", len(seen))
+	}
+	want := llm.Route{Provider: llm.Anthropic, ModelID: "claude-haiku-5-5"}
+	for i, d := range seen {
+		if d.Primary != want || d.Fallbacks != nil {
+			t.Errorf("round %d decision = %+v", i+1, d)
+		}
+	}
+	// The pin does not disturb the money: round 1 still settles the reservation.
+	if seen[0].Cerberus.BudgetReservationUsdMicros != 1000 || seen[1].Cerberus.BudgetReservationUsdMicros != 0 {
+		t.Errorf("reservations = %d, %d", seen[0].Cerberus.BudgetReservationUsdMicros, seen[1].Cerberus.BudgetReservationUsdMicros)
+	}
+}
+
+// A turn with no extras is routed exactly as before, fallbacks and all.
+func TestWithoutExtraToolsTheDecisionIsNotPinned(t *testing.T) {
+	tr := newTransport(mixedDecision(), textStep("ok"))
+	mustReply(t, newHarness(tr).answerWith(&recordingRunner{}, TurnOptions{}))
+	if d := tr.seen()[0]; d.Primary.Provider != llm.OpenRouter || len(d.Fallbacks) != 2 {
+		t.Errorf("decision = %+v", d)
+	}
+}
+
+func TestExtraToolsDroppedWhenNoAnthropicRoute(t *testing.T) {
+	picked := realFreeLaneDecision()
+	tr := newTransport(picked,
+		toolsStep(call("c1", "aaru__read_library", "{}")),
+		textStep("I can't reach your library here."))
+	base, extra := &recordingRunner{}, &recordingRunner{}
+
+	reply := mustReply(t, newHarness(tr).answerWith(base, aaruOptions(extra)))
+
+	if reply.Text != "I can't reach your library here." || !reply.IsAnswer {
+		t.Errorf("reply = %+v", reply)
+	}
+	if reply.UsedConnectedApp || reply.RanPersonalTool || reply.ToolCallCount != 0 {
+		t.Errorf("reply = %+v", reply)
+	}
+	if len(extra.names()) != 0 || len(base.names()) != 0 {
+		t.Errorf("ran extra %v, base %v", extra.names(), base.names())
+	}
+	sent := tr.sent()
+	if len(sent) != 2 {
+		t.Fatalf("rounds = %d", len(sent))
+	}
+	for i, payload := range sent {
+		if got := connectedNames(offeredNames(t, payload)); len(got) != 0 {
+			t.Errorf("round %d offered %v", i+1, got)
+		}
+	}
+	// The dropped tool is refused like any tool that was never offered.
+	if got := lastToolContent(t, sent[1]); got != refusal {
+		t.Errorf("model read %v", got)
+	}
+	// The turn ran on the decision as picked, not on a pinned or emptied one.
+	for i, d := range tr.seen() {
+		if d.Primary != picked.Primary || !reflect.DeepEqual(d.Fallbacks, picked.Fallbacks) || !d.Cerberus.IsFreeLane {
+			t.Errorf("round %d decision = %+v", i+1, d)
+		}
+	}
+}
+
+// Whatever the route, a call that goes to a provider other than Anthropic, or
+// on the free lane at all, carries no connected-app tool and no extra runs.
+func TestFreeLaneNeverCarriesExtraTools(t *testing.T) {
+	trialledFreeLane := realFreeLaneDecision()
+	trialledFreeLane.Fallbacks = trialledFreeLane.Candidates()
+	trialledFreeLane.Primary = llm.Route{Provider: llm.Anthropic, ModelID: "claude-haiku-5-5"}
+	trialledFreeLane.ManagedTrialPrepended = true
+
+	paidOpenAI := paidDecision(1000)
+	paidOpenAI.Primary = llm.Route{Provider: llm.OpenAI, ModelID: "gpt-5"}
+	paidOpenAI.Fallbacks = []llm.Route{{Provider: llm.Groq, ModelID: "llama"}}
+
+	cases := []struct {
+		name       string
+		picked     llm.Decision
+		wantExtras bool
+	}{
+		{"free lane, paid trial scope", realFreeLaneDecision(), false},
+		{"free lane, trial prepended", trialledFreeLane, false},
+		{"free lane, single route", freeLaneDecision(), false},
+		{"paid, no anthropic route", paidOpenAI, false},
+		{"paid, anthropic behind", mixedDecision(), true},
+		{"paid, anthropic in front", paidDecision(1000), true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tr := newTransport(tc.picked,
+				toolsStep(call("c1", "aaru__read_library", "{}")),
+				toolsStep(call("c2", "aaru__list_airs", "{}")),
+				textStep("Done."))
+			extra := &recordingRunner{}
+
+			reply := mustReply(t, newHarness(tr).answerWith(&recordingRunner{}, aaruOptions(extra)))
+
+			seen, sent := tr.seen(), tr.sent()
+			if len(seen) != 3 || len(sent) != 3 {
+				t.Fatalf("rounds = %d", len(seen))
+			}
+			for i, d := range seen {
+				carried := connectedNames(offeredNames(t, sent[i]))
+				freeLane := d.Cerberus != nil && d.Cerberus.IsFreeLane
+				if (d.Primary.Provider != llm.Anthropic || d.Fallbacks != nil || freeLane) && len(carried) != 0 {
+					t.Errorf("round %d: decision %+v carried %v", i+1, d, carried)
+				}
+				if tc.wantExtras != (len(carried) == len(aaruTools)) {
+					t.Errorf("round %d carried %v, want extras %v", i+1, carried, tc.wantExtras)
+				}
+			}
+			if ran := len(extra.names()) > 0; ran != tc.wantExtras || reply.UsedConnectedApp != tc.wantExtras {
+				t.Errorf("extra ran %v, reply = %+v", extra.names(), reply)
+			}
+		})
+	}
+}
+
+func TestAnthropicFailureDoesNotFallOver(t *testing.T) {
+	tr := newTransport(mixedDecision(), toolsStep(call("c1", "aaru__read_library", "{}")), failStep())
+	extra := &recordingRunner{results: map[string]ToolResult{"aaru__read_library": {ModelContent: "LIBRARY"}}}
+
+	reply := mustReply(t, newHarness(tr).answerWith(&recordingRunner{}, aaruOptions(extra)))
+
+	if !strings.HasPrefix(reply.Text, failedLead) || reply.IsAnswer {
+		t.Errorf("reply = %+v", reply)
+	}
+	// Task 8 marks the rows by this, so a failed turn still says it.
+	if !reply.UsedConnectedApp || !reply.RanPersonalTool || reply.Indexable() {
+		t.Errorf("reply = %+v", reply)
+	}
+	// One transport call per round, each with nowhere else to go.
+	seen := tr.seen()
+	if len(seen) != 2 {
+		t.Fatalf("transport calls = %d, want 2", len(seen))
+	}
+	for i, d := range seen {
+		if d.Primary.Provider != llm.Anthropic || d.Fallbacks != nil {
+			t.Errorf("round %d decision = %+v", i+1, d)
+		}
+	}
+}
+
+// A pinned turn whose first round fails has run nothing, so it starts over as
+// an ordinary turn: the decision from before the pin, no connected-app tools.
+func TestAnthropicFailureOnRoundOneRerunsWithoutExtras(t *testing.T) {
+	picked := mixedDecision()
+	tr := newTransport(picked,
+		failStep(),
+		toolsStep(call("c1", "search", `{"query":"dune"}`), call("c2", "aaru__read_library", "{}")),
+		textStep("Found it."))
+	base, extra := &recordingRunner{}, &recordingRunner{}
+	h := newHarness(tr)
+
+	reply := mustReply(t, h.answerWith(base, aaruOptions(extra)))
+
+	if reply.Text != "Found it." || !reply.IsAnswer || reply.UsedConnectedApp || reply.RanPersonalTool || reply.ToolCallCount != 1 {
+		t.Errorf("reply = %+v", reply)
+	}
+	if len(extra.names()) != 0 || !reflect.DeepEqual(base.names(), []string{"search"}) {
+		t.Errorf("ran extra %v, base %v", extra.names(), base.names())
+	}
+	seen, sent := tr.seen(), tr.sent()
+	if len(seen) != 3 {
+		t.Fatalf("transport calls = %d, want 3", len(seen))
+	}
+	// The failed round was the pinned one, and it settled the reservation.
+	if seen[0].Primary.Provider != llm.Anthropic || seen[0].Fallbacks != nil || seen[0].Cerberus.BudgetReservationUsdMicros != 1000 {
+		t.Errorf("pinned round decision = %+v", seen[0])
+	}
+	if got := connectedNames(offeredNames(t, sent[0])); len(got) != len(aaruTools) {
+		t.Errorf("pinned round offered %v", got)
+	}
+	for i := 1; i < len(seen); i++ {
+		d := seen[i]
+		if d.Primary != picked.Primary || !reflect.DeepEqual(d.Fallbacks, picked.Fallbacks) {
+			t.Errorf("rerun call %d decision = %+v", i, d)
+		}
+		if d.Cerberus.BudgetReservationUsdMicros != 0 {
+			t.Errorf("rerun call %d carries a reservation of %d", i, d.Cerberus.BudgetReservationUsdMicros)
+		}
+		if got := offeredNames(t, sent[i]); !reflect.DeepEqual(got, names(h.service.Tools)) {
+			t.Errorf("rerun call %d offered %v", i, got)
+		}
+	}
+	// The model asking for the dropped tool anyway is refused.
+	if got := lastToolContent(t, sent[2]); got != refusal {
+		t.Errorf("model read %v", got)
+	}
+	if got := h.logs.outcomes(); !reflect.DeepEqual(got, []string{"answer"}) {
+		t.Errorf("outcomes = %v", got)
+	}
+	if len(h.releases.all()) != 0 {
+		t.Errorf("released %v", h.releases.all())
+	}
+}
+
+// The rerun happens once: it is not pinned, so its own round-1 failure is the
+// ordinary hand-back to the classic path.
+func TestRerunWithoutExtrasCannotPinAgainOrLoop(t *testing.T) {
+	picked := mixedDecision()
+	tr := newTransport(picked, failStep())
+	extra := &recordingRunner{}
+	h := newHarness(tr)
+
+	outcome := h.answerWith(&recordingRunner{}, aaruOptions(extra))
+
+	if outcome.Reply != nil || outcome.PreDecided != nil {
+		t.Errorf("outcome = %+v", outcome)
+	}
+	seen, sent := tr.seen(), tr.sent()
+	if len(seen) != 2 {
+		t.Fatalf("transport calls = %d, want 2", len(seen))
+	}
+	if seen[0].Primary.Provider != llm.Anthropic || seen[0].Fallbacks != nil {
+		t.Errorf("first decision = %+v", seen[0])
+	}
+	if seen[1].Primary != picked.Primary || !reflect.DeepEqual(seen[1].Fallbacks, picked.Fallbacks) {
+		t.Errorf("rerun decision = %+v", seen[1])
+	}
+	if got := connectedNames(offeredNames(t, sent[1])); len(got) != 0 {
+		t.Errorf("rerun offered %v", got)
+	}
+	if len(extra.names()) != 0 {
+		t.Errorf("extra ran %v", extra.names())
+	}
+	if tr.picks != 1 || len(tr.endpointChecks) != 1 {
+		t.Errorf("picks = %d, endpoint checks = %d", tr.picks, len(tr.endpointChecks))
+	}
+	if got := h.logs.outcomes(); !reflect.DeepEqual(got, []string{"fallback"}) {
+		t.Errorf("outcomes = %v", got)
+	}
+}
+
+// A turn that is not pinned keeps the old round-1 behaviour: no rerun.
+func TestRoundOneFailureWithoutExtrasDoesNotRerun(t *testing.T) {
+	tr := newTransport(mixedDecision(), failStep())
+	if outcome := newHarness(tr).answerWith(&recordingRunner{}, TurnOptions{}); outcome.Reply != nil {
+		t.Errorf("outcome = %+v", outcome)
+	}
+	if len(tr.seen()) != 1 {
+		t.Errorf("transport calls = %d, want 1", len(tr.seen()))
+	}
+}
+
+// byokAnthropicDecision is a user spending their own Anthropic key.
+func byokAnthropicDecision() llm.Decision {
+	d := paidDecision(1000)
+	d.Primary = llm.Route{Provider: llm.Anthropic, ModelID: "claude-sonnet-4-6"}
+	d.Fallbacks = []llm.Route{{Provider: llm.OpenAI, ModelID: "gpt-5"}}
+	d.Cerberus.Mode = llm.ModeBYOK
+	d.CredentialMode = llm.ModeBYOK
+	return d
+}
+
+// "Anthropic only" is Anthropic's endpoint: a key stored with another base URL
+// would carry the app's tools and data to that host.
+func TestExtraToolsDroppedWhenAnthropicKeyNamesAnotherHost(t *testing.T) {
+	picked := byokAnthropicDecision()
+	tr := newTransport(picked, toolsStep(call("c1", "aaru__read_library", "{}")), textStep("No library here."))
+	tr.customEndpoint = true
+	base, extra := &recordingRunner{}, &recordingRunner{}
+
+	reply := mustReply(t, newHarness(tr).answerWith(base, aaruOptions(extra)))
+
+	if reply.UsedConnectedApp || reply.RanPersonalTool || reply.ToolCallCount != 0 {
+		t.Errorf("reply = %+v", reply)
+	}
+	if len(extra.names()) != 0 || len(base.names()) != 0 {
+		t.Errorf("ran extra %v, base %v", extra.names(), base.names())
+	}
+	sent := tr.sent()
+	if len(sent) != 2 {
+		t.Fatalf("rounds = %d", len(sent))
+	}
+	for i, payload := range sent {
+		if got := connectedNames(offeredNames(t, payload)); len(got) != 0 {
+			t.Errorf("round %d offered %v", i+1, got)
+		}
+	}
+	if got := lastToolContent(t, sent[1]); got != refusal {
+		t.Errorf("model read %v", got)
+	}
+	// The turn ran on the decision as picked, fallbacks and all.
+	for i, d := range tr.seen() {
+		if d.Primary != picked.Primary || !reflect.DeepEqual(d.Fallbacks, picked.Fallbacks) {
+			t.Errorf("round %d decision = %+v", i+1, d)
+		}
+	}
+	// What was checked is the route the pin chose.
+	if len(tr.endpointChecks) != 1 || tr.endpointChecks[0].Primary != picked.Primary || tr.endpointChecks[0].Fallbacks != nil {
+		t.Errorf("endpoint checks = %+v", tr.endpointChecks)
+	}
+}
+
+func TestExtraToolsRunOnAnOwnKeyAtTheDefaultEndpoint(t *testing.T) {
+	tr := newTransport(byokAnthropicDecision(), toolsStep(call("c1", "aaru__read_library", "{}")), textStep("Done."))
+	extra := &recordingRunner{}
+
+	reply := mustReply(t, newHarness(tr).answerWith(&recordingRunner{}, aaruOptions(extra)))
+
+	if !reply.UsedConnectedApp || !reflect.DeepEqual(extra.names(), []string{"aaru__read_library"}) {
+		t.Errorf("reply = %+v, extra ran %v", reply, extra.names())
+	}
+	for i, d := range tr.seen() {
+		if d.Primary.Provider != llm.Anthropic || d.Fallbacks != nil || d.CredentialMode != llm.ModeBYOK {
+			t.Errorf("round %d decision = %+v", i+1, d)
+		}
+	}
+}
+
+// A turn with nothing to protect does not look the credential up.
+func TestNoEndpointCheckWithoutExtraTools(t *testing.T) {
+	tr := newTransport(paidDecision(1000), textStep("ok"))
+	mustReply(t, newHarness(tr).answer(context.Background(), &recordingRunner{}, nil))
+	if len(tr.endpointChecks) != 0 {
+		t.Errorf("endpoint checks = %d", len(tr.endpointChecks))
+	}
+}
+
+func TestUnknownDoubleUnderscoreToolRefused(t *testing.T) {
+	tr := newTransport(paidDecision(1000), toolsStep(call("c1", "norviq__x", "{}")), textStep("No."))
+	base, extra := &recordingRunner{}, &recordingRunner{}
+
+	reply := mustReply(t, newHarness(tr).answerWith(base, aaruOptions(extra)))
+
+	if got := lastToolContent(t, tr.sent()[1]); got != refusal {
+		t.Errorf("model read %v", got)
+	}
+	if len(base.names()) != 0 || len(extra.names()) != 0 {
+		t.Errorf("ran base %v, extra %v", base.names(), extra.names())
+	}
+	if reply.UsedConnectedApp || reply.RanPersonalTool || reply.ToolCallCount != 0 {
+		t.Errorf("reply = %+v", reply)
+	}
+}
+
+// An extra that could not be told apart from a base tool, or that has no
+// runner, is not offered: the two sets stay disjoint.
+func TestExtraToolsEntryGuard(t *testing.T) {
+	tr := newTransport(paidDecision(1000), toolsStep(call("c1", "search", `{"query":"x"}`)), textStep("ok"))
+	base, extra := &recordingRunner{}, &recordingRunner{}
+	h := newHarness(tr)
+	opts := TurnOptions{
+		ExtraTools:    append([]Tool{{Name: "search", InputSchema: json.RawMessage(`{"type":"object"}`)}}, aaruTools...),
+		ExtraRunner:   extra,
+		AnthropicOnly: true,
+	}
+
+	mustReply(t, h.answerWith(base, opts))
+
+	if !reflect.DeepEqual(base.names(), []string{"search"}) || len(extra.names()) != 0 {
+		t.Errorf("ran base %v, extra %v", base.names(), extra.names())
+	}
+	want := append(names(h.service.Tools), "aaru__read_library", "aaru__list_airs")
+	if got := offeredNames(t, tr.sent()[0]); !reflect.DeepEqual(got, want) {
+		t.Errorf("offered %v, want %v", got, want)
+	}
+
+	tr = newTransport(mixedDecision(), toolsStep(call("c1", "aaru__read_library", "{}")), textStep("ok"))
+	reply := mustReply(t, newHarness(tr).answerWith(base, TurnOptions{ExtraTools: aaruTools, AnthropicOnly: true}))
+	if got := connectedNames(offeredNames(t, tr.sent()[0])); len(got) != 0 || reply.UsedConnectedApp {
+		t.Errorf("no runner: offered %v, reply = %+v", got, reply)
+	}
+}
+
+// The loop logs counts and durations only: never a tool's arguments or result.
+func TestExtraToolArgumentsAndResultsAreNotLogged(t *testing.T) {
+	tr := newTransport(paidDecision(1000),
+		toolsStep(call("c1", "aaru__read_library", `{"status":"SECRET-ARGUMENT"}`)),
+		textStep("Done."))
+	extra := &recordingRunner{results: map[string]ToolResult{"aaru__read_library": {ModelContent: "SECRET-RESULT"}}}
+	h := newHarness(tr)
+
+	mustReply(t, h.answerWith(&recordingRunner{}, aaruOptions(extra)))
+
+	h.logs.mu.Lock()
+	defer h.logs.mu.Unlock()
+	if len(h.logs.records) == 0 {
+		t.Fatal("nothing was logged")
+	}
+	for _, r := range h.logs.records {
+		if strings.Contains(r.message, "SECRET") {
+			t.Errorf("message %q leaks tool data", r.message)
+		}
+		for k, v := range r.attrs {
+			if strings.Contains(v.String(), "SECRET") {
+				t.Errorf("%q logs tool data in %q", r.message, k)
+			}
+		}
+	}
+}
+
+// MARK: - No silent writes once a connected app has answered (R28)
+
+// toolResults is each tool message of a payload, as "name: content".
+func toolResults(t *testing.T, payload []byte) []string {
+	t.Helper()
+	var out []string
+	for _, m := range toolMessages(t, payload) {
+		name, _ := m["name"].(string)
+		content, _ := m["content"].(string)
+		out = append(out, name+": "+content)
+	}
+	return out
+}
+
+// notingRunner is a base runner that is told when a connected app ran.
+type notingRunner struct {
+	recordingRunner
+	noted int
+}
+
+func (r *notingRunner) NoteConnectedApp() { r.noted++ }
+
+func TestWritesAfterAConnectedAppAnswerAreRefused(t *testing.T) {
+	tr := newTransport(paidDecision(1000),
+		toolsStep(call("c1", "aaru__read_library", `{}`)),
+		toolsStep(
+			call("c2", "memory_save", `{"content":"SECRET-ARG Severance"}`),
+			call("c3", "space_create", `{"name":"SECRET-ARG Shows"}`),
+			call("c4", "browse", `{}`),
+			call("c5", "calendar_create", `{"title":"Finale","start":"2030-01-01T09:00:00"}`)),
+		toolsStep(call("c6", "app_reminder_create", `{"title":"SECRET-ARG"}`), call("c7", "space_update", `{}`), call("c8", "file_move", `{}`)),
+		textStep("Nothing was saved."))
+	base := &notingRunner{}
+	extra := &recordingRunner{results: map[string]ToolResult{"aaru__read_library": {ModelContent: "LIBRARY"}}}
+	h := newHarness(tr)
+
+	reply := mustReply(t, h.answerWith(base, aaruOptions(extra)))
+
+	// Reads and the tool that waits for Confirm still reach the runner; no
+	// write that needs no tap does.
+	if got := base.names(); !reflect.DeepEqual(got, []string{"browse", "calendar_create"}) {
+		t.Errorf("base runner ran %v", got)
+	}
+	if base.noted != 1 {
+		t.Errorf("the base runner was told %d times", base.noted)
+	}
+	sent := tr.sent()
+	if got, want := toolResults(t, sent[2])[1:], []string{
+		"memory_save: " + connectedAppWriteRefused,
+		"space_create: " + connectedAppWriteRefused,
+		"browse: result of browse",
+		"calendar_create: result of calendar_create",
+	}; !reflect.DeepEqual(got, want) {
+		t.Errorf("round 2 results = %v", got)
+	}
+	if got := toolResults(t, sent[3]); !reflect.DeepEqual(got[len(got)-3:], []string{
+		"app_reminder_create: " + connectedAppWriteRefused,
+		"space_update: " + connectedAppWriteRefused,
+		"file_move: " + connectedAppWriteRefused,
+	}) {
+		t.Errorf("round 3 results = %v", got)
+	}
+	if strings.Contains(connectedAppWriteRefused, "SECRET-ARG") {
+		t.Error("the refusal repeats an argument")
+	}
+	// The refused calls ran nothing, so they are not counted.
+	if !reply.UsedConnectedApp || reply.ToolCallCount != 3 || reply.RanAppAction {
+		t.Errorf("reply = %+v", reply)
+	}
+}
+
+// Once an app answered, the model's words can carry that app's data, and a
+// tool that embeds them would hand it to the embedding provider (R31).
+func TestEmbeddingToolsAfterAConnectedAppAnswerAreRefused(t *testing.T) {
+	tr := newTransport(paidDecision(1000),
+		toolsStep(call("c1", "search", `{"query":"mine"}`), call("c2", "memory_context", `{}`)),
+		toolsStep(
+			call("c3", "search", `{"query":"before"}`),
+			call("c4", "aaru__read_library", `{}`),
+			call("c5", "search", `{"query":"SECRET-ARG Severance"}`)),
+		toolsStep(
+			call("c6", "search", `{"query":"SECRET-ARG Dune"}`),
+			call("c7", "memory_context", `{"space":"SECRET-ARG"}`),
+			call("c8", "recent", `{}`),
+			call("c9", "read", `{"path":"a.md"}`)),
+		textStep("Here is your library."))
+	base := &recordingRunner{}
+	extra := &recordingRunner{results: map[string]ToolResult{"aaru__read_library": {ModelContent: "LIBRARY"}}}
+	h := newHarness(tr)
+
+	reply := mustReply(t, h.answerWith(base, aaruOptions(extra)))
+
+	// Before the app answered both run. After it, the base runner never sees
+	// either; reads that embed nothing still run.
+	if got := base.names(); !reflect.DeepEqual(got, []string{"search", "memory_context", "search", "recent", "read"}) {
+		t.Errorf("base runner ran %v", got)
+	}
+	for _, c := range base.calls {
+		if q, _ := c.args["query"].(string); strings.Contains(q, "SECRET-ARG") {
+			t.Errorf("a search ran with app-era text: %v", c.args)
+		}
+	}
+	sent := tr.sent()
+	if got, want := toolResults(t, sent[2]), []string{
+		"search: result of search",
+		"aaru__read_library: LIBRARY",
+		"search: " + connectedAppEmbedRefused,
+	}; !reflect.DeepEqual(got[len(got)-3:], want) {
+		t.Errorf("round 2 results = %v", got)
+	}
+	if got, want := toolResults(t, sent[3]), []string{
+		"search: " + connectedAppEmbedRefused,
+		"memory_context: " + connectedAppEmbedRefused,
+		"recent: result of recent",
+		"read: result of read",
+	}; !reflect.DeepEqual(got[len(got)-4:], want) {
+		t.Errorf("round 3 results = %v", got)
+	}
+	if strings.Contains(connectedAppEmbedRefused, "SECRET-ARG") {
+		t.Error("the refusal repeats an argument")
+	}
+	// The refused calls ran nothing, so they are not counted.
+	if !reply.UsedConnectedApp || reply.ToolCallCount != 6 {
+		t.Errorf("reply = %+v", reply)
+	}
+}
+
+// Offering the app tools gates nothing: only one having answered does.
+func TestSearchInATurnThatRanNoConnectedAppStillRuns(t *testing.T) {
+	tr := newTransport(paidDecision(1000),
+		toolsStep(call("c1", "search", `{"query":"dune"}`), call("c2", "memory_context", `{}`)),
+		textStep("Done."))
+	base := &recordingRunner{}
+	h := newHarness(tr)
+
+	mustReply(t, h.answerWith(base, aaruOptions(&recordingRunner{})))
+
+	if got := base.names(); !reflect.DeepEqual(got, []string{"search", "memory_context"}) {
+		t.Errorf("base runner ran %v", got)
+	}
+}
+
+// A write asked for before the app answered holds no app data: it runs.
+func TestAWriteBeforeTheConnectedAppAnswerStillRuns(t *testing.T) {
+	tr := newTransport(paidDecision(1000),
+		toolsStep(
+			call("c1", "memory_save", `{"content":"mine"}`),
+			call("c2", "aaru__read_library", `{}`),
+			call("c3", "memory_save", `{"content":"theirs"}`)),
+		textStep("Done."))
+	base := &recordingRunner{}
+	h := newHarness(tr)
+
+	mustReply(t, h.answerWith(base, aaruOptions(&recordingRunner{})))
+
+	if got := base.names(); !reflect.DeepEqual(got, []string{"memory_save"}) {
+		t.Fatalf("base runner ran %v", got)
+	}
+	if got := base.calls[0].args["content"]; got != "mine" {
+		t.Errorf("the write that ran had %v", got)
+	}
+	if got := toolResults(t, tr.sent()[1]); got[len(got)-1] != "memory_save: "+connectedAppWriteRefused {
+		t.Errorf("results = %v", got)
+	}
+}
+
+// Offering the tools changes nothing: only one having run does.
+func TestAWriteInATurnThatRanNoConnectedAppStillRuns(t *testing.T) {
+	for name, opts := range map[string]TurnOptions{"no extras": {}, "extras offered": aaruOptions(&recordingRunner{})} {
+		tr := newTransport(paidDecision(1000),
+			toolsStep(call("c1", "memory_save", `{"content":"mine"}`), call("c2", "space_create", `{"name":"Shows"}`)),
+			textStep("Saved."))
+		base := &notingRunner{}
+
+		reply := mustReply(t, newHarness(tr).answerWith(base, opts))
+
+		if got := base.names(); !reflect.DeepEqual(got, []string{"memory_save", "space_create"}) {
+			t.Errorf("%s: base runner ran %v", name, got)
+		}
+		if base.noted != 0 || reply.UsedConnectedApp {
+			t.Errorf("%s: noted %d, reply %+v", name, base.noted, reply)
+		}
 	}
 }

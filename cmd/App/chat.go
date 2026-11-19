@@ -6,6 +6,7 @@ import (
 	"lumina/internal/apns"
 	linkcapture "lumina/internal/capture"
 	"lumina/internal/chunkindex"
+	"lumina/internal/connectedapps"
 	"lumina/internal/entitlement"
 	"lumina/internal/hermesprofile"
 	"lumina/internal/httpserver"
@@ -32,6 +33,8 @@ import (
 
 	"github.com/google/uuid"
 )
+
+var _ chat.ConnectedApps = (*connectedapps.Service)(nil)
 
 // chatModules builds wave 5C: /v1/conversations and its siblings, and /v1/llm/chat.
 // links is the shared link-capture pipeline, enrichment its enrichment service.
@@ -92,6 +95,11 @@ func (a *agent) chatModules(links *linkcapture.Service, enrichment *linkcapture.
 	}
 	quick, quickRoutes := a.quickAssistant()
 	opts.QuickAssistant = quick
+	// Only a real service: a nil *connectedapps.Service in the interface field
+	// would not be nil to chat.
+	if a.connectedApps != nil {
+		opts.ConnectedApps = a.connectedApps
+	}
 
 	catalog := a.skillCatalog()
 	selectorTransport := llmchat.SelectorTransport{Transport: a.stack.Transport}

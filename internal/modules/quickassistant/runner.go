@@ -88,6 +88,21 @@ type TurnState struct {
 	personalRan bool
 	writes      int
 	proposals   int
+	// connectedApp: a connected-app tool was asked for earlier in the turn.
+	connectedApp bool
+}
+
+// UsedConnectedApp reports whether a connected-app tool ran earlier in the turn.
+func (s *TurnState) UsedConnectedApp() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.connectedApp
+}
+
+func (s *TurnState) noteConnectedApp() {
+	s.mu.Lock()
+	s.connectedApp, s.personalRan = true, true
+	s.mu.Unlock()
 }
 
 // PersonalRan reports whether a personal tool ran earlier in the turn.
@@ -172,6 +187,11 @@ type refusalError struct{ msg string }
 func (e *refusalError) Error() string { return e.msg }
 
 func refuse(msg string) error { return &refusalError{msg: msg} }
+
+// NoteConnectedApp is the loop saying a connected-app tool is about to run.
+// Another app's data is personal, and every card proposed from here on
+// carries the turn's origin.
+func (r *Runner) NoteConnectedApp() { r.state().noteConnectedApp() }
 
 // Run implements ToolRunner.
 func (r *Runner) Run(ctx context.Context, name string, args map[string]any) ToolResult {

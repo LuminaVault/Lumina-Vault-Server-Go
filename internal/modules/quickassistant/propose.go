@@ -129,9 +129,16 @@ func (r *Runner) proposeChange(ctx context.Context, tool string, vault uuid.UUID
 	}
 	id := uuid.New()
 	expiresAt := r.now().Add(ConfirmWindow)
+	// A card proposed after a connected app answered can name its data, so
+	// the line its confirm or cancel writes is flagged like the turn.
+	var origin *string
+	if r.state().UsedConnectedApp() {
+		flag := OriginConnectedApp
+		origin = &flag
+	}
 	if err := r.Store.Insert(ctx, PendingAction{
 		ID: id, TenantID: r.Actor, VaultID: vault, ConversationID: *r.ConversationID,
-		Tool: tool, Args: args, Summary: summary, ExpiresAt: expiresAt,
+		Tool: tool, Args: args, Summary: summary, ExpiresAt: expiresAt, Origin: origin,
 	}); err != nil {
 		return ToolResult{}, err
 	}

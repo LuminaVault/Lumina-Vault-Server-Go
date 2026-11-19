@@ -961,6 +961,9 @@ func (w *Worker) recentConversationText(ctx context.Context, tenant uuid.UUID, d
 		FROM conversation_messages m
 		JOIN conversations c ON c.id = m.conversation_id
 		WHERE c.tenant_id = $1 AND m.created_at >= $2
+		  -- A turn that ran a connected-app tool (chat.OriginConnectedApp) can
+		  -- quote another app's data, and this review is not Anthropic-pinned.
+		  AND m.origin IS DISTINCT FROM 'connected_app'
 		ORDER BY m.created_at ASC
 		LIMIT 500`, tenant, since)
 	if err != nil {

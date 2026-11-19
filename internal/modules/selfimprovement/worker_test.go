@@ -284,6 +284,32 @@ func TestTickSoulReview(t *testing.T) {
 	require.Equal(t, "HTTPError: Service Unavailable, soul_review_disabled", *run.failure)
 }
 
+// The SOUL reviewer is not Anthropic-pinned, so it never reads a turn that ran
+// a connected-app tool.
+func TestSoulReviewLeavesOutConnectedAppTurns(t *testing.T) {
+	v := setup(t)
+	tenant := v.user()
+	_, err := v.soul.Write(tenant, v.username(tenant), "# SOUL.md\n\n## Identity\n\nStable voice.\n")
+	require.NoError(t, err)
+	v.exec(`INSERT INTO self_improvement_settings (id, tenant_id, soul_review_enabled, lease_until) VALUES (gen_random_uuid(), $1, TRUE, now())`, tenant)
+	conversation := uuid.New()
+	v.exec(`INSERT INTO conversations (id, tenant_id, title, created_at, updated_at) VALUES ($1, $2, 't', now(), now())`, conversation, tenant)
+	v.exec(`INSERT INTO conversation_messages (id, conversation_id, role, content, source_memory_ids, tool_call_count, origin, created_at) VALUES
+		(gen_random_uuid(), $1, 'user', 'plain question', '{}', 0, NULL, now() - interval '4 minutes'),
+		(gen_random_uuid(), $1, 'assistant', 'a nudge', '{}', 0, 'proactive', now() - interval '3 minutes'),
+		(gen_random_uuid(), $1, 'user', 'library question', '{}', 0, 'connected_app', now() - interval '2 minutes'),
+		(gen_random_uuid(), $1, 'assistant', 'library answer', '{}', 0, 'connected_app', now() - interval '1 minute')`, conversation)
+
+	stub := &stubReviewLLM{reply: `{"needed":false,"summary":"stable"}`}
+	run := v.drain(v.worker(stub), v.queueRun(tenant, "soul", false))
+	require.Equal(t, "succeeded", run.status, run.failure)
+	require.Len(t, stub.prompts, 1)
+	require.Contains(t, stub.prompts[0], "user: plain question")
+	require.Contains(t, stub.prompts[0], "assistant: a nudge")
+	require.NotContains(t, stub.prompts[0], "library question")
+	require.NotContains(t, stub.prompts[0], "library answer")
+}
+
 // A curator for a BYO Hermes tenant fails read-only; an LLM failure fails the run
 // with the error's description.
 func TestTickFailures(t *testing.T) {

@@ -331,6 +331,15 @@ type Config struct {
 	// (make a space, move a note) run on the Quick Assistant tool loop. It needs
 	// QUICK_ASSISTANT_ENABLED too, and a client that declares chat.app_actions.
 	ChatAppActionsEnabled string `env:"CHAT_APP_ACTIONS_ENABLED" envDefault:"false"`
+	// ConnectedAppsEnabled is Go only: it ships connected apps (Lumina as an MCP
+	// client to Norviq, Aaru, Khepri and Loci) dark. Read with
+	// strings.EqualFold(v, "true"). The URLs below are each app's public MCP
+	// endpoint; they are never user-supplied.
+	ConnectedAppsEnabled      string `env:"CONNECTED_APPS_ENABLED" envDefault:"false"`
+	ConnectedAppsNorviqMCPURL string `env:"CONNECTED_APPS_NORVIQ_MCP_URL" envDefault:"https://mcp.norviq.org/mcp"`
+	ConnectedAppsAaruMCPURL   string `env:"CONNECTED_APPS_AARU_MCP_URL" envDefault:"https://api.aaruapp.com/v1/mcp"`
+	ConnectedAppsKhepriMCPURL string `env:"CONNECTED_APPS_KHEPRI_MCP_URL" envDefault:"https://www.kheprios.com/mcp"`
+	ConnectedAppsLociMCPURL   string `env:"CONNECTED_APPS_LOCI_MCP_URL" envDefault:"https://api.lociai.fyi/mcp"`
 	// VaultGitEnabled turns on per-tenant vault history (backlog E4,
 	// internal/vaultgit): the committer, VaultGitSweep and VaultGitGC.
 	VaultGitEnabled string `env:"VAULT_GIT_ENABLED" envDefault:"false"`

@@ -3,6 +3,7 @@ package main
 import (
 	"lumina/internal/apns"
 	"lumina/internal/chunkindex"
+	"lumina/internal/connectedapps"
 	"lumina/internal/devicerpc"
 	"lumina/internal/devicetools"
 	"lumina/internal/httpserver"
@@ -41,12 +42,28 @@ func (a *agent) mcpModule(broker *devicerpc.Broker) httpserver.Module {
 		Personal:   devicetools.New(a.pool, broker, devicerpc.NewQueue(a.pool, push)),
 		Soul:       soul.New(a.paths, cfg.HermesDataRoot),
 	})
-	return mcp.New(mcp.Options{
+	return mcp.New(a.mcpOptions(mcp.Options{
 		Identify:      a.identify,
 		Limits:        a.limits,
 		VaultAccess:   vaultaccess.New(a.pool),
 		Connections:   mcp.NewConnections(a.pool),
 		Service:       a.mcp,
 		PublicBaseURL: base,
-	})
+	}))
+}
+
+var _ mcp.ConnectedApps = (*connectedapps.Service)(nil)
+
+// mcpOptions adds connected apps to /v1/mcp when they are on: the service the
+// app tools go through and the registry ids a key can be granted. With them
+// off both stay unset, and the interface is never given a typed nil.
+func (a *agent) mcpOptions(opts mcp.Options) mcp.Options {
+	if a.connectedApps == nil {
+		return opts
+	}
+	opts.ConnectedApps = a.connectedApps
+	for _, app := range connectedapps.NewRegistry(a.cfg).All() {
+		opts.ConnectedAppIDs = append(opts.ConnectedAppIDs, app.ID)
+	}
+	return opts
 }

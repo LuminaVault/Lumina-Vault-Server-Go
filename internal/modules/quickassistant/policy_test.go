@@ -3,6 +3,7 @@ package quickassistant
 import (
 	"encoding/json"
 	"os"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -75,6 +76,74 @@ func TestEveryCatalogToolIsClassifiedDeliberately(t *testing.T) {
 			require.Equal(t, Confirm, ActionFor(n), n)
 		default:
 			require.Equal(t, Refused, ActionFor(n), n)
+		}
+	}
+}
+
+// R28: every offered tool that writes and is not parked for Confirm is one
+// the loop refuses once a connected app has answered. A new write tool that
+// is classified Run but left out of IsWrite would slip past that gate.
+func TestEveryUnconfirmedWriteIsGated(t *testing.T) {
+	gated := map[string]bool{}
+	for _, tool := range Definitions(DefinitionOptions{DeviceWrites: true, AppActions: true}) {
+		if tool.Writes && ActionFor(tool.Name) == Run && !WritesWithoutConfirm(tool.Name) {
+			t.Errorf("%s writes without Confirm and is not gated", tool.Name)
+		}
+		if !tool.Writes && WritesWithoutConfirm(tool.Name) {
+			t.Errorf("%s is gated as a write but its definition says it never writes", tool.Name)
+		}
+		if WritesWithoutConfirm(tool.Name) {
+			gated[tool.Name] = true
+		}
+	}
+	want := map[string]bool{"memory_save": true, "app_reminder_create": true, "space_create": true, "space_update": true, "file_move": true}
+	if !reflect.DeepEqual(gated, want) {
+		t.Errorf("gated = %v", gated)
+	}
+}
+
+// Every tool that runs without a tap is classified for a turn that read a
+// connected app: a write (refused, R28), embed-gated (refused, R31) or a read
+// that sends none of the model's text to the embedding provider. A new
+// Run-class tool fails here until someone decides which it is.
+func TestEveryRunToolIsClassifiedForConnectedAppTurns(t *testing.T) {
+	// Checked against mcp/tools.go and the runner: none of these embeds.
+	embedsNothing := map[string]bool{
+		"browse": true, "read": true, "recent": true, "health_query": true,
+		"calendar_query": true, "reminders_list": true, "app_reminders_list": true,
+		"space_list": true,
+	}
+	gated := map[string]bool{}
+	for _, tool := range Definitions(DefinitionOptions{DeviceWrites: true, AppActions: true}) {
+		name := tool.Name
+		if EmbedGated(name) {
+			gated[name] = true
+			if ActionFor(name) != Run || tool.Writes {
+				t.Errorf("%s is embed-gated but is not a read that runs at once", name)
+			}
+		}
+		if ActionFor(name) != Run {
+			continue
+		}
+		classes := 0
+		for _, in := range []bool{WritesWithoutConfirm(name), EmbedGated(name), embedsNothing[name]} {
+			if in {
+				classes++
+			}
+		}
+		if classes != 1 {
+			t.Errorf("%s is in %d of: unconfirmed write, embed-gated, embeds nothing", name, classes)
+		}
+	}
+	// search embeds its query (mcp.search). memory_context embeds nothing
+	// today; ruling 31 names it, so it is gated with search.
+	want := map[string]bool{"search": true, "memory_context": true}
+	if !reflect.DeepEqual(gated, want) {
+		t.Errorf("embed-gated = %v", gated)
+	}
+	for _, name := range []string{"", "aaru__search", "searches", "memory_save", "memory_update"} {
+		if EmbedGated(name) {
+			t.Errorf("%q is embed-gated", name)
 		}
 	}
 }

@@ -118,12 +118,28 @@ func hitDTO(h memorystore.SearchResult) HitDTO {
 	return dto
 }
 
+// historyMessages is the stored turns as a model reads them. A turn that ran
+// a connected-app tool is left out, for every model: Hermes, a device's local
+// model and any other provider must never be handed another app's data.
 func historyMessages(rows []messageRow) []llm.ChatMessage {
-	out := make([]llm.ChatMessage, len(rows))
-	for i, r := range rows {
-		out[i] = llm.ChatMessage{Role: r.Role, Content: r.Content}
+	out := make([]llm.ChatMessage, 0, len(rows))
+	for _, r := range rows {
+		if r.Origin != nil && *r.Origin == OriginConnectedApp {
+			continue
+		}
+		out = append(out, llm.ChatMessage{Role: r.Role, Content: r.Content})
 	}
 	return out
+}
+
+// flagConnectedAppQuestion marks the turn's user row. Scoped as the insert
+// was: this conversation, which fetch already tied to the person asking.
+func (m *Module) flagConnectedAppQuestion(ctx context.Context, t turn) error {
+	_, err := m.pool.Exec(ctx, `UPDATE conversation_messages SET origin = $1
+		WHERE id = $2 AND role = 'user'
+		  AND conversation_id IN (SELECT id FROM conversations WHERE id = $3 AND tenant_id = $4)`,
+		OriginConnectedApp, t.userMessage, t.conv.ID, t.actor)
+	return err
 }
 
 func (m *Module) insertMessage(ctx context.Context, r messageRow, localExecution *uuid.UUID) error {
@@ -132,9 +148,9 @@ func (m *Module) insertMessage(ctx context.Context, r messageRow, localExecution
 		sources = []uuid.UUID{}
 	}
 	_, err := m.pool.Exec(ctx, `INSERT INTO conversation_messages
-		(id, conversation_id, role, content, source_memory_ids, parallel_execution_id, local_execution_id, tool_call_count, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-		r.ID, r.ConversationID, r.Role, r.Content, sources, r.ParallelExecutionID, localExecution, r.ToolCallCount, r.CreatedAt)
+		(id, conversation_id, role, content, source_memory_ids, parallel_execution_id, local_execution_id, tool_call_count, origin, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+		r.ID, r.ConversationID, r.Role, r.Content, sources, r.ParallelExecutionID, localExecution, r.ToolCallCount, r.Origin, r.CreatedAt)
 	return err
 }
 
@@ -260,7 +276,8 @@ func (m *Module) streamReply(c *echo.Context) error {
 	}
 
 	now := m.now()
-	if err := m.insertMessage(base, messageRow{ID: uuid.New(), ConversationID: convID, Role: "user", Content: content, CreatedAt: now}, nil); err != nil {
+	userMessage := uuid.New()
+	if err := m.insertMessage(base, messageRow{ID: userMessage, ConversationID: convID, Role: "user", Content: content, CreatedAt: now}, nil); err != nil {
 		return err
 	}
 
@@ -359,7 +376,7 @@ func (m *Module) streamReply(c *echo.Context) error {
 	t := turn{
 		actor: actor, vault: vault, billing: access.BillingSponsorUserID, conv: conv, user: user,
 		sessionKey: ids.Upper(vault), sessionID: ids.Upper(convID), req: req, hits: hits,
-		disclosure: disclosure, parallel: parallel, content: content,
+		disclosure: disclosure, parallel: parallel, content: content, userMessage: userMessage,
 	}
 	if loop {
 		// This prompt runs only when the loop could not, so it says actions are
@@ -412,6 +429,8 @@ type turn struct {
 	disclosure            llm.Disclosure
 	parallel              llm.ParallelStrategy
 	content               string
+	// userMessage is the row this turn's question was stored in.
+	userMessage uuid.UUID
 	// qa is the Quick Assistant loop to try first; nil for a classic turn.
 	qa *quickTurn
 }
@@ -452,11 +471,22 @@ func (m *Module) runTurn(ctx context.Context, t turn, yield func(StreamEvent) bo
 		if reply := outcome.Reply; reply != nil {
 			// Not ctx: a dismissed card cancels it, and a write that already ran
 			// must keep its record.
+			work := context.WithoutCancel(ctx)
+			// A connected-app tool ran: both rows of the turn are flagged, so
+			// no later prompt replays them. The question is flagged even when
+			// no reply is kept. Indexable is already false for such a reply.
+			var origin *string
+			if reply.UsedConnectedApp {
+				flag := OriginConnectedApp
+				origin = &flag
+				if err := m.flagConnectedAppQuestion(work, t); err != nil {
+					m.log.ErrorContext(work, "connected app turn: question not flagged", "error", err)
+				}
+			}
 			if reply.ShouldPersist {
-				work := context.WithoutCancel(ctx)
 				if err := m.persistTurn(work, t, assistantRecord{
 					Text: reply.Text, SourceIDs: sourceIDs, ToolCalls: reply.ToolCallCount, Route: route.get(),
-					Indexable: reply.Indexable(), IsAnswer: reply.IsAnswer,
+					Indexable: reply.Indexable(), IsAnswer: reply.IsAnswer, Origin: origin,
 				}); err != nil {
 					m.log.ErrorContext(work, "assistant turn persist failed", "error", err)
 				}
@@ -575,6 +605,8 @@ type assistantRecord struct {
 	// Assistant turns may not: that is background model work a single question
 	// should not cost.
 	ReviewComplex bool
+	// Origin is the row's origin; nil for an ordinary reply.
+	Origin *string
 }
 
 // persistTurn writes the assistant message, the output-index job, the turn trace and
@@ -583,7 +615,7 @@ func (m *Module) persistTurn(ctx context.Context, t turn, rec assistantRecord) e
 	msgID := uuid.New()
 	if err := m.insertMessage(ctx, messageRow{
 		ID: msgID, ConversationID: t.conv.ID, Role: "assistant", Content: rec.Text, SourceMemoryIDs: rec.SourceIDs,
-		ToolCallCount: rec.ToolCalls, CreatedAt: m.now(),
+		ToolCallCount: rec.ToolCalls, Origin: rec.Origin, CreatedAt: m.now(),
 	}, nil); err != nil {
 		return err
 	}

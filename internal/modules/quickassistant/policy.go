@@ -63,6 +63,28 @@ func IsWrite(name string) bool {
 	}
 }
 
+// WritesWithoutConfirm reports whether the tool changes something the moment
+// the model asks, with no tap from the user: a Run-class write.
+func WritesWithoutConfirm(name string) bool {
+	return ActionFor(name) == Run && IsWrite(name)
+}
+
+// EmbedGated reports whether the tool is refused once a connected app has
+// answered in the turn because running it would send text the model wrote to
+// the embedding provider, which is not Anthropic (ruling 31). After the app
+// answered, that text can carry the app's data. search embeds its query.
+// memory_context embeds nothing today; the ruling names it, so it is gated
+// with search and stays gated if it ever learns to rank by a query. The
+// writes that embed (memory_save) are refused by WritesWithoutConfirm.
+func EmbedGated(name string) bool {
+	switch name {
+	case "search", "memory_context":
+		return true
+	default:
+		return false
+	}
+}
+
 // ChangesApp reports whether the tool changes spaces, files or a memory's
 // text. A reply from a turn where one was asked for describes that change
 // ("Created the space Health"), which is not something to remember.

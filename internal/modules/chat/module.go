@@ -92,6 +92,10 @@ type Options struct {
 	// is on and its table exists. Nil, a stream body's quickAssistant is never
 	// read and chat is exactly what it was before Quick Assistant.
 	QuickAssistant *QuickAssistant
+	// ConnectedApps offers the asker's connected-app tools on a Quick
+	// Assistant turn. Nil (CONNECTED_APPS_ENABLED off) offers none. Assign a
+	// real service only: a nil pointer in this field is not nil.
+	ConnectedApps ConnectedApps
 }
 
 // QuickAssistant is what a Quick Assistant turn runs on: the tool loop and the
@@ -124,6 +128,9 @@ type Module struct {
 	// afterTurn runs when a stream's turn has finished, persistence included.
 	// Tests use it to wait for a turn whose client went away.
 	afterTurn func()
+	// appToolsDeadline replaces connectedAppToolsDeadline when positive. Tests
+	// set it to avoid a four second wait.
+	appToolsDeadline time.Duration
 }
 
 // New builds the module.

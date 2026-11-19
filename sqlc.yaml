@@ -879,6 +879,7 @@ sql:
     schema:
       - internal/migrations/sql/schema-swift.sql
       - internal/migrations/sql/00002_assistant_pending_actions.sql
+      - internal/migrations/sql/00011_assistant_pending_actions_origin.sql
     queries: internal/modules/quickassistant/queries.sql
     gen:
       go:

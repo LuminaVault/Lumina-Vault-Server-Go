@@ -16,8 +16,8 @@ import (
 const appendAssistantMessage = `-- name: AppendAssistantMessage :exec
 WITH inserted AS (
     INSERT INTO conversation_messages
-        (id, conversation_id, role, content, source_memory_ids, parallel_execution_id, local_execution_id, tool_call_count, created_at)
-    VALUES ($1, $2, 'assistant', $3, '{}'::uuid[], NULL, NULL, 0, NOW())
+        (id, conversation_id, role, content, source_memory_ids, parallel_execution_id, local_execution_id, tool_call_count, origin, created_at)
+    VALUES ($1, $2, 'assistant', $3, '{}'::uuid[], NULL, NULL, 0, $4, NOW())
     RETURNING conversation_id
 )
 UPDATE conversations SET updated_at = NOW()
@@ -28,21 +28,29 @@ type AppendAssistantMessageParams struct {
 	ID             uuid.UUID
 	ConversationID uuid.UUID
 	Content        string
+	Origin         *string
 }
 
 // The line a confirm or cancel leaves in the conversation (Swift:
 // QuickAssistantActionsController.appendMessage). Written straight to the
 // transcript, so it is never indexed (ruling 28); the conversation moves up
 // the inbox, which sorts by updated_at. Columns as chat's insertMessage.
+// origin is the proposing turn's: 'connected_app' keeps the line out of every
+// later prompt, as it keeps the turn itself out.
 func (q *Queries) AppendAssistantMessage(ctx context.Context, arg AppendAssistantMessageParams) error {
-	_, err := q.db.Exec(ctx, appendAssistantMessage, arg.ID, arg.ConversationID, arg.Content)
+	_, err := q.db.Exec(ctx, appendAssistantMessage,
+		arg.ID,
+		arg.ConversationID,
+		arg.Content,
+		arg.Origin,
+	)
 	return err
 }
 
 const cancelPendingAction = `-- name: CancelPendingAction :one
 UPDATE assistant_pending_actions SET status = 'cancelled', args = '{}'::jsonb, summary = ''
 WHERE id = $1 AND tenant_id = $2 AND status = 'pending'
-RETURNING conversation_id
+RETURNING conversation_id, origin
 `
 
 type CancelPendingActionParams struct {
@@ -50,11 +58,16 @@ type CancelPendingActionParams struct {
 	TenantID uuid.UUID
 }
 
-func (q *Queries) CancelPendingAction(ctx context.Context, arg CancelPendingActionParams) (uuid.UUID, error) {
+type CancelPendingActionRow struct {
+	ConversationID uuid.UUID
+	Origin         *string
+}
+
+func (q *Queries) CancelPendingAction(ctx context.Context, arg CancelPendingActionParams) (CancelPendingActionRow, error) {
 	row := q.db.QueryRow(ctx, cancelPendingAction, arg.ID, arg.TenantID)
-	var conversation_id uuid.UUID
-	err := row.Scan(&conversation_id)
-	return conversation_id, err
+	var i CancelPendingActionRow
+	err := row.Scan(&i.ConversationID, &i.Origin)
+	return i, err
 }
 
 const claimPendingAction = `-- name: ClaimPendingAction :one
@@ -68,7 +81,7 @@ UPDATE assistant_pending_actions AS a
 SET status = 'confirmed', args = '{}'::jsonb, summary = ''
 FROM claimed
 WHERE a.id = claimed.id
-RETURNING a.tool, a.vault_id, a.conversation_id, claimed.args AS claimed_args
+RETURNING a.tool, a.vault_id, a.conversation_id, a.origin, claimed.args AS claimed_args
 `
 
 type ClaimPendingActionParams struct {
@@ -80,6 +93,7 @@ type ClaimPendingActionRow struct {
 	Tool           string
 	VaultID        uuid.UUID
 	ConversationID uuid.UUID
+	Origin         *string
 	ClaimedArgs    json.RawMessage
 }
 
@@ -93,6 +107,7 @@ func (q *Queries) ClaimPendingAction(ctx context.Context, arg ClaimPendingAction
 		&i.Tool,
 		&i.VaultID,
 		&i.ConversationID,
+		&i.Origin,
 		&i.ClaimedArgs,
 	)
 	return i, err
@@ -111,8 +126,8 @@ func (q *Queries) DeleteLongExpiredPendingActions(ctx context.Context, tenantID 
 const insertPendingAction = `-- name: InsertPendingAction :exec
 
 INSERT INTO assistant_pending_actions
-    (id, tenant_id, vault_id, conversation_id, tool, args, summary, status, expires_at, created_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8, NOW())
+    (id, tenant_id, vault_id, conversation_id, tool, args, summary, status, expires_at, origin, created_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8, $9, NOW())
 `
 
 type InsertPendingActionParams struct {
@@ -124,6 +139,7 @@ type InsertPendingActionParams struct {
 	Args           json.RawMessage
 	Summary        string
 	ExpiresAt      time.Time
+	Origin         *string
 }
 
 // Quick Assistant pending actions (Swift: AssistantPendingActionStore in
@@ -139,6 +155,7 @@ func (q *Queries) InsertPendingAction(ctx context.Context, arg InsertPendingActi
 		arg.Args,
 		arg.Summary,
 		arg.ExpiresAt,
+		arg.Origin,
 	)
 	return err
 }

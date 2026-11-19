@@ -569,6 +569,46 @@ func TestACancelLeavesALineInTheConversation(t *testing.T) {
 	require.Greater(t, updated, time.Now().Add(-time.Minute))
 }
 
+// R29: a card proposed after a connected app answered carries the turn's
+// origin, and the line its confirm or cancel leaves is flagged with it.
+func TestALineFromAConnectedAppTurnCarriesItsOrigin(t *testing.T) {
+	w := newWorld(newRig(t), worldOptions{})
+	w.allowCalendar(true, true)
+	propose := func(r *Runner, title string) uuid.UUID {
+		result := r.Run(context.Background(), "calendar_create", calendarArgs(title))
+		require.NotNil(t, result.Action, result.ModelContent)
+		return result.Action.ID.UUID
+	}
+	plain := propose(w.runner(w.user), "Dentist")
+	flagged := w.runner(w.user)
+	early := propose(flagged, "Before the app answered")
+	flagged.NoteConnectedApp()
+	confirmed, cancelled := propose(flagged, "Severance finale"), propose(flagged, "Dune night")
+
+	for _, id := range []uuid.UUID{plain, early, confirmed} {
+		require.Equal(t, StatusConfirmed, w.confirm(id).resolution.Status)
+	}
+	require.Equal(t, StatusCancelled, w.cancel(cancelled).resolution.Status)
+
+	rows, err := w.g.pool.Query(context.Background(),
+		`SELECT content || '|' || COALESCE(origin, '') FROM conversation_messages WHERE conversation_id = $1 ORDER BY created_at`, w.conversation)
+	require.NoError(t, err)
+	defer rows.Close()
+	var lines []string
+	for rows.Next() {
+		var s string
+		require.NoError(t, rows.Scan(&s))
+		lines = append(lines, s)
+	}
+	require.NoError(t, rows.Err())
+	require.Equal(t, []string{
+		"Added “Dentist” to your calendar.|",
+		"Added “Before the app answered” to your calendar.|",
+		"Added “Severance finale” to your calendar.|connected_app",
+		"Cancelled. Nothing was changed.|connected_app",
+	}, lines)
+}
+
 // Ruling 28: the appended line goes straight to the transcript.
 func TestTheConfirmationLineIsNeverIndexed(t *testing.T) {
 	g := newRig(t)
