@@ -1731,7 +1731,19 @@ func TestExtraToolArgumentsAndResultsAreNotLogged(t *testing.T) {
 
 	mustReply(t, h.answerWith(&recordingRunner{}, aaruOptions(extra)))
 
-	if logged := fmt.Sprintf("%+v", h.logs); strings.Contains(logged, "SECRET") {
-		t.Errorf("logs leak tool data: %s", logged)
+	h.logs.mu.Lock()
+	defer h.logs.mu.Unlock()
+	if len(h.logs.records) == 0 {
+		t.Fatal("nothing was logged")
+	}
+	for _, r := range h.logs.records {
+		if strings.Contains(r.message, "SECRET") {
+			t.Errorf("message %q leaks tool data", r.message)
+		}
+		for k, v := range r.attrs {
+			if strings.Contains(v.String(), "SECRET") {
+				t.Errorf("%q logs tool data in %q", r.message, k)
+			}
+		}
 	}
 }
