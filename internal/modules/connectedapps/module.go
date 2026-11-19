@@ -249,13 +249,13 @@ func (m *Module) disconnect(c *echo.Context) error {
 		return err
 	}
 	ctx := c.Request().Context()
-	if app.Auth == core.AuthOAuth {
-		// Best effort: whatever happens here, the row below still goes.
-		if err := m.oauth.Revoke(ctx, user, app.ID); err != nil {
-			m.log.WarnContext(ctx, "connected app revoke failed", "app", app.ID, "kind", errorKind(err))
-		}
+	// Revoke and delete under the refresh lock, so a refresh in flight cannot
+	// write the row back. The revoke is best effort: the row goes either way.
+	revokeErr, err := m.oauth.Disconnect(ctx, user, app.ID)
+	if revokeErr != nil {
+		m.log.WarnContext(ctx, "connected app revoke failed", "app", app.ID, "kind", errorKind(revokeErr))
 	}
-	if err := m.store.Delete(ctx, user, app.ID); err != nil {
+	if err != nil {
 		return err
 	}
 	m.service.Forget(user, app.ID)

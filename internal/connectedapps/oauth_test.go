@@ -448,3 +448,157 @@ func TestStartTagsUpstreamFailuresOnly(t *testing.T) {
 	require.Error(t, err)
 	require.NotErrorIs(t, err, connectedapps.ErrUpstream)
 }
+
+// blockRefresh makes the stub's refresh answer wait for release. entered is
+// closed once the first refresh request has arrived.
+func blockRefresh(s *asStub) (entered, release chan struct{}) {
+	entered, release = make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	s.refreshFn = func(w http.ResponseWriter) {
+		once.Do(func() { close(entered) })
+		<-release
+		_ = json.NewEncoder(w).Encode(map[string]any{"access_token": "acc-2", "refresh_token": "ref-2", "expires_in": 3600})
+	}
+	return entered, release
+}
+
+// A refresh that answers after the row was deleted must not write it back.
+func TestRefreshNeverRecreatesADeletedRow(t *testing.T) {
+	s := newAS(t)
+	entered, release := blockRefresh(s)
+	o, store := newOAuth(t, s)
+	finish(t, o) // expires in 10s
+	ctx := context.Background()
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := o.Fresh(ctx, alice, "aaru")
+		done <- err
+	}()
+	<-entered
+	require.NoError(t, store.Delete(ctx, alice, "aaru"))
+	close(release)
+
+	require.ErrorIs(t, <-done, connectedapps.ErrNotConnected)
+	_, err := store.Get(ctx, alice, "aaru")
+	require.ErrorIs(t, err, connectedapps.ErrNotConnected)
+}
+
+func TestRefreshTransientStatusLeavesRowConnected(t *testing.T) {
+	for _, status := range []int{http.StatusTooManyRequests, http.StatusRequestTimeout, http.StatusForbidden} {
+		s := newAS(t)
+		s.refreshFn = func(w http.ResponseWriter) {
+			w.WriteHeader(status)
+			_ = json.NewEncoder(w).Encode(map[string]any{"error": "slow_down"})
+		}
+		o, store := newOAuth(t, s)
+		finish(t, o)
+		_, err := o.Fresh(context.Background(), alice, "aaru")
+		require.Error(t, err, status)
+		require.NotErrorIs(t, err, connectedapps.ErrNotConnected, status)
+		require.Contains(t, err.Error(), "token refresh failed", status)
+		a, err := store.Get(context.Background(), alice, "aaru")
+		require.NoError(t, err)
+		require.Equal(t, "connected", a.Status, status)
+		require.Equal(t, "acc-1", a.AccessToken, "row untouched")
+	}
+}
+
+func TestRefreshUnauthorizedMarksNeedsReauth(t *testing.T) {
+	s := newAS(t)
+	s.refreshFn = func(w http.ResponseWriter) { w.WriteHeader(http.StatusUnauthorized) }
+	o, store := newOAuth(t, s)
+	finish(t, o)
+	_, err := o.Fresh(context.Background(), alice, "aaru")
+	require.ErrorIs(t, err, connectedapps.ErrNotConnected)
+	a, err := store.Get(context.Background(), alice, "aaru")
+	require.NoError(t, err)
+	require.Equal(t, "needs_reauth", a.Status)
+}
+
+// Disconnect waits for a refresh in flight, then revokes the token that
+// refresh left behind and deletes the row: nothing writes it back.
+func TestDisconnectDuringRefreshLeavesNoRow(t *testing.T) {
+	s := newAS(t)
+	entered, release := blockRefresh(s)
+	o, store := newOAuth(t, s)
+	finish(t, o) // expires in 10s
+	ctx := context.Background()
+
+	refreshed := make(chan error, 1)
+	go func() {
+		_, err := o.Fresh(ctx, alice, "aaru")
+		refreshed <- err
+	}()
+	<-entered
+	disconnected := make(chan [2]error, 1)
+	go func() {
+		revokeErr, err := o.Disconnect(ctx, alice, "aaru")
+		disconnected <- [2]error{revokeErr, err}
+	}()
+	select {
+	case <-disconnected:
+		t.Fatal("disconnect did not wait for the refresh")
+	case <-time.After(150 * time.Millisecond):
+	}
+	close(release)
+
+	require.NoError(t, <-refreshed)
+	errs := <-disconnected
+	require.NoError(t, errs[0])
+	require.NoError(t, errs[1])
+	_, err := store.Get(ctx, alice, "aaru")
+	require.ErrorIs(t, err, connectedapps.ErrNotConnected)
+	_, err = o.Fresh(ctx, alice, "aaru")
+	require.ErrorIs(t, err, connectedapps.ErrNotConnected)
+	require.EqualValues(t, 1, s.revokes.Load())
+	s.mu.Lock()
+	require.Equal(t, "ref-2", s.revokeForm.Get("token"), "the token the refresh left, not the one it replaced")
+	s.mu.Unlock()
+}
+
+// The delete does not depend on the revoke or on the caller staying around.
+func TestDisconnectDeletesWhateverTheRevokeDid(t *testing.T) {
+	s := newAS(t)
+	s.revokeStatus = http.StatusInternalServerError
+	o, store := newOAuth(t, s)
+	finish(t, o)
+
+	revokeErr, err := o.Disconnect(context.Background(), alice, "aaru")
+	require.Error(t, revokeErr)
+	require.NotContains(t, revokeErr.Error(), "ref-1")
+	require.NoError(t, err)
+	_, err = store.Get(context.Background(), alice, "aaru")
+	require.ErrorIs(t, err, connectedapps.ErrNotConnected)
+
+	// A caller that has already gone: the revoke fails, the row still goes.
+	finish(t, o)
+	gone, cancel := context.WithCancel(context.Background())
+	cancel()
+	revokeErr, err = o.Disconnect(gone, alice, "aaru")
+	require.Error(t, revokeErr)
+	require.NoError(t, err)
+	_, err = store.Get(context.Background(), alice, "aaru")
+	require.ErrorIs(t, err, connectedapps.ErrNotConnected)
+
+	// Never connected: nothing to revoke, nothing to delete, no error.
+	revokeErr, err = o.Disconnect(context.Background(), bob, "aaru")
+	require.NoError(t, revokeErr)
+	require.NoError(t, err)
+	_, err = o.Disconnect(context.Background(), alice, "evil")
+	require.ErrorIs(t, err, connectedapps.ErrUnknownApp)
+}
+
+func TestDisconnectPATAppDeletesWithoutRevoke(t *testing.T) {
+	s := newAS(t)
+	o, store := newOAuth(t, s)
+	ctx := context.Background()
+	require.NoError(t, o.SavePAT(ctx, alice, "norviq", "nvq_pat_abc"))
+
+	revokeErr, err := o.Disconnect(ctx, alice, "norviq")
+	require.NoError(t, revokeErr)
+	require.NoError(t, err)
+	_, err = store.Get(ctx, alice, "norviq")
+	require.ErrorIs(t, err, connectedapps.ErrNotConnected)
+	require.EqualValues(t, 0, s.revokes.Load())
+}

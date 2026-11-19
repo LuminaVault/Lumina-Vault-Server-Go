@@ -36,20 +36,32 @@ func NewStore(pool *pgxpool.Pool, box *secretbox.Box) *Store {
 	return &Store{pool: pool, box: box, now: time.Now}
 }
 
-// Save upserts the (user, app) row as connected. An empty RefreshToken stores
-// NULLs. Never logs tokens.
-func (s *Store) Save(ctx context.Context, user uuid.UUID, a Account) error {
+// sealed is an account's tokens sealed under the user id. An empty refresh
+// token gives nil ciphertext and nonce, stored as NULLs.
+type sealed struct{ accCT, accNonce, refCT, refNonce []byte }
+
+func (s *Store) seal(user uuid.UUID, a Account) (sealed, error) {
 	access, err := s.box.Seal(a.AccessToken, user)
 	if err != nil {
-		return err
+		return sealed{}, err
 	}
-	var refCT, refNonce []byte
+	out := sealed{accCT: access.Ciphertext, accNonce: access.Nonce}
 	if a.RefreshToken != "" {
 		refresh, err := s.box.Seal(a.RefreshToken, user)
 		if err != nil {
-			return err
+			return sealed{}, err
 		}
-		refCT, refNonce = refresh.Ciphertext, refresh.Nonce
+		out.refCT, out.refNonce = refresh.Ciphertext, refresh.Nonce
+	}
+	return out, nil
+}
+
+// Save upserts the (user, app) row as connected. An empty RefreshToken stores
+// NULLs. Never logs tokens.
+func (s *Store) Save(ctx context.Context, user uuid.UUID, a Account) error {
+	t, err := s.seal(user, a)
+	if err != nil {
+		return err
 	}
 	_, err = s.pool.Exec(ctx, `
 INSERT INTO connected_app_accounts
@@ -66,9 +78,39 @@ ON CONFLICT (user_id, app_id) DO UPDATE SET
     status = 'connected',
     last_failure_code = NULL,
     updated_at = EXCLUDED.updated_at`,
-		uuid.New(), user, a.AppID, access.Ciphertext, access.Nonce, refCT, refNonce,
+		uuid.New(), user, a.AppID, t.accCT, t.accNonce, t.refCT, t.refNonce,
 		a.ExpiresAt, a.Scope, s.now())
 	return err
+}
+
+// UpdateTokens replaces the tokens of an existing (user, app) row and never
+// inserts one: a refresh that answers after a disconnect must not bring the
+// row back. ErrNotConnected when the row is gone. Never logs tokens.
+func (s *Store) UpdateTokens(ctx context.Context, user uuid.UUID, a Account) error {
+	t, err := s.seal(user, a)
+	if err != nil {
+		return err
+	}
+	tag, err := s.pool.Exec(ctx, `
+UPDATE connected_app_accounts SET
+    access_ciphertext = $3,
+    access_nonce = $4,
+    refresh_ciphertext = $5,
+    refresh_nonce = $6,
+    access_expires_at = $7,
+    scope = $8,
+    status = 'connected',
+    last_failure_code = NULL,
+    updated_at = $9
+WHERE user_id = $1 AND app_id = $2`,
+		user, a.AppID, t.accCT, t.accNonce, t.refCT, t.refNonce, a.ExpiresAt, a.Scope, s.now())
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotConnected
+	}
+	return nil
 }
 
 // Get returns the account with tokens opened. ErrNotConnected when absent; a

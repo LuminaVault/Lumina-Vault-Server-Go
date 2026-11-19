@@ -42,6 +42,7 @@ const (
 	sessionTTL    = 600 * time.Second
 	refreshAhead  = 120 * time.Second
 	revokeTimeout = 5 * time.Second
+	deleteTimeout = 5 * time.Second
 )
 
 func isNoRows(err error) bool { return errors.Is(err, pgx.ErrNoRows) }
@@ -351,7 +352,9 @@ func (o *OAuth) refresh(ctx context.Context, user uuid.UUID, app App, acct Accou
 	if err != nil {
 		return "", err
 	}
-	if status >= 400 && status < 500 {
+	// Only a 400 or a 401 says the grant itself is dead. Anything else (a 429,
+	// a 408, a 5xx) can pass, so the row stays connected.
+	if status == http.StatusBadRequest || status == http.StatusUnauthorized {
 		code := sanitizeCode(tr.Error)
 		_ = o.store.MarkNeedsReauth(ctx, user, app.ID, code)
 		return "", ErrNotConnected
@@ -370,7 +373,9 @@ func (o *OAuth) refresh(ctx context.Context, user uuid.UUID, app App, acct Accou
 		exp := o.now().Add(time.Duration(tr.ExpiresIn) * time.Second)
 		next.ExpiresAt = &exp
 	}
-	if err := o.store.Save(ctx, user, next); err != nil {
+	// Update only: a row deleted while the token endpoint was answering stays
+	// deleted (ErrNotConnected).
+	if err := o.store.UpdateTokens(ctx, user, next); err != nil {
 		return "", err
 	}
 	return next.AccessToken, nil
@@ -402,10 +407,10 @@ func (o *OAuth) SavePAT(ctx context.Context, user uuid.UUID, appID, token string
 }
 
 // Revoke tells the app's authorization server to drop the user's refresh
-// token (RFC 7009) before a disconnect. It is a no-op without an account, a
-// refresh token, a registered client or an advertised revocation endpoint,
-// and it gives up after revokeTimeout. It shares the refresh lock, so it
-// revokes the token a concurrent refresh left behind, not the one it replaced.
+// token (RFC 7009). It is a no-op without an account, a refresh token, a
+// registered client or an advertised revocation endpoint, and it gives up
+// after revokeTimeout. It shares the refresh lock, so it revokes the token a
+// concurrent refresh left behind, not the one it replaced.
 func (o *OAuth) Revoke(ctx context.Context, user uuid.UUID, appID string) error {
 	app, err := o.app(appID)
 	if err != nil {
@@ -414,12 +419,41 @@ func (o *OAuth) Revoke(ctx context.Context, user uuid.UUID, appID string) error 
 	if app.Auth != AuthOAuth {
 		return ErrNotOAuth
 	}
-	ctx, cancel := context.WithTimeout(ctx, revokeTimeout)
-	defer cancel()
 	mu := o.lockFor(user, appID)
 	mu.Lock()
 	defer mu.Unlock()
-	acct, err := o.store.Get(ctx, user, appID)
+	return o.revokeLocked(ctx, user, app)
+}
+
+// Disconnect removes the user's link to the app: a best-effort revoke for an
+// OAuth app, then the row's delete, both under the per-(user, app) lock a
+// refresh holds. So a refresh either finishes before the delete or finds no
+// row to update; it can never write the row back. The delete runs whatever
+// the revoke did and even when the caller has gone away. revokeErr is the
+// revoke's failure, for the caller's log; err is the delete's. A PAT app has
+// nothing to revoke. Deleting an absent row is not an error.
+func (o *OAuth) Disconnect(ctx context.Context, user uuid.UUID, appID string) (revokeErr, err error) {
+	app, err := o.app(appID)
+	if err != nil {
+		return nil, err
+	}
+	mu := o.lockFor(user, appID)
+	mu.Lock()
+	defer mu.Unlock()
+	if app.Auth == AuthOAuth {
+		revokeErr = o.revokeLocked(ctx, user, app)
+	}
+	dctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), deleteTimeout)
+	defer cancel()
+	return revokeErr, o.store.Delete(dctx, user, app.ID)
+}
+
+// revokeLocked is Revoke's work. The caller holds the per-(user, app) lock;
+// the timeout starts here, so waiting for the lock does not use it up.
+func (o *OAuth) revokeLocked(ctx context.Context, user uuid.UUID, app App) error {
+	ctx, cancel := context.WithTimeout(ctx, revokeTimeout)
+	defer cancel()
+	acct, err := o.store.Get(ctx, user, app.ID)
 	if errors.Is(err, ErrNotConnected) {
 		return nil
 	}
