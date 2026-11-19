@@ -861,3 +861,34 @@ func TestInstructionsNameConnectedAppsOnlyWhenTheyAreOn(t *testing.T) {
 	require.Contains(t, got, "read-only")
 	require.NotContains(t, mcp.ConnectedAppInstructions, "`")
 }
+
+// The parity database is Swift-migrated and never gets connected_app_grants
+// (goose 00010). Agent keys must keep working there with no app grants, and a
+// grants change must be refused whole rather than half-applied.
+func TestAgentKeysWorkWithoutTheGrantsColumn(t *testing.T) {
+	v := setupApps(t, newFakeApps())
+	got := v.issue(alice, `{"name":"k","clientKind":"other"}`)
+	_, err := v.pool.Exec(context.Background(), `ALTER TABLE agent_connections DROP COLUMN connected_app_grants`)
+	require.NoError(t, err)
+
+	code, _ := v.do(got.Token, http.MethodPost, "/v1/mcp", `{"jsonrpc":"2.0","id":1,"method":"ping"}`)
+	require.Equal(t, http.StatusOK, code)
+	require.Empty(t, appToolNames(v.tools(got.Token)))
+
+	code, raw := v.do(v.jwt(alice), http.MethodGet, "/v1/me/agent-connections", "")
+	require.Equal(t, http.StatusOK, code)
+	require.Contains(t, string(raw), `"connectedAppGrants":[]`)
+
+	code, _ = v.patch(alice, got.Connection.ID, `{"connectedAppGrants":["aaru"],"access":"read_write"}`)
+	require.Equal(t, http.StatusServiceUnavailable, code)
+	var access string
+	require.NoError(t, v.pool.QueryRow(context.Background(), `SELECT access FROM agent_connections`).Scan(&access))
+	require.Equal(t, "read", access, "a refused grants change must not apply the other fields")
+
+	code, conn := v.patch(alice, got.Connection.ID, `{"access":"read_write"}`)
+	require.Equal(t, http.StatusOK, code)
+	require.Equal(t, "read_write", conn["access"])
+
+	second := v.issue(alice, `{"name":"k2","clientKind":"other"}`)
+	require.Equal(t, "read", second.Connection.Access)
+}
