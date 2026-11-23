@@ -19,7 +19,23 @@ jobs:
           version: v2.15.0
 
   test:
+    # Production runs Postgres 18 (platform/infra apps/data/postgres.yaml). The
+    # pg19 leg is an early warning for the planned 18 -> 19 upgrade (FTS
+    # stemming and ranking change in 19) and is allowed to fail; the pg18 leg
+    # keeps the original check name.
+    name: test${{ matrix.pg != '18' && format(' (pg{0}, allowed to fail)', matrix.pg) || '' }}
     runs-on: ubuntu-latest
+    continue-on-error: ${{ matrix.experimental }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - pg: "18"
+            experimental: false
+          - pg: "19"
+            experimental: true
+    env:
+      DBTEST_IMAGE: pgvector/pgvector:pg${{ matrix.pg }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
