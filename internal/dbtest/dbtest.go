@@ -4,6 +4,7 @@ package dbtest
 import (
 	"context"
 	"lumina/internal/db"
+	"os"
 	"testing"
 	"time"
 
@@ -13,8 +14,17 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-// Image matches the Swift CI service image (LuminaVaultServer ci.yml).
-const Image = "pgvector/pgvector:pg18"
+// Image matches the Swift CI service image (LuminaVaultServer ci.yml) and the
+// production server (platform/infra apps/data/postgres.yaml). DBTEST_IMAGE
+// overrides it; CI uses that to run the suite on the next Postgres major too.
+var Image = imageFromEnv()
+
+func imageFromEnv() string {
+	if v := os.Getenv("DBTEST_IMAGE"); v != "" {
+		return v
+	}
+	return "pgvector/pgvector:pg18"
+}
 
 // Postgres returns a pool on a fresh database; the container is removed when
 // the test ends. Tests are skipped under -short.
