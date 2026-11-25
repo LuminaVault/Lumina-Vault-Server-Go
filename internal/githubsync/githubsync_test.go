@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -133,12 +134,49 @@ func TestConnectionCascades(t *testing.T) {
 func TestMigrationDownAndAbsentTable(t *testing.T) {
 	p := pool(t)
 	ctx := context.Background()
+	// 00013 (the merge consent, E4.8) goes down and up on its own first.
+	consent, err := fs.ReadFile(migrations.SQL(), "00013_github_sync_merge_existing.sql")
+	require.NoError(t, err)
+	consentUp, consentDown, ok := strings.Cut(string(consent), "-- +goose Down")
+	require.True(t, ok)
+	hasConsent := func() bool {
+		var n int
+		require.NoError(t, p.QueryRow(ctx, `SELECT count(*) FROM information_schema.columns
+			WHERE table_name = 'github_sync_connections' AND column_name = 'merge_existing'`).Scan(&n))
+		return n == 1
+	}
+	require.True(t, hasConsent())
+	_, err = p.Exec(ctx, consentDown)
+	require.NoError(t, err)
+	require.False(t, hasConsent())
+	_, err = p.Exec(ctx, strings.SplitN(consentUp, "-- +goose Up", 2)[1])
+	require.NoError(t, err)
+	require.True(t, hasConsent())
+
 	raw, err := fs.ReadFile(migrations.SQL(), "00012_github_sync.sql")
 	require.NoError(t, err)
 	up, down, ok := strings.Cut(string(raw), "-- +goose Down")
 	require.True(t, ok)
 	_, err = p.Exec(ctx, down)
 	require.NoError(t, err)
+
+	// The worker's reads and writes take the absent table the same way.
+	store := githubsync.NewStore(p)
+	due, err := store.Due(ctx, time.Now())
+	require.NoError(t, err)
+	require.Empty(t, due)
+	key := githubsync.Key{Vault: uuid.New(), RepoID: 1, Branch: "main"}
+	for name, write := range map[string]func() (bool, error){
+		"MarkPushed":         func() (bool, error) { return store.MarkPushed(ctx, key, "abc", time.Now(), true) },
+		"MarkRetry":          func() (bool, error) { return store.MarkRetry(ctx, key, "sync_failed", time.Now(), time.Now()) },
+		"MarkNeedsAttention": func() (bool, error) { return store.MarkNeedsAttention(ctx, key, "push_rejected", time.Now()) },
+		"SetRepoFullName":    func() (bool, error) { return store.SetRepoFullName(ctx, key, "a/b", time.Now()) },
+		"Requeue":            func() (bool, error) { return store.Requeue(ctx, key.Vault, []string{"push_rejected"}, "x", time.Now()) },
+	} {
+		changed, err := write()
+		require.NoError(t, err, name)
+		require.False(t, changed, name)
+	}
 
 	c, err := githubsync.NewStore(p).Get(ctx, uuid.New())
 	require.NoError(t, err)

@@ -90,19 +90,11 @@ func (c *Committer) GC(ctx context.Context, tenantsDir string) (repacked, failed
 }
 
 func (c *Committer) gcTenant(ctx context.Context, tenant uuid.UUID) error {
-	l := c.tenantLock(tenant)
-	l.Lock()
-	defer l.Unlock()
-	if c.opts.Lock != nil {
-		unlock, ok, err := c.opts.Lock.TryLock(ctx, tenant)
-		if err != nil {
-			return err
-		}
-		if !ok {
-			return ErrLocked
-		}
-		defer unlock()
+	unlock, err := c.lock(ctx, tenant)
+	if err != nil {
+		return err
 	}
+	defer unlock()
 	r, err := Open(c.opts.RawRoot(tenant))
 	if err != nil {
 		return err

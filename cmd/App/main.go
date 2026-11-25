@@ -334,7 +334,7 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		// Backlog E8.2: note properties, indexed on every Markdown write.
 		vaultfiles.EnableProperties(swiftBoolDefaultFalse(cfg.VaultPropertiesEnabled))
 		// Backlog E4: vault history, off unless VAULT_GIT_ENABLED.
-		gitJobs, stopVaultGit := vaultGit(pool, cfg, paths, disk)
+		history, gitJobs, stopVaultGit := vaultGit(pool, cfg, paths, disk)
 		registered = append(registered, gitJobs...)
 		defer stopVaultGit()
 		// LapseArchiverService (7A): dry run unless LV_LAPSE_DRY_RUN=false; off unless LV_GO_JOBS names it.
@@ -402,8 +402,13 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 			deps.Modules = append(deps.Modules, connectedAppsMod)
 		}
 		// GitHub sync (backlog E4.6-E4.10): unmounted unless GITHUB_SYNC_ENABLED.
-		if m := githubSyncModule(pool, cfg, paths, limits); m != nil {
-			deps.Modules = append(deps.Modules, m)
+		// Its stop runs before the committer's (defers are last in, first
+		// out): a commit flushed at shutdown is pushed by the next start.
+		syncMod, syncJobs, stopGitHubSync := githubSync(pool, cfg, paths, limits, history)
+		defer stopGitHubSync()
+		registered = append(registered, syncJobs...)
+		if syncMod != nil {
+			deps.Modules = append(deps.Modules, syncMod)
 		}
 		deps.Modules = append(deps.Modules, agent.mcpModule(deviceRPC))
 		deps.Modules = append(deps.Modules, agent.routerModules()...)

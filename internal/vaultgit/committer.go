@@ -42,6 +42,11 @@ type Options struct {
 	Space       SpaceCheck // nil: no disk check
 	Logger      *slog.Logger
 	Now         func() time.Time
+	// OnCommit is called after a Flush that made a commit (the first commit of
+	// a new repository included), once both locks are released. It is never
+	// called for a flush that recorded nothing. It must not block: GitHub sync
+	// only queues a push from it (sync spec D5, D6). Nil by default.
+	OnCommit func(tenant uuid.UUID, sha string)
 }
 
 // Committer turns touches into commits, one tenant at a time.
@@ -128,9 +133,30 @@ func (c *Committer) fire(tenant uuid.UUID) {
 	c.wg.Add(1)
 	c.mu.Unlock()
 	defer c.wg.Done()
-	if _, err := c.Flush(context.Background(), tenant, b.message()); err != nil {
+	_, err := c.Flush(context.Background(), tenant, b.message())
+	switch {
+	case errors.Is(err, ErrLocked):
+		// Another replica holds the tenant: a commit, a gc, or a push to
+		// GitHub, which can take a minute. Try again after another debounce
+		// rather than leave the change to the sweep.
+		c.requeue(tenant, b)
+	case err != nil:
 		c.opts.Logger.Warn("vault git commit failed", "tenant", strings.ToUpper(tenant.String()), "error", err)
 	}
+}
+
+// requeue puts a burst whose commit found the tenant locked back in line.
+// Touches that arrived meanwhile already made a new burst, which will commit
+// the same tree; then there is nothing to add.
+func (c *Committer) requeue(tenant uuid.UUID, b *burst) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.closed || c.pending[tenant] != nil {
+		return
+	}
+	b.first = c.opts.Now()
+	b.timer = time.AfterFunc(c.opts.Debounce, func() { c.fire(tenant) })
+	c.pending[tenant] = b
 }
 
 // message is one reason, or "mixed" when the burst saw several.
@@ -163,33 +189,92 @@ var ErrLocked = errors.New("vaultgit: tenant locked by another replica")
 // use (spec D5). It returns the new commit, or "" when nothing changed or the
 // disk check skipped it.
 func (c *Committer) Flush(ctx context.Context, tenant uuid.UUID, msg Message) (string, error) {
-	l := c.tenantLock(tenant)
-	l.Lock()
-	defer l.Unlock()
-	if c.opts.Lock != nil {
-		unlock, ok, err := c.opts.Lock.TryLock(ctx, tenant)
-		if err != nil {
-			return "", err
-		}
-		if !ok {
-			return "", ErrLocked
-		}
-		defer unlock()
+	sha, made, err := c.flush(ctx, tenant, msg)
+	// After flush returned, so after its deferred unlocks: the hook may take
+	// the tenant's lock itself.
+	if made != "" && c.opts.OnCommit != nil {
+		c.opts.OnCommit(tenant, made)
 	}
+	return sha, err
+}
+
+// flush is Flush under the tenant's locks. made is the commit OnCommit is
+// told about: sha, or the initial import when this call created the
+// repository and had nothing more to record.
+func (c *Committer) flush(ctx context.Context, tenant uuid.UUID, msg Message) (sha, made string, err error) {
+	unlock, err := c.lock(ctx, tenant)
+	if err != nil {
+		return "", "", err
+	}
+	defer unlock()
 	if c.opts.Space != nil {
 		if err := c.opts.Space(0); err != nil {
 			c.opts.Logger.Warn("vault git commit skipped: low disk", "tenant", strings.ToUpper(tenant.String()))
-			return "", nil
+			return "", "", nil
 		}
 	}
 	limit := c.opts.MaxFileSize(tenant)
-	repo, _, err := Init(c.opts.RawRoot(tenant), limit)
+	repo, created, err := Init(c.opts.RawRoot(tenant), limit)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
-	sha, _, err := repo.Commit(msg, limit, c.opts.Now())
-	return sha, err
+	sha, _, err = repo.Commit(msg, limit, c.opts.Now())
+	if err != nil {
+		return "", "", err
+	}
+	made = sha
+	if made == "" && created {
+		if made, err = repo.Head(); err != nil {
+			return "", "", err
+		}
+	}
+	return sha, made, nil
 }
+
+// lock takes the tenant's in-process mutex and, when configured, its Postgres
+// advisory lock. ErrLocked means another replica holds the latter.
+func (c *Committer) lock(ctx context.Context, tenant uuid.UUID) (unlock func(), err error) {
+	l := c.tenantLock(tenant)
+	l.Lock()
+	if c.opts.Lock == nil {
+		return l.Unlock, nil
+	}
+	release, ok, err := c.opts.Lock.TryLock(ctx, tenant)
+	if err != nil {
+		l.Unlock()
+		return nil, err
+	}
+	if !ok {
+		l.Unlock()
+		return nil, ErrLocked
+	}
+	return func() {
+		release()
+		l.Unlock()
+	}, nil
+}
+
+// WithRepo runs fn on tenant's repository under the same in-process mutex and
+// Postgres advisory lock Flush and GC use, so a push, a pull, a commit and a
+// gc never overlap on one tenant (spec D3; sync spec D5). It is the only way
+// GitHub sync touches a repository. It is not re-entrant: fn must not call
+// Flush or WithRepo for the same tenant. A tenant with no repository yet is
+// ErrNoRepo; another replica holding the lock is ErrLocked.
+func (c *Committer) WithRepo(ctx context.Context, tenant uuid.UUID, fn func(*Repo) error) error {
+	unlock, err := c.lock(ctx, tenant)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	repo, err := Open(c.opts.RawRoot(tenant))
+	if err != nil {
+		return err
+	}
+	return fn(repo)
+}
+
+// MaxFileSize is tenant's history limit, as Flush reads it.
+func (c *Committer) MaxFileSize(tenant uuid.UUID) int64 { return c.opts.MaxFileSize(tenant) }
 
 // Close stops new touches, commits every pending burst now and waits for
 // in-flight commits, so a shutdown loses nothing it was told about.

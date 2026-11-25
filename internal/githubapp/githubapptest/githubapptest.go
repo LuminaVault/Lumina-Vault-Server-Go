@@ -73,6 +73,8 @@ type Server struct {
 	Followed int
 	// Intercept, when set, sees every request first; true means it answered.
 	Intercept func(w http.ResponseWriter, r *http.Request) bool
+	// Git is the git side of the stub: the repositories pushes land in.
+	Git *GitRemote
 
 	Exchanges                 []string
 	Minted                    []Mint
@@ -98,6 +100,7 @@ func New(t testing.TB) *Server {
 		Renamed:       map[string]int64{},
 		installTokens: map[string]Mint{},
 	}
+	s.Git = newGitRemote(t, s)
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /login/oauth/access_token", s.exchange)
 	mux.HandleFunc("DELETE /applications/{clientID}/token", s.revokeUser)
@@ -121,6 +124,9 @@ func New(t testing.TB) *Server {
 		intercept := s.Intercept
 		s.mu.Unlock()
 		if intercept != nil && intercept(w, r) {
+			return
+		}
+		if s.serveGit(w, r) {
 			return
 		}
 		mux.ServeHTTP(w, r)

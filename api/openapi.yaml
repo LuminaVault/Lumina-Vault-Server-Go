@@ -7705,9 +7705,11 @@ paths:
       x-lv-module: githubsync
       summary: Disconnect the vault (vault owner)
       description: |
-        D13. Deletes the connection and revokes a cached installation token.
+        D13. Deletes the connection, removes the `origin` remote and its refs
+        from the vault's repository and revokes a cached installation token.
         Vault files and history stay; nothing on GitHub changes and the App
-        stays installed (`manageUrl` in the status).
+        stays installed (`manageUrl` in the status). A push in flight is not
+        interrupted: the remote goes as soon as it ends.
       security: [{ bearerJWT: [] }]
       responses:
         '204':
@@ -7715,6 +7717,53 @@ paths:
         '401': { $ref: '#/components/responses/GitHubSyncFailure' }
         '429': { $ref: '#/components/responses/GitHubSyncRateLimited' }
         '503': { $ref: '#/components/responses/GitHubSyncGitHubRateLimited' }
+        default: { $ref: '#/components/responses/GitHubSyncFailure' }
+        '403':
+          description: '`owner_required`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GitHubSyncError' }
+        '404':
+          description: '`not_connected`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GitHubSyncError' }
+
+  /v1/vault/github-sync/sync:
+    post:
+      tags: [GitHubSync]
+      operationId: githubSyncNow
+      x-lv-module: githubsync
+      summary: Sync now
+      description: |
+        Backlog E4.8 (spec 2026-11-19-e4-github-sync D14). Only the vault
+        owner queues a sync; members see the status and cannot ask. The
+        answer is the status as it is now, and the sync runs after the
+        response. Clients poll
+        `GET /v1/vault/github-sync` while `syncing` is true.
+
+        A connection waiting to retry after `sync_failed` is tried at once
+        (a wait GitHub asked for, `github_rate_limited`, is not cut short).
+        A connection in `needs_attention` goes back to `active` and is tried
+        again when its cause may have been fixed on GitHub: `push_rejected`,
+        `repo_too_large`, `installation_suspended`, `repo_access_removed`.
+        `installation_removed` is not retried: installing the App again
+        makes a new installation, so disconnect and connect. The `error`
+        stays in the status until a sync succeeds.
+
+        Until pull ships (E4.9) a sync is a push only.
+
+        Rate limit: 6 per minute per vault, on top of the 30
+        per minute per user of the other routes.
+      security: [{ bearerJWT: [] }]
+      responses:
+        '202':
+          description: Queued.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GitHubSyncStatus' }
+        '401': { $ref: '#/components/responses/GitHubSyncFailure' }
+        '429': { $ref: '#/components/responses/GitHubSyncRateLimited' }
         default: { $ref: '#/components/responses/GitHubSyncFailure' }
         '403':
           description: '`owner_required`.'
@@ -11326,7 +11375,12 @@ components:
         lastPushAt: { type: [string, 'null'], format: date-time }
         lastPullAt: { type: [string, 'null'], format: date-time }
         pendingPush: { type: boolean, description: Local history is ahead of GitHub. }
-        syncing: { type: boolean }
+        syncing:
+          type: boolean
+          description: |
+            A sync for this vault is running or queued on the server that
+            answered. With more than one API replica another may be the one
+            syncing; `pendingPush` is the durable signal.
         progress:
           oneOf:
             - type: object
@@ -11342,9 +11396,22 @@ components:
               properties:
                 code:
                   type: string
-                  description: One of installation_removed, installation_suspended, repo_access_removed, push_rejected, repo_too_large, or sync_failed (transient).
+                  description: |
+                    `sync_failed` (transient: network, GitHub 5xx, a timeout,
+                    or a branch that moved on GitHub while pull is not
+                    available) and `github_rate_limited` are always retried.
+                    `installation_removed` and `push_rejected` (a rejected
+                    update) stop retries at once. `installation_suspended`,
+                    `repo_access_removed` and `push_rejected` (GitHub forbids
+                    the push) are reported with `retrying: true` first and
+                    stop retries when GitHub gives the same answer three
+                    times running. `repo_too_large` is set by pull (E4.9).
+                  enum: [sync_failed, github_rate_limited, installation_removed, installation_suspended,
+                         repo_access_removed, push_rejected, repo_too_large]
                 at: { type: string, format: date-time }
-                retrying: { type: boolean }
+                retrying:
+                  type: boolean
+                  description: True while the connection is `active`; false in `needs_attention`, until "Sync now" or a reconnect.
             - { type: 'null' }
         conflicts:
           type: array
