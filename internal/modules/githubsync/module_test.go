@@ -5,7 +5,9 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"log/slog"
 	"lumina/internal/auth"
 	"lumina/internal/config"
@@ -15,6 +17,7 @@ import (
 	"lumina/internal/githubsync"
 	"lumina/internal/httpserver"
 	"lumina/internal/migrations"
+	"lumina/internal/ratelimit"
 	"lumina/internal/vaultaccess"
 	"lumina/internal/vaultpaths"
 	"lumina/parity/scenario"
@@ -23,6 +26,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -89,7 +93,9 @@ func (c *clock) advance(d time.Duration) {
 	c.t = c.t.Add(d)
 }
 
-func newEnv(t *testing.T) *env {
+func newEnv(t *testing.T) *env { return newEnvWith(t, []string{webOrigin}) }
+
+func newEnvWith(t *testing.T, origins []string) *env {
 	t.Helper()
 	pool := dbtest.Postgres(t)
 	require.NoError(t, migrations.Up(context.Background(), pool, migrations.SQL()))
@@ -97,12 +103,16 @@ func newEnv(t *testing.T) *env {
 	logs := &syncBuffer{}
 	root := t.TempDir()
 	clk := &clock{t: time.Now()}
+	// The rate limits run on the test's clock, so a slow machine cannot roll
+	// a window over in the middle of a test.
+	limits := ratelimit.NewStore()
+	limits.SetClock(clk.now)
 	m := module.New(module.Options{
 		Client: gh.Client(t), Store: githubsync.NewStore(pool), Access: vaultaccess.New(pool),
 		Paths: vaultpaths.Paths{Root: root}, CallbackURL: "https://api.lumina.test/v1/github-sync/callback",
 		Slug: "luminavault", MaxRepoBytes: 200 << 20, MaxFiles: 5000,
-		WebReturnOrigins: []string{webOrigin},
-		Log:              slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
+		WebReturnOrigins: origins, Limits: limits,
+		Log: slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
 	})
 	m.SetClock(clk.now)
 	e := httpserver.New(config.Config{}, httpserver.Deps{
@@ -374,11 +384,12 @@ func TestForgedInstallChangesNothing(t *testing.T) {
 	alice := v.user()
 	v.seedGitHub("ghu_alice", "octocat")
 
-	// A forged callback: someone else's installation id, no valid state.
+	// A forged callback: someone else's installation id, no valid state. With
+	// no flow to say where it came from, the browser goes to the web app.
 	for _, q := range []string{"installation_id=99&setup_action=install", "state=forged&code=x&installation_id=99"} {
 		r := v.do(uuid.Nil, nil, http.MethodGet, "/v1/github-sync/callback?"+q, nil)
 		require.Equal(t, http.StatusFound, r.code)
-		require.Equal(t, "luminavault://github-sync?status=error", r.header.Get("Location"))
+		require.Equal(t, webOrigin+"/settings/integrations?status=error", r.header.Get("Location"))
 	}
 	require.Zero(t, v.gh.ExchangeCount())
 
@@ -667,26 +678,67 @@ func TestInvalidReturnTo(t *testing.T) {
 
 // D17: no token, code, client secret or key reaches a response body, a
 // redirect or a log line (beyond the handle and session the client is given).
+// The completion handle and the session go to their client and nowhere else:
+// neither is ever logged. (The webhook secret never reaches this module; the
+// cmd/App test covers it, with the key as the server is configured.)
 func TestNoSecretsInResponsesOrLogs(t *testing.T) {
 	v := newEnv(t)
-	alice := v.user()
+	alice, mallory := v.user(), v.user()
 	v.seedGitHub("ghu_alice_secret_token", "octocat")
-	session := v.signIn(alice, nil, "code-secret-value", "ghu_alice_secret_token")
-	r := v.put(alice, nil, map[string]any{"session": session, "installationId": 7, "repositoryId": 456})
+	v.gh.Lock()
+	v.gh.Codes["code-secret-value"] = "ghu_alice_secret_token"
+	v.gh.Codes["code-refused-value"] = "ghu_alice_secret_token"
+	v.gh.Unlock()
+
+	// A completion refused for another account, which logs.
+	refused, _ := v.startFlow(alice, nil, "code-refused-value", nil)
+	r := v.do(mallory, nil, http.MethodPost, "/v1/vault/github-sync/complete", map[string]string{"completion": refused})
+	require.Equal(t, "wrong_account", r.errCode())
+
+	handle, _ := v.startFlow(alice, nil, "code-secret-value", nil)
+	r = v.do(alice, nil, http.MethodPost, "/v1/vault/github-sync/complete", map[string]string{"completion": handle})
+	require.Equal(t, http.StatusOK, r.code, r.String())
+	var done completeOut
+	require.NoError(t, json.Unmarshal(r.body, &done))
+	session := done.Session
+
+	// A GitHub failure, which logs too.
+	v.gh.Lock()
+	v.gh.Intercept = func(w http.ResponseWriter, r *http.Request) bool {
+		if r.URL.Path != "/user/installations" {
+			return false
+		}
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte(`{"message":"upstream said ghu_alice_secret_token"}`))
+		return true
+	}
+	v.gh.Unlock()
+	r = v.do(alice, nil, http.MethodGet, "/v1/vault/github-sync/installations?session="+session, nil)
+	require.Equal(t, "github_unavailable", r.errCode())
+	v.gh.Lock()
+	v.gh.Intercept = nil
+	v.gh.Unlock()
+
+	r = v.put(alice, nil, map[string]any{"session": session, "installationId": 7, "repositoryId": 456})
 	require.Equal(t, http.StatusAccepted, r.code, r.String())
 	r = v.do(alice, nil, http.MethodGet, "/v1/vault/github-sync", nil)
 	require.Equal(t, http.StatusOK, r.code)
 	require.Equal(t, http.StatusNoContent, v.do(alice, nil, http.MethodDelete, "/v1/vault/github-sync/connection", nil).code)
 
-	secrets := []string{"ghu_alice_secret_token", "code-secret-value", githubapptest.ClientSecret}
+	keyPEM := string(pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(v.gh.Key)}))
+	secrets := []string{"ghu_alice_secret_token", "code-secret-value", "code-refused-value", githubapptest.ClientSecret}
+	secrets = append(secrets, strings.Split(strings.TrimSpace(keyPEM), "\n")[1:4]...) // lines of the key's body
 	for _, m := range v.gh.Mints() {
 		secrets = append(secrets, m.Token)
 	}
+	require.NotEmpty(t, v.logs.String())
 	for _, s := range secrets {
 		require.NotContains(t, v.bodies.String(), s)
 		require.NotContains(t, v.logs.String(), s)
 	}
-	require.NotContains(t, v.logs.String(), session)
+	for _, own := range []string{session, handle, refused} {
+		require.NotContains(t, v.logs.String(), own)
+	}
 }
 
 // Every success body matches api/openapi.yaml.
@@ -708,7 +760,10 @@ func TestSpecConformance(t *testing.T) {
 		in := &openapi3filter.ResponseValidationInput{
 			RequestValidationInput: &openapi3filter.RequestValidationInput{
 				Request: req, PathParams: params, Route: route,
-				Options: &openapi3filter.Options{AuthenticationFunc: openapi3filter.NoopAuthenticationFunc, ExcludeRequestBody: true},
+				Options: &openapi3filter.Options{
+					AuthenticationFunc: openapi3filter.NoopAuthenticationFunc, ExcludeRequestBody: true,
+					IncludeResponseStatus: true, // an undeclared status fails
+				},
 			},
 			Status: r.code, Header: http.Header{"Content-Type": {r.header.Get("Content-Type")}},
 		}
@@ -745,4 +800,283 @@ func TestSpecConformance(t *testing.T) {
 	call(alice, http.MethodDelete, "/v1/vault/github-sync/connection", nil)
 	cb := v.do(uuid.Nil, nil, http.MethodGet, "/v1/github-sync/callback?state=x", nil)
 	check(http.MethodGet, "/v1/github-sync/callback", cb)
+
+	// Finding 10: every error body matches GitHubSyncError, code included,
+	// also the errors this module did not make.
+	fail := func(user uuid.UUID, vault *uuid.UUID, method, target string, body any, status int, code string) response {
+		t.Helper()
+		r := v.do(user, vault, method, target, body)
+		require.Equal(t, status, r.code, "%s %s: %s", method, target, r.String())
+		require.Equal(t, code, r.errCode(), "%s %s: %s", method, target, r.String())
+		check(method, target, r)
+		return r
+	}
+	const base = "/v1/vault/github-sync"
+	nowhere := uuid.New()
+	_, team := v.teamVault(alice, nil)
+	for _, route := range []struct{ method, path string }{
+		{http.MethodGet, base},
+		{http.MethodPost, base + "/connect"},
+		{http.MethodPost, base + "/complete"},
+		{http.MethodGet, base + "/installations"},
+		{http.MethodGet, base + "/repositories"},
+		{http.MethodGet, base + "/branches"},
+		{http.MethodPut, base + "/connection"},
+		{http.MethodDelete, base + "/connection"},
+	} {
+		fail(uuid.Nil, nil, route.method, route.path, map[string]any{}, http.StatusUnauthorized, "unauthenticated")
+		fail(alice, &nowhere, route.method, route.path, map[string]any{}, http.StatusNotFound, "not_found")
+		fail(bob, &team, route.method, route.path, map[string]any{}, http.StatusForbidden, "forbidden")
+	}
+	fail(alice, nil, http.MethodPost, base+"/connect", "not an object", http.StatusBadRequest, "invalid_request")
+	fail(alice, nil, http.MethodPost, base+"/complete", []int{1}, http.StatusBadRequest, "invalid_request")
+	fail(alice, nil, http.MethodPost, base+"/complete", map[string]string{"completion": "nope"}, http.StatusBadRequest, "session_expired")
+	fail(bob, nil, http.MethodDelete, base+"/connection", nil, http.StatusNotFound, "not_connected")
+	fail(alice, nil, http.MethodPost, base+"/connect", map[string]string{"returnTo": "https://evil.example/"}, http.StatusBadRequest, "invalid_return_to")
+
+	v.seedGitHub("ghu_alice2", "octocat") // the connect above revoked the first token
+	session := v.signIn(alice, nil, "code-e", "ghu_alice2")
+	fail(alice, nil, http.MethodGet, base+"/repositories?session="+session, nil, http.StatusBadRequest, "invalid_request")
+	fail(alice, nil, http.MethodPut, base+"/connection", map[string]any{"session": session}, http.StatusBadRequest, "invalid_request")
+	fail(alice, nil, http.MethodGet, base+"/branches?session="+session+"&installationId=7&repositoryId=458", nil, http.StatusNotFound, "repo_not_accessible")
+
+	// GitHub's rate limit, with the time it named.
+	v.gh.Lock()
+	v.gh.Intercept = func(w http.ResponseWriter, r *http.Request) bool {
+		if !strings.HasPrefix(r.URL.Path, "/user/installations") {
+			return false
+		}
+		w.Header().Set("Retry-After", "42")
+		w.WriteHeader(http.StatusForbidden)
+		return true
+	}
+	v.gh.Unlock()
+	r = fail(alice, nil, http.MethodGet, base+"/installations?session="+session, nil, http.StatusServiceUnavailable, "github_rate_limited")
+	require.Equal(t, "42", r.header.Get("Retry-After"))
+	v.gh.Lock()
+	v.gh.Intercept = nil
+	archived := v.gh.Repos[456]
+	archived.Archived = true
+	v.gh.Repos[456] = archived
+	v.gh.Unlock()
+	fail(alice, nil, http.MethodPut, base+"/connection", map[string]any{"session": session, "installationId": 7, "repositoryId": 456},
+		http.StatusConflict, "repo_archived")
+
+	// Our own rate limit: the heavy routes take 10 a minute.
+	var limited response
+	for range 12 {
+		limited = v.do(alice, nil, http.MethodGet, base+"/branches?session="+session+"&installationId=7&repositoryId=458", nil)
+		if limited.code == http.StatusTooManyRequests {
+			break
+		}
+	}
+	require.Equal(t, http.StatusTooManyRequests, limited.code)
+	require.Equal(t, "rate_limited", limited.errCode())
+	require.NotEmpty(t, limited.header.Get("Retry-After"))
+	check(http.MethodGet, base+"/branches", limited)
+	for range 35 {
+		limited = v.do(uuid.Nil, nil, http.MethodGet, "/v1/github-sync/callback?state=x", nil)
+		if limited.code == http.StatusTooManyRequests {
+			break
+		}
+	}
+	require.Equal(t, "rate_limited", limited.errCode())
+	check(http.MethodGet, "/v1/github-sync/callback", limited)
+}
+
+// Finding 1: every signed-in route is limited per user; the status read,
+// which clients poll every 3 s, has room for that; one user's limit is not
+// another's.
+func TestRateLimits(t *testing.T) {
+	v := newEnv(t)
+	alice, bob := v.user(), v.user()
+	const base = "/v1/vault/github-sync"
+	for i := range 60 { // three minutes of polling in one
+		require.Equal(t, http.StatusOK, v.do(alice, nil, http.MethodGet, base, nil).code, "poll %d", i)
+	}
+	codes := map[int]int{}
+	for range 35 {
+		codes[v.do(alice, nil, http.MethodPost, base+"/connect", nil).code]++
+	}
+	require.Equal(t, map[int]int{http.StatusOK: 30, http.StatusTooManyRequests: 5}, codes)
+	require.Equal(t, http.StatusTooManyRequests, v.do(alice, nil, http.MethodDelete, base+"/connection", nil).code, "one policy for the managing routes")
+	require.Equal(t, http.StatusOK, v.do(alice, nil, http.MethodGet, base, nil).code, "the status read is not caught by it")
+	require.Equal(t, http.StatusOK, v.do(bob, nil, http.MethodPost, base+"/connect", nil).code)
+	v.clock.advance(61 * time.Second)
+	require.Equal(t, http.StatusOK, v.do(alice, nil, http.MethodPost, base+"/connect", nil).code, "a new window")
+
+	// The public callback is limited per address.
+	codes = map[int]int{}
+	for range 35 {
+		codes[v.do(uuid.Nil, nil, http.MethodGet, "/v1/github-sync/callback?state=x", nil).code]++
+	}
+	require.Equal(t, map[int]int{http.StatusFound: 30, http.StatusTooManyRequests: 5}, codes)
+	over := v.do(uuid.Nil, nil, http.MethodGet, "/v1/github-sync/callback?state=x", nil)
+	require.Equal(t, "rate_limited", over.errCode())
+	require.NotEmpty(t, over.header.Get("Retry-After"))
+}
+
+// Finding 1: a client that starts sign-ins in a loop only replaces its own.
+func TestStartedSignInsAreBounded(t *testing.T) {
+	v := newEnv(t)
+	alice, bob := v.user(), v.user()
+	start := func(user uuid.UUID) string {
+		t.Helper()
+		r := v.do(user, nil, http.MethodPost, "/v1/vault/github-sync/connect", nil)
+		require.Equal(t, http.StatusOK, r.code, r.String())
+		var out struct {
+			AuthorizeURL string `json:"authorizeUrl"`
+		}
+		require.NoError(t, json.Unmarshal(r.body, &out))
+		u, err := url.Parse(out.AuthorizeURL)
+		require.NoError(t, err)
+		return u.Query().Get("state")
+	}
+	callback := func(state string) string {
+		t.Helper()
+		loc, err := url.Parse(v.do(uuid.Nil, nil, http.MethodGet, "/v1/github-sync/callback?code=c&state="+url.QueryEscape(state), nil).header.Get("Location"))
+		require.NoError(t, err)
+		return loc.Query().Get("status")
+	}
+	bobs := start(bob)
+	var states []string
+	for range 7 {
+		states = append(states, start(alice))
+	}
+	require.Equal(t, 6, v.module.PendingSignIns(), "five of alice's and bob's one")
+	require.Equal(t, "error", callback(states[0]), "the oldest was dropped")
+	require.Equal(t, "error", callback(states[1]))
+	require.Equal(t, "authorized", callback(states[2]))
+	require.Equal(t, "authorized", callback(states[6]))
+	require.Equal(t, "authorized", callback(bobs), "another user's sign-in is untouched")
+}
+
+// Finding 8: a callback whose state the server no longer knows goes back to
+// where the sign-in started: the app's scheme for the app, the web app's
+// integrations page for a browser.
+func TestCallbackWithUnknownState(t *testing.T) {
+	location := func(v *env, state string) string {
+		t.Helper()
+		r := v.do(uuid.Nil, nil, http.MethodGet, "/v1/github-sync/callback?code=c&state="+url.QueryEscape(state), nil)
+		require.Equal(t, http.StatusFound, r.code)
+		return r.header.Get("Location")
+	}
+	stateOf := func(v *env, user uuid.UUID, body any) string {
+		t.Helper()
+		r := v.do(user, nil, http.MethodPost, "/v1/vault/github-sync/connect", body)
+		require.Equal(t, http.StatusOK, r.code, r.String())
+		var out struct {
+			AuthorizeURL string `json:"authorizeUrl"`
+		}
+		require.NoError(t, json.Unmarshal(r.body, &out))
+		u, err := url.Parse(out.AuthorizeURL)
+		require.NoError(t, err)
+		return u.Query().Get("state")
+	}
+	const (
+		app = "luminavault://github-sync?status=error"
+		web = webOrigin + "/settings/integrations?status=error"
+	)
+
+	// The first origin is a development one: the https origin is preferred.
+	v := newEnvWith(t, []string{"http://localhost:5173", webOrigin + "/"})
+	alice := v.user()
+	fromWeb := stateOf(v, alice, map[string]string{"returnTo": webOrigin + "/settings/integrations?tab=github"})
+	fromApp := stateOf(v, alice, nil)
+	v.clock.advance(11 * time.Minute) // both expire
+	require.Equal(t, web, location(v, fromWeb))
+	require.Equal(t, app, location(v, fromApp), "an app sign-in still ends in the app")
+	require.Equal(t, web, location(v, "forged"))
+	require.Equal(t, web, location(v, ""))
+
+	// A live web flow that was declined keeps its own returnTo.
+	declined := stateOf(v, alice, map[string]string{"returnTo": webOrigin + "/settings/integrations?tab=github"})
+	r := v.do(uuid.Nil, nil, http.MethodGet, "/v1/github-sync/callback?error=access_denied&state="+url.QueryEscape(declined), nil)
+	require.Equal(t, webOrigin+"/settings/integrations?tab=github&status=error", r.header.Get("Location"))
+
+	// Only a development origin: that is the web app there.
+	dev := newEnvWith(t, []string{"http://localhost:5173"})
+	require.Equal(t, "http://localhost:5173/settings/integrations?status=error", location(dev, "forged"))
+
+	// No web origin at all: the app's scheme is all there is.
+	none := newEnvWith(t, nil)
+	require.Equal(t, app, location(none, "forged"))
+	require.Equal(t, app, location(none, "w.forged"))
+}
+
+// Findings 2, 5 and 11 at connect.
+func TestConnectRefusals(t *testing.T) {
+	v := newEnv(t)
+	alice := v.user()
+	v.seedGitHub("ghu_alice", "octocat")
+	session := v.signIn(alice, nil, "code-a", "ghu_alice")
+	body := map[string]any{"session": session, "installationId": 7, "repositoryId": 456, "branch": "main", "mergeExisting": true}
+
+	// The installation no longer covers the repository: GitHub answers the
+	// token request with 422.
+	v.gh.Lock()
+	v.gh.InstallationRepos[7] = []int64{457}
+	v.gh.Unlock()
+	r := v.put(alice, nil, body)
+	require.Equal(t, http.StatusNotFound, r.code, r.String())
+	require.Equal(t, "repo_not_accessible", r.errCode())
+	v.gh.Lock()
+	v.gh.InstallationRepos[7] = []int64{456, 457}
+	v.gh.Unlock()
+
+	// A tree listing larger than the client reads is a repository too large,
+	// not GitHub being down.
+	entries := make([]githubapp.TreeEntry, 0, 70_000)
+	for i := range 70_000 {
+		entries = append(entries, githubapp.TreeEntry{
+			Path: "notes/" + strings.Repeat("d", 40) + "/" + strconv.Itoa(i) + ".md", Mode: "100644", Type: "blob",
+			SHA: strings.Repeat("a", 40), Size: 10,
+		})
+	}
+	b := githubapp.Branch{Name: "main"}
+	b.Commit.SHA = "c0ffee"
+	b.Commit.Commit.Tree.SHA = "big"
+	v.gh.Lock()
+	v.gh.Branches["octocat/notes"] = []githubapp.Branch{b}
+	v.gh.Trees["big"] = githubapp.Tree{Entries: entries}
+	v.gh.Unlock()
+	r = v.put(alice, nil, body)
+	require.Equal(t, http.StatusRequestEntityTooLarge, r.code, r.String())
+	require.Equal(t, "repo_too_large", r.errCode())
+
+	// A root .gitignore is merged, not written as a vault file: it is not in
+	// the summary's files, held files or conflicts.
+	raw := vaultpaths.Paths{Root: v.root}.Raw(alice)
+	require.NoError(t, os.MkdirAll(raw, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(raw, ".gitignore"), []byte("local\n"), 0o600))
+	v.gh.Lock()
+	v.gh.Trees["big"] = githubapp.Tree{Entries: []githubapp.TreeEntry{
+		{Path: ".gitignore", Mode: "100644", Type: "blob", SHA: "1", Size: 12},
+		{Path: "inbox/a.md", Mode: "100644", Type: "blob", SHA: "2", Size: 3},
+	}}
+	v.gh.Unlock()
+	delete(body, "mergeExisting")
+	r = v.put(alice, nil, body)
+	require.Equal(t, "remote_not_empty", r.errCode(), r.String())
+	var conflict struct {
+		Summary githubsync.Summary `json:"summary"`
+	}
+	require.NoError(t, json.Unmarshal(r.body, &conflict))
+	require.Equal(t, githubsync.Summary{Files: 1, Notes: 1, Bytes: 15}, conflict.Summary)
+
+	// An archived repository cannot be pushed to.
+	v.gh.Lock()
+	archived := v.gh.Repos[456]
+	archived.Archived = true
+	v.gh.Repos[456] = archived
+	list := v.gh.UserRepos["ghu_alice"][7]
+	list[0].Archived = true
+	v.gh.Unlock()
+	body["mergeExisting"] = true
+	r = v.put(alice, nil, body)
+	require.Equal(t, http.StatusConflict, r.code, r.String())
+	require.Equal(t, "repo_archived", r.errCode())
+	require.Nil(t, v.connection(alice))
+	r = v.do(alice, nil, http.MethodGet, "/v1/vault/github-sync/repositories?session="+session+"&installationId=7", nil)
+	require.Contains(t, r.String(), `"archived":true`)
 }

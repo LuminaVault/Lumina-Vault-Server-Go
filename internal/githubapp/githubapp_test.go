@@ -7,6 +7,7 @@ import (
 	"lumina/internal/githubapp"
 	"lumina/internal/githubapp/githubapptest"
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -153,6 +154,8 @@ func TestStatusErrorKinds(t *testing.T) {
 	for status, want := range map[int]error{
 		http.StatusNotFound: githubapp.ErrNotFound, http.StatusUnauthorized: githubapp.ErrUnauthorized,
 		http.StatusForbidden: githubapp.ErrForbidden, http.StatusBadGateway: githubapp.ErrUnavailable,
+		http.StatusTooManyRequests: githubapp.ErrRateLimited, http.StatusMovedPermanently: githubapp.ErrMoved,
+		http.StatusFound: githubapp.ErrMoved, http.StatusTemporaryRedirect: githubapp.ErrMoved,
 	} {
 		require.ErrorIs(t, &githubapp.StatusError{Status: status}, want)
 	}
@@ -193,4 +196,166 @@ func TestNewRequiresEveryField(t *testing.T) {
 		_, err := githubapp.New(cfg)
 		require.Error(t, err)
 	}
+}
+
+// A renamed or transferred repository: GitHub answers the old name with a
+// 301. The client never follows it; it reads the new name by id and asks once
+// more (spec: "a repository rename on the stub is followed through
+// GET /repositories/{id}").
+func TestRenamedRepositoryIsReadByID(t *testing.T) {
+	s := stubWithRepo(t)
+	c := s.Client(t)
+	ctx := context.Background()
+	tok, err := c.InstallationToken(ctx, 7, 456)
+	require.NoError(t, err)
+
+	b := githubapp.Branch{Name: "main"}
+	b.Commit.Commit.Tree.SHA = "7ree"
+	s.Lock()
+	renamed := s.Repos[456]
+	renamed.FullName = "hubot/journal"
+	s.Repos[456] = renamed
+	s.Renamed["octocat/notes"] = 456
+	s.Branches["hubot/journal"] = []githubapp.Branch{b}
+	s.Trees["7ree"] = githubapp.Tree{Entries: []githubapp.TreeEntry{{Path: "a.md", Mode: "100644", Type: "blob", SHA: "1", Size: 1}}}
+	s.Unlock()
+
+	stale := githubapp.RepoRef{ID: 456, FullName: "octocat/notes"}
+	list, err := c.Branches(ctx, tok, stale)
+	require.NoError(t, err)
+	require.Len(t, list, 1)
+	got, err := c.Branch(ctx, tok, stale, "main")
+	require.NoError(t, err)
+	require.Equal(t, "7ree", got.TreeSHA())
+	tree, err := c.Tree(ctx, tok, stale, "7ree")
+	require.NoError(t, err)
+	require.Len(t, tree.Entries, 1)
+
+	// Without an id there is nothing to ask: the redirect is ErrMoved.
+	_, err = c.Branches(ctx, tok, githubapp.RepoRef{FullName: "octocat/notes"})
+	require.ErrorIs(t, err, githubapp.ErrMoved)
+	require.NotErrorIs(t, err, githubapp.ErrUnavailable)
+
+	s.Lock()
+	defer s.Unlock()
+	require.Zero(t, s.Followed, "a redirect is never followed")
+}
+
+// GitHub's rate limits are ErrRateLimited, not "forbidden", and the error
+// says when to come back.
+func TestRateLimited(t *testing.T) {
+	s := stubWithRepo(t)
+	c := s.Client(t)
+	now := time.Unix(1_800_000_000, 0)
+	c.SetClock(func() time.Time { return now })
+	ctx := context.Background()
+	answer := func(status int, headers map[string]string) {
+		s.Lock()
+		defer s.Unlock()
+		s.Intercept = func(w http.ResponseWriter, _ *http.Request) bool {
+			for k, v := range headers {
+				w.Header().Set(k, v)
+			}
+			w.WriteHeader(status)
+			_, _ = w.Write([]byte(`{"message":"API rate limit exceeded for installation ID 7."}`))
+			return true
+		}
+	}
+	reset := now.Add(20 * time.Minute)
+
+	t.Run("primary: 403 with no requests remaining", func(t *testing.T) {
+		answer(http.StatusForbidden, map[string]string{"X-RateLimit-Remaining": "0", "X-RateLimit-Reset": strconv.FormatInt(reset.Unix(), 10)})
+		_, err := c.User(ctx, "ghu_x")
+		require.ErrorIs(t, err, githubapp.ErrRateLimited)
+		require.NotErrorIs(t, err, githubapp.ErrForbidden)
+		var se *githubapp.StatusError
+		require.ErrorAs(t, err, &se)
+		require.Equal(t, http.StatusForbidden, se.Status)
+		require.NotNil(t, se.RateLimitRemaining)
+		require.Zero(t, *se.RateLimitRemaining)
+		require.True(t, se.RateLimitReset.Equal(reset))
+		require.True(t, se.RetryAt(now).Equal(reset))
+		require.NotContains(t, err.Error(), "installation ID", "no body text in the error")
+	})
+
+	t.Run("secondary: Retry-After, on a 403 and on a 429", func(t *testing.T) {
+		for _, status := range []int{http.StatusForbidden, http.StatusTooManyRequests} {
+			answer(status, map[string]string{"Retry-After": "90", "X-RateLimit-Remaining": "4000"})
+			_, err := c.User(ctx, "ghu_x")
+			require.ErrorIs(t, err, githubapp.ErrRateLimited)
+			var se *githubapp.StatusError
+			require.ErrorAs(t, err, &se)
+			require.Equal(t, 90*time.Second, se.RetryAfter)
+			require.True(t, se.RetryAt(now).Equal(now.Add(90*time.Second)))
+		}
+		answer(http.StatusTooManyRequests, nil)
+		_, err := c.User(ctx, "ghu_x")
+		require.ErrorIs(t, err, githubapp.ErrRateLimited)
+		var se *githubapp.StatusError
+		require.ErrorAs(t, err, &se)
+		require.True(t, se.RetryAt(now).IsZero(), "GitHub said nothing about when")
+	})
+
+	t.Run("a plain 403 stays forbidden", func(t *testing.T) {
+		answer(http.StatusForbidden, map[string]string{"X-RateLimit-Remaining": "4999"})
+		_, err := c.User(ctx, "ghu_x")
+		require.ErrorIs(t, err, githubapp.ErrForbidden)
+		require.NotErrorIs(t, err, githubapp.ErrRateLimited)
+	})
+
+	t.Run("the token mint and the code exchange keep the headers too", func(t *testing.T) {
+		answer(http.StatusTooManyRequests, map[string]string{"Retry-After": "7"})
+		_, err := c.InstallationToken(ctx, 7, 456)
+		require.ErrorIs(t, err, githubapp.ErrRateLimited)
+		_, err = c.ExchangeCode(ctx, "code", "https://x/cb")
+		require.ErrorIs(t, err, githubapp.ErrRateLimited)
+		var se *githubapp.StatusError
+		require.ErrorAs(t, err, &se)
+		require.Equal(t, 7*time.Second, se.RetryAfter)
+	})
+}
+
+// 422 minting a token: the installation no longer covers the repository.
+func TestInstallationTokenRepoAccessRemoved(t *testing.T) {
+	s := stubWithRepo(t)
+	c := s.Client(t)
+	_, err := c.InstallationToken(context.Background(), 7, 999)
+	require.ErrorIs(t, err, githubapp.ErrRepoAccessRemoved)
+	require.NotErrorIs(t, err, githubapp.ErrUnavailable)
+	var se *githubapp.StatusError
+	require.ErrorAs(t, err, &se)
+	require.Equal(t, http.StatusUnprocessableEntity, se.Status)
+	// Elsewhere a 422 means nothing in particular.
+	require.ErrorIs(t, &githubapp.StatusError{Status: http.StatusUnprocessableEntity}, githubapp.ErrUnavailable)
+}
+
+// An answer over the read limit is ErrTooLarge, not a body that "did not
+// parse"; one under it that GitHub cut short says so itself.
+func TestTreeTooLargeAndTruncated(t *testing.T) {
+	s := stubWithRepo(t)
+	c := s.Client(t)
+	ctx := context.Background()
+	tok, err := c.InstallationToken(ctx, 7, 456)
+	require.NoError(t, err)
+	repo := githubapp.RepoRef{ID: 456, FullName: "octocat/notes"}
+
+	entries := make([]githubapp.TreeEntry, 0, 70_000)
+	for i := range 70_000 { // about 9 MB of JSON
+		entries = append(entries, githubapp.TreeEntry{
+			Path: "notes/" + strings.Repeat("d", 40) + "/" + strconv.Itoa(i) + ".md", Mode: "100644", Type: "blob",
+			SHA: strings.Repeat("a", 40), Size: 10,
+		})
+	}
+	s.Lock()
+	s.Trees["big"] = githubapp.Tree{Entries: entries}
+	s.Trees["cut"] = githubapp.Tree{Entries: entries[:10], Truncated: true}
+	s.Unlock()
+
+	_, err = c.Tree(ctx, tok, repo, "big")
+	require.ErrorIs(t, err, githubapp.ErrTooLarge)
+	require.NotErrorIs(t, err, githubapp.ErrUnavailable)
+
+	tree, err := c.Tree(ctx, tok, repo, "cut")
+	require.NoError(t, err)
+	require.True(t, tree.Truncated)
 }

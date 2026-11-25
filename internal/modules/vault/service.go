@@ -361,6 +361,16 @@ func (f *Files) Find(ctx context.Context, vault uuid.UUID, path string) (*vaultf
 // Move renames the file at path to newPath, both relative to the vault's raw
 // root, and returns its row.
 func (f *Files) Move(ctx context.Context, vault uuid.UUID, path, newPath string) (*vaultfiles.VaultFile, error) {
+	return f.MoveIfMatch(ctx, vault, path, newPath, "")
+}
+
+// MoveIfMatch is Move for a caller that planned the move from a known version
+// of the file (GitHub sync's pull): with a non-empty ifMatch (the If-Match
+// syntax Write takes: sha256 values, or "*") the move only happens while the
+// bytes at path still hash to one of them, else ErrPreconditionFailed. The
+// check and the move hold the path locks of both paths, the ones every save
+// takes, so no save of either path lands in between.
+func (f *Files) MoveIfMatch(ctx context.Context, vault uuid.UUID, path, newPath, ifMatch string) (*vaultfiles.VaultFile, error) {
 	from, err := vaultfiles.SanitizePath(path)
 	if err != nil {
 		return nil, err
@@ -372,12 +382,23 @@ func (f *Files) Move(ctx context.Context, vault uuid.UUID, path, newPath string)
 	if from == to {
 		return nil, wire.NewError(http.StatusBadRequest, "path and newPath are identical")
 	}
+	unlock := f.locks.lock2(vault, from, to)
+	defer unlock()
 	row, err := f.store.FindByPath(ctx, vault, from)
 	if err != nil {
 		return nil, err
 	}
 	if row == nil {
 		return nil, errFileNotFound
+	}
+	if ifMatch != "" {
+		target, err := vaultfiles.ResolveEntryInside(f.paths.Raw(vault), from)
+		if err != nil {
+			return nil, err
+		}
+		if err := checkIfMatch(ifMatch, target); err != nil {
+			return nil, err
+		}
 	}
 	if err := f.store.MoveFile(ctx, row, to, vault); err != nil {
 		return nil, err
@@ -391,10 +412,20 @@ func (f *Files) Move(ctx context.Context, vault uuid.UUID, path, newPath string)
 // memory made from it are removed. A failed move is logged and doesn't stop
 // the delete, since the row is what the user sees.
 func (f *Files) Delete(ctx context.Context, vault, actor uuid.UUID, path string) error {
+	return f.DeleteIfMatch(ctx, vault, actor, path, "")
+}
+
+// DeleteIfMatch is Delete with MoveIfMatch's precondition: with a non-empty
+// ifMatch the file is only trashed while its bytes still hash to one of the
+// listed sha256 values, else ErrPreconditionFailed. The check and the delete
+// hold the path's lock.
+func (f *Files) DeleteIfMatch(ctx context.Context, vault, actor uuid.UUID, path, ifMatch string) error {
 	safe, err := vaultfiles.SanitizePath(path)
 	if err != nil {
 		return err
 	}
+	unlock := f.locks.lock(vault, safe)
+	defer unlock()
 	row, err := f.store.FindByPath(ctx, vault, safe)
 	if err != nil {
 		return err
@@ -406,6 +437,11 @@ func (f *Files) Delete(ctx context.Context, vault, actor uuid.UUID, path string)
 	target, err := vaultfiles.ResolveEntryInside(rawRoot, safe)
 	if err != nil {
 		return err
+	}
+	if ifMatch != "" {
+		if err := checkIfMatch(ifMatch, target); err != nil {
+			return err
+		}
 	}
 	if _, err := f.store.Trash(ctx, rawRoot, target, row, &actor, f.now()); err != nil {
 		slog.ErrorContext(ctx, "vault delete: move to trash failed", "tenant", ids.Upper(vault), "path", safe, "error", err)

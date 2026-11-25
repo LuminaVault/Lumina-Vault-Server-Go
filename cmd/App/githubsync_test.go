@@ -1,15 +1,18 @@
 package main
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
+	"log/slog"
 	"lumina/internal/config"
 	"lumina/internal/httpserver"
 	"lumina/internal/vaultpaths"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -18,7 +21,7 @@ import (
 func githubSyncStatuses(t *testing.T, cfg config.Config) []int {
 	t.Helper()
 	var modules []httpserver.Module
-	if m := githubSyncModule(nil, cfg, vaultpaths.Paths{Root: t.TempDir()}); m != nil {
+	if m := githubSyncModule(nil, cfg, vaultpaths.Paths{Root: t.TempDir()}, nil); m != nil {
 		modules = append(modules, m)
 	}
 	srv := httpserver.New(config.Config{}, httpserver.Deps{Auth: noAuth, Modules: modules})
@@ -83,5 +86,63 @@ func TestGitHubSyncFlagOnWithoutConfigRegistersNothing(t *testing.T) {
 		cfg := githubSyncConfig(t)
 		change(&cfg)
 		require.Equal(t, []int{404, 404, 404, 404, 404, 404, 404, 404, 404}, githubSyncStatuses(t, cfg), name)
+	}
+}
+
+// D17, as the server is configured: neither the App's private key nor the
+// webhook secret nor the client secret reaches a log line or a response,
+// whether the module mounts or is refused for a bad setting.
+func TestGitHubSyncConfigSecretsStayOutOfLogsAndResponses(t *testing.T) {
+	var logs bytes.Buffer
+	old := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(old) })
+
+	cfg := githubSyncConfig(t)
+	cfg.GitHubAppWebhookSecret = "whsec-do-not-log-0123456789"
+	cfg.GitHubAppClientSecret = "client-secret-do-not-log-0123456789"
+	secrets := []string{cfg.GitHubAppWebhookSecret, cfg.GitHubAppClientSecret}
+	secrets = append(secrets, strings.Split(strings.TrimSpace(cfg.GitHubAppPrivateKey), "\n")[1:4]...)
+
+	var bodies bytes.Buffer
+	serve := func(cfg config.Config) int {
+		var modules []httpserver.Module
+		if m := githubSyncModule(nil, cfg, vaultpaths.Paths{Root: t.TempDir()}, nil); m != nil {
+			modules = append(modules, m)
+		}
+		srv := httpserver.New(config.Config{}, httpserver.Deps{Auth: noAuth, Modules: modules})
+		rec := httptest.NewRecorder()
+		srv.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/v1/github-sync/callback?state=x&code=y", nil))
+		bodies.WriteString(rec.Body.String() + rec.Header().Get("Location"))
+		return rec.Code
+	}
+	require.Equal(t, http.StatusFound, serve(cfg))
+
+	// Refused settings are logged by name, never by value.
+	for _, change := range []func(*config.Config){
+		func(c *config.Config) { c.GitHubSyncPollInterval = "soon" },
+		func(c *config.Config) { c.GitHubAppPrivateKey = c.GitHubAppPrivateKey[:len(c.GitHubAppPrivateKey)/2] },
+		func(c *config.Config) { c.GitHubAPIBaseURL = "http://api.github.com" },
+		func(c *config.Config) { c.GitHubAppID = "not-a-number" },
+	} {
+		bad := cfg
+		change(&bad)
+		require.Equal(t, http.StatusNotFound, serve(bad))
+	}
+	require.Contains(t, logs.String(), "GitHub sync is enabled but not configured")
+	for _, s := range secrets {
+		require.NotContains(t, logs.String(), s)
+		require.NotContains(t, bodies.String(), s)
+	}
+}
+
+// The HTTPS requirement of the GitHub client follows the same rule as the
+// settings check: "development" is a development environment for both.
+func TestGitHubSyncDevelopmentAllowsHTTPStub(t *testing.T) {
+	cfg := githubSyncConfig(t)
+	cfg.GitHubAPIBaseURL, cfg.GitHubGitBaseURL = "http://127.0.0.1:1", "http://127.0.0.1:1"
+	for env, mounted := range map[string]bool{"dev": true, "development": true, "test": true, "staging": false, "production": false} {
+		cfg.LVEnvironment = env
+		require.Equal(t, mounted, githubSyncModule(nil, cfg, vaultpaths.Paths{Root: t.TempDir()}, nil) != nil, env)
 	}
 }

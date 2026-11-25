@@ -66,6 +66,13 @@ type Server struct {
 	Branches map[string][]githubapp.Branch
 	// Trees maps a commit sha to its recursive tree.
 	Trees map[string]githubapp.Tree
+	// Renamed maps a repository's old full name to its id. The stub answers
+	// the old name as GitHub does, 301 to /repositories/{id}/..., and counts
+	// in Followed any request that went there: the client must not follow.
+	Renamed  map[string]int64
+	Followed int
+	// Intercept, when set, sees every request first; true means it answered.
+	Intercept func(w http.ResponseWriter, r *http.Request) bool
 
 	Exchanges                 []string
 	Minted                    []Mint
@@ -88,6 +95,7 @@ func New(t testing.TB) *Server {
 		UserRepos:         map[string]map[int64][]githubapp.Repository{},
 		InstallationRepos: map[int64][]int64{}, Repos: map[int64]githubapp.Repository{},
 		Branches: map[string][]githubapp.Branch{}, Trees: map[string]githubapp.Tree{},
+		Renamed:       map[string]int64{},
 		installTokens: map[string]Mint{},
 	}
 	mux := http.NewServeMux()
@@ -102,7 +110,21 @@ func New(t testing.TB) *Server {
 	mux.HandleFunc("GET /repos/{owner}/{name}/branches", s.branches)
 	mux.HandleFunc("GET /repos/{owner}/{name}/branches/{branch...}", s.branch)
 	mux.HandleFunc("GET /repos/{owner}/{name}/git/trees/{sha}", s.tree)
-	s.Server = httptest.NewServer(mux)
+	mux.HandleFunc("GET /repositories/{id}/{rest...}", func(w http.ResponseWriter, _ *http.Request) {
+		s.mu.Lock()
+		s.Followed++
+		s.mu.Unlock()
+		w.WriteHeader(http.StatusNotFound)
+	})
+	s.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.mu.Lock()
+		intercept := s.Intercept
+		s.mu.Unlock()
+		if intercept != nil && intercept(w, r) {
+			return
+		}
+		mux.ServeHTTP(w, r)
+	}))
 	t.Cleanup(s.Close)
 	return s
 }
@@ -346,6 +368,20 @@ func (s *Server) readable(r *http.Request, repo githubapp.Repository) bool {
 	return false
 }
 
+// moved answers a request for a renamed repository's old name with GitHub's
+// 301. The caller holds the lock.
+func (s *Server) moved(w http.ResponseWriter, r *http.Request) bool {
+	old := r.PathValue("owner") + "/" + r.PathValue("name")
+	id, ok := s.Renamed[old]
+	if !ok {
+		return false
+	}
+	rest := strings.TrimPrefix(r.URL.Path, "/repos/"+old)
+	w.Header().Set("Location", s.URL+"/repositories/"+strconv.FormatInt(id, 10)+rest)
+	w.WriteHeader(http.StatusMovedPermanently)
+	return true
+}
+
 func (s *Server) byName(r *http.Request) (githubapp.Repository, bool) {
 	full := r.PathValue("owner") + "/" + r.PathValue("name")
 	for _, repo := range s.Repos {
@@ -371,6 +407,9 @@ func (s *Server) repository(w http.ResponseWriter, r *http.Request) {
 func (s *Server) branches(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.moved(w, r) {
+		return
+	}
 	repo, ok := s.byName(r)
 	if !ok {
 		w.WriteHeader(http.StatusNotFound)
@@ -386,6 +425,9 @@ func (s *Server) branches(w http.ResponseWriter, r *http.Request) {
 func (s *Server) branch(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.moved(w, r) {
+		return
+	}
 	repo, ok := s.byName(r)
 	if !ok {
 		w.WriteHeader(http.StatusNotFound)
@@ -403,6 +445,9 @@ func (s *Server) branch(w http.ResponseWriter, r *http.Request) {
 func (s *Server) tree(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.moved(w, r) {
+		return
+	}
 	if _, ok := s.byName(r); !ok || r.URL.Query().Get("recursive") != "1" {
 		w.WriteHeader(http.StatusNotFound)
 		return

@@ -112,6 +112,19 @@ var VaultUploadByUser = Policy{Name: "vaultUploadByUser", Max: 30, Window: 60 * 
 // standard tier scale, keyed by user or IP.
 var VaultExportByUser = Policy{Name: "vaultExportByUser", Max: 3, Window: 300 * time.Second, TierScale: StandardTierScale}
 
+// GitHub sync's policies are Go only (spec 2026-11-19-e4-github-sync).
+// GitHubSyncStatusByUser is the status read, which a client polls every 3 s
+// while a sync runs. GitHubSyncByUser is every other signed-in route.
+// GitHubSyncHeavyByUser is stacked on the two that can cost dozens of GitHub
+// calls and a walk of the vault (branches, connect). GitHubSyncCallbackByIP is
+// the public sign-in callback.
+var (
+	GitHubSyncStatusByUser = Policy{Name: "githubSyncStatusByUser", Max: 120, Window: 60 * time.Second}
+	GitHubSyncByUser       = Policy{Name: "githubSyncByUser", Max: 30, Window: 60 * time.Second}
+	GitHubSyncHeavyByUser  = Policy{Name: "githubSyncHeavyByUser", Max: 10, Window: 60 * time.Second}
+	GitHubSyncCallbackByIP = Policy{Name: "githubSyncCallbackByIP", Max: 30, Window: 60 * time.Second}
+)
+
 // QueryByUser is RateLimitPolicy.queryByUser: 30 per 60 s on the standard tier
 // scale. The calendar brief and /v1/query share it.
 var QueryByUser = Policy{Name: "queryByUser", Max: 30, Window: 60 * time.Second, TierScale: StandardTierScale}

@@ -6,6 +6,7 @@ import (
 	"lumina/internal/githubapp"
 	"lumina/internal/githubsync"
 	"lumina/internal/httpserver"
+	"lumina/internal/ratelimit"
 	"lumina/internal/ssrfguard"
 	"lumina/internal/vaultaccess"
 	"lumina/internal/vaultpaths"
@@ -24,7 +25,7 @@ import (
 //
 // Requests to GitHub go through the SSRF-guarded client, HTTPS only outside
 // development, and never follow a redirect.
-func githubSyncModule(pool *pgxpool.Pool, cfg config.Config, paths vaultpaths.Paths) httpserver.Module {
+func githubSyncModule(pool *pgxpool.Pool, cfg config.Config, paths vaultpaths.Paths, limits *ratelimit.Store) httpserver.Module {
 	if !githubsync.Enabled(cfg) {
 		return nil
 	}
@@ -34,7 +35,7 @@ func githubSyncModule(pool *pgxpool.Pool, cfg config.Config, paths vaultpaths.Pa
 		log.Warn("GitHub sync is enabled but not configured; not mounting it", "reason", err.Error())
 		return nil
 	}
-	guard := ssrfguard.Guard{RequireHTTPS: cfg.LVEnvironment != "" && cfg.LVEnvironment != "dev" && cfg.LVEnvironment != "test"}
+	guard := ssrfguard.Guard{RequireHTTPS: !githubsync.IsDev(cfg)}
 	client, err := githubapp.New(githubapp.Config{
 		AppID: settings.AppID, ClientID: settings.ClientID, ClientSecret: settings.ClientSecret, PrivateKey: settings.PrivateKey,
 		APIBaseURL: settings.APIBaseURL, WebBaseURL: settings.GitBaseURL, HTTP: guard.Client(30 * time.Second),
@@ -47,6 +48,6 @@ func githubSyncModule(pool *pgxpool.Pool, cfg config.Config, paths vaultpaths.Pa
 		Client: client, Store: githubsync.NewStore(pool), Access: vaultaccess.New(pool), Paths: paths,
 		CallbackURL: settings.CallbackURL, Slug: settings.Slug,
 		MaxRepoBytes: settings.MaxRepoBytes, MaxFiles: settings.MaxFiles,
-		WebReturnOrigins: cfg.CORSAllowedOrigins, Log: log,
+		WebReturnOrigins: cfg.CORSAllowedOrigins, Limits: limits, Log: log,
 	})
 }
