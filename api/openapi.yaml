@@ -7736,9 +7736,10 @@ paths:
       x-lv-module: githubsync
       summary: Sync now
       description: |
-        Backlog E4.8 (spec 2026-11-19-e4-github-sync D14). Anyone who may
-        write to the vault queues a sync; the answer is the status as it is
-        now, and the sync runs after the response. Clients poll
+        Backlog E4.8 (spec 2026-11-19-e4-github-sync D14). Only the vault
+        owner queues a sync; members see the status and cannot ask. The
+        answer is the status as it is now, and the sync runs after the
+        response. Clients poll
         `GET /v1/vault/github-sync` while `syncing` is true.
 
         A connection waiting to retry after `sync_failed` is tried at once
@@ -7752,7 +7753,7 @@ paths:
 
         Until pull ships (E4.9) a sync is a push only.
 
-        Rate limit: 6 per minute per vault, whoever asks, on top of the 30
+        Rate limit: 6 per minute per vault, on top of the 30
         per minute per user of the other routes.
       security: [{ bearerJWT: [] }]
       responses:
@@ -7765,7 +7766,7 @@ paths:
         '429': { $ref: '#/components/responses/GitHubSyncRateLimited' }
         default: { $ref: '#/components/responses/GitHubSyncFailure' }
         '403':
-          description: '`forbidden`: not a member of the vault, or a member who may not write.'
+          description: '`owner_required`.'
           content:
             application/json:
               schema: { $ref: '#/components/schemas/GitHubSyncError' }

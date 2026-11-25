@@ -1160,20 +1160,16 @@ func (m *Module) disconnect(c *echo.Context) error {
 
 // MARK: POST /v1/vault/github-sync/sync
 
-// syncNow is "Sync now" (D14): anyone who may write to the vault queues a
-// sync, at most 6 times a minute per vault. It also puts a connection that
-// stopped for a cause that may since have been fixed on GitHub back to work.
-// The answer is the status as it is now; the sync runs after the response.
+// syncNow is "Sync now" (D14): the vault's owner queues a sync, at most 6
+// times a minute per vault. It also puts a connection that stopped for a
+// cause that may since have been fixed on GitHub back to work. Members see
+// the status and cannot ask. The answer is the status as it is now; the sync
+// runs after the response.
 func (m *Module) syncNow(c *echo.Context) error {
-	user, err := userOf(c)
+	_, vault, err := m.owner(c)
 	if err != nil {
 		return err
 	}
-	a, err := m.access.Resolve(c, vaultaccess.Write)
-	if err != nil {
-		return err
-	}
-	vault := a.VaultID
 	if limited, retry := m.limits.Hit(ratelimit.GitHubSyncNowByVault, vault.String()); limited {
 		c.Response().Header().Set("Retry-After", strconv.Itoa(retry))
 		return ratelimit.ErrLimited
@@ -1191,11 +1187,7 @@ func (m *Module) syncNow(c *echo.Context) error {
 			return err
 		}
 	}
-	owner, err := m.store.VaultOwner(ctx, vault)
-	if err != nil {
-		return err
-	}
-	out, err := m.statusOf(ctx, vault, owner == user)
+	out, err := m.statusOf(ctx, vault, true)
 	if err != nil {
 		return err
 	}

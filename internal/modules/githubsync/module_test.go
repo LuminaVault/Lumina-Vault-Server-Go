@@ -1169,9 +1169,9 @@ func (v *env) status(user uuid.UUID, vault *uuid.UUID) syncStatus {
 	return st
 }
 
-// D14: POST …/sync. Anyone who may write to the vault queues a sync and may
-// put a stopped connection back to work; a viewer may not; 6 per minute per
-// vault. The status tells the truth about what is pending and what failed.
+// D14: POST …/sync. Only the vault owner queues a sync and may put a stopped
+// connection back to work; members may not, whatever their role; 6 per
+// minute per vault. The status tells the truth about what is pending and what failed.
 func TestSyncNow(t *testing.T) {
 	v := newEnv(t)
 	alice, bob, carol, dave := v.user(), v.user(), v.user(), v.user()
@@ -1202,20 +1202,27 @@ func TestSyncNow(t *testing.T) {
 	require.True(t, st.Connection.PendingPush)
 	require.Nil(t, st.Connection.LastPushAt)
 
-	// A viewer cannot sync; someone outside the vault cannot see it.
-	r = v.do(carol, &vault, http.MethodPost, route, nil)
-	require.Equal(t, http.StatusForbidden, r.code, r.String())
-	require.Equal(t, "forbidden", r.errCode())
-	require.GreaterOrEqual(t, v.do(dave, &vault, http.MethodPost, route, nil).code, 400)
-
-	// GitHub is back. A member who may write syncs now, without waiting for
-	// the retry.
+	// GitHub is back. Only the owner may ask: a member who may write to the
+	// vault cannot, nor a viewer, and someone outside cannot see it. None of
+	// them starts a sync.
 	v.gh.Lock()
 	delete(v.gh.Git.Status, 456)
 	v.gh.Unlock()
-	r = v.do(bob, &vault, http.MethodPost, route, nil)
+	for _, member := range []uuid.UUID{bob, carol} {
+		r = v.do(member, &vault, http.MethodPost, route, nil)
+		require.Equal(t, http.StatusForbidden, r.code, r.String())
+		require.Equal(t, "owner_required", r.errCode())
+	}
+	r = v.do(dave, &vault, http.MethodPost, route, nil)
+	require.Equal(t, http.StatusForbidden, r.code, r.String())
+	require.NotEmpty(t, r.errCode())
+	require.Empty(t, v.gh.Git.Tip(456, "main"), "a refused request pushed")
+	require.NotNil(t, v.status(bob, &vault).Connection.Error, "a refused request cleared the wait")
+
+	// The owner syncs now, without waiting for the retry.
+	r = v.do(alice, &vault, http.MethodPost, route, nil)
 	require.Equal(t, http.StatusAccepted, r.code, r.String())
-	require.Contains(t, r.String(), `"canManage":false`)
+	require.Contains(t, r.String(), `"canManage":true`)
 	v.settled(vault, func(c *githubsync.Connection) bool { return c.RemoteSHA != nil && *c.RemoteSHA == head })
 	require.Equal(t, head, v.gh.Git.Tip(456, "main"))
 	st = v.status(bob, &vault)
@@ -1241,23 +1248,19 @@ func TestSyncNow(t *testing.T) {
 	require.Equal(t, githubsync.StateNeedsAttention, v.status(alice, &vault).Connection.State)
 
 	// 6 per minute per vault: that was 4 that reached the limiter (the
-	// viewer and the outsider never did), whoever asked.
+	// members and the outsider never did).
 	codes := map[int]int{}
-	for i := range 6 {
-		who := alice
-		if i%2 == 1 {
-			who = bob
-		}
-		codes[v.do(who, &vault, http.MethodPost, route, nil).code]++
+	for range 6 {
+		codes[v.do(alice, &vault, http.MethodPost, route, nil).code]++
 	}
 	require.Equal(t, map[int]int{http.StatusAccepted: 2, http.StatusTooManyRequests: 4}, codes)
-	over := v.do(bob, &vault, http.MethodPost, route, nil)
+	over := v.do(alice, &vault, http.MethodPost, route, nil)
 	require.Equal(t, "rate_limited", over.errCode())
 	require.NotEmpty(t, over.header.Get("Retry-After"))
 	// Another vault has its own budget.
 	require.Equal(t, http.StatusNotFound, v.do(alice, nil, http.MethodPost, route, nil).code)
 	v.clock.advance(61 * time.Second)
-	require.Equal(t, http.StatusAccepted, v.do(bob, &vault, http.MethodPost, route, nil).code, "a new window")
+	require.Equal(t, http.StatusAccepted, v.do(alice, &vault, http.MethodPost, route, nil).code, "a new window")
 }
 
 // D13: disconnect removes the origin remote from the vault's repository,
