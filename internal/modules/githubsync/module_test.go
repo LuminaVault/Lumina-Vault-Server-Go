@@ -874,6 +874,14 @@ func TestSpecConformance(t *testing.T) {
 	require.Equal(t, "rate_limited", limited.errCode())
 	require.NotEmpty(t, limited.header.Get("Retry-After"))
 	check(http.MethodGet, base+"/branches", limited)
+	for range 35 {
+		limited = v.do(uuid.Nil, nil, http.MethodGet, "/v1/github-sync/callback?state=x", nil)
+		if limited.code == http.StatusTooManyRequests {
+			break
+		}
+	}
+	require.Equal(t, "rate_limited", limited.errCode())
+	check(http.MethodGet, "/v1/github-sync/callback", limited)
 }
 
 // Finding 1: every signed-in route is limited per user; the status read,
@@ -903,6 +911,9 @@ func TestRateLimits(t *testing.T) {
 		codes[v.do(uuid.Nil, nil, http.MethodGet, "/v1/github-sync/callback?state=x", nil).code]++
 	}
 	require.Equal(t, map[int]int{http.StatusFound: 30, http.StatusTooManyRequests: 5}, codes)
+	over := v.do(uuid.Nil, nil, http.MethodGet, "/v1/github-sync/callback?state=x", nil)
+	require.Equal(t, "rate_limited", over.errCode())
+	require.NotEmpty(t, over.header.Get("Retry-After"))
 }
 
 // Finding 1: a client that starts sign-ins in a loop only replaces its own.

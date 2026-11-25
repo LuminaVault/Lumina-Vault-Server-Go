@@ -13,7 +13,7 @@
 // No response, redirect or log line carries a token, a code, a completion
 // handle or a picker session id other than to the client it belongs to.
 //
-// Every error body of the signed-in routes carries a stable code (D14), also
+// Every error body of these routes carries a stable code (D14), also
 // the ones that come from outside this package (auth, vault access, the rate
 // limit, a body that does not decode).
 package githubsync
@@ -171,7 +171,7 @@ func (m *Module) Register(r httpserver.Router, authMW echo.MiddlewareFunc) {
 	r.GET(basePath+"/branches", m.branches, heavy...)
 	r.PUT(basePath+"/connection", m.setConnection, heavy...)
 	r.DELETE(basePath+"/connection", m.disconnect, manage...)
-	r.GET(callbackPath, m.callback, ratelimit.Middleware(m.limits, ratelimit.GitHubSyncCallbackByIP, ratelimit.IPOnlyKey))
+	r.GET(callbackPath, m.callback, m.coded, ratelimit.Middleware(m.limits, ratelimit.GitHubSyncCallbackByIP, ratelimit.IPOnlyKey))
 }
 
 // MARK: errors

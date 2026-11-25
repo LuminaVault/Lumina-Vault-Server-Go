@@ -7490,13 +7490,7 @@ paths:
       responses:
         '302':
           description: Back to the client.
-        '429':
-          description: Too many callbacks from one address.
-          headers:
-            Retry-After: { schema: { type: integer } }
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '429': { $ref: '#/components/responses/GitHubSyncRateLimited' }
 
   /v1/vault/github-sync/complete:
     post:
@@ -11187,7 +11181,7 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/GitHubSyncError' }
     GitHubSyncRateLimited:
-      description: '`rate_limited`: too many requests from this account.'
+      description: '`rate_limited`: too many requests from this account (or, for the callback, this address).'
       headers:
         Retry-After: { schema: { type: integer }, description: Seconds until the window ends. }
       content:
