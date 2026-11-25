@@ -66,6 +66,21 @@ func TestConfigEnvNamesComeFromSwiftKeys(t *testing.T) {
 		// Go-only: vault history (backlog E4, internal/vaultgit).
 		"VAULT_GIT_ENABLED":        true,
 		"VAULT_PROPERTIES_ENABLED": true,
+		// Go-only: GitHub sync ships dark (spec 2026-11-19-e4-github-sync D16;
+		// internal/githubsync.SettingsFrom).
+		"GITHUB_SYNC_ENABLED":       true,
+		"GITHUB_APP_ID":             true,
+		"GITHUB_APP_CLIENT_ID":      true,
+		"GITHUB_APP_CLIENT_SECRET":  true,
+		"GITHUB_APP_PRIVATE_KEY":    true,
+		"GITHUB_APP_WEBHOOK_SECRET": true,
+		"GITHUB_APP_SLUG":           true,
+		"GITHUB_SYNC_CALLBACK_URL":  true,
+		"GITHUB_SYNC_POLL_INTERVAL": true,
+		"GITHUB_SYNC_MAX_REPO_MB":   true,
+		"GITHUB_SYNC_MAX_FILES":     true,
+		"GITHUB_API_BASE_URL":       true,
+		"GITHUB_GIT_BASE_URL":       true,
 		// TranscribeProviderRegistry.loadConfig builds these with key = "openai".
 		"TRANSCRIBE_RATECARD_OPENAI_MTOK_PER_SECOND":              true,
 		"TRANSCRIBE_RATECARD_OPENAI_IMPUTED_USD_PER_AUDIO_MINUTE": true,
