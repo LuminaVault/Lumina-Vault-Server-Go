@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 )
@@ -143,6 +144,17 @@ func TestMigrationDownAndAbsentTable(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, c)
 
+	// Only the absent table reads as "not connected". A table that lost a
+	// column (42703) is a broken schema, and says so.
+	_, err = p.Exec(ctx, `CREATE TABLE github_sync_connections (vault_id uuid PRIMARY KEY)`)
+	require.NoError(t, err)
+	_, err = githubsync.NewStore(p).Get(ctx, uuid.New())
+	var pgErr *pgconn.PgError
+	require.ErrorAs(t, err, &pgErr)
+	require.Equal(t, "42703", pgErr.Code)
+	_, err = p.Exec(ctx, `DROP TABLE github_sync_connections`)
+	require.NoError(t, err)
+
 	_, err = p.Exec(ctx, strings.SplitN(up, "-- +goose Up", 2)[1])
 	require.NoError(t, err)
 	var n int
@@ -161,6 +173,11 @@ func TestClassify(t *testing.T) {
 		{"tools/run.txt", "100755", 10, githubsync.Materialized},
 		{"papers/a.pdf", "100644", 6 << 20, githubsync.HeldTooLarge},
 		{".obsidian/app.json", "100644", 10, githubsync.HeldHidden},
+		{".gitignore", "100644", 10, githubsync.IgnoreFile},
+		{".gitignore", "100644", 6 << 20, githubsync.HeldTooLarge},
+		{".gitignore", "120000", 10, githubsync.HeldNotAFile},
+		{"notes/.gitignore", "100644", 10, githubsync.HeldHidden},
+		{".gitattributes", "100644", 10, githubsync.HeldHidden},
 		{"notes/.draft.md", "100644", 10, githubsync.HeldHidden},
 		{"a/.git/config.md", "100644", 10, githubsync.HeldHidden},
 		{"README", "100644", 10, githubsync.HeldUnsupported},
@@ -178,7 +195,14 @@ func TestSummarize(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "inbox"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "inbox", "same.md"), []byte("same"), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "inbox", "differs.md"), []byte("local"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "inbox", "samesize.md"), []byte("LOCAL!"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".gitignore"), []byte("mine\n"), 0o600))
+	// Another size cannot be the same blob: counted without being read.
+	require.NoError(t, os.WriteFile(filepath.Join(root, "inbox", "unreadable.md"), []byte("longer than remote"), 0o000))
 	entries := []githubsync.RemoteEntry{
+		{Path: ".gitignore", Mode: "100644", Type: "blob", SHA: githubsync.BlobID([]byte("theirs\n")), Size: 7},
+		{Path: "inbox/samesize.md", Mode: "100644", Type: "blob", SHA: githubsync.BlobID([]byte("remote")), Size: 6},
+		{Path: "inbox/unreadable.md", Mode: "100644", Type: "blob", SHA: githubsync.BlobID([]byte("r")), Size: 1},
 		{Path: "inbox", Mode: "040000", Type: "tree"},
 		{Path: "inbox/same.md", Mode: "100644", Type: "blob", SHA: githubsync.BlobID([]byte("same")), Size: 4},
 		{Path: "inbox/differs.md", Mode: "100644", Type: "blob", SHA: githubsync.BlobID([]byte("remote")), Size: 6},
@@ -187,9 +211,15 @@ func TestSummarize(t *testing.T) {
 		{Path: ".obsidian/app.json", Mode: "100644", Type: "blob", SHA: "y", Size: 20},
 		{Path: "My Note.md", Mode: "100644", Type: "blob", SHA: "z", Size: 3},
 	}
-	s, err := githubsync.Summarize(entries, root, 5<<20)
+	s, err := githubsync.Summarize(context.Background(), entries, root, 5<<20)
 	require.NoError(t, err)
-	require.Equal(t, githubsync.Summary{Files: 4, Notes: 3, Conflicts: 1, Held: 2, Bytes: 134}, s)
+	// The root .gitignore is bytes only: not a file, not held, not a conflict.
+	require.Equal(t, githubsync.Summary{Files: 6, Notes: 5, Conflicts: 3, Held: 2, Bytes: 148}, s)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err = githubsync.Summarize(ctx, entries, root, 5<<20)
+	require.ErrorIs(t, err, context.Canceled)
 	require.Equal(t, "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391", githubsync.BlobID(nil), "git's empty blob")
 }
 
@@ -242,4 +272,15 @@ func TestSettingsFrom(t *testing.T) {
 		require.NotContains(t, err.Error(), "BEGIN", name)
 	}
 	require.False(t, githubsync.Enabled(config.Config{}))
+}
+
+// One rule decides "development" for the settings check and for the HTTP
+// client's HTTPS requirement.
+func TestIsDev(t *testing.T) {
+	for env, want := range map[string]bool{
+		"": true, "dev": true, "development": true, "test": true,
+		"staging": false, "production": false, "prod": false,
+	} {
+		require.Equal(t, want, githubsync.IsDev(config.Config{LVEnvironment: env}), env)
+	}
 }

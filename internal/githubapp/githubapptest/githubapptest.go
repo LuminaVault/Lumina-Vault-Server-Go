@@ -95,7 +95,7 @@ func New(t testing.TB) *Server {
 		UserRepos:         map[string]map[int64][]githubapp.Repository{},
 		InstallationRepos: map[int64][]int64{}, Repos: map[int64]githubapp.Repository{},
 		Branches: map[string][]githubapp.Branch{}, Trees: map[string]githubapp.Tree{},
-		Renamed: map[string]int64{},
+		Renamed:       map[string]int64{},
 		installTokens: map[string]Mint{},
 	}
 	mux := http.NewServeMux()

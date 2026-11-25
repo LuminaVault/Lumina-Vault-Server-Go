@@ -7397,7 +7397,18 @@ paths:
       description: |
         Backlog E4.7 (spec 2026-11-19-e4-github-sync D14). Any member of the
         vault (`X-Vault-ID`, absent = personal vault) may read it; `canManage`
-        is true for the vault owner only. 404 when GitHub sync is off.
+        is true for the vault owner only. When GitHub sync is off the route is
+        not mounted: 404 with an empty body. Clients poll this while a sync
+        runs; it has its own rate limit (120 per minute per user). The other
+        routes share 30 per minute per user, and `branches` and
+        `PUT connection` a further 10 per minute.
+
+        Every error of the signed-in GitHub sync routes is a
+        `GitHubSyncError` with a `code`, also the ones that are not specific
+        to GitHub sync: `unauthenticated` (401), `forbidden` (403, not a
+        member of the vault), `not_found` (404, no such vault),
+        `invalid_request` (400), `rate_limited` (429, with `Retry-After`) and
+        `internal_error` (5xx).
       security: [{ bearerJWT: [] }]
       responses:
         '200':
@@ -7405,13 +7416,16 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/GitHubSyncStatus' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
+        '401': { $ref: '#/components/responses/GitHubSyncFailure' }
+        '429': { $ref: '#/components/responses/GitHubSyncRateLimited' }
+        '503': { $ref: '#/components/responses/GitHubSyncGitHubRateLimited' }
+        default: { $ref: '#/components/responses/GitHubSyncFailure' }
         '403':
           description: Not a member of the vault.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
-        '404': { $ref: '#/components/responses/NotFound' }
+              schema: { $ref: '#/components/schemas/GitHubSyncError' }
+        '404': { $ref: '#/components/responses/GitHubSyncFailure' }
 
   /v1/vault/github-sync/connect:
     post:
@@ -7440,7 +7454,10 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/GitHubSyncError' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
+        '401': { $ref: '#/components/responses/GitHubSyncFailure' }
+        '429': { $ref: '#/components/responses/GitHubSyncRateLimited' }
+        '503': { $ref: '#/components/responses/GitHubSyncGitHubRateLimited' }
+        default: { $ref: '#/components/responses/GitHubSyncFailure' }
         '403':
           description: '`owner_required`.'
           content:
@@ -7460,12 +7477,26 @@ paths:
         `luminavault://github-sync?status=…&completion=…` (iOS); `status=error`
         on any failure. Exchanges nothing; `installation_id` and
         `setup_action` are ignored.
+
+        A state the server no longer knows (expired, used, or the server
+        restarted) still says where its sign-in started: one started by the
+        app goes to `luminavault://github-sync?status=error`; any other goes
+        to the web app, `<first allowed https origin>/settings/integrations?status=error`
+        (the app's scheme only when no web origin is configured). Limited to
+        30 per minute per IP; over that it answers 429.
       parameters:
         - { name: code, in: query, required: false, schema: { type: string } }
         - { name: state, in: query, required: false, schema: { type: string } }
       responses:
         '302':
           description: Back to the client.
+        '429':
+          description: Too many callbacks from one address.
+          headers:
+            Retry-After: { schema: { type: integer } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
 
   /v1/vault/github-sync/complete:
     post:
@@ -7494,7 +7525,10 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/GitHubSyncError' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
+        '401': { $ref: '#/components/responses/GitHubSyncFailure' }
+        '429': { $ref: '#/components/responses/GitHubSyncRateLimited' }
+        '503': { $ref: '#/components/responses/GitHubSyncGitHubRateLimited' }
+        default: { $ref: '#/components/responses/GitHubSyncFailure' }
         '403':
           description: '`wrong_account` or `owner_required`.'
           content:
@@ -7526,7 +7560,10 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/GitHubSyncError' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
+        '401': { $ref: '#/components/responses/GitHubSyncFailure' }
+        '429': { $ref: '#/components/responses/GitHubSyncRateLimited' }
+        '503': { $ref: '#/components/responses/GitHubSyncGitHubRateLimited' }
+        default: { $ref: '#/components/responses/GitHubSyncFailure' }
         '403':
           description: '`owner_required`.'
           content:
@@ -7556,7 +7593,10 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/GitHubSyncError' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
+        '401': { $ref: '#/components/responses/GitHubSyncFailure' }
+        '429': { $ref: '#/components/responses/GitHubSyncRateLimited' }
+        '503': { $ref: '#/components/responses/GitHubSyncGitHubRateLimited' }
+        default: { $ref: '#/components/responses/GitHubSyncFailure' }
         '403':
           description: '`owner_required`.'
           content:
@@ -7591,7 +7631,10 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/GitHubSyncError' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
+        '401': { $ref: '#/components/responses/GitHubSyncFailure' }
+        '429': { $ref: '#/components/responses/GitHubSyncRateLimited' }
+        '503': { $ref: '#/components/responses/GitHubSyncGitHubRateLimited' }
+        default: { $ref: '#/components/responses/GitHubSyncFailure' }
         '403':
           description: '`owner_required`.'
           content:
@@ -7613,8 +7656,9 @@ paths:
         D4, D11. The installation and repository are checked again with the
         user's token (push rights), then with the App's token. A branch with
         files answers 409 `remote_not_empty` with a summary until the request
-        repeats with `mergeExisting: true`. On success the picker's user token
-        is revoked.
+        repeats with `mergeExisting: true`. An archived repository is refused
+        (409 `repo_archived`): nothing can be pushed to it. On success the
+        picker's user token is revoked.
       security: [{ bearerJWT: [] }]
       requestBody:
         required: true
@@ -7632,7 +7676,10 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/GitHubSyncError' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
+        '401': { $ref: '#/components/responses/GitHubSyncFailure' }
+        '429': { $ref: '#/components/responses/GitHubSyncRateLimited' }
+        '503': { $ref: '#/components/responses/GitHubSyncGitHubRateLimited' }
+        default: { $ref: '#/components/responses/GitHubSyncFailure' }
         '403':
           description: '`owner_required`.'
           content:
@@ -7644,7 +7691,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/GitHubSyncError' }
         '409':
-          description: '`remote_not_empty` (with `summary`), `repo_in_use` or `already_connected`.'
+          description: '`remote_not_empty` (with `summary`), `repo_in_use`, `already_connected` or `repo_archived`.'
           content:
             application/json:
               schema: { $ref: '#/components/schemas/GitHubSyncError' }
@@ -7671,7 +7718,10 @@ paths:
       responses:
         '204':
           description: Disconnected.
-        '401': { $ref: '#/components/responses/Unauthorized' }
+        '401': { $ref: '#/components/responses/GitHubSyncFailure' }
+        '429': { $ref: '#/components/responses/GitHubSyncRateLimited' }
+        '503': { $ref: '#/components/responses/GitHubSyncGitHubRateLimited' }
+        default: { $ref: '#/components/responses/GitHubSyncFailure' }
         '403':
           description: '`owner_required`.'
           content:
@@ -11131,6 +11181,25 @@ components:
       schema: { type: string }
 
   responses:
+    GitHubSyncFailure:
+      description: A GitHub sync error; `error.code` says which.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/GitHubSyncError' }
+    GitHubSyncRateLimited:
+      description: '`rate_limited`: too many requests from this account.'
+      headers:
+        Retry-After: { schema: { type: integer }, description: Seconds until the window ends. }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/GitHubSyncError' }
+    GitHubSyncGitHubRateLimited:
+      description: '`github_rate_limited`: GitHub is limiting the App or this sign-in.'
+      headers:
+        Retry-After: { schema: { type: integer }, description: Seconds until GitHub takes requests again, when it said. }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/GitHubSyncError' }
     Unauthorized:
       description: Missing / invalid credential.
       content:
@@ -11204,8 +11273,17 @@ components:
           properties:
             code:
               type: string
+              description: |
+                Stable. The first twelve are D14's. `repo_archived` and
+                `github_rate_limited` (503, `Retry-After` when GitHub said
+                when) are GitHub sync's too. The rest are errors any route
+                has, coded here so a client reads one shape:
+                `invalid_request`, `unauthenticated`, `forbidden`,
+                `not_found`, `rate_limited`, `internal_error`.
               enum: [owner_required, session_expired, wrong_account, repo_in_use, remote_not_empty, repo_too_large,
-                     repo_not_accessible, invalid_branch, invalid_return_to, already_connected, not_connected, github_unavailable]
+                     repo_not_accessible, invalid_branch, invalid_return_to, already_connected, not_connected, github_unavailable,
+                     repo_archived, github_rate_limited,
+                     invalid_request, unauthenticated, forbidden, not_found, rate_limited, internal_error]
             message: { type: string }
         summary: { $ref: '#/components/schemas/GitHubSyncSummary' }
 
@@ -11224,7 +11302,12 @@ components:
       type: object
       required: [available, canManage, connection]
       properties:
-        available: { type: boolean }
+        available:
+          type: boolean
+          description: |
+            The server has the GitHub App configured. Always true in an
+            answer: a server without it does not mount these routes, and
+            that 404 is how a client learns sync is unavailable.
         canManage: { type: boolean, description: The caller is the vault owner. }
         connection:
           oneOf:
@@ -11345,6 +11428,7 @@ components:
         id: { type: integer, format: int64 }
         fullName: { type: string }
         private: { type: boolean }
+        archived: { type: boolean, description: 'Read-only on GitHub; connecting it answers `repo_archived`.' }
         defaultBranch: { type: string }
         empty: { type: boolean, description: GitHub reports a size of 0. }
         sizeKb: { type: integer, format: int64 }

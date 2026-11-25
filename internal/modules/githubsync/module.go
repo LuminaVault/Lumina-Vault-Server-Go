@@ -12,18 +12,24 @@
 //
 // No response, redirect or log line carries a token, a code, a completion
 // handle or a picker session id other than to the client it belongs to.
+//
+// Every error body of the signed-in routes carries a stable code (D14), also
+// the ones that come from outside this package (auth, vault access, the rate
+// limit, a body that does not decode).
 package githubsync
 
 import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"lumina/internal/auth"
 	"lumina/internal/githubapp"
 	"lumina/internal/githubsync"
 	"lumina/internal/httpserver"
 	"lumina/internal/modules/calendar"
+	"lumina/internal/ratelimit"
 	"lumina/internal/vaultaccess"
 	"lumina/internal/vaultgit"
 	"lumina/internal/vaultpaths"
@@ -43,6 +49,18 @@ const (
 	callbackPath = "/v1/github-sync/callback"
 	// appCallback is where the callback sends the iOS app.
 	appCallback = "luminavault://github-sync"
+	// webIntegrationsPath is the web app's page for this feature, where the
+	// callback sends a browser whose sign-in it no longer knows.
+	webIntegrationsPath = "/settings/integrations"
+	// A state names where its sign-in started, so the callback can send even
+	// an expired one back to the right place. The prefix chooses between two
+	// fixed destinations and nothing else.
+	stateWeb = "w."
+	stateApp = "a."
+
+	// maxFlowsPerUser and maxFlows bound the started sign-ins held in memory.
+	maxFlowsPerUser = 5
+	maxFlows        = 10_000
 
 	stateTTL      = 10 * time.Minute
 	completionTTL = 60 * time.Second
@@ -74,7 +92,9 @@ type Options struct {
 	MaxFileSize int64
 	// WebReturnOrigins is the returnTo allowlist (CORS_ALLOWED_ORIGINS).
 	WebReturnOrigins []string
-	Log              *slog.Logger
+	// Limits is the process's rate-limit store. Nil gives the module its own.
+	Limits *ratelimit.Store
+	Log    *slog.Logger
 }
 
 type Module struct {
@@ -88,6 +108,7 @@ type Module struct {
 	maxFiles     int
 	maxFileSize  int64
 	webReturn    []string
+	limits       *ratelimit.Store
 	log          *slog.Logger
 	now          func() time.Time
 
@@ -105,31 +126,52 @@ func New(opts Options) *Module {
 	if maxFile <= 0 {
 		maxFile = vaultgit.DefaultMaxFileSize
 	}
+	limits := opts.Limits
+	if limits == nil {
+		limits = ratelimit.NewStore()
+	}
 	m := &Module{
+		limits: limits,
 		client: opts.Client, store: opts.Store, access: opts.Access, paths: opts.Paths,
 		callbackURL: opts.CallbackURL, slug: opts.Slug, maxRepoBytes: opts.MaxRepoBytes, maxFiles: opts.MaxFiles,
 		maxFileSize: maxFile, webReturn: opts.WebReturnOrigins, log: log, now: time.Now,
 	}
 	clock := func() time.Time { return m.now() }
-	m.flows = newOnceStore[flow](stateTTL, clock)
-	m.parked = newOnceStore[parked](completionTTL, clock)
+	m.flows = newOnceStore[flow](stateTTL, clock, maxFlowsPerUser, maxFlows)
+	// A parked code exists only for a state that was just taken, so the
+	// flows' bounds already bound these.
+	m.parked = newOnceStore[parked](completionTTL, clock, maxFlowsPerUser, maxFlows)
 	m.pickers = newPickers(pickerTTL, clock, m.revokeUserToken)
 	return m
 }
 
+// PendingSignIns is how many started sign-ins are held, for tests of the bound.
+func (m *Module) PendingSignIns() int { return m.flows.len() }
+
 // SetClock replaces the clock of the stores, for tests of expiry.
 func (m *Module) SetClock(now func() time.Time) { m.now = now }
 
+// Register mounts the routes. Every signed-in route is rate-limited per user,
+// after authMW so the key is the account; the status read has its own, looser
+// policy because clients poll it, and the two routes that can cost dozens of
+// GitHub calls have a tighter one on top. coded is outermost, so the 401 and
+// the 429 carry a code like every other error here.
 func (m *Module) Register(r httpserver.Router, authMW echo.MiddlewareFunc) {
-	r.GET(basePath, m.status, authMW)
-	r.POST(basePath+"/connect", m.connect, authMW)
-	r.POST(basePath+"/complete", m.complete, authMW)
-	r.GET(basePath+"/installations", m.installations, authMW)
-	r.GET(basePath+"/repositories", m.repositories, authMW)
-	r.GET(basePath+"/branches", m.branches, authMW)
-	r.PUT(basePath+"/connection", m.setConnection, authMW)
-	r.DELETE(basePath+"/connection", m.disconnect, authMW)
-	r.GET(callbackPath, m.callback)
+	limit := func(p ratelimit.Policy) echo.MiddlewareFunc {
+		return ratelimit.Middleware(m.limits, p, ratelimit.UserOrIPKey)
+	}
+	status := []echo.MiddlewareFunc{m.coded, authMW, limit(ratelimit.GitHubSyncStatusByUser)}
+	manage := []echo.MiddlewareFunc{m.coded, authMW, limit(ratelimit.GitHubSyncByUser)}
+	heavy := append(slices.Clone(manage), limit(ratelimit.GitHubSyncHeavyByUser))
+	r.GET(basePath, m.status, status...)
+	r.POST(basePath+"/connect", m.connect, manage...)
+	r.POST(basePath+"/complete", m.complete, manage...)
+	r.GET(basePath+"/installations", m.installations, manage...)
+	r.GET(basePath+"/repositories", m.repositories, manage...)
+	r.GET(basePath+"/branches", m.branches, heavy...)
+	r.PUT(basePath+"/connection", m.setConnection, heavy...)
+	r.DELETE(basePath+"/connection", m.disconnect, manage...)
+	r.GET(callbackPath, m.callback, ratelimit.Middleware(m.limits, ratelimit.GitHubSyncCallbackByIP, ratelimit.IPOnlyKey))
 }
 
 // MARK: errors
@@ -141,6 +183,8 @@ type apiError struct {
 	code    string
 	message string
 	summary *githubsync.Summary
+	// retryAfter, in seconds, is sent as Retry-After when positive.
+	retryAfter int
 }
 
 func (e *apiError) Error() string   { return e.message }
@@ -155,6 +199,9 @@ func (e *apiError) WriteResponse(c *echo.Context) error {
 		Error   body                `json:"error"`
 		Summary *githubsync.Summary `json:"summary,omitempty"`
 	}{Error: body{Code: e.code, Message: e.message}, Summary: e.summary}
+	if e.retryAfter > 0 {
+		c.Response().Header().Set("Retry-After", strconv.Itoa(e.retryAfter))
+	}
 	return wire.JSON(c, e.status, out)
 }
 
@@ -174,8 +221,64 @@ var (
 	errAlreadyConnected  = newErr(http.StatusConflict, "already_connected", "This vault is already connected to GitHub. Disconnect it first.")
 	errNotConnected      = newErr(http.StatusNotFound, "not_connected", "This vault is not connected to GitHub.")
 	errGitHubUnavailable = newErr(http.StatusBadGateway, "github_unavailable", "GitHub could not be reached. Try again later.")
-	errBadRequest        = wire.NewError(http.StatusBadRequest, "invalid request")
+	errRepoArchived      = newErr(http.StatusConflict, "repo_archived", "That repository is archived on GitHub, so nothing can be pushed to it. Unarchive it or pick another.")
+	errBadRequest        = newErr(http.StatusBadRequest, "invalid_request", "invalid request")
 )
+
+// errGitHubRateLimited is GitHub's rate limit on the App or the user's token:
+// 503 with Retry-After when GitHub said when to come back.
+func errGitHubRateLimited(retryAfter int) *apiError {
+	e := newErr(http.StatusServiceUnavailable, "github_rate_limited", "GitHub is limiting requests right now. Try again in a few minutes.")
+	e.retryAfter = retryAfter
+	return e
+}
+
+// codeFor is the code of an error that came from outside this package.
+func codeFor(status int) string {
+	switch {
+	case status == http.StatusUnauthorized:
+		return "unauthenticated"
+	case status == http.StatusForbidden:
+		return "forbidden"
+	case status == http.StatusNotFound:
+		return "not_found"
+	case status == http.StatusTooManyRequests:
+		return "rate_limited"
+	case status >= http.StatusInternalServerError:
+		return "internal_error"
+	}
+	return "invalid_request"
+}
+
+// coded gives every error of a route D14's body. An error this package made
+// already has its code; anything else (auth, vault access, the rate limit,
+// wire's decoding) keeps its status and message and gets the code of its
+// status. An error with no status is a 500: logged here, never shown.
+func (m *Module) coded(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c *echo.Context) error {
+		err := next(c)
+		if err == nil {
+			return nil
+		}
+		var own *apiError
+		if errors.As(err, &own) {
+			return err
+		}
+		var we *wire.Error
+		if errors.As(err, &we) {
+			return newErr(we.Status, codeFor(we.Status), we.Message)
+		}
+		status := echo.StatusCode(err)
+		if status == 0 {
+			status = http.StatusInternalServerError
+		}
+		if status >= http.StatusInternalServerError {
+			m.log.ErrorContext(c.Request().Context(), "github sync: request failed", "error", err, "path", c.Path())
+			return newErr(status, codeFor(status), "Something went wrong. Try again later.")
+		}
+		return newErr(status, codeFor(status), http.StatusText(status))
+	}
+}
 
 func errRemoteNotEmpty(s githubsync.Summary) *apiError {
 	e := newErr(http.StatusConflict, "remote_not_empty", "This branch already has files. Confirm to merge them with the vault.")
@@ -191,11 +294,25 @@ var appOps = map[string]bool{"installation_token": true, "repository": true, "br
 // githubErr maps a GitHub failure to D14's codes. The error's own text is
 // never shown or logged beyond its kind.
 func (m *Module) githubErr(ctx context.Context, op string, err error) error {
-	if errors.Is(err, githubapp.ErrNotFound) || errors.Is(err, githubapp.ErrForbidden) {
+	switch {
+	case errors.Is(err, githubapp.ErrRateLimited):
+		retry := 0
+		var se *githubapp.StatusError
+		if errors.As(err, &se) {
+			if at := se.RetryAt(m.now()); !at.IsZero() {
+				retry = max(1, int(at.Sub(m.now()).Round(time.Second)/time.Second))
+			}
+		}
+		m.log.WarnContext(ctx, "github sync: github rate limit", "op", op, "kind", kind(err), "retry_after_s", retry)
+		return errGitHubRateLimited(retry)
+	case errors.Is(err, githubapp.ErrNotFound), errors.Is(err, githubapp.ErrForbidden), errors.Is(err, githubapp.ErrRepoAccessRemoved):
+		// ErrRepoAccessRemoved: the installation no longer covers the repository.
 		return errRepoNotAccessible
-	}
-	if errors.Is(err, githubapp.ErrUnauthorized) && !appOps[op] {
+	case errors.Is(err, githubapp.ErrUnauthorized) && !appOps[op]:
 		return errSessionExpired
+	case errors.Is(err, githubapp.ErrTooLarge) && op == "tree":
+		// A listing too big to read is a repository too big to plan.
+		return errRepoTooLarge
 	}
 	m.log.WarnContext(ctx, "github sync: github call failed", "op", op, "kind", kind(err))
 	return errGitHubUnavailable
@@ -204,6 +321,10 @@ func (m *Module) githubErr(ctx context.Context, op string, err error) error {
 func kind(err error) string {
 	var se *githubapp.StatusError
 	switch {
+	case errors.Is(err, githubapp.ErrRateLimited):
+		return "rate_limited"
+	case errors.Is(err, githubapp.ErrTooLarge):
+		return "too_large"
 	case errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled):
 		return "timeout"
 	case errors.As(err, &se):
@@ -284,6 +405,10 @@ func (m *Module) manageURL(accountType, login string, installation int64) string
 // MARK: GET /v1/vault/github-sync
 
 type statusDTO struct {
+	// Available says the server has the GitHub App configured. It is always
+	// true in an answer: a server without the App does not mount these routes
+	// at all, and the client reads that 404 as "not available". The field
+	// stays so one decoder serves both.
 	Available  bool           `json:"available"`
 	CanManage  bool           `json:"canManage"`
 	Connection *connectionDTO `json:"connection"`
@@ -447,7 +572,12 @@ func (m *Module) connect(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	m.flows.put(state, flow{user: user, vault: vault, returnTo: returnTo})
+	if returnTo != nil {
+		state = stateWeb + state
+	} else {
+		state = stateApp + state
+	}
+	m.flows.put(state, user.String(), flow{user: user, vault: vault, returnTo: returnTo})
 	return wire.JSON(c, http.StatusOK, connectResponse{AuthorizeURL: m.client.AuthorizeURL(state, m.callbackURL)})
 }
 
@@ -457,11 +587,17 @@ func (m *Module) connect(c *echo.Context) error {
 // step 2): it takes the state once, parks the code under a fresh completion
 // handle and sends the browser back. installation_id and setup_action are
 // never read.
+//
+// A state it does not know (expired, used, forged, or started on a process
+// that has restarted) has no flow to say where the browser came from. One
+// that names the app goes to the app's scheme; any other goes to the web
+// app's integrations page, where a browser can show the error. The app's
+// scheme is the last resort, when no web origin is configured.
 func (m *Module) callback(c *echo.Context) error {
 	state, _ := wire.QueryParam(c, "state")
 	f, ok := m.flows.take(state)
 	if state == "" || !ok {
-		return c.Redirect(http.StatusFound, redirect(nil, m.webReturn, "error", ""))
+		return c.Redirect(http.StatusFound, m.unknownFlowRedirect(state))
 	}
 	code, _ := wire.QueryParam(c, "code")
 	if code == "" { // the user declined
@@ -471,8 +607,40 @@ func (m *Module) callback(c *echo.Context) error {
 	if err != nil {
 		return c.Redirect(http.StatusFound, redirect(f.returnTo, m.webReturn, "error", ""))
 	}
-	m.parked.put(handle, parked{flow: f, code: code})
+	m.parked.put(handle, f.user.String(), parked{flow: f, code: code})
 	return c.Redirect(http.StatusFound, redirect(f.returnTo, m.webReturn, "authorized", handle))
+}
+
+// unknownFlowRedirect is where a callback with no known flow goes.
+func (m *Module) unknownFlowRedirect(state string) string {
+	const q = "?status=error"
+	if strings.HasPrefix(state, stateApp) {
+		return appCallback + q
+	}
+	if page, ok := webErrorPage(m.webReturn); ok {
+		return page + q
+	}
+	return appCallback + q
+}
+
+// webErrorPage is the integrations page of the first allowed web origin, an
+// https one when there is one (the list may start with a development
+// origin). It passes the same check as a client's returnTo.
+func webErrorPage(allowed []string) (string, bool) {
+	var fallback string
+	for _, origin := range allowed {
+		page, ok := calendar.ValidReturn(strings.TrimRight(strings.TrimSpace(origin), "/")+webIntegrationsPath, allowed)
+		if !ok {
+			continue
+		}
+		if strings.HasPrefix(strings.ToLower(page), "https://") {
+			return page, true
+		}
+		if fallback == "" {
+			fallback = page
+		}
+	}
+	return fallback, fallback != ""
 }
 
 // redirect is the validated returnTo (checked again here) or the iOS deep
@@ -659,6 +827,7 @@ type repositoryDTO struct {
 	ID            int64  `json:"id"`
 	FullName      string `json:"fullName"`
 	Private       bool   `json:"private"`
+	Archived      bool   `json:"archived"`
 	DefaultBranch string `json:"defaultBranch"`
 	Empty         bool   `json:"empty"`
 	SizeKB        int64  `json:"sizeKb"`
@@ -720,7 +889,7 @@ func (m *Module) repositories(c *echo.Context) error {
 			continue
 		}
 		out.Repositories = append(out.Repositories, repositoryDTO{
-			ID: r.ID, FullName: r.FullName, Private: r.Private, DefaultBranch: r.DefaultBranch,
+			ID: r.ID, FullName: r.FullName, Private: r.Private, Archived: r.Archived, DefaultBranch: r.DefaultBranch,
 			// GitHub's repository object has no emptiness flag; a size of 0 is
 			// the cheap sign. Connect checks the branch itself.
 			Empty: r.Size == 0, SizeKB: r.Size, CanPush: true, InUse: inUse[r.ID],
@@ -766,7 +935,7 @@ func (m *Module) branches(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	list, err := m.client.Branches(ctx, s.token, repo.FullName)
+	list, err := m.client.Branches(ctx, s.token, githubapp.RepoRef{ID: repo.ID, FullName: repo.FullName})
 	if err != nil {
 		return m.githubErr(ctx, "branches", err)
 	}
@@ -846,6 +1015,9 @@ func (m *Module) setConnection(c *echo.Context) error {
 	if err != nil {
 		return m.githubErr(ctx, "repository", err)
 	}
+	if repo.Archived {
+		return errRepoArchived
+	}
 	if repo.Size*1024 > m.maxRepoBytes {
 		return errRepoTooLarge
 	}
@@ -859,7 +1031,7 @@ func (m *Module) setConnection(c *echo.Context) error {
 	if !vaultgit.ValidBranchName(branch) {
 		return errInvalidBranch
 	}
-	if err := m.checkRemote(ctx, token, repo.FullName, branch, vault, req.MergeExisting); err != nil {
+	if err := m.checkRemote(ctx, token, githubapp.RepoRef{ID: repo.ID, FullName: repo.FullName}, branch, vault, req.MergeExisting); err != nil {
 		return err
 	}
 	err = m.store.Insert(ctx, githubsync.Connection{
@@ -892,15 +1064,15 @@ func (m *Module) setConnection(c *echo.Context) error {
 // nothing. Otherwise the remote is counted against the vault, refused when it
 // is over the limits, and answered with a summary unless the owner already
 // confirmed the merge.
-func (m *Module) checkRemote(ctx context.Context, token, fullName, branch string, vault uuid.UUID, mergeExisting bool) error {
-	b, err := m.client.Branch(ctx, token, fullName, branch)
+func (m *Module) checkRemote(ctx context.Context, token string, repo githubapp.RepoRef, branch string, vault uuid.UUID, mergeExisting bool) error {
+	b, err := m.client.Branch(ctx, token, repo, branch)
 	if errors.Is(err, githubapp.ErrNotFound) {
 		return nil // empty repository, or a new branch the first push creates
 	}
 	if err != nil {
 		return m.githubErr(ctx, "branch", err)
 	}
-	tree, err := m.client.Tree(ctx, token, fullName, b.TreeSHA())
+	tree, err := m.client.Tree(ctx, token, repo, b.TreeSHA())
 	if err != nil {
 		return m.githubErr(ctx, "tree", err)
 	}
@@ -911,8 +1083,11 @@ func (m *Module) checkRemote(ctx context.Context, token, fullName, branch string
 	for _, e := range tree.Entries {
 		entries = append(entries, githubsync.RemoteEntry{Path: e.Path, Mode: e.Mode, Type: e.Type, SHA: e.SHA, Size: e.Size})
 	}
-	summary, err := githubsync.Summarize(entries, m.paths.Raw(vault), m.maxFileSize)
+	summary, err := githubsync.Summarize(ctx, entries, m.paths.Raw(vault), m.maxFileSize)
 	if err != nil {
+		if ctx.Err() != nil {
+			return m.githubErr(ctx, "tree", fmt.Errorf("%w: %w", githubapp.ErrUnavailable, ctx.Err()))
+		}
 		return err
 	}
 	if summary.Files > m.maxFiles {

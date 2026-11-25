@@ -81,7 +81,7 @@ func SettingsFrom(cfg config.Config) (Settings, error) {
 	}
 	// Outside development every URL GitHub or the browser is sent to is HTTPS.
 	// Staging's callback is the port-forward on localhost (D15), which is http.
-	dev := cfg.LVEnvironment == "" || cfg.LVEnvironment == "dev" || cfg.LVEnvironment == "development" || cfg.LVEnvironment == "test"
+	dev := IsDev(cfg)
 	for _, kv := range []struct{ key, val string }{
 		{"GITHUB_API_BASE_URL", cfg.GitHubAPIBaseURL},
 		{"GITHUB_GIT_BASE_URL", cfg.GitHubGitBaseURL},
@@ -103,4 +103,15 @@ func SettingsFrom(cfg config.Config) (Settings, error) {
 		MaxRepoBytes: int64(cfg.GitHubSyncMaxRepoMB) << 20, MaxFiles: cfg.GitHubSyncMaxFiles,
 		APIBaseURL: strings.TrimSpace(cfg.GitHubAPIBaseURL), GitBaseURL: strings.TrimSpace(cfg.GitHubGitBaseURL),
 	}, nil
+}
+
+// IsDev reports a development or test environment, where GitHub's base URLs
+// may be plain http (a stub on localhost). It is the one rule for both the
+// settings check above and the HTTP client's HTTPS requirement.
+func IsDev(cfg config.Config) bool {
+	switch cfg.LVEnvironment {
+	case "", "dev", "development", "test":
+		return true
+	}
+	return false
 }

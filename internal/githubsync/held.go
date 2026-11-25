@@ -1,6 +1,7 @@
 package githubsync
 
 import (
+	"context"
 	"crypto/sha1" //nolint:gosec // git's object id, not a security hash
 	"encoding/hex"
 	"errors"
@@ -12,11 +13,17 @@ import (
 )
 
 // HeldReason says why a remote path stays in git and never reaches raw/
-// (spec D8). The empty reason means the path is materialized.
+// (spec D8). The empty reason means the path is materialized. IgnoreFile is
+// neither.
 type HeldReason string
 
 const (
-	Materialized    HeldReason = ""
+	Materialized HeldReason = ""
+	// IgnoreFile is the root .gitignore, the one dot-file that lives in raw/
+	// (D8). It is not held, and it is not materialized either: it never goes
+	// through Files.Write, never gets a row and is never a conflict copy. A
+	// pull takes the remote file as is and re-adds the managed block.
+	IgnoreFile      HeldReason = "gitignore"
 	HeldNotAFile    HeldReason = "not_a_file"
 	HeldHidden      HeldReason = "hidden"
 	HeldUnsupported HeldReason = "unsupported_type"
@@ -33,7 +40,9 @@ const (
 // Classify applies D8's rule to one entry of a remote tree: a path is
 // materialized only when it is a regular file, no segment starts with ".",
 // SanitizePath returns it unchanged and it is at most maxSize bytes. A path
-// with a ".git" segment is hidden before anything else is looked at.
+// with a ".git" segment is hidden before anything else is looked at. The
+// root .gitignore, when it is a regular file within the limit, is IgnoreFile;
+// a .gitignore in a folder is hidden like any other dot-file.
 func Classify(path, mode string, size, maxSize int64) HeldReason {
 	segments := strings.Split(path, "/")
 	for _, s := range segments {
@@ -43,6 +52,12 @@ func Classify(path, mode string, size, maxSize int64) HeldReason {
 	}
 	if mode != modeFile && mode != modeExecutable {
 		return HeldNotAFile
+	}
+	if path == IgnorePath {
+		if size > maxSize {
+			return HeldTooLarge
+		}
+		return IgnoreFile
 	}
 	for _, s := range segments {
 		if strings.HasPrefix(s, ".") {
@@ -62,6 +77,9 @@ func Classify(path, mode string, size, maxSize int64) HeldReason {
 	}
 	return Materialized
 }
+
+// IgnorePath is the one dot-file sync keeps in raw/.
+const IgnorePath = ".gitignore"
 
 // IsNotePath is the vault's note rule: Markdown and plain text.
 func IsNotePath(path string) bool {
@@ -99,14 +117,25 @@ type RemoteEntry struct {
 
 // Summarize counts a remote tree against the vault at rawRoot. A local file
 // whose git blob id equals the remote one is the same file, not a conflict.
-func Summarize(entries []RemoteEntry, rawRoot string, maxSize int64) (Summary, error) {
+// A local file of another size cannot be the same blob, so it is counted
+// without being read; only files of the remote's size are read and hashed.
+// The root .gitignore adds to Bytes only: it is merged, not written as a
+// vault file. ctx stops the walk.
+func Summarize(ctx context.Context, entries []RemoteEntry, rawRoot string, maxSize int64) (Summary, error) {
 	var s Summary
 	for _, e := range entries {
 		if e.Type == "tree" {
 			continue
 		}
+		if err := ctx.Err(); err != nil {
+			return Summary{}, err
+		}
 		s.Bytes += e.Size
-		if Classify(e.Path, e.Mode, e.Size, maxSize) != Materialized {
+		switch Classify(e.Path, e.Mode, e.Size, maxSize) {
+		case Materialized:
+		case IgnoreFile:
+			continue
+		default:
 			s.Held++
 			continue
 		}
@@ -114,39 +143,45 @@ func Summarize(entries []RemoteEntry, rawRoot string, maxSize int64) (Summary, e
 		if IsNotePath(e.Path) {
 			s.Notes++
 		}
-		local, err := localBlobID(rawRoot, e.Path)
+		differs, err := localDiffers(rawRoot, e)
 		if err != nil {
 			return Summary{}, err
 		}
-		if local != "" && local != e.SHA {
+		if differs {
 			s.Conflicts++
 		}
 	}
 	return s, nil
 }
 
-// localBlobID is the git blob id of the vault file at path, or "" when there
-// is none.
-func localBlobID(rawRoot, path string) (string, error) {
-	target, err := vaultfiles.ResolveInside(rawRoot, path)
+// localDiffers reports a vault file at e.Path whose bytes are not the remote
+// blob's. No local file is no conflict.
+func localDiffers(rawRoot string, e RemoteEntry) (bool, error) {
+	target, err := vaultfiles.ResolveInside(rawRoot, e.Path)
 	if err != nil {
-		return "", nil //nolint:nilerr // a path the vault cannot hold has no local file
+		return false, nil //nolint:nilerr // a path the vault cannot hold has no local file
 	}
 	info, err := os.Lstat(target)
 	if errors.Is(err, fs.ErrNotExist) {
-		return "", nil
+		return false, nil
 	}
 	if err != nil {
-		return "", err
+		return false, err
 	}
 	if !info.Mode().IsRegular() {
-		return "", nil
+		return false, nil
+	}
+	if info.Size() != e.Size {
+		return true, nil
 	}
 	data, err := os.ReadFile(target) //nolint:gosec // target comes from ResolveInside
-	if err != nil {
-		return "", err
+	if errors.Is(err, fs.ErrNotExist) {
+		return false, nil
 	}
-	return BlobID(data), nil
+	if err != nil {
+		return false, err
+	}
+	return BlobID(data) != e.SHA, nil
 }
 
 // BlobID is git's object id for a blob with these bytes.

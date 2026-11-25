@@ -74,7 +74,8 @@ type Connection struct {
 
 // Store reads and writes the connections table. The table is Go only: on a
 // database migrated by Swift (parity) it is absent, and Get reads that as
-// "not connected" rather than failing.
+// "not connected" rather than failing. Only the absent table (42P01) is read
+// that way: a missing column is a broken schema and stays an error.
 type Store struct{ pool *pgxpool.Pool }
 
 func NewStore(pool *pgxpool.Pool) *Store { return &Store{pool: pool} }
@@ -85,7 +86,7 @@ const columns = `vault_id, installation_id, account_login, account_type, repo_id
 
 func missingTable(err error) bool {
 	var pgErr *pgconn.PgError
-	return errors.As(err, &pgErr) && (pgErr.Code == "42P01" || pgErr.Code == "42703")
+	return errors.As(err, &pgErr) && pgErr.Code == "42P01"
 }
 
 // Get returns the vault's connection, or nil.

@@ -20,28 +20,77 @@ func randomHandle() (string, error) {
 }
 
 // onceStore is connected apps' one-shot store: in memory, per process, a
-// take removes the entry, entries are pruned after ttl.
+// take removes the entry, entries are pruned after ttl. It is bounded: at
+// most perOwner live entries for one owner and max in all, and a put over
+// either limit drops the oldest, so a client that starts sign-ins in a loop
+// only ever replaces its own.
 type onceStore[V any] struct {
-	mu    sync.Mutex
-	items map[string]stamped[V]
-	ttl   time.Duration
-	now   func() time.Time
+	mu       sync.Mutex
+	items    map[string]stamped[V]
+	ttl      time.Duration
+	now      func() time.Time
+	perOwner int
+	max      int
+	seq      uint64
 }
 
 type stamped[V any] struct {
-	v  V
-	at time.Time
+	v     V
+	at    time.Time
+	owner string
+	seq   uint64
 }
 
-func newOnceStore[V any](ttl time.Duration, now func() time.Time) *onceStore[V] {
-	return &onceStore[V]{items: map[string]stamped[V]{}, ttl: ttl, now: now}
+func newOnceStore[V any](ttl time.Duration, now func() time.Time, perOwner, maxItems int) *onceStore[V] {
+	return &onceStore[V]{items: map[string]stamped[V]{}, ttl: ttl, now: now, perOwner: perOwner, max: maxItems}
 }
 
-func (s *onceStore[V]) put(key string, v V) {
+func (s *onceStore[V]) put(key, owner string, v V) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.prune()
-	s.items[key] = stamped[V]{v: v, at: s.now()}
+	for s.count(owner) >= s.perOwner {
+		s.dropOldest(owner, true)
+	}
+	for len(s.items) >= s.max {
+		s.dropOldest("", false)
+	}
+	s.seq++
+	s.items[key] = stamped[V]{v: v, at: s.now(), owner: owner, seq: s.seq}
+}
+
+func (s *onceStore[V]) count(owner string) int {
+	n := 0
+	for _, it := range s.items {
+		if it.owner == owner {
+			n++
+		}
+	}
+	return n
+}
+
+// dropOldest removes the oldest entry, of one owner or of all.
+func (s *onceStore[V]) dropOldest(owner string, sameOwner bool) {
+	var (
+		oldest string
+		seq    uint64
+		found  bool
+	)
+	for k, it := range s.items {
+		if sameOwner && it.owner != owner {
+			continue
+		}
+		if !found || it.seq < seq {
+			oldest, seq, found = k, it.seq, true
+		}
+	}
+	delete(s.items, oldest)
+}
+
+func (s *onceStore[V]) len() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.items)
 }
 
 func (s *onceStore[V]) take(key string) (V, bool) {

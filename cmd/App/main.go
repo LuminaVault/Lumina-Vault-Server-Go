@@ -402,7 +402,7 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 			deps.Modules = append(deps.Modules, connectedAppsMod)
 		}
 		// GitHub sync (backlog E4.6-E4.10): unmounted unless GITHUB_SYNC_ENABLED.
-		if m := githubSyncModule(pool, cfg, paths); m != nil {
+		if m := githubSyncModule(pool, cfg, paths, limits); m != nil {
 			deps.Modules = append(deps.Modules, m)
 		}
 		deps.Modules = append(deps.Modules, agent.mcpModule(deviceRPC))
