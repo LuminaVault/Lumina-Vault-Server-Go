@@ -74,6 +74,7 @@ func TestEveryPolicyNameIsUnique(t *testing.T) {
 		ratelimit.AudioSpeechByUserPerMinute, ratelimit.AudioSpeechByUserDaily,
 		ratelimit.TTSByUserPerMinute, ratelimit.TTSByUserDaily,
 		ratelimit.GitHubSyncStatusByUser, ratelimit.GitHubSyncByUser, ratelimit.GitHubSyncHeavyByUser, ratelimit.GitHubSyncCallbackByIP,
+		ratelimit.GitHubSyncNowByVault,
 	} {
 		require.NotEmpty(t, p.Name)
 		require.False(t, seen[p.Name], p.Name)

@@ -117,8 +117,10 @@ var VaultExportByUser = Policy{Name: "vaultExportByUser", Max: 3, Window: 300 * 
 // while a sync runs. GitHubSyncByUser is every other signed-in route.
 // GitHubSyncHeavyByUser is stacked on the two that can cost dozens of GitHub
 // calls and a walk of the vault (branches, connect). GitHubSyncCallbackByIP is
-// the public sign-in callback.
+// the public sign-in callback. GitHubSyncNowByVault is "Sync now", keyed by
+// the vault (spec D14: 6 per minute per vault, whoever asks).
 var (
+	GitHubSyncNowByVault   = Policy{Name: "githubSyncNowByVault", Max: 6, Window: 60 * time.Second}
 	GitHubSyncStatusByUser = Policy{Name: "githubSyncStatusByUser", Max: 120, Window: 60 * time.Second}
 	GitHubSyncByUser       = Policy{Name: "githubSyncByUser", Max: 30, Window: 60 * time.Second}
 	GitHubSyncHeavyByUser  = Policy{Name: "githubSyncHeavyByUser", Max: 10, Window: 60 * time.Second}

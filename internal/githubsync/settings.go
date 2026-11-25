@@ -1,7 +1,8 @@
 // Package githubsync keeps a vault and a GitHub repository in sync (spec
-// 2026-11-19-e4-github-sync). This first part holds the settings, the
-// connection table and the rules for which remote files a vault can hold;
-// the push (E4.8) and pull (E4.9) workers build on them.
+// 2026-11-19-e4-github-sync). It holds the settings, the connection table,
+// the rules for which remote files a vault can hold, and the Syncer that
+// pushes a vault's commits to GitHub (E4.8, syncer.go). Pull (E4.9) plugs
+// into the Syncer as its PullFunc.
 package githubsync
 
 import (

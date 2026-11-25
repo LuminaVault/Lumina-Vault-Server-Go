@@ -346,6 +346,8 @@ type Config struct {
 	// GitHubSyncEnabled is Go only: GitHub sync (spec 2026-11-19-e4-github-sync),
 	// dark by default. It needs VAULT_GIT_ENABLED and the GitHub App below; the
 	// keys are checked only when it is on (internal/githubsync.SettingsFrom).
+	// On, every API process pushes a vault's commits as they are made and
+	// the GitHubSyncSweep job (LV_GO_JOBS) catches what a restart missed.
 	GitHubSyncEnabled      string `env:"GITHUB_SYNC_ENABLED" envDefault:"false"`
 	GitHubAppID            string `env:"GITHUB_APP_ID"`
 	GitHubAppClientID      string `env:"GITHUB_APP_CLIENT_ID"`

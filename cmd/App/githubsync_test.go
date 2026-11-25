@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"lumina/internal/config"
 	"lumina/internal/httpserver"
+	"lumina/internal/jobs"
 	"lumina/internal/vaultpaths"
 	"net/http"
 	"net/http/httptest"
@@ -18,10 +19,28 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// buildGitHubSync wires vault history and GitHub sync the way main does, with
+// no database, and stops both with the test.
+func buildGitHubSync(t *testing.T, cfg config.Config) (httpserver.Module, []jobs.Job) {
+	t.Helper()
+	paths := vaultpaths.Paths{Root: t.TempDir()}
+	history, _, stopGit := vaultGit(nil, cfg, paths, nil)
+	t.Cleanup(stopGit)
+	m, registered, stop := githubSync(nil, cfg, paths, nil, history)
+	t.Cleanup(stop)
+	return m, registered
+}
+
+func githubSyncModule(t *testing.T, cfg config.Config) httpserver.Module {
+	t.Helper()
+	m, _ := buildGitHubSync(t, cfg)
+	return m
+}
+
 func githubSyncStatuses(t *testing.T, cfg config.Config) []int {
 	t.Helper()
 	var modules []httpserver.Module
-	if m := githubSyncModule(nil, cfg, vaultpaths.Paths{Root: t.TempDir()}, nil); m != nil {
+	if m := githubSyncModule(t, cfg); m != nil {
 		modules = append(modules, m)
 	}
 	srv := httpserver.New(config.Config{}, httpserver.Deps{Auth: noAuth, Modules: modules})
@@ -35,6 +54,7 @@ func githubSyncStatuses(t *testing.T, cfg config.Config) []int {
 		{http.MethodGet, "/v1/vault/github-sync/branches"},
 		{http.MethodPut, "/v1/vault/github-sync/connection"},
 		{http.MethodDelete, "/v1/vault/github-sync/connection"},
+		{http.MethodPost, "/v1/vault/github-sync/sync"},
 		{http.MethodGet, "/v1/github-sync/callback"},
 	} {
 		rec := httptest.NewRecorder()
@@ -64,14 +84,48 @@ func TestGitHubSyncFlagOffRegistersNothing(t *testing.T) {
 	cfg := githubSyncConfig(t)
 	for _, flag := range []string{"false", "", "0"} {
 		cfg.GitHubSyncEnabled = flag
-		require.Equal(t, []int{404, 404, 404, 404, 404, 404, 404, 404, 404}, githubSyncStatuses(t, cfg), "flag %q", flag)
+		require.Equal(t, []int{404, 404, 404, 404, 404, 404, 404, 404, 404, 404}, githubSyncStatuses(t, cfg), "flag %q", flag)
 	}
 }
 
 func TestGitHubSyncFlagOnRegistersRoutes(t *testing.T) {
 	// The vault routes sit behind auth; the callback is public and answers a
 	// missing state with its error redirect.
-	require.Equal(t, []int{401, 401, 401, 401, 401, 401, 401, 401, 302}, githubSyncStatuses(t, githubSyncConfig(t)))
+	require.Equal(t, []int{401, 401, 401, 401, 401, 401, 401, 401, 401, 302}, githubSyncStatuses(t, githubSyncConfig(t)))
+}
+
+// D6: the sweep is registered with the routes, and only with them. With the
+// flag off, or a half-configured server, no job exists and no commit hook is
+// set, so nothing runs.
+func TestGitHubSyncSweepJobFollowsTheFlag(t *testing.T) {
+	names := func(cfg config.Config) []string {
+		_, registered := buildGitHubSync(t, cfg)
+		out := []string{}
+		for _, j := range registered {
+			out = append(out, j.Name)
+		}
+		return out
+	}
+	cfg := githubSyncConfig(t)
+	require.Equal(t, []string{"GitHubSyncSweep"}, names(cfg))
+
+	off := cfg
+	off.GitHubSyncEnabled = "false"
+	require.Empty(t, names(off))
+
+	paths := vaultpaths.Paths{Root: t.TempDir()}
+	history, _, stopGit := vaultGit(nil, off, paths, nil)
+	defer stopGit()
+	_, _, stop := githubSync(nil, off, paths, nil, history)
+	defer stop()
+	require.Nil(t, history.hook.Load(), "flag off: commits notify nobody")
+
+	half := cfg
+	half.GitHubAppClientSecret = ""
+	require.Empty(t, names(half))
+	noGit := cfg
+	noGit.VaultGitEnabled = "false"
+	require.Empty(t, names(noGit))
 }
 
 // D5: a half-configured server mounts nothing.
@@ -85,7 +139,7 @@ func TestGitHubSyncFlagOnWithoutConfigRegistersNothing(t *testing.T) {
 	} {
 		cfg := githubSyncConfig(t)
 		change(&cfg)
-		require.Equal(t, []int{404, 404, 404, 404, 404, 404, 404, 404, 404}, githubSyncStatuses(t, cfg), name)
+		require.Equal(t, []int{404, 404, 404, 404, 404, 404, 404, 404, 404, 404}, githubSyncStatuses(t, cfg), name)
 	}
 }
 
@@ -107,7 +161,7 @@ func TestGitHubSyncConfigSecretsStayOutOfLogsAndResponses(t *testing.T) {
 	var bodies bytes.Buffer
 	serve := func(cfg config.Config) int {
 		var modules []httpserver.Module
-		if m := githubSyncModule(nil, cfg, vaultpaths.Paths{Root: t.TempDir()}, nil); m != nil {
+		if m := githubSyncModule(t, cfg); m != nil {
 			modules = append(modules, m)
 		}
 		srv := httpserver.New(config.Config{}, httpserver.Deps{Auth: noAuth, Modules: modules})
@@ -143,6 +197,6 @@ func TestGitHubSyncDevelopmentAllowsHTTPStub(t *testing.T) {
 	cfg.GitHubAPIBaseURL, cfg.GitHubGitBaseURL = "http://127.0.0.1:1", "http://127.0.0.1:1"
 	for env, mounted := range map[string]bool{"dev": true, "development": true, "test": true, "staging": false, "production": false} {
 		cfg.LVEnvironment = env
-		require.Equal(t, mounted, githubSyncModule(nil, cfg, vaultpaths.Paths{Root: t.TempDir()}, nil) != nil, env)
+		require.Equal(t, mounted, githubSyncModule(t, cfg) != nil, env)
 	}
 }

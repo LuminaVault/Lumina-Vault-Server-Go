@@ -2,6 +2,8 @@
 // callback: a vault owner connects one GitHub repository and branch to a
 // vault (spec 2026-11-19-e4-github-sync, E4.7 server side, D3, D4, D13, D14).
 // The work lives in lumina/internal/githubsync and lumina/internal/githubapp.
+// "Sync now" and the status's sync fields (E4.8) ask githubsync.Syncer, which
+// also takes the git remote away on disconnect.
 //
 // Binding (D3, the #181 class): the server never reads installation_id from a
 // redirect. The unauthenticated callback only parks the code; the signed-in
@@ -94,7 +96,22 @@ type Options struct {
 	WebReturnOrigins []string
 	// Limits is the process's rate-limit store. Nil gives the module its own.
 	Limits *ratelimit.Store
-	Log    *slog.Logger
+	// Sync is the push worker (E4.8). Nil leaves the routes working with
+	// nothing behind them: a connection is saved and never pushed.
+	Sync Syncer
+	Log  *slog.Logger
+}
+
+// Syncer is what the routes need from githubsync.Syncer.
+type Syncer interface {
+	// Notify queues a sync for the vault.
+	Notify(vault uuid.UUID)
+	// SyncNow makes a waiting or stopped connection due and queues a sync.
+	SyncNow(ctx context.Context, vault uuid.UUID) error
+	// Syncing reports a sync running or waiting for the vault.
+	Syncing(vault uuid.UUID) bool
+	// Disconnected removes the vault's git remote after its row is gone.
+	Disconnected(ctx context.Context, vault uuid.UUID)
 }
 
 type Module struct {
@@ -109,6 +126,7 @@ type Module struct {
 	maxFileSize  int64
 	webReturn    []string
 	limits       *ratelimit.Store
+	sync         Syncer
 	log          *slog.Logger
 	now          func() time.Time
 
@@ -131,7 +149,7 @@ func New(opts Options) *Module {
 		limits = ratelimit.NewStore()
 	}
 	m := &Module{
-		limits: limits,
+		limits: limits, sync: opts.Sync,
 		client: opts.Client, store: opts.Store, access: opts.Access, paths: opts.Paths,
 		callbackURL: opts.CallbackURL, slug: opts.Slug, maxRepoBytes: opts.MaxRepoBytes, maxFiles: opts.MaxFiles,
 		maxFileSize: maxFile, webReturn: opts.WebReturnOrigins, log: log, now: time.Now,
@@ -171,6 +189,7 @@ func (m *Module) Register(r httpserver.Router, authMW echo.MiddlewareFunc) {
 	r.GET(basePath+"/branches", m.branches, heavy...)
 	r.PUT(basePath+"/connection", m.setConnection, heavy...)
 	r.DELETE(basePath+"/connection", m.disconnect, manage...)
+	r.POST(basePath+"/sync", m.syncNow, manage...)
 	r.GET(callbackPath, m.callback, m.coded, ratelimit.Middleware(m.limits, ratelimit.GitHubSyncCallbackByIP, ratelimit.IPOnlyKey))
 }
 
@@ -494,6 +513,7 @@ func (m *Module) statusOf(ctx context.Context, vault uuid.UUID, canManage bool) 
 		LastPushAt: wireTime(conn.LastPushAt), LastPullAt: wireTime(conn.LastPullAt),
 		PendingPush: m.pendingPush(vault, conn.RemoteSHA),
 		Conflicts:   []conflictDTO{}, Held: []heldDTO{}, HeldCount: conn.Report.HeldCount,
+		Syncing:   m.sync != nil && conn.State == githubsync.StateActive && m.sync.Syncing(vault),
 		ManageURL: m.manageURL(conn.AccountType, conn.AccountLogin, conn.InstallationID),
 	}
 	if conn.ErrorCode != nil {
@@ -1038,9 +1058,11 @@ func (m *Module) setConnection(c *echo.Context) error {
 		VaultID: vault, InstallationID: inst.ID, AccountLogin: inst.Account.Login, AccountType: inst.Account.Type,
 		RepoID: repo.ID, RepoFullName: repo.FullName, RepoPrivate: repo.Private, Branch: branch,
 		// Active with no remote_sha: the push and pull workers (E4.8, E4.9)
-		// take it from here, a first push or a merge with the remote.
+		// take it from here, a first push or a merge with the remote. The
+		// owner's answer to the merge question goes with it (D11).
 		State:             githubsync.StateActive,
 		ConnectedByUserID: &user, ConnectedGitHubLogin: s.login,
+		MergeExisting: req.MergeExisting,
 	})
 	switch {
 	case errors.Is(err, githubsync.ErrAlreadyConnected):
@@ -1053,6 +1075,9 @@ func (m *Module) setConnection(c *echo.Context) error {
 	// The picker is over: its user token is revoked now (D4).
 	m.pickers.drop(sessionID)
 	m.log.InfoContext(ctx, "github sync: vault connected", "vault", vault.String(), "installation", inst.ID, "repo", repo.ID)
+	if m.sync != nil {
+		m.sync.Notify(vault) // the first push, without waiting for the sweep
+	}
 	out, err := m.statusOf(ctx, vault, true)
 	if err != nil {
 		return err
@@ -1101,9 +1126,11 @@ func (m *Module) checkRemote(ctx context.Context, token string, repo githubapp.R
 
 // MARK: DELETE /v1/vault/github-sync/connection
 
-// disconnect deletes the row and revokes a cached installation token (D13).
-// Vault files and local history stay; nothing on GitHub changes. The App
-// stays installed; the status's manageUrl is where the user removes it.
+// disconnect deletes the row, removes the origin remote and its refs from the
+// vault's repository and revokes a cached installation token (D13). Vault
+// files, local history and the held list stay; nothing on GitHub changes.
+// The App stays installed; the status's manageUrl is where the user removes
+// it.
 func (m *Module) disconnect(c *echo.Context) error {
 	_, vault, err := m.owner(c)
 	if err != nil {
@@ -1117,6 +1144,11 @@ func (m *Module) disconnect(c *echo.Context) error {
 	if conn == nil {
 		return errNotConnected
 	}
+	// The row is gone first, so no new push starts; the remote goes once a
+	// push in flight has let go of the vault's lock.
+	if m.sync != nil {
+		m.sync.Disconnected(ctx, vault)
+	}
 	rctx, cancel := context.WithTimeout(ctx, revokeTimeout)
 	defer cancel()
 	if err := m.client.RevokeInstallationToken(rctx, conn.InstallationID, conn.RepoID); err != nil {
@@ -1124,4 +1156,48 @@ func (m *Module) disconnect(c *echo.Context) error {
 	}
 	m.log.InfoContext(ctx, "github sync: vault disconnected", "vault", vault.String())
 	return c.NoContent(http.StatusNoContent)
+}
+
+// MARK: POST /v1/vault/github-sync/sync
+
+// syncNow is "Sync now" (D14): anyone who may write to the vault queues a
+// sync, at most 6 times a minute per vault. It also puts a connection that
+// stopped for a cause that may since have been fixed on GitHub back to work.
+// The answer is the status as it is now; the sync runs after the response.
+func (m *Module) syncNow(c *echo.Context) error {
+	user, err := userOf(c)
+	if err != nil {
+		return err
+	}
+	a, err := m.access.Resolve(c, vaultaccess.Write)
+	if err != nil {
+		return err
+	}
+	vault := a.VaultID
+	if limited, retry := m.limits.Hit(ratelimit.GitHubSyncNowByVault, vault.String()); limited {
+		c.Response().Header().Set("Retry-After", strconv.Itoa(retry))
+		return ratelimit.ErrLimited
+	}
+	ctx := c.Request().Context()
+	conn, err := m.store.Get(ctx, vault)
+	if err != nil {
+		return err
+	}
+	if conn == nil {
+		return errNotConnected
+	}
+	if m.sync != nil {
+		if err := m.sync.SyncNow(ctx, vault); err != nil {
+			return err
+		}
+	}
+	owner, err := m.store.VaultOwner(ctx, vault)
+	if err != nil {
+		return err
+	}
+	out, err := m.statusOf(ctx, vault, owner == user)
+	if err != nil {
+		return err
+	}
+	return wire.JSON(c, http.StatusAccepted, out)
 }

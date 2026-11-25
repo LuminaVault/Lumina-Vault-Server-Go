@@ -9,13 +9,13 @@ import (
 )
 
 func TestVaultGitIsOffByDefault(t *testing.T) {
-	registered, stop := vaultGit(nil, config.Config{VaultGitEnabled: "false"}, vaultpaths.Paths{Root: t.TempDir()}, nil)
+	_, registered, stop := vaultGit(nil, config.Config{VaultGitEnabled: "false"}, vaultpaths.Paths{Root: t.TempDir()}, nil)
 	defer stop()
 	require.Empty(t, registered)
 }
 
 func TestVaultGitRegistersSweepAndGC(t *testing.T) {
-	registered, stop := vaultGit(nil, config.Config{VaultGitEnabled: "true"}, vaultpaths.Paths{Root: t.TempDir()}, nil)
+	_, registered, stop := vaultGit(nil, config.Config{VaultGitEnabled: "true"}, vaultpaths.Paths{Root: t.TempDir()}, nil)
 	defer stop()
 	names := []string{}
 	for _, j := range registered {

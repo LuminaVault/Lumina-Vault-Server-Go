@@ -155,9 +155,14 @@ func (m Message) render(paths []string) string {
 
 // pending lists the changes a commit would take: added or modified files of at
 // most maxFileSize bytes, and deletions. Files over the limit are skipped; a
-// tracked file that grows past it keeps its last committed version.
+// tracked file that grows past it keeps its last committed version. A held
+// path (held.go) that is missing from the working tree is never a deletion.
 func (r *Repo) pending(maxFileSize int64) (add, remove []string, err error) {
 	wt, err := r.repo.Worktree()
+	if err != nil {
+		return nil, nil, err
+	}
+	held, err := r.heldSet()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -172,6 +177,9 @@ func (r *Repo) pending(maxFileSize int64) (add, remove []string, err error) {
 		info, err := os.Lstat(filepath.Join(r.root, filepath.FromSlash(p)))
 		switch {
 		case errors.Is(err, os.ErrNotExist):
+			if _, isHeld := held[p]; isHeld {
+				continue
+			}
 			if s.Staging != git.Untracked && s.Staging != git.Added {
 				remove = append(remove, p)
 			}

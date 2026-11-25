@@ -19,6 +19,7 @@ import (
 	"lumina/internal/migrations"
 	"lumina/internal/ratelimit"
 	"lumina/internal/vaultaccess"
+	"lumina/internal/vaultgit"
 	"lumina/internal/vaultpaths"
 	"lumina/parity/scenario"
 	"net/http"
@@ -52,11 +53,16 @@ type env struct {
 	pool   *pgxpool.Pool
 	gh     *githubapptest.Server
 	module *module.Module
-	e      *echo.Echo
-	root   string
-	logs   *syncBuffer
-	bodies *syncBuffer
-	clock  *clock
+	// committer and syncer are the push worker behind the routes, wired as
+	// cmd/App does.
+	committer *vaultgit.Committer
+	syncer    *githubsync.Syncer
+	paths     vaultpaths.Paths
+	e         *echo.Echo
+	root      string
+	logs      *syncBuffer
+	bodies    *syncBuffer
+	clock     *clock
 }
 
 type syncBuffer struct {
@@ -107,19 +113,35 @@ func newEnvWith(t *testing.T, origins []string) *env {
 	// a window over in the middle of a test.
 	limits := ratelimit.NewStore()
 	limits.SetClock(clk.now)
+	client, store, paths := gh.Client(t), githubsync.NewStore(pool), vaultpaths.Paths{Root: root}
+	log := slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	var syncer *githubsync.Syncer
+	committer := vaultgit.NewCommitter(vaultgit.Options{
+		RawRoot: paths.Raw, Lock: vaultgit.PGLocker{Pool: pool}, Logger: log,
+		OnCommit: func(tenant uuid.UUID, sha string) { syncer.OnCommit(tenant, sha) },
+	})
+	syncer = githubsync.NewSyncer(githubsync.SyncerOptions{
+		Store: store, GitHub: client, Repos: committer, RawRoot: paths.Raw, GitBaseURL: gh.URL, Now: clk.now, Log: log,
+	})
+	t.Cleanup(func() {
+		syncer.Stop()
+		committer.Close(context.Background())
+	})
 	m := module.New(module.Options{
-		Client: gh.Client(t), Store: githubsync.NewStore(pool), Access: vaultaccess.New(pool),
-		Paths: vaultpaths.Paths{Root: root}, CallbackURL: "https://api.lumina.test/v1/github-sync/callback",
+		Client: client, Store: store, Access: vaultaccess.New(pool),
+		Paths: paths, CallbackURL: "https://api.lumina.test/v1/github-sync/callback",
 		Slug: "luminavault", MaxRepoBytes: 200 << 20, MaxFiles: 5000,
-		WebReturnOrigins: origins, Limits: limits,
-		Log: slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
+		WebReturnOrigins: origins, Limits: limits, Sync: syncer, Log: log,
 	})
 	m.SetClock(clk.now)
 	e := httpserver.New(config.Config{}, httpserver.Deps{
 		Auth:    auth.Middleware(testKeys, auth.PGUsers(pool)),
 		Modules: []httpserver.Module{m},
 	})
-	return &env{t: t, pool: pool, gh: gh, module: m, e: e, root: root, logs: logs, bodies: &syncBuffer{}, clock: clk}
+	return &env{
+		t: t, pool: pool, gh: gh, module: m, committer: committer, syncer: syncer, paths: paths,
+		e: e, root: root, logs: logs, bodies: &syncBuffer{}, clock: clk,
+	}
 }
 
 func (v *env) exec(sql string, args ...any) {
@@ -797,7 +819,12 @@ func TestSpecConformance(t *testing.T) {
 	require.Contains(t, r.String(), `"retrying":false`)
 	require.Contains(t, r.String(), `"conflictPath":"a.conflict-20261120-100340.md"`)
 	call(bob, http.MethodGet, "/v1/vault/github-sync", nil)
+	r = call(alice, http.MethodPost, "/v1/vault/github-sync/sync", nil)
+	require.Equal(t, http.StatusAccepted, r.code, r.String())
+	require.Contains(t, r.String(), `"retrying":true`, "Sync now put the stopped connection back to work")
 	call(alice, http.MethodDelete, "/v1/vault/github-sync/connection", nil)
+	r = call(alice, http.MethodPost, "/v1/vault/github-sync/sync", nil)
+	require.Equal(t, "not_connected", r.errCode())
 	cb := v.do(uuid.Nil, nil, http.MethodGet, "/v1/github-sync/callback?state=x", nil)
 	check(http.MethodGet, "/v1/github-sync/callback", cb)
 
@@ -1079,4 +1106,181 @@ func TestConnectRefusals(t *testing.T) {
 	require.Nil(t, v.connection(alice))
 	r = v.do(alice, nil, http.MethodGet, "/v1/vault/github-sync/repositories?session="+session+"&installationId=7", nil)
 	require.Contains(t, r.String(), `"archived":true`)
+}
+
+// MARK: E4.8
+
+// connectVault runs the whole connect flow for the standard stub repository.
+func (v *env) connectVault(owner uuid.UUID, vault *uuid.UUID) {
+	v.t.Helper()
+	v.seedGitHub("ghu_"+owner.String(), "octocat")
+	session := v.signIn(owner, vault, "code-"+owner.String(), "ghu_"+owner.String())
+	r := v.put(owner, vault, map[string]any{"session": session, "installationId": 7, "repositoryId": 456, "branch": "main"})
+	require.Equal(v.t, http.StatusAccepted, r.code, r.String())
+}
+
+// commit writes a note into the vault and commits it, as a save does once
+// its debounce has passed.
+func (v *env) commit(vault uuid.UUID, path, body string) string {
+	v.t.Helper()
+	full := filepath.Join(v.paths.Raw(vault), path)
+	require.NoError(v.t, os.MkdirAll(filepath.Dir(full), 0o750))
+	require.NoError(v.t, os.WriteFile(full, []byte(body), 0o600))
+	_, err := v.committer.Flush(context.Background(), vault, vaultgit.Message{Reason: "upload"})
+	require.NoError(v.t, err)
+	repo, err := vaultgit.Open(v.paths.Raw(vault))
+	require.NoError(v.t, err)
+	head, err := repo.Head()
+	require.NoError(v.t, err)
+	return head
+}
+
+type syncStatus struct {
+	CanManage  bool `json:"canManage"`
+	Connection *struct {
+		State       string  `json:"state"`
+		LastPushAt  *string `json:"lastPushAt"`
+		PendingPush bool    `json:"pendingPush"`
+		Syncing     bool    `json:"syncing"`
+		Error       *struct {
+			Code     string `json:"code"`
+			Retrying bool   `json:"retrying"`
+		} `json:"error"`
+	} `json:"connection"`
+}
+
+func (v *env) status(user uuid.UUID, vault *uuid.UUID) syncStatus {
+	v.t.Helper()
+	r := v.do(user, vault, http.MethodGet, "/v1/vault/github-sync", nil)
+	require.Equal(v.t, http.StatusOK, r.code, r.String())
+	var st syncStatus
+	require.NoError(v.t, json.Unmarshal(r.body, &st))
+	return st
+}
+
+// D14: POST …/sync. Anyone who may write to the vault queues a sync and may
+// put a stopped connection back to work; a viewer may not; 6 per minute per
+// vault. The status tells the truth about what is pending and what failed.
+func TestSyncNow(t *testing.T) {
+	v := newEnv(t)
+	alice, bob, carol, dave := v.user(), v.user(), v.user(), v.user()
+	_, vault := v.teamVault(alice, map[uuid.UUID]string{bob: "editor", carol: "viewer"})
+	const route = "/v1/vault/github-sync/sync"
+
+	r := v.do(alice, &vault, http.MethodPost, route, nil)
+	require.Equal(t, http.StatusNotFound, r.code, r.String())
+	require.Equal(t, "not_connected", r.errCode())
+	require.Equal(t, http.StatusUnauthorized, v.do(uuid.Nil, &vault, http.MethodPost, route, nil).code)
+
+	v.connectVault(alice, &vault)
+	st := v.status(bob, &vault)
+	require.False(t, st.CanManage)
+	require.False(t, st.Connection.PendingPush, "no history yet")
+	require.Nil(t, st.Connection.LastPushAt)
+
+	// GitHub is down when the first commit is made.
+	v.gh.Lock()
+	v.gh.Git.Status[456] = http.StatusServiceUnavailable
+	v.gh.Unlock()
+	head := v.commit(vault, "note.md", "hello")
+	require.Eventually(t, func() bool { return v.status(bob, &vault).Connection.Error != nil }, 10*time.Second, 10*time.Millisecond)
+	st = v.status(carol, &vault)
+	require.Equal(t, githubsync.StateActive, st.Connection.State)
+	require.Equal(t, "sync_failed", st.Connection.Error.Code)
+	require.True(t, st.Connection.Error.Retrying)
+	require.True(t, st.Connection.PendingPush)
+	require.Nil(t, st.Connection.LastPushAt)
+
+	// A viewer cannot sync; someone outside the vault cannot see it.
+	r = v.do(carol, &vault, http.MethodPost, route, nil)
+	require.Equal(t, http.StatusForbidden, r.code, r.String())
+	require.Equal(t, "forbidden", r.errCode())
+	require.GreaterOrEqual(t, v.do(dave, &vault, http.MethodPost, route, nil).code, 400)
+
+	// GitHub is back. A member who may write syncs now, without waiting for
+	// the retry.
+	v.gh.Lock()
+	delete(v.gh.Git.Status, 456)
+	v.gh.Unlock()
+	r = v.do(bob, &vault, http.MethodPost, route, nil)
+	require.Equal(t, http.StatusAccepted, r.code, r.String())
+	require.Contains(t, r.String(), `"canManage":false`)
+	require.Eventually(t, func() bool { return v.gh.Git.Tip(456, "main") == head }, 10*time.Second, 10*time.Millisecond)
+	require.Eventually(t, func() bool {
+		st := v.status(bob, &vault)
+		return !st.Connection.PendingPush && !st.Connection.Syncing && st.Connection.Error == nil && st.Connection.LastPushAt != nil
+	}, 10*time.Second, 10*time.Millisecond)
+
+	// Stopped for a rejected push; the owner fixed the branch rule.
+	v.exec(`UPDATE github_sync_connections SET state = 'needs_attention', error_code = 'push_rejected', error_at = now(), remote_sha = NULL WHERE vault_id = $1`, vault)
+	require.False(t, v.status(alice, &vault).Connection.Error.Retrying)
+	r = v.do(alice, &vault, http.MethodPost, route, nil)
+	require.Equal(t, http.StatusAccepted, r.code, r.String())
+	require.Eventually(t, func() bool {
+		st := v.status(alice, &vault)
+		return st.Connection.State == githubsync.StateActive && st.Connection.Error == nil && !st.Connection.PendingPush
+	}, 10*time.Second, 10*time.Millisecond)
+
+	// An uninstalled App is not something "Sync now" can fix.
+	v.exec(`UPDATE github_sync_connections SET state = 'needs_attention', error_code = 'installation_removed', error_at = now() WHERE vault_id = $1`, vault)
+	r = v.do(alice, &vault, http.MethodPost, route, nil)
+	require.Equal(t, http.StatusAccepted, r.code, r.String())
+	require.Equal(t, githubsync.StateNeedsAttention, v.status(alice, &vault).Connection.State)
+
+	// 6 per minute per vault: that was 4 that reached the limiter (the
+	// viewer and the outsider never did), whoever asked.
+	codes := map[int]int{}
+	for i := range 6 {
+		who := alice
+		if i%2 == 1 {
+			who = bob
+		}
+		codes[v.do(who, &vault, http.MethodPost, route, nil).code]++
+	}
+	require.Equal(t, map[int]int{http.StatusAccepted: 2, http.StatusTooManyRequests: 4}, codes)
+	over := v.do(bob, &vault, http.MethodPost, route, nil)
+	require.Equal(t, "rate_limited", over.errCode())
+	require.NotEmpty(t, over.header.Get("Retry-After"))
+	// Another vault has its own budget.
+	require.Equal(t, http.StatusNotFound, v.do(alice, nil, http.MethodPost, route, nil).code)
+	v.clock.advance(61 * time.Second)
+	require.Equal(t, http.StatusAccepted, v.do(bob, &vault, http.MethodPost, route, nil).code, "a new window")
+}
+
+// D13: disconnect removes the origin remote from the vault's repository,
+// besides the row and the cached token. Nothing is pushed afterwards.
+func TestDisconnectRemovesTheRemote(t *testing.T) {
+	v := newEnv(t)
+	alice := v.user()
+	v.connectVault(alice, nil)
+	head := v.commit(alice, "note.md", "hello")
+	require.Eventually(t, func() bool { return v.gh.Git.Tip(456, "main") == head }, 10*time.Second, 10*time.Millisecond)
+	require.Eventually(t, func() bool { return !v.status(alice, nil).Connection.PendingPush }, 10*time.Second, 10*time.Millisecond)
+	remote := func() string {
+		t.Helper()
+		repo, err := vaultgit.Open(v.paths.Raw(alice))
+		require.NoError(t, err)
+		u, err := repo.RemoteURL()
+		require.NoError(t, err)
+		return u
+	}
+	require.Equal(t, v.gh.URL+"/octocat/notes.git", remote())
+	mints := v.gh.Mints()
+
+	r := v.do(alice, nil, http.MethodDelete, "/v1/vault/github-sync/connection", nil)
+	require.Equal(t, http.StatusNoContent, r.code, r.String())
+	require.Empty(t, remote(), "the remote is gone when the request returns")
+	require.Equal(t, []string{mints[len(mints)-1].Token}, v.gh.RevokedInstallations())
+	cfg, err := os.ReadFile(filepath.Join(v.paths.Raw(alice), ".git", "config"))
+	require.NoError(t, err)
+	require.NotContains(t, string(cfg), "octocat")
+	require.NotContains(t, v.logs.String(), mints[len(mints)-1].Token)
+
+	// The vault and its history go on; GitHub hears nothing more.
+	second := v.commit(alice, "note.md", "after")
+	require.NotEqual(t, head, second)
+	time.Sleep(200 * time.Millisecond)
+	require.Equal(t, head, v.gh.Git.Tip(456, "main"))
+	require.Len(t, v.gh.Mints(), len(mints))
+	require.Nil(t, v.status(alice, nil).Connection)
 }
