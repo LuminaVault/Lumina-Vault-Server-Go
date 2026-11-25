@@ -21,8 +21,9 @@ import (
 // silently overwriting another device's edit. Without the header, an upload
 // overwrites as before.
 
-// errPreconditionFailed is the 412 a stale save gets.
-var errPreconditionFailed = wire.NewError(http.StatusPreconditionFailed,
+// ErrPreconditionFailed is the 412 a stale save, move or delete gets. Callers
+// with no request (GitHub sync) test for it with errors.Is.
+var ErrPreconditionFailed = wire.NewError(http.StatusPreconditionFailed,
 	"the file changed since you opened it; reload it and save again")
 
 // parseIfMatch splits an If-Match value into the sha256 values it lists.
@@ -53,7 +54,7 @@ func checkIfMatch(header, target string) error {
 	tags, anyTag := parseIfMatch(header)
 	current, err := os.ReadFile(target) //nolint:gosec // target comes from ResolveInside
 	if errors.Is(err, fs.ErrNotExist) {
-		return errPreconditionFailed
+		return ErrPreconditionFailed
 	}
 	if err != nil {
 		return err
@@ -68,14 +69,14 @@ func checkIfMatch(header, target string) error {
 			return nil
 		}
 	}
-	return errPreconditionFailed
+	return ErrPreconditionFailed
 }
 
 // checkAbsent is `If-None-Match: *`: 412 when the file already exists.
 func checkAbsent(target string) error {
 	_, err := os.Stat(target)
 	if err == nil {
-		return errPreconditionFailed
+		return ErrPreconditionFailed
 	}
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil
@@ -90,11 +91,35 @@ type pathLocks struct {
 	stripes [64]sync.Mutex
 }
 
-func (l *pathLocks) lock(tenant uuid.UUID, path string) func() {
+func (l *pathLocks) stripe(tenant uuid.UUID, path string) int {
 	h := fnv.New32a()
 	_, _ = h.Write(tenant[:])
 	_, _ = h.Write([]byte(path))
-	mu := &l.stripes[h.Sum32()%uint32(len(l.stripes))]
+	return int(h.Sum32() % uint32(len(l.stripes)))
+}
+
+func (l *pathLocks) lock(tenant uuid.UUID, path string) func() {
+	mu := &l.stripes[l.stripe(tenant, path)]
 	mu.Lock()
 	return mu.Unlock
+}
+
+// lock2 holds the stripes of two paths, for a move. The stripes are taken in
+// index order, and once when both paths share one, so two moves in opposite
+// directions can't deadlock and a move can't wait for itself.
+func (l *pathLocks) lock2(tenant uuid.UUID, a, b string) func() {
+	i, j := l.stripe(tenant, a), l.stripe(tenant, b)
+	if i == j {
+		l.stripes[i].Lock()
+		return l.stripes[i].Unlock
+	}
+	if i > j {
+		i, j = j, i
+	}
+	l.stripes[i].Lock()
+	l.stripes[j].Lock()
+	return func() {
+		l.stripes[j].Unlock()
+		l.stripes[i].Unlock()
+	}
 }
