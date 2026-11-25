@@ -137,7 +137,7 @@ func (m *Module) patchProperties(c *echo.Context) error {
 	if err != nil {
 		return err
 	}
-	m.upsertNoteMemory(ctx, tenant, id, spaceID, path, next, saved.Metadata)
+	m.files.upsertNoteMemory(ctx, tenant, id, spaceID, path, next, saved.Metadata)
 	vaultgit.Touch(tenant, "properties", ids.Upper(actor), "")
 	slog.InfoContext(ctx, "vault properties patch", "tenant", ids.Upper(tenant), "path", path,
 		"set", len(set), "unset", len(unset))

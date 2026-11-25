@@ -152,7 +152,7 @@ func (m *Module) createNote(ctx context.Context, tenant, actor uuid.UUID, spaceI
 	if err != nil {
 		return nil, false, err
 	}
-	m.upsertNoteMemory(ctx, tenant, id, spaceID, path, data, meta)
+	m.files.upsertNoteMemory(ctx, tenant, id, spaceID, path, data, meta)
 	row, err := m.store.FindByID(ctx, tenant, id)
 	return row, true, err
 }

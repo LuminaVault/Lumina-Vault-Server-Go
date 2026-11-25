@@ -98,7 +98,7 @@ func (m *Module) restoreTrash(c *echo.Context) error {
 	if isNotePath(row.Path) {
 		if target, err := vaultfiles.ResolveInside(rawRoot, row.Path); err == nil {
 			if data, err := os.ReadFile(target); err == nil { //nolint:gosec // target comes from SanitizePath and ResolveInside
-				m.upsertNoteMemory(ctx, tenant, row.ID, row.SpaceID, row.Path, data, row.Metadata)
+				m.files.upsertNoteMemory(ctx, tenant, row.ID, row.SpaceID, row.Path, data, row.Metadata)
 			}
 		}
 	}

@@ -212,7 +212,7 @@ func (m *Module) restoreVersion(c *echo.Context) error {
 		return err
 	}
 	if isNotePath(path) {
-		m.upsertNoteMemory(ctx, tenant, id, spaceID, path, data, saved.Metadata)
+		m.files.upsertNoteMemory(ctx, tenant, id, spaceID, path, data, saved.Metadata)
 	}
 	vaultgit.Touch(tenant, "restore", ids.Upper(actor), "")
 	slog.InfoContext(ctx, "vault version restore", "tenant", ids.Upper(tenant), "path", path, "sha", c.Param("sha"))
