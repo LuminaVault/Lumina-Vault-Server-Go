@@ -87,6 +87,8 @@ tags:
     description: Vault-scoped usage intelligence, memory health, and recommendations.
   - name: Kanban
     description: Native Kanban boards, columns, and cards.
+  - name: GitHubSync
+    description: GitHub sync of a vault (backlog E4.6-E4.10), behind GITHUB_SYNC_ENABLED.
   - name: Calendar
     description: Google Calendar integration — OAuth connect, sync, events.
 
@@ -7386,6 +7388,301 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /v1/vault/github-sync:
+    get:
+      tags: [GitHubSync]
+      operationId: githubSyncStatus
+      x-lv-module: githubsync
+      summary: The vault's GitHub sync status
+      description: |
+        Backlog E4.7 (spec 2026-11-19-e4-github-sync D14). Any member of the
+        vault (`X-Vault-ID`, absent = personal vault) may read it; `canManage`
+        is true for the vault owner only. 404 when GitHub sync is off.
+      security: [{ bearerJWT: [] }]
+      responses:
+        '200':
+          description: The status; `connection` is null when not connected.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GitHubSyncStatus' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: Not a member of the vault.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/vault/github-sync/connect:
+    post:
+      tags: [GitHubSync]
+      operationId: githubSyncConnect
+      x-lv-module: githubsync
+      summary: Start the GitHub sign-in (vault owner)
+      description: |
+        D3 step 1. Answers the GitHub authorize URL. Web sends `returnTo` (an
+        allowed origin); iOS sends no body and is sent back to
+        `luminavault://github-sync`.
+      security: [{ bearerJWT: [] }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GitHubSyncConnectRequest' }
+      responses:
+        '200':
+          description: The URL to open.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GitHubSyncConnectResponse' }
+        '400':
+          description: '`invalid_return_to`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GitHubSyncError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: '`owner_required`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GitHubSyncError' }
+
+  /v1/github-sync/callback:
+    get:
+      tags: [GitHubSync]
+      operationId: githubSyncCallback
+      x-lv-module: githubsync
+      summary: GitHub sign-in callback (public)
+      description: |
+        D3 step 2. Takes the state once, parks the code under a single-use
+        completion handle (60 s) and redirects to
+        `returnTo?status=authorized&completion=<handle>` (web) or
+        `luminavault://github-sync?status=…&completion=…` (iOS); `status=error`
+        on any failure. Exchanges nothing; `installation_id` and
+        `setup_action` are ignored.
+      parameters:
+        - { name: code, in: query, required: false, schema: { type: string } }
+        - { name: state, in: query, required: false, schema: { type: string } }
+      responses:
+        '302':
+          description: Back to the client.
+
+  /v1/vault/github-sync/complete:
+    post:
+      tags: [GitHubSync]
+      operationId: githubSyncComplete
+      x-lv-module: githubsync
+      summary: Finish the sign-in and open a picker session (vault owner)
+      description: |
+        D3 steps 3-4. The handle works once. Another Lumina account or vault
+        than the one that started the flow is 403 `wrong_account` and the
+        code is never exchanged.
+      security: [{ bearerJWT: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GitHubSyncCompleteRequest' }
+      responses:
+        '200':
+          description: A picker session (10 minutes) and the user's installations.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GitHubSyncCompleteResponse' }
+        '400':
+          description: '`session_expired` (unknown, used or expired handle).'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GitHubSyncError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: '`wrong_account` or `owner_required`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GitHubSyncError' }
+        '502':
+          description: '`github_unavailable`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GitHubSyncError' }
+
+  /v1/vault/github-sync/installations:
+    get:
+      tags: [GitHubSync]
+      operationId: githubSyncInstallations
+      x-lv-module: githubsync
+      summary: The user's installations of the App (vault owner)
+      security: [{ bearerJWT: [] }]
+      parameters:
+        - { name: session, in: query, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Installations, and the link to install the App.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GitHubSyncInstallationsResponse' }
+        '400':
+          description: '`session_expired`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GitHubSyncError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: '`owner_required`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GitHubSyncError' }
+
+  /v1/vault/github-sync/repositories:
+    get:
+      tags: [GitHubSync]
+      operationId: githubSyncRepositories
+      x-lv-module: githubsync
+      summary: Repositories the user can push to in one installation (vault owner)
+      description: D4. Listed with the user's own token, 50 per page.
+      security: [{ bearerJWT: [] }]
+      parameters:
+        - { name: session, in: query, required: true, schema: { type: string } }
+        - { name: installationId, in: query, required: true, schema: { type: integer, format: int64 } }
+        - { name: page, in: query, required: false, schema: { type: integer, minimum: 1, default: 1 } }
+      responses:
+        '200':
+          description: One page of repositories.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GitHubSyncRepositoriesResponse' }
+        '400':
+          description: '`session_expired`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GitHubSyncError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: '`owner_required`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GitHubSyncError' }
+        '404':
+          description: '`repo_not_accessible`: the installation is not in this user''s list.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GitHubSyncError' }
+
+  /v1/vault/github-sync/branches:
+    get:
+      tags: [GitHubSync]
+      operationId: githubSyncBranches
+      x-lv-module: githubsync
+      summary: A repository's branches (vault owner)
+      description: The first 100. The client also accepts a typed name.
+      security: [{ bearerJWT: [] }]
+      parameters:
+        - { name: session, in: query, required: true, schema: { type: string } }
+        - { name: installationId, in: query, required: true, schema: { type: integer, format: int64 } }
+        - { name: repositoryId, in: query, required: true, schema: { type: integer, format: int64 } }
+      responses:
+        '200':
+          description: Branch names and the default branch.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GitHubSyncBranchesResponse' }
+        '400':
+          description: '`session_expired`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GitHubSyncError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: '`owner_required`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GitHubSyncError' }
+        '404':
+          description: '`repo_not_accessible`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GitHubSyncError' }
+
+  /v1/vault/github-sync/connection:
+    put:
+      tags: [GitHubSync]
+      operationId: githubSyncSetConnection
+      x-lv-module: githubsync
+      summary: Connect the vault to a repository and branch (vault owner)
+      description: |
+        D4, D11. The installation and repository are checked again with the
+        user's token (push rights), then with the App's token. A branch with
+        files answers 409 `remote_not_empty` with a summary until the request
+        repeats with `mergeExisting: true`. On success the picker's user token
+        is revoked.
+      security: [{ bearerJWT: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GitHubSyncSetConnectionRequest' }
+      responses:
+        '202':
+          description: Connected; the status.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GitHubSyncStatus' }
+        '400':
+          description: '`session_expired` or `invalid_branch`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GitHubSyncError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: '`owner_required`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GitHubSyncError' }
+        '404':
+          description: '`repo_not_accessible`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GitHubSyncError' }
+        '409':
+          description: '`remote_not_empty` (with `summary`), `repo_in_use` or `already_connected`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GitHubSyncError' }
+        '413':
+          description: '`repo_too_large`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GitHubSyncError' }
+        '502':
+          description: '`github_unavailable`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GitHubSyncError' }
+    delete:
+      tags: [GitHubSync]
+      operationId: githubSyncDisconnect
+      x-lv-module: githubsync
+      summary: Disconnect the vault (vault owner)
+      description: |
+        D13. Deletes the connection and revokes a cached installation token.
+        Vault files and history stay; nothing on GitHub changes and the App
+        stays installed (`manageUrl` in the status).
+      security: [{ bearerJWT: [] }]
+      responses:
+        '204':
+          description: Disconnected.
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: '`owner_required`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GitHubSyncError' }
+        '404':
+          description: '`not_connected`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GitHubSyncError' }
+
   /v1/vault/trash/{id}/restore:
     post:
       tags: [Vault]
@@ -10895,6 +11192,194 @@ components:
           schema: { $ref: '#/components/schemas/ErrorEnvelope' }
 
   schemas:
+
+    # ── GitHub sync (backlog E4.7, spec 2026-11-19-e4-github-sync D14) ──
+    GitHubSyncError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum: [owner_required, session_expired, wrong_account, repo_in_use, remote_not_empty, repo_too_large,
+                     repo_not_accessible, invalid_branch, invalid_return_to, already_connected, not_connected, github_unavailable]
+            message: { type: string }
+        summary: { $ref: '#/components/schemas/GitHubSyncSummary' }
+
+    GitHubSyncSummary:
+      type: object
+      description: What a first connect to a branch with files would do (D11).
+      required: [files, notes, conflicts, held, bytes]
+      properties:
+        files: { type: integer, description: Remote files that would be written to the vault. }
+        notes: { type: integer }
+        conflicts: { type: integer, description: Files on both sides with other bytes; both are kept. }
+        held: { type: integer, description: Remote files the vault cannot show; they stay on GitHub. }
+        bytes: { type: integer, format: int64 }
+
+    GitHubSyncStatus:
+      type: object
+      required: [available, canManage, connection]
+      properties:
+        available: { type: boolean }
+        canManage: { type: boolean, description: The caller is the vault owner. }
+        connection:
+          oneOf:
+            - { $ref: '#/components/schemas/GitHubSyncConnection' }
+            - { type: 'null' }
+
+    GitHubSyncConnection:
+      type: object
+      required: [state, accountLogin, accountType, repoFullName, repoUrl, repoPrivate, branch, connectedAt,
+                 connectedByLogin, lastPushAt, lastPullAt, pendingPush, syncing, progress, error, conflicts,
+                 heldCount, held, manageUrl]
+      properties:
+        state: { type: string, enum: [connecting, initial_sync, active, needs_attention] }
+        accountLogin: { type: string }
+        accountType: { type: string, enum: [User, Organization] }
+        repoFullName: { type: string }
+        repoUrl: { type: string }
+        repoPrivate: { type: boolean }
+        branch: { type: string }
+        connectedAt: { type: string, format: date-time }
+        connectedByLogin: { type: string }
+        lastPushAt: { type: [string, 'null'], format: date-time }
+        lastPullAt: { type: [string, 'null'], format: date-time }
+        pendingPush: { type: boolean, description: Local history is ahead of GitHub. }
+        syncing: { type: boolean }
+        progress:
+          oneOf:
+            - type: object
+              required: [done, total]
+              properties:
+                done: { type: integer }
+                total: { type: integer }
+            - { type: 'null' }
+        error:
+          oneOf:
+            - type: object
+              required: [code, at, retrying]
+              properties:
+                code:
+                  type: string
+                  description: One of installation_removed, installation_suspended, repo_access_removed, push_rejected, repo_too_large, or sync_failed (transient).
+                at: { type: string, format: date-time }
+                retrying: { type: boolean }
+            - { type: 'null' }
+        conflicts:
+          type: array
+          maxItems: 20
+          items:
+            type: object
+            required: [path, conflictPath, at]
+            properties:
+              path: { type: string }
+              conflictPath: { type: string }
+              at: { type: string, format: date-time }
+        heldCount: { type: integer }
+        held:
+          type: array
+          maxItems: 20
+          items:
+            type: object
+            required: [path, reason]
+            properties:
+              path: { type: string }
+              reason: { type: string, enum: [unsupported_name, unsupported_type, too_large, hidden, not_a_file] }
+        manageUrl: { type: string }
+
+    GitHubSyncConnectRequest:
+      type: object
+      properties:
+        returnTo: { type: string, description: Web only; must be an allowed origin. }
+
+    GitHubSyncConnectResponse:
+      type: object
+      required: [authorizeUrl]
+      properties:
+        authorizeUrl: { type: string }
+
+    GitHubSyncCompleteRequest:
+      type: object
+      required: [completion]
+      properties:
+        completion: { type: string }
+
+    GitHubSyncInstallation:
+      type: object
+      required: [id, accountLogin, accountType, repositorySelection]
+      properties:
+        id: { type: integer, format: int64 }
+        accountLogin: { type: string }
+        accountType: { type: string, enum: [User, Organization] }
+        repositorySelection: { type: string, enum: [all, selected] }
+
+    GitHubSyncCompleteResponse:
+      type: object
+      required: [session, expiresAt, githubLogin, installations, installUrl]
+      properties:
+        session: { type: string, description: Picker session, 10 minutes. }
+        expiresAt: { type: string, format: date-time }
+        githubLogin: { type: string }
+        installations:
+          type: array
+          items: { $ref: '#/components/schemas/GitHubSyncInstallation' }
+        installUrl: { type: string }
+
+    GitHubSyncInstallationsResponse:
+      type: object
+      required: [installations, installUrl]
+      properties:
+        installations:
+          type: array
+          items: { $ref: '#/components/schemas/GitHubSyncInstallation' }
+        installUrl: { type: string }
+
+    GitHubSyncRepository:
+      type: object
+      required: [id, fullName, private, defaultBranch, empty, sizeKb, canPush, inUse]
+      properties:
+        id: { type: integer, format: int64 }
+        fullName: { type: string }
+        private: { type: boolean }
+        defaultBranch: { type: string }
+        empty: { type: boolean, description: GitHub reports a size of 0. }
+        sizeKb: { type: integer, format: int64 }
+        canPush: { type: boolean }
+        inUse: { type: boolean, description: Another vault already syncs to it. }
+
+    GitHubSyncRepositoriesResponse:
+      type: object
+      required: [repositories, nextPage, addRepositoriesUrl, newRepositoryUrl]
+      properties:
+        repositories:
+          type: array
+          items: { $ref: '#/components/schemas/GitHubSyncRepository' }
+        nextPage: { type: [integer, 'null'] }
+        addRepositoriesUrl: { type: string }
+        newRepositoryUrl: { type: string }
+
+    GitHubSyncBranchesResponse:
+      type: object
+      required: [branches, defaultBranch]
+      properties:
+        branches:
+          type: array
+          items: { type: string }
+        defaultBranch: { type: string }
+
+    GitHubSyncSetConnectionRequest:
+      type: object
+      required: [session, installationId, repositoryId]
+      properties:
+        session: { type: string }
+        installationId: { type: integer, format: int64 }
+        repositoryId: { type: integer, format: int64 }
+        branch: { type: string, description: Defaults to the repository's default branch, else main. }
+        mergeExisting: { type: boolean, default: false }
 
     # ── Root: AASA + deep health ──
     AppleAppSiteAssociation:

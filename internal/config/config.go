@@ -343,6 +343,22 @@ type Config struct {
 	// VaultGitEnabled turns on per-tenant vault history (backlog E4,
 	// internal/vaultgit): the committer, VaultGitSweep and VaultGitGC.
 	VaultGitEnabled string `env:"VAULT_GIT_ENABLED" envDefault:"false"`
+	// GitHubSyncEnabled is Go only: GitHub sync (spec 2026-11-19-e4-github-sync),
+	// dark by default. It needs VAULT_GIT_ENABLED and the GitHub App below; the
+	// keys are checked only when it is on (internal/githubsync.SettingsFrom).
+	GitHubSyncEnabled      string `env:"GITHUB_SYNC_ENABLED" envDefault:"false"`
+	GitHubAppID            string `env:"GITHUB_APP_ID"`
+	GitHubAppClientID      string `env:"GITHUB_APP_CLIENT_ID"`
+	GitHubAppClientSecret  string `env:"GITHUB_APP_CLIENT_SECRET"`
+	GitHubAppPrivateKey    string `env:"GITHUB_APP_PRIVATE_KEY"`
+	GitHubAppWebhookSecret string `env:"GITHUB_APP_WEBHOOK_SECRET"`
+	GitHubAppSlug          string `env:"GITHUB_APP_SLUG"`
+	GitHubSyncCallbackURL  string `env:"GITHUB_SYNC_CALLBACK_URL"`
+	GitHubSyncPollInterval string `env:"GITHUB_SYNC_POLL_INTERVAL" envDefault:"15m"`
+	GitHubSyncMaxRepoMB    int    `env:"GITHUB_SYNC_MAX_REPO_MB" envDefault:"200"`
+	GitHubSyncMaxFiles     int    `env:"GITHUB_SYNC_MAX_FILES" envDefault:"5000"`
+	GitHubAPIBaseURL       string `env:"GITHUB_API_BASE_URL" envDefault:"https://api.github.com"`
+	GitHubGitBaseURL       string `env:"GITHUB_GIT_BASE_URL" envDefault:"https://github.com"`
 	// VaultPropertiesEnabled indexes Markdown frontmatter into
 	// vault_files.properties and turns on the properties API (backlog E8.2).
 	VaultPropertiesEnabled string `env:"VAULT_PROPERTIES_ENABLED" envDefault:"false"`
