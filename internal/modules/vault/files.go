@@ -2,22 +2,13 @@ package vault
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
-	"lumina/internal/chunkindex"
-	"lumina/internal/embedding"
 	"lumina/internal/ids"
-	"lumina/internal/memorystore"
-	"lumina/internal/modules/achievements"
 	"lumina/internal/modules/vault/db"
-	"lumina/internal/onboardlatch"
 	"lumina/internal/vaultaccess"
 	"lumina/internal/vaultfiles"
-	"lumina/internal/vaultgit"
 	"lumina/internal/wire"
 	"net/http"
 	"os"
@@ -181,14 +172,15 @@ func (m *Module) replace(c *echo.Context) error {
 
 // writeFile is the shared half of upload and replace: everything after the path
 // and Space are decided. Query `note` and `processed`, the X-Vault-Metadata
-// sidecar, If-Match and If-None-Match apply to both.
+// sidecar, If-Match and If-None-Match apply to both. Files.Write does the rest.
 func (m *Module) writeFile(c *echo.Context, actor, tenant uuid.UUID, safe string, spaceID *uuid.UUID) error {
-	ctx := c.Request().Context()
 	r := c.Request()
 	contentType := "application/octet-stream"
 	if values, ok := r.Header["Content-Type"]; ok {
 		contentType = strings.Join(values, ", ")
 	}
+	// Write checks it again; checking here first keeps a wrong type a 415
+	// before the body is read, so a large body of the wrong type is not a 413.
 	if err := vaultfiles.ValidateContentType(contentType, vaultfiles.Lowercased(vaultfiles.PathExtension(safe))); err != nil {
 		return err
 	}
@@ -205,104 +197,19 @@ func (m *Module) writeFile(c *echo.Context, actor, tenant uuid.UUID, safe string
 		return wire.NewError(http.StatusBadRequest, "empty body")
 	}
 	isNote := wire.Query(c, "note") == "true"
-	// A markdown note without a sidecar title is titled from its first H1, else its
-	// filename, the same rule bulk import uses.
-	if isNote && isMarkdownPath(safe) && (sidecar == nil || sidecar.Title == nil) {
-		if content, ok := vaultfiles.DecodeUTF8(data); ok {
-			title := vaultfiles.MarkdownTitle(content, vaultfiles.LastPathComponent(safe))
-			if sidecar == nil {
-				sidecar = &vaultfiles.Metadata{}
-			}
-			sidecar.Title = &title
-		}
-	}
-	if m.guard != nil {
-		if err := m.guard.Check(int64(len(data))); err != nil {
-			return err
-		}
-	}
-	if err := m.paths.EnsureTenantDirectories(tenant); err != nil {
-		return err
-	}
-	target, err := vaultfiles.ResolveInside(m.paths.Raw(tenant), safe)
-	if err != nil {
-		return err
-	}
-	// E5.1: the check and the write hold one lock, so two saves made from the
-	// same version can't both pass.
-	unlock := m.locks.lock(tenant, safe)
-	if ifMatch := r.Header.Get("If-Match"); ifMatch != "" {
-		if err := checkIfMatch(ifMatch, target); err != nil {
-			unlock()
-			return err
-		}
-	}
-	// `If-None-Match: *` is create-only: an import never replaces a note that
-	// already has the name, so the client can pick another one.
-	if r.Header.Get("If-None-Match") == "*" {
-		if err := checkAbsent(target); err != nil {
-			unlock()
-			return err
-		}
-	}
-	err = vaultfiles.ReplaceFile(target, data)
-	unlock()
-	if err != nil {
-		return err
-	}
-	vaultgit.Touch(tenant, "upload", ids.Upper(actor), "")
-
-	sum := sha256.Sum256(data)
-	digest := hex.EncodeToString(sum[:])
-	savedID, err := m.store.Upsert(ctx, vaultfiles.UpsertParams{
-		TenantID:    tenant,
-		SpaceID:     spaceID,
-		Path:        safe,
-		ContentType: contentType,
-		SizeBytes:   int64(len(data)),
-		SHA256:      digest,
-		Processed:   wire.Query(c, "processed") == "true",
-		Metadata:    sidecar,
+	saved, err := m.files.Write(r.Context(), WriteInput{
+		Vault: tenant, Actor: actor, Path: safe, Data: data,
+		ContentType: contentType, SpaceID: spaceID, KeepNilSpace: true, Metadata: sidecar,
+		Note: &isNote, Processed: wire.Query(c, "processed") == "true",
+		IfMatch: r.Header.Get("If-Match"), IfAbsent: r.Header.Get("If-None-Match") == "*",
+		Reason: "upload",
 	})
 	if err != nil {
 		return err
-	}
-	if err := m.store.StampActors(ctx, savedID, actor); err != nil {
-		return err
-	}
-	slog.InfoContext(ctx, "vault upload", "tenant", ids.Upper(tenant), "path", safe, "bytes", len(data))
-
-	m.sink.Enqueue(tenant, achievements.EventVaultUploaded)
-	m.latches.Latch(ctx, onboardlatch.FirstCapture, tenant)
-
-	m.analytics.Capture("vault_file_uploaded", ids.Upper(actor), map[string]any{
-		"content_type": contentType,
-		"is_note":      isNote,
-		"has_space":    spaceID != nil,
-	})
-	var memoryID *wire.UUID
-	if isNote {
-		memoryID = m.upsertNoteMemory(ctx, tenant, savedID, spaceID, safe, data, sidecar)
-	}
-	// UpdateContent drops a note's chunks, so every note write re-indexes: chunks for
-	// retrieval and [[wikilinks]] for backlinks and the graph. Then the vault's
-	// pending links re-resolve, since this note may be the one they point at.
-	if memoryID != nil && m.indexer != nil {
-		if content, ok := vaultfiles.DecodeUTF8(data); ok {
-			m.indexer.IndexBestEffort(ctx, chunkindex.IndexParams{
-				Tenant: tenant, MemoryID: memoryID.UUID, VaultFileID: &savedID, SpaceID: spaceID,
-				SourcePath: &safe, Content: content,
-			})
-			// Links elsewhere that were waiting for this note now find it.
-			m.indexer.ReresolvePendingBestEffort(ctx, tenant)
-		}
-	}
-	// An unfiled note gets a Space suggestion in the background.
-	if isNote && spaceID == nil && m.filing != nil {
-		m.filing(tenant, savedID)
 	}
 	return wire.JSON(c, http.StatusOK, VaultUploadResponse{
-		Path: safe, Size: len(data), ContentType: contentType, Sha256: digest, MemoryId: memoryID,
+		Path: saved.Path, Size: saved.Size, ContentType: saved.ContentType, Sha256: saved.SHA256,
+		MemoryId: wireUUID(saved.MemoryID),
 	})
 }
 
@@ -337,58 +244,6 @@ func (m *Module) readFile(r *http.Request) ([]byte, error) {
 		return nil, wire.ErrBodyTooLarge
 	}
 	return data, nil
-}
-
-// upsertNoteMemory gives a written note its recall memory, keyed on the vault
-// file. The file write already succeeded, so a failure is logged and the response
-// has no memoryId. Text that isn't UTF-8 has no memory at all. Indexing (chunks and
-// wikilinks) runs after it in upload, since UpdateContent deletes the note's chunks.
-func (m *Module) upsertNoteMemory(ctx context.Context, tenant, fileID uuid.UUID, spaceID *uuid.UUID, path string, data []byte, sidecar *vaultfiles.Metadata) *wire.UUID {
-	content, ok := vaultfiles.DecodeUTF8(data)
-	if m.embeddings == nil || !ok || content == "" {
-		return nil
-	}
-	id, err := m.writeNoteMemory(ctx, tenant, fileID, spaceID, content, sidecar)
-	if err != nil {
-		slog.ErrorContext(ctx, "note memory upsert failed", "tenant", ids.Upper(tenant), "path", path, "error", err)
-		return nil
-	}
-	return &wire.UUID{UUID: id}
-}
-
-func (m *Module) writeNoteMemory(ctx context.Context, tenant, fileID uuid.UUID, spaceID *uuid.UUID, content string, sidecar *vaultfiles.Metadata) (uuid.UUID, error) {
-	// An embedding outage still writes the memory, without a vector.
-	vec, err := embedding.EmbedForWrite(ctx, m.embeddings, content, tenant, "vault.note")
-	if err != nil {
-		return uuid.Nil, err
-	}
-	existing, err := m.memories.IDBySourceVaultFileID(ctx, tenant, fileID)
-	if err != nil {
-		return uuid.Nil, err
-	}
-	if existing != nil {
-		if _, err := m.memories.UpdateContent(ctx, tenant, *existing, content, vec, nil); err != nil {
-			return uuid.Nil, err
-		}
-		return *existing, nil
-	}
-	var tags []string
-	if sidecar != nil {
-		tags = sidecar.Tags
-	}
-	created, err := m.memories.Create(ctx, memorystore.CreateParams{
-		Tenant:            tenant,
-		Content:           content,
-		Embedding:         vec,
-		Tags:              tags,
-		SourceVaultFileID: &fileID,
-		SpaceID:           spaceID,
-		ReviewState:       memorystore.ReviewAuto,
-	})
-	if err != nil {
-		return uuid.Nil, err
-	}
-	return created.ID, nil
 }
 
 // list is VaultController.list, newest first.

@@ -81,29 +81,26 @@ type Options struct {
 const defaultMaxFileSize = 10 * 1024 * 1024
 
 type Module struct {
-	pool       *pgxpool.Pool
-	q          *db.Queries
-	index      *vaultindex.Service
-	soul       *soul.Service
-	access     *vaultaccess.Service
-	store      *vaultfiles.Store
-	files      *Files
-	memories   *memorystore.Repository
-	links      *chunkindex.LinkRepository
-	paths      vaultpaths.Paths
-	identify   echo.MiddlewareFunc
-	limits     *ratelimit.Store
-	spaces     SpaceSeeder
-	embeddings embedding.Service
-	guard      *diskguard.Guard
-	sink       *achievementsink.Sink
-	latches    *onboardlatch.Latches
-	analytics  *posthog.Client
-	filing     func(tenant, file uuid.UUID)
-	indexer    *chunkindex.Indexer
-	maxFile    int64
-	now        func() time.Time
-	locks      pathLocks
+	pool      *pgxpool.Pool
+	q         *db.Queries
+	index     *vaultindex.Service
+	soul      *soul.Service
+	access    *vaultaccess.Service
+	store     *vaultfiles.Store
+	files     *Files
+	memories  *memorystore.Repository
+	links     *chunkindex.LinkRepository
+	paths     vaultpaths.Paths
+	identify  echo.MiddlewareFunc
+	limits    *ratelimit.Store
+	spaces    SpaceSeeder
+	guard     *diskguard.Guard
+	analytics *posthog.Client
+	maxFile   int64
+	now       func() time.Time
+	// locks is shared with files, so a Files.Write and a route's own
+	// check-and-write of one path never interleave.
+	locks *pathLocks
 }
 
 func New(pool *pgxpool.Pool, opts Options) *Module {
@@ -114,31 +111,35 @@ func New(pool *pgxpool.Pool, opts Options) *Module {
 	store := vaultfiles.NewStore(pool, opts.Paths)
 	links := chunkindex.NewLinkRepository(pool)
 	memories := memorystore.New(pool, nil)
+	locks := &pathLocks{}
 	return &Module{
-		files:      &Files{store: store, memories: memories, paths: opts.Paths, now: time.Now},
-		pool:       pool,
-		q:          db.New(pool),
-		index:      vaultindex.New(pool, store, links),
-		soul:       soul.New(opts.Paths, opts.HermesDataRoot),
-		access:     vaultaccess.New(pool),
-		store:      store,
-		memories:   memories,
-		links:      links,
-		paths:      opts.Paths,
-		identify:   opts.Identify,
-		limits:     opts.Limits,
-		spaces:     opts.Spaces,
-		embeddings: opts.Embeddings,
-		guard:      opts.Guard,
-		sink:       opts.Sink,
-		latches:    opts.Latches,
-		analytics:  opts.Analytics,
-		filing:     opts.CaptureFiling,
-		indexer:    opts.Indexer,
-		maxFile:    maxFile,
-		now:        time.Now,
+		files: newFiles(store, memories, opts.Paths, locks, FilesOptions{
+			Embeddings: opts.Embeddings, Indexer: opts.Indexer, Guard: opts.Guard,
+			Sink: opts.Sink, Latches: opts.Latches, Analytics: opts.Analytics, Filing: opts.CaptureFiling,
+		}),
+		pool:      pool,
+		q:         db.New(pool),
+		index:     vaultindex.New(pool, store, links),
+		soul:      soul.New(opts.Paths, opts.HermesDataRoot),
+		access:    vaultaccess.New(pool),
+		store:     store,
+		memories:  memories,
+		links:     links,
+		paths:     opts.Paths,
+		identify:  opts.Identify,
+		limits:    opts.Limits,
+		spaces:    opts.Spaces,
+		guard:     opts.Guard,
+		analytics: opts.Analytics,
+		maxFile:   maxFile,
+		now:       time.Now,
+		locks:     locks,
 	}
 }
+
+// Files is the module's write pipeline for callers with no HTTP request. It
+// shares the routes' path locks, so its writes and theirs never interleave.
+func (m *Module) Files() *Files { return m.files }
 
 // Register mirrors App+build.swift's four /v1/vault groups, middleware in Swift's
 // order. Every group sits behind auth.Identify: Swift's authenticator never
