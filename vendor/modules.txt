@@ -297,7 +297,7 @@ github.com/klauspost/compress/internal/regmask
 github.com/klauspost/compress/internal/snapref
 github.com/klauspost/compress/zstd
 github.com/klauspost/compress/zstd/internal/xxhash
-# github.com/labstack/echo/v5 v5.4.6
+# github.com/labstack/echo/v5 v5.4.7
 ## explicit; go 1.25.0
 github.com/labstack/echo/v5
 github.com/labstack/echo/v5/middleware
@@ -631,7 +631,7 @@ golang.org/x/mod/internal/lazyregexp
 golang.org/x/mod/modfile
 golang.org/x/mod/module
 golang.org/x/mod/semver
-# golang.org/x/net v0.62.0
+# golang.org/x/net v0.63.0
 ## explicit; go 1.26.0
 golang.org/x/net/context
 golang.org/x/net/http/httpguts
