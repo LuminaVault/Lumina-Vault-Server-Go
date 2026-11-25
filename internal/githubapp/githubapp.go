@@ -37,7 +37,10 @@ const (
 	// refreshAhead: a cached installation token is replaced this long before
 	// it expires (D1).
 	refreshAhead = 5 * time.Minute
-	maxBody      = 4 << 20
+	// maxBody is the largest answer read. GitHub cuts a recursive tree at 7 MB
+	// and says so (truncated); an answer over this is ErrTooLarge, not a
+	// parse failure.
+	maxBody = 8 << 20
 )
 
 var (
@@ -49,8 +52,22 @@ var (
 	// ErrForbidden is a 403, including a suspended installation.
 	ErrForbidden = errors.New("githubapp: forbidden")
 	// ErrUnavailable is everything else GitHub or the network did: a 5xx, a
-	// timeout, a body that does not parse, a redirect.
+	// timeout, a body that does not parse.
 	ErrUnavailable = errors.New("githubapp: github unavailable")
+	// ErrRateLimited is GitHub's primary or secondary rate limit: a 429, or a
+	// 403 with X-RateLimit-Remaining: 0 or a Retry-After. The StatusError in
+	// the chain says when to come back.
+	ErrRateLimited = errors.New("githubapp: rate limited")
+	// ErrMoved is a redirect: the repository was renamed or transferred.
+	// Redirects are never followed; the repository calls ask for the new name
+	// by id and try once more, so callers only see this when that fails too.
+	ErrMoved = errors.New("githubapp: moved")
+	// ErrTooLarge is an answer over maxBody.
+	ErrTooLarge = errors.New("githubapp: response too large")
+	// ErrRepoAccessRemoved is a 422 minting an installation token: the
+	// installation exists but no longer covers the repository (removed from
+	// the installation, deleted or transferred).
+	ErrRepoAccessRemoved = errors.New("githubapp: repository access removed")
 	// ErrBadCode is a code exchange GitHub refused (expired, used, wrong
 	// redirect URI).
 	ErrBadCode = errors.New("githubapp: authorization code refused")
@@ -69,7 +86,7 @@ type Config struct {
 	// endpoints, and the links shown to users.
 	WebBaseURL string
 	// HTTP is the client every request goes through. The copy kept here
-	// refuses redirects.
+	// never follows a redirect: a 3xx comes back as ErrMoved.
 	HTTP *http.Client
 }
 
@@ -116,14 +133,12 @@ func New(cfg Config) (*Client, error) {
 		return nil, err
 	}
 	httpc := *cfg.HTTP
-	httpc.CheckRedirect = func(*http.Request, []*http.Request) error { return errRedirect }
+	httpc.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	return &Client{
 		appID: cfg.AppID, clientID: cfg.ClientID, clientSecret: cfg.ClientSecret, key: cfg.PrivateKey,
 		api: api, web: web, http: &httpc, now: time.Now, tokens: map[tokenKey]cachedToken{},
 	}, nil
 }
-
-var errRedirect = errors.New("githubapp: redirects are not followed")
 
 func baseURL(raw string) (string, error) {
 	u, err := url.Parse(raw)
@@ -189,6 +204,10 @@ func (c *Client) InstallationToken(ctx context.Context, installation, repo int64
 	}
 	path := "/app/installations/" + strconv.FormatInt(installation, 10) + "/access_tokens"
 	if err := c.do(ctx, http.MethodPost, c.api+path, "Bearer "+signed, body, http.StatusCreated, &out); err != nil {
+		var se *StatusError
+		if errors.As(err, &se) && se.Status == http.StatusUnprocessableEntity {
+			se.as = ErrRepoAccessRemoved
+		}
 		return "", err
 	}
 	if out.Token == "" || out.ExpiresAt.IsZero() {
@@ -236,7 +255,7 @@ func (c *Client) ExchangeCode(ctx context.Context, code, redirectURI string) (Us
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
-	status, raw, err := c.send(req)
+	status, header, raw, err := c.send(req)
 	if err != nil {
 		return UserToken{}, err
 	}
@@ -246,7 +265,7 @@ func (c *Client) ExchangeCode(ctx context.Context, code, redirectURI string) (Us
 		Error       string `json:"error"`
 	}
 	if status != http.StatusOK || json.Unmarshal(raw, &out) != nil {
-		return UserToken{}, statusError(status)
+		return UserToken{}, c.statusError(status, header)
 	}
 	// GitHub answers a refused code with 200 and an "error" field.
 	if out.Error != "" || out.AccessToken == "" {
@@ -272,14 +291,14 @@ func (c *Client) RevokeUserToken(ctx context.Context, token string) error {
 	req.SetBasicAuth(c.clientID, c.clientSecret)
 	c.headers(req, "")
 	req.Header.Set("Content-Type", "application/json")
-	status, _, err := c.send(req)
+	status, header, _, err := c.send(req)
 	if err != nil {
 		return err
 	}
 	if status == http.StatusNoContent || status == http.StatusNotFound {
 		return nil
 	}
-	return statusError(status)
+	return c.statusError(status, header)
 }
 
 // Account is the user or organization an installation belongs to.
@@ -301,6 +320,8 @@ type Repository struct {
 	FullName      string `json:"full_name"`
 	Private       bool   `json:"private"`
 	DefaultBranch string `json:"default_branch"`
+	// Archived repositories are read-only: no push can succeed.
+	Archived bool `json:"archived"`
 	// Size is in KiB, as GitHub reports it.
 	Size        int64 `json:"size"`
 	Permissions struct {
@@ -374,27 +395,54 @@ type Branch struct {
 // GET /git/trees documents taking (it does not document a commit SHA).
 func (b Branch) TreeSHA() string { return b.Commit.Commit.Tree.SHA }
 
+// RepoRef names a repository for the calls GitHub only documents by name. ID
+// is what survives a rename or a transfer; FullName (owner/name) may be stale.
+type RepoRef struct {
+	ID       int64
+	FullName string
+}
+
+// repoGet is GET /repos/{owner}/{name}{rest}. GitHub answers a renamed or
+// transferred repository with a redirect, which is never followed: the
+// current name is read by id (GET /repositories/{id}) and the call is made
+// once more with it. A caller that stores the name refreshes it with
+// RepositoryByID.
+func (c *Client) repoGet(ctx context.Context, token string, repo RepoRef, rest string, out any) error {
+	err := c.get(ctx, "/repos/"+repoPath(repo.FullName)+rest, "Bearer "+token, out)
+	if !errors.Is(err, ErrMoved) || repo.ID <= 0 {
+		return err
+	}
+	current, err := c.RepositoryByID(ctx, token, repo.ID)
+	if err != nil {
+		return err
+	}
+	if current.FullName == "" || current.FullName == repo.FullName {
+		return fmt.Errorf("%w: redirected with no new name", ErrUnavailable)
+	}
+	return c.get(ctx, "/repos/"+repoPath(current.FullName)+rest, "Bearer "+token, out)
+}
+
 // Branches lists the first 100 branches of a repository with the given token.
 // An empty repository has none.
-func (c *Client) Branches(ctx context.Context, token, fullName string) ([]Branch, error) {
+func (c *Client) Branches(ctx context.Context, token string, repo RepoRef) ([]Branch, error) {
 	var out []Branch
-	if err := c.get(ctx, "/repos/"+repoPath(fullName)+"/branches?per_page=100", "Bearer "+token, &out); err != nil {
+	if err := c.repoGet(ctx, token, repo, "/branches?per_page=100", &out); err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
 // Branch reads one branch; a branch that does not exist is ErrNotFound.
-func (c *Client) Branch(ctx context.Context, token, fullName, branch string) (Branch, error) {
+func (c *Client) Branch(ctx context.Context, token string, repo RepoRef, branch string) (Branch, error) {
 	var out Branch
-	if err := c.get(ctx, "/repos/"+repoPath(fullName)+"/branches/"+segments(branch), "Bearer "+token, &out); err != nil {
+	if err := c.repoGet(ctx, token, repo, "/branches/"+segments(branch), &out); err != nil {
 		return Branch{}, err
 	}
 	return out, nil
 }
 
 // RepositoryByID reads a repository by its id (GET /repositories/{id}), which
-// survives a rename.
+// survives a rename and a transfer.
 func (c *Client) RepositoryByID(ctx context.Context, token string, id int64) (Repository, error) {
 	var out Repository
 	if err := c.get(ctx, "/repositories/"+strconv.FormatInt(id, 10), "Bearer "+token, &out); err != nil {
@@ -412,16 +460,18 @@ type TreeEntry struct {
 	Size int64  `json:"size"`
 }
 
-// Tree is a recursive tree listing. Truncated means GitHub cut it short.
+// Tree is a recursive tree listing. Truncated means GitHub cut it short
+// (over 100,000 entries or 7 MB).
 type Tree struct {
 	Entries   []TreeEntry `json:"tree"`
 	Truncated bool        `json:"truncated"`
 }
 
 // Tree lists every entry under a commit (GET .../git/trees/{sha}?recursive=1).
-func (c *Client) Tree(ctx context.Context, token, fullName, treeSHA string) (Tree, error) {
+// A listing over the size this client reads is ErrTooLarge.
+func (c *Client) Tree(ctx context.Context, token string, repo RepoRef, treeSHA string) (Tree, error) {
 	var out Tree
-	if err := c.get(ctx, "/repos/"+repoPath(fullName)+"/git/trees/"+url.PathEscape(treeSHA)+"?recursive=1", "Bearer "+token, &out); err != nil {
+	if err := c.repoGet(ctx, token, repo, "/git/trees/"+url.PathEscape(treeSHA)+"?recursive=1", &out); err != nil {
 		return Tree{}, err
 	}
 	return out, nil
@@ -469,15 +519,18 @@ func (c *Client) do(ctx context.Context, method, rawURL, authorization string, b
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	status, raw, err := c.send(req)
+	status, header, raw, err := c.send(req)
 	if err != nil {
 		return err
 	}
 	if status != want {
-		return statusError(status)
+		return c.statusError(status, header)
 	}
 	if out == nil {
 		return nil
+	}
+	if len(raw) > maxBody {
+		return ErrTooLarge
 	}
 	if err := json.Unmarshal(raw, out); err != nil {
 		return fmt.Errorf("%w: response did not parse", ErrUnavailable)
@@ -487,38 +540,105 @@ func (c *Client) do(ctx context.Context, method, rawURL, authorization string, b
 
 // send runs req. A transport error becomes ErrUnavailable with the context's
 // error kept for errors.Is; the URL (which never holds a secret) is dropped
-// anyway, since url.Error prints it.
-func (c *Client) send(req *http.Request) (int, []byte, error) {
+// anyway, since url.Error prints it. At most maxBody+1 bytes of the answer are
+// read, so a caller can tell a body that was cut from one that fits.
+func (c *Client) send(req *http.Request) (int, http.Header, []byte, error) {
 	resp, err := c.http.Do(req)
 	if err != nil {
 		if ctxErr := req.Context().Err(); ctxErr != nil {
-			return 0, nil, fmt.Errorf("%w: %w", ErrUnavailable, ctxErr)
+			return 0, nil, nil, fmt.Errorf("%w: %w", ErrUnavailable, ctxErr)
 		}
-		return 0, nil, fmt.Errorf("%w: request failed", ErrUnavailable)
+		return 0, nil, nil, fmt.Errorf("%w: request failed", ErrUnavailable)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxBody))
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxBody+1))
 	if err != nil {
-		return 0, nil, fmt.Errorf("%w: body read failed", ErrUnavailable)
+		if ctxErr := req.Context().Err(); ctxErr != nil {
+			return 0, nil, nil, fmt.Errorf("%w: %w", ErrUnavailable, ctxErr)
+		}
+		return 0, nil, nil, fmt.Errorf("%w: body read failed", ErrUnavailable)
 	}
-	return resp.StatusCode, raw, nil
+	return resp.StatusCode, resp.Header, raw, nil
 }
 
-// StatusError is a non-success answer; its text is the status only.
-type StatusError struct{ Status int }
+// StatusError is a non-success answer. Its text is the status only; beside
+// the status it keeps GitHub's rate-limit answer as numbers and times, never
+// a header's or the body's text.
+type StatusError struct {
+	Status int
+	// RetryAfter is the Retry-After header, zero when there is none.
+	RetryAfter time.Duration
+	// RateLimitRemaining is X-RateLimit-Remaining, nil when there is none.
+	RateLimitRemaining *int
+	// RateLimitReset is X-RateLimit-Reset, zero when there is none.
+	RateLimitReset time.Time
+	// as replaces what Unwrap answers, for a status that means something
+	// particular on one endpoint.
+	as error
+}
 
 func (e *StatusError) Error() string { return "githubapp: github answered " + strconv.Itoa(e.Status) }
 
+// RateLimited reports GitHub's primary or secondary rate limit: a 429, or a
+// 403 that says no requests remain or names a Retry-After.
+func (e *StatusError) RateLimited() bool {
+	return e.Status == http.StatusTooManyRequests ||
+		(e.Status == http.StatusForbidden && (e.exhausted() || e.RetryAfter > 0))
+}
+
+func (e *StatusError) exhausted() bool {
+	return e.RateLimitRemaining != nil && *e.RateLimitRemaining == 0
+}
+
+// RetryAt is when GitHub says to come back: the later of Retry-After from now
+// and the rate-limit reset when no requests remain. Zero when it said nothing.
+func (e *StatusError) RetryAt(now time.Time) time.Time {
+	var at time.Time
+	if e.RetryAfter > 0 {
+		at = now.Add(e.RetryAfter)
+	}
+	if e.exhausted() && e.RateLimitReset.After(at) {
+		at = e.RateLimitReset
+	}
+	return at
+}
+
 func (e *StatusError) Unwrap() error {
-	switch e.Status {
-	case http.StatusNotFound:
+	switch {
+	case e.as != nil:
+		return e.as
+	case e.RateLimited(): // before the 403 below
+		return ErrRateLimited
+	case e.Status == http.StatusNotFound:
 		return ErrNotFound
-	case http.StatusUnauthorized:
+	case e.Status == http.StatusUnauthorized:
 		return ErrUnauthorized
-	case http.StatusForbidden:
+	case e.Status == http.StatusForbidden:
 		return ErrForbidden
+	case e.Status >= 300 && e.Status < 400:
+		return ErrMoved
 	}
 	return ErrUnavailable
 }
 
-func statusError(status int) error { return &StatusError{Status: status} }
+// maxRetryAfter bounds a Retry-After this client believes.
+const maxRetryAfter = 24 * time.Hour
+
+// statusError keeps the status and the rate-limit headers, parsed.
+func (c *Client) statusError(status int, h http.Header) error {
+	e := &StatusError{Status: status}
+	if v := strings.TrimSpace(h.Get("Retry-After")); v != "" {
+		if secs, err := strconv.ParseInt(v, 10, 64); err == nil && secs > 0 {
+			e.RetryAfter = min(time.Duration(secs)*time.Second, maxRetryAfter)
+		} else if at, err := http.ParseTime(v); err == nil && at.After(c.now()) {
+			e.RetryAfter = min(at.Sub(c.now()), maxRetryAfter)
+		}
+	}
+	if n, err := strconv.Atoi(strings.TrimSpace(h.Get("X-RateLimit-Remaining"))); err == nil && n >= 0 {
+		e.RateLimitRemaining = &n
+	}
+	if secs, err := strconv.ParseInt(strings.TrimSpace(h.Get("X-RateLimit-Reset")), 10, 64); err == nil && secs > 0 {
+		e.RateLimitReset = time.Unix(secs, 0)
+	}
+	return e
+}
