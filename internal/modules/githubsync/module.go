@@ -183,13 +183,18 @@ func errRemoteNotEmpty(s githubsync.Summary) *apiError {
 	return e
 }
 
+// appOps are the calls made as the App (its JWT or an installation token).
+// A 401 there is the server's own credential failing (a bad key, a skewed
+// clock), not the user's sign-in expiring.
+var appOps = map[string]bool{"installation_token": true, "repository": true, "branch": true, "tree": true}
+
 // githubErr maps a GitHub failure to D14's codes. The error's own text is
 // never shown or logged beyond its kind.
 func (m *Module) githubErr(ctx context.Context, op string, err error) error {
 	if errors.Is(err, githubapp.ErrNotFound) || errors.Is(err, githubapp.ErrForbidden) {
 		return errRepoNotAccessible
 	}
-	if errors.Is(err, githubapp.ErrUnauthorized) {
+	if errors.Is(err, githubapp.ErrUnauthorized) && !appOps[op] {
 		return errSessionExpired
 	}
 	m.log.WarnContext(ctx, "github sync: github call failed", "op", op, "kind", kind(err))
@@ -895,7 +900,7 @@ func (m *Module) checkRemote(ctx context.Context, token, fullName, branch string
 	if err != nil {
 		return m.githubErr(ctx, "branch", err)
 	}
-	tree, err := m.client.Tree(ctx, token, fullName, b.Commit.SHA)
+	tree, err := m.client.Tree(ctx, token, fullName, b.TreeSHA())
 	if err != nil {
 		return m.githubErr(ctx, "tree", err)
 	}

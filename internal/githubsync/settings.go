@@ -36,11 +36,21 @@ func Enabled(cfg config.Config) bool {
 	return strings.EqualFold(strings.TrimSpace(cfg.GitHubSyncEnabled), "true")
 }
 
+// swiftBool is how cmd/App reads VAULT_GIT_ENABLED (swiftBoolDefaultFalse),
+// so history and sync never disagree on whether it is on.
+func swiftBool(raw string) bool {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "yes", "1", "true":
+		return true
+	}
+	return false
+}
+
 // SettingsFrom checks the GitHub keys. It is called only with the switch on:
 // with it off nothing reads them. The error names the first missing or bad
 // key and never quotes a value.
 func SettingsFrom(cfg config.Config) (Settings, error) {
-	if !strings.EqualFold(strings.TrimSpace(cfg.VaultGitEnabled), "true") {
+	if !swiftBool(cfg.VaultGitEnabled) {
 		return Settings{}, errors.New("githubsync: needs VAULT_GIT_ENABLED=true")
 	}
 	appID, err := strconv.ParseInt(strings.TrimSpace(cfg.GitHubAppID), 10, 64)

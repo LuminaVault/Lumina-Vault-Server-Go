@@ -208,7 +208,8 @@ func (s *Server) revokeUser(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// appJWT checks the App JWT: RS256 under the stub's key, iss = AppID.
+// appJWT checks the App JWT: RS256 under the stub's key, iss = AppID. The
+// caller holds the lock, so a test may swap Key.
 func (s *Server) appJWT(r *http.Request) bool {
 	tok, err := jwt.ParseWithClaims(bearer(r), &jwt.RegisteredClaims{}, func(*jwt.Token) (any, error) {
 		return &s.Key.PublicKey, nil
@@ -221,6 +222,8 @@ func (s *Server) appJWT(r *http.Request) bool {
 }
 
 func (s *Server) mint(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if !s.appJWT(r) {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
@@ -234,8 +237,6 @@ func (s *Server) mint(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		return
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	repos, ok := s.InstallationRepos[inst]
 	if !ok {
 		w.WriteHeader(http.StatusNotFound)

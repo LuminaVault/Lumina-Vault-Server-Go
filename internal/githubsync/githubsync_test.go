@@ -211,6 +211,11 @@ func TestSettingsFrom(t *testing.T) {
 	require.Equal(t, int64(123), s.AppID)
 	require.Equal(t, int64(200<<20), s.MaxRepoBytes)
 
+	yes := good
+	yes.VaultGitEnabled = "1"
+	_, err = githubsync.SettingsFrom(yes)
+	require.NoError(t, err, "VAULT_GIT_ENABLED is read as cmd/App reads it")
+
 	staging := good
 	staging.LVEnvironment = "staging"
 	staging.GitHubSyncCallbackURL = "http://localhost:8080/v1/github-sync/callback"

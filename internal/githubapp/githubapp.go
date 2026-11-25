@@ -361,9 +361,18 @@ func (c *Client) UserInstallationRepos(ctx context.Context, userToken string, in
 type Branch struct {
 	Name   string `json:"name"`
 	Commit struct {
-		SHA string `json:"sha"`
+		SHA    string `json:"sha"`
+		Commit struct {
+			Tree struct {
+				SHA string `json:"sha"`
+			} `json:"tree"`
+		} `json:"commit"`
 	} `json:"commit"`
 }
+
+// TreeSHA is the root tree of the branch's head commit, which is what
+// GET /git/trees documents taking (it does not document a commit SHA).
+func (b Branch) TreeSHA() string { return b.Commit.Commit.Tree.SHA }
 
 // Branches lists the first 100 branches of a repository with the given token.
 // An empty repository has none.
@@ -410,9 +419,9 @@ type Tree struct {
 }
 
 // Tree lists every entry under a commit (GET .../git/trees/{sha}?recursive=1).
-func (c *Client) Tree(ctx context.Context, token, fullName, commitSHA string) (Tree, error) {
+func (c *Client) Tree(ctx context.Context, token, fullName, treeSHA string) (Tree, error) {
 	var out Tree
-	if err := c.get(ctx, "/repos/"+repoPath(fullName)+"/git/trees/"+url.PathEscape(commitSHA)+"?recursive=1", "Bearer "+token, &out); err != nil {
+	if err := c.get(ctx, "/repos/"+repoPath(fullName)+"/git/trees/"+url.PathEscape(treeSHA)+"?recursive=1", "Bearer "+token, &out); err != nil {
 		return Tree{}, err
 	}
 	return out, nil

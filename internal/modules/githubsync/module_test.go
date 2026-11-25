@@ -3,6 +3,8 @@ package githubsync_test
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
 	"encoding/json"
 	"log/slog"
 	"lumina/internal/auth"
@@ -577,8 +579,9 @@ func TestConnectChecks(t *testing.T) {
 	v.gh.Lock()
 	b := githubapp.Branch{Name: "main"}
 	b.Commit.SHA = "c0ffee"
+	b.Commit.Commit.Tree.SHA = "7ree"
 	v.gh.Branches["octocat/notes"] = []githubapp.Branch{b}
-	v.gh.Trees["c0ffee"] = githubapp.Tree{Entries: []githubapp.TreeEntry{
+	v.gh.Trees["7ree"] = githubapp.Tree{Entries: []githubapp.TreeEntry{
 		{Path: "inbox", Mode: "040000", Type: "tree"},
 		{Path: "inbox/plan.md", Mode: "100644", Type: "blob", SHA: githubsync.BlobID([]byte("remote")), Size: 6},
 		{Path: "inbox/new.md", Mode: "100644", Type: "blob", SHA: "1", Size: 4},
@@ -597,15 +600,15 @@ func TestConnectChecks(t *testing.T) {
 
 	// A truncated listing is too large to plan.
 	v.gh.Lock()
-	tr := v.gh.Trees["c0ffee"]
+	tr := v.gh.Trees["7ree"]
 	tr.Truncated = true
-	v.gh.Trees["c0ffee"] = tr
+	v.gh.Trees["7ree"] = tr
 	v.gh.Unlock()
 	r = v.put(alice, nil, body(map[string]any{"mergeExisting": true}))
 	require.Equal(t, http.StatusRequestEntityTooLarge, r.code, r.String())
 	v.gh.Lock()
 	tr.Truncated = false
-	v.gh.Trees["c0ffee"] = tr
+	v.gh.Trees["7ree"] = tr
 	v.gh.Unlock()
 
 	// In use by another vault.
@@ -633,6 +636,25 @@ func TestConnectChecks(t *testing.T) {
 	r = v.put(alice, nil, map[string]any{"session": "unknown", "installationId": 7, "repositoryId": 456})
 	require.Equal(t, http.StatusBadRequest, r.code)
 	require.Equal(t, "session_expired", r.errCode())
+}
+
+// A 401 on the App's own credential (a rotated key, a skewed clock) is the
+// server's fault: 502 and a log line, not "sign in again".
+func TestAppCredentialFailureIsUnavailable(t *testing.T) {
+	v := newEnv(t)
+	alice := v.user()
+	v.seedGitHub("ghu_alice", "octocat")
+	session := v.signIn(alice, nil, "code-a", "ghu_alice")
+	other, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	v.gh.Lock()
+	v.gh.Key = other
+	v.gh.Unlock()
+	r := v.put(alice, nil, map[string]any{"session": session, "installationId": 7, "repositoryId": 456})
+	require.Equal(t, http.StatusBadGateway, r.code, r.String())
+	require.Equal(t, "github_unavailable", r.errCode())
+	require.Contains(t, v.logs.String(), "op=installation_token")
+	require.Nil(t, v.connection(alice))
 }
 
 func TestInvalidReturnTo(t *testing.T) {
