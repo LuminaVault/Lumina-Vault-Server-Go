@@ -52,7 +52,6 @@ const (
 	maxWake = 10 * time.Minute
 	// SweepInterval is how often GitHubSyncSweep runs (D6).
 	SweepInterval = 5 * time.Minute
-	sweepBatch    = 1000
 
 	defaultPushTimeout = 60 * time.Second
 	defaultConcurrency = 4
@@ -100,7 +99,10 @@ type SyncerOptions struct {
 	// PushTimeout bounds one push (default 60 s).
 	PushTimeout time.Duration
 	// Concurrency bounds pushes in flight in this process (default 4). Each
-	// holds a database connection for the vault's advisory lock.
+	// pins one database connection for the vault's advisory lock for as long
+	// as it runs, and needs a second for its row reads and writes: it must
+	// stay well under the pool's size, or pushes starve the API, and at the
+	// pool's size they wait on each other for ever.
 	Concurrency int
 	// LockedRetry is how soon a vault whose lock another replica holds is
 	// looked at again (default 5 s). That is not a failure and is not recorded.
@@ -261,7 +263,7 @@ func (s *Syncer) dropWake(vault uuid.UUID) {
 // in-memory trigger was lost to a restart, and what retries after a wait no
 // timer survived. It is safe on every replica at once.
 func (s *Syncer) Sweep(ctx context.Context) (looked int, err error) {
-	vaults, err := s.opts.Store.Due(ctx, s.opts.Now(), sweepBatch)
+	vaults, err := s.opts.Store.Due(ctx, s.opts.Now())
 	if err != nil {
 		return 0, err
 	}

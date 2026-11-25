@@ -162,7 +162,7 @@ func TestMigrationDownAndAbsentTable(t *testing.T) {
 
 	// The worker's reads and writes take the absent table the same way.
 	store := githubsync.NewStore(p)
-	due, err := store.Due(ctx, time.Now(), 10)
+	due, err := store.Due(ctx, time.Now())
 	require.NoError(t, err)
 	require.Empty(t, due)
 	key := githubsync.Key{Vault: uuid.New(), RepoID: 1, Branch: "main"}

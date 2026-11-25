@@ -1135,6 +1135,17 @@ func (v *env) commit(vault uuid.UUID, path, body string) string {
 	return head
 }
 
+// settled waits until the vault's row satisfies ok and no sync is running or
+// queued. It reads the store, not the status route, which is rate-limited on
+// the test's frozen clock.
+func (v *env) settled(vault uuid.UUID, ok func(*githubsync.Connection) bool) {
+	v.t.Helper()
+	require.Eventually(v.t, func() bool {
+		c, err := githubsync.NewStore(v.pool).Get(context.Background(), vault)
+		return err == nil && c != nil && ok(c) && !v.syncer.Syncing(vault)
+	}, 20*time.Second, 10*time.Millisecond)
+}
+
 type syncStatus struct {
 	CanManage  bool `json:"canManage"`
 	Connection *struct {
@@ -1183,7 +1194,7 @@ func TestSyncNow(t *testing.T) {
 	v.gh.Git.Status[456] = http.StatusServiceUnavailable
 	v.gh.Unlock()
 	head := v.commit(vault, "note.md", "hello")
-	require.Eventually(t, func() bool { return v.status(bob, &vault).Connection.Error != nil }, 10*time.Second, 10*time.Millisecond)
+	v.settled(vault, func(c *githubsync.Connection) bool { return c.ErrorCode != nil })
 	st = v.status(carol, &vault)
 	require.Equal(t, githubsync.StateActive, st.Connection.State)
 	require.Equal(t, "sync_failed", st.Connection.Error.Code)
@@ -1205,21 +1216,23 @@ func TestSyncNow(t *testing.T) {
 	r = v.do(bob, &vault, http.MethodPost, route, nil)
 	require.Equal(t, http.StatusAccepted, r.code, r.String())
 	require.Contains(t, r.String(), `"canManage":false`)
-	require.Eventually(t, func() bool { return v.gh.Git.Tip(456, "main") == head }, 10*time.Second, 10*time.Millisecond)
-	require.Eventually(t, func() bool {
-		st := v.status(bob, &vault)
-		return !st.Connection.PendingPush && !st.Connection.Syncing && st.Connection.Error == nil && st.Connection.LastPushAt != nil
-	}, 10*time.Second, 10*time.Millisecond)
+	v.settled(vault, func(c *githubsync.Connection) bool { return c.RemoteSHA != nil && *c.RemoteSHA == head })
+	require.Equal(t, head, v.gh.Git.Tip(456, "main"))
+	st = v.status(bob, &vault)
+	require.False(t, st.Connection.PendingPush)
+	require.False(t, st.Connection.Syncing)
+	require.Nil(t, st.Connection.Error)
+	require.NotNil(t, st.Connection.LastPushAt)
 
 	// Stopped for a rejected push; the owner fixed the branch rule.
 	v.exec(`UPDATE github_sync_connections SET state = 'needs_attention', error_code = 'push_rejected', error_at = now(), remote_sha = NULL WHERE vault_id = $1`, vault)
 	require.False(t, v.status(alice, &vault).Connection.Error.Retrying)
 	r = v.do(alice, &vault, http.MethodPost, route, nil)
 	require.Equal(t, http.StatusAccepted, r.code, r.String())
-	require.Eventually(t, func() bool {
-		st := v.status(alice, &vault)
-		return st.Connection.State == githubsync.StateActive && st.Connection.Error == nil && !st.Connection.PendingPush
-	}, 10*time.Second, 10*time.Millisecond)
+	v.settled(vault, func(c *githubsync.Connection) bool {
+		return c.State == githubsync.StateActive && c.ErrorCode == nil && c.RemoteSHA != nil
+	})
+	require.False(t, v.status(alice, &vault).Connection.PendingPush)
 
 	// An uninstalled App is not something "Sync now" can fix.
 	v.exec(`UPDATE github_sync_connections SET state = 'needs_attention', error_code = 'installation_removed', error_at = now() WHERE vault_id = $1`, vault)
@@ -1254,8 +1267,9 @@ func TestDisconnectRemovesTheRemote(t *testing.T) {
 	alice := v.user()
 	v.connectVault(alice, nil)
 	head := v.commit(alice, "note.md", "hello")
-	require.Eventually(t, func() bool { return v.gh.Git.Tip(456, "main") == head }, 10*time.Second, 10*time.Millisecond)
-	require.Eventually(t, func() bool { return !v.status(alice, nil).Connection.PendingPush }, 10*time.Second, 10*time.Millisecond)
+	v.settled(alice, func(c *githubsync.Connection) bool { return c.RemoteSHA != nil && *c.RemoteSHA == head })
+	require.Equal(t, head, v.gh.Git.Tip(456, "main"))
+	require.False(t, v.status(alice, nil).Connection.PendingPush)
 	remote := func() string {
 		t.Helper()
 		repo, err := vaultgit.Open(v.paths.Raw(alice))

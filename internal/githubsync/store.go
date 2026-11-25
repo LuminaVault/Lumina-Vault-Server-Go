@@ -227,13 +227,14 @@ func (s *Store) update(ctx context.Context, sql string, args ...any) (bool, erro
 
 // Due lists the active connections of vaults that are not archived (D13) and
 // whose retry time, if any, has passed: the ones a sweep looks at (D6).
-// Oldest touched first.
-func (s *Store) Due(ctx context.Context, now time.Time, limit int) ([]uuid.UUID, error) {
+// All of them, every time: a row that is in sync is never touched, so no
+// ordering would bring a skipped one to the front.
+func (s *Store) Due(ctx context.Context, now time.Time) ([]uuid.UUID, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT c.vault_id FROM github_sync_connections c
 		JOIN vaults v ON v.id = c.vault_id
 		WHERE c.state = $1 AND (c.next_retry_at IS NULL OR c.next_retry_at <= $2) AND v.archived_at IS NULL
-		ORDER BY c.updated_at LIMIT $3`, StateActive, now, limit)
+		ORDER BY c.vault_id`, StateActive, now)
 	if missingTable(err) {
 		return nil, nil
 	}

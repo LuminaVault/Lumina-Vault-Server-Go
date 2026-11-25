@@ -62,7 +62,7 @@ func githubSync(pool *pgxpool.Pool, cfg config.Config, paths vaultpaths.Paths, l
 	store := githubsync.NewStore(pool)
 	syncer := githubsync.NewSyncer(githubsync.SyncerOptions{
 		Store: store, GitHub: client, Repos: history.committer, RawRoot: paths.Raw,
-		GitBaseURL: settings.GitBaseURL, Log: log,
+		GitBaseURL: settings.GitBaseURL, Concurrency: pushConcurrency(pool), Log: log,
 	})
 	history.onCommit(syncer.OnCommit)
 	module = githubsyncmod.New(githubsyncmod.Options{
@@ -72,4 +72,17 @@ func githubSync(pool *pgxpool.Pool, cfg config.Config, paths vaultpaths.Paths, l
 		WebReturnOrigins: cfg.CORSAllowedOrigins, Limits: limits, Sync: syncer, Log: log,
 	})
 	return module, []jobs.Job{syncer.SweepJob()}, syncer.Stop
+}
+
+// pushConcurrency is how many pushes may run at once in this process: a
+// quarter of the database pool, at least 1 and at most 4. A push pins one
+// pool connection for the vault's advisory lock for up to a minute and needs
+// a second for its own queries, so pushes must never be able to take the
+// pool: the API would wait behind them, and at the pool's size they would
+// wait on each other. pgx's default pool is max(4, CPUs), which gives 1.
+func pushConcurrency(pool *pgxpool.Pool) int {
+	if pool == nil {
+		return 1
+	}
+	return max(1, min(4, int(pool.Config().MaxConns)/4))
 }
