@@ -311,7 +311,7 @@ func (r *Repo) status(held *heldPaths) (*git.Worktree, git.Status, error) {
 // headClashes reports whether HEAD's tree has a name that is both an entry
 // and the folder of other entries.
 func (r *Repo) headClashes() (bool, error) {
-	ref, err := r.repo.Head()
+	ref, err := r.headRef()
 	if err != nil {
 		return false, err
 	}
@@ -507,7 +507,7 @@ func (r *Repo) Log(path string, limit int, before string) ([]Version, error) {
 	if limit <= 0 {
 		limit = 50
 	}
-	head, err := r.repo.Head()
+	head, err := r.headRef()
 	if errors.Is(err, plumbing.ErrReferenceNotFound) {
 		return []Version{}, nil
 	}
@@ -643,9 +643,42 @@ func (r *Repo) Blob(sha, path string) ([]byte, error) {
 	return io.ReadAll(rd)
 }
 
+// headRefWait bounds how long headRef waits for a ref being written.
+const headRefWait = 250 * time.Millisecond
+
+// headRef resolves HEAD. go-git moves a branch by truncating its ref file and
+// then writing the new hash, and it reads an empty ref file as a reference
+// that does not exist. A reader without the tenant's lock (history, the
+// GitHub sync's peeks and status) that lands between the two steps would take
+// a repository with a commit in progress for one with no commits at all. A
+// branch that has a ref file has commits, so while the file is there a
+// missing reference is read again, for at most headRefWait: a file a crash
+// left empty still reads as no commits, as before.
+func (r *Repo) headRef() (*plumbing.Reference, error) {
+	deadline := time.Now().Add(headRefWait)
+	for wait := 500 * time.Microsecond; ; wait = min(2*wait, 20*time.Millisecond) {
+		ref, err := r.repo.Head()
+		if !errors.Is(err, plumbing.ErrReferenceNotFound) || !r.headHasRefFile() || time.Now().After(deadline) {
+			return ref, err
+		}
+		time.Sleep(wait)
+	}
+}
+
+// headHasRefFile reports whether the branch HEAD names has a ref file of its
+// own. A repository before its first commit has none.
+func (r *Repo) headHasRefFile() bool {
+	head, err := r.repo.Storer.Reference(plumbing.HEAD)
+	if err != nil || head.Type() != plumbing.SymbolicReference {
+		return false
+	}
+	info, err := os.Stat(filepath.Join(r.root, ".git", filepath.FromSlash(head.Target().String())))
+	return err == nil && info.Mode().IsRegular()
+}
+
 // Head is the newest commit's hash, or "" before the first commit.
 func (r *Repo) Head() (string, error) {
-	h, err := r.repo.Head()
+	h, err := r.headRef()
 	if errors.Is(err, plumbing.ErrReferenceNotFound) {
 		return "", nil
 	}
