@@ -134,24 +134,34 @@ func TestConnectionCascades(t *testing.T) {
 func TestMigrationDownAndAbsentTable(t *testing.T) {
 	p := pool(t)
 	ctx := context.Background()
-	// 00013 (the merge consent, E4.8) goes down and up on its own first.
-	consent, err := fs.ReadFile(migrations.SQL(), "00013_github_sync_merge_existing.sql")
-	require.NoError(t, err)
-	consentUp, consentDown, ok := strings.Cut(string(consent), "-- +goose Down")
-	require.True(t, ok)
-	hasConsent := func() bool {
-		var n int
-		require.NoError(t, p.QueryRow(ctx, `SELECT count(*) FROM information_schema.columns
-			WHERE table_name = 'github_sync_connections' AND column_name = 'merge_existing'`).Scan(&n))
-		return n == 1
+	// The migrations that add columns go down and up on their own first,
+	// newest first: 00014 (attempts: confirm_count and reserved_at), then
+	// 00013 (the merge consent, E4.8).
+	for _, added := range []struct {
+		file    string
+		columns []string
+	}{
+		{"00014_github_sync_attempts.sql", []string{"confirm_count", "reserved_at"}},
+		{"00013_github_sync_merge_existing.sql", []string{"merge_existing"}},
+	} {
+		sql, err := fs.ReadFile(migrations.SQL(), added.file)
+		require.NoError(t, err)
+		addUp, addDown, ok := strings.Cut(string(sql), "-- +goose Down")
+		require.True(t, ok)
+		has := func() int {
+			var n int
+			require.NoError(t, p.QueryRow(ctx, `SELECT count(*) FROM information_schema.columns
+				WHERE table_name = 'github_sync_connections' AND column_name = ANY($1)`, added.columns).Scan(&n))
+			return n
+		}
+		require.Equal(t, len(added.columns), has(), added.file)
+		_, err = p.Exec(ctx, addDown)
+		require.NoError(t, err)
+		require.Zero(t, has(), added.file)
+		_, err = p.Exec(ctx, strings.SplitN(addUp, "-- +goose Up", 2)[1])
+		require.NoError(t, err)
+		require.Equal(t, len(added.columns), has(), added.file)
 	}
-	require.True(t, hasConsent())
-	_, err = p.Exec(ctx, consentDown)
-	require.NoError(t, err)
-	require.False(t, hasConsent())
-	_, err = p.Exec(ctx, strings.SplitN(consentUp, "-- +goose Up", 2)[1])
-	require.NoError(t, err)
-	require.True(t, hasConsent())
 
 	raw, err := fs.ReadFile(migrations.SQL(), "00012_github_sync.sql")
 	require.NoError(t, err)
@@ -167,8 +177,12 @@ func TestMigrationDownAndAbsentTable(t *testing.T) {
 	require.Empty(t, due)
 	key := githubsync.Key{Vault: uuid.New(), RepoID: 1, Branch: "main"}
 	for name, write := range map[string]func() (bool, error){
-		"MarkPushed":         func() (bool, error) { return store.MarkPushed(ctx, key, "abc", time.Now(), true) },
-		"MarkRetry":          func() (bool, error) { return store.MarkRetry(ctx, key, "sync_failed", time.Now(), time.Now()) },
+		"MarkPushed": func() (bool, error) { return store.MarkPushed(ctx, key, "abc", time.Now(), true) },
+		"MarkRetry": func() (bool, error) {
+			return store.MarkRetry(ctx, key, "sync_failed", time.Now(), time.Now(), false, false)
+		},
+		"Reserve":            func() (bool, error) { return store.Reserve(ctx, key, time.Now(), time.Now(), true) },
+		"Release":            func() (bool, error) { return store.Release(ctx, key, time.Now()) },
 		"MarkNeedsAttention": func() (bool, error) { return store.MarkNeedsAttention(ctx, key, "push_rejected", time.Now()) },
 		"SetRepoFullName":    func() (bool, error) { return store.SetRepoFullName(ctx, key, "a/b", time.Now()) },
 		"Requeue":            func() (bool, error) { return store.Requeue(ctx, key.Vault, []string{"push_rejected"}, "x", time.Now()) },
@@ -278,6 +292,12 @@ func TestSettingsFrom(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(123), s.AppID)
 	require.Equal(t, int64(200<<20), s.MaxRepoBytes)
+	require.Zero(t, s.PushTimeout, "unset: the syncer's default")
+	slow := good
+	slow.GitHubSyncPushTimeout = "5m"
+	s, err = githubsync.SettingsFrom(slow)
+	require.NoError(t, err)
+	require.Equal(t, 5*time.Minute, s.PushTimeout)
 
 	yes := good
 	yes.VaultGitEnabled = "1"
@@ -298,6 +318,8 @@ func TestSettingsFrom(t *testing.T) {
 		"bad key":          func(c *config.Config) { c.GitHubAppPrivateKey = "nope" },
 		"http api":         func(c *config.Config) { c.GitHubAPIBaseURL = "http://api.github.com" },
 		"short poll":       func(c *config.Config) { c.GitHubSyncPollInterval = "10s" },
+		"bad push timeout": func(c *config.Config) { c.GitHubSyncPushTimeout = "soon" },
+		"no push timeout":  func(c *config.Config) { c.GitHubSyncPushTimeout = "0s" },
 		"no callback":      func(c *config.Config) { c.GitHubSyncCallbackURL = "" },
 		"zero max files":   func(c *config.Config) { c.GitHubSyncMaxFiles = 0 },
 		"http callback":    func(c *config.Config) { c.GitHubSyncCallbackURL = "http://api.luminavault.fyi/cb" },

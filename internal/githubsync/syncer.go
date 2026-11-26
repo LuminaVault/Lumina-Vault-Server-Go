@@ -68,6 +68,9 @@ const (
 	deliveryRetention = 7 * 24 * time.Hour
 
 	defaultPushTimeout = 60 * time.Second
+	// pushRate is the slowest upload a push is given time for: its deadline
+	// is PushTimeout plus the repository's size at this rate.
+	pushRate           = 1 << 20 // bytes per second
 	defaultLockTimeout = 5 * time.Minute
 	defaultConcurrency = 4
 	disconnectWait     = 2 * time.Second
@@ -120,7 +123,8 @@ type SyncerOptions struct {
 	// is ever pulled, and nothing is forced.
 	Pull Puller
 	// MaxRepoBytes is GITHUB_SYNC_MAX_REPO_MB (D11), checked before every
-	// fetch against the size GitHub reports. Zero: no check.
+	// fetch against the size GitHub reports, and against the pack of every
+	// push before it is sent: go-git holds that pack in memory. Zero: no check.
 	MaxRepoBytes int64
 	// PollInterval is how often PollJob asks every remote for its tip (D9).
 	PollInterval time.Duration
@@ -128,7 +132,10 @@ type SyncerOptions struct {
 	// vault's lock, a pinned database connection and a worker slot are held
 	// that long at most (default 5 min).
 	LockTimeout time.Duration
-	// PushTimeout bounds one push (default 60 s).
+	// PushTimeout is GITHUB_SYNC_PUSH_TIMEOUT: what one push may take (default
+	// 60 s), plus a second for every MiB of objects the repository holds, up
+	// to MaxRepoBytes: a first push of a large vault gets the time it needs.
+	// It also bounds the question "where is the remote's tip", unscaled.
 	PushTimeout time.Duration
 	// Concurrency bounds pushes in flight in this process (default 4). Each
 	// pins one database connection for the vault's advisory lock for as long
@@ -298,7 +305,18 @@ func (s *Syncer) wake(vault uuid.UUID, d time.Duration, pull bool) {
 	if t := s.wakes[vault]; t != nil {
 		t.Stop()
 	}
-	s.wakes[vault] = time.AfterFunc(max(d, 0), func() { s.start(vault, false, pull) })
+	var t *time.Timer
+	t = time.AfterFunc(max(d, 0), func() {
+		// The entry goes when its timer fires, unless a later wake took its
+		// place. (t is set before the lock is let go, which this waits for.)
+		s.mu.Lock()
+		if s.wakes[vault] == t {
+			delete(s.wakes, vault)
+		}
+		s.mu.Unlock()
+		s.start(vault, false, pull)
+	})
+	s.wakes[vault] = t
 }
 
 func (s *Syncer) dropWake(vault uuid.UUID) {
@@ -347,12 +365,16 @@ func (s *Syncer) each(ctx context.Context, vaults []uuid.UUID, pull func(uuid.UU
 			}
 		})
 	}
+send:
 	for _, v := range vaults {
-		if ctx.Err() != nil {
-			break
+		// A worker may be inside a long sync: the caller's cancellation is
+		// not kept waiting for it.
+		select {
+		case work <- v:
+			looked++
+		case <-ctx.Done():
+			break send
 		}
-		work <- v
-		looked++
 	}
 	close(work)
 	wg.Wait()
@@ -490,6 +512,54 @@ type outcome struct {
 	retryAt time.Time // when GitHub said to come back, if it did
 }
 
+// hold is the retry time an attempt wrote to the row before it pushed or
+// fetched (Store.Reserve), so that a process killed in the middle does not
+// try again the moment it is back.
+type hold struct {
+	made bool // the row carries it
+	kept bool // the attempt's end replaced it: nothing to take back
+	key  Key
+	next time.Time
+	base int // retry_count before the attempt was counted in it
+}
+
+// reserve writes the hold, or moves it on when the attempt already has one.
+// False: the row is no longer this connection, or cannot be written; nothing
+// may be sent.
+func (s *Syncer) reserve(ctx context.Context, conn *Connection, h *hold) bool {
+	if h.made && h.key != conn.Key() {
+		*h = hold{}
+	}
+	first := !h.made
+	if first {
+		h.base = conn.RetryCount
+	}
+	// Postgres keeps microseconds; Release compares what it reads back.
+	now := s.opts.Now()
+	next := now.Add(Backoff(h.base)).Truncate(time.Microsecond)
+	ok, err := s.opts.Store.Reserve(ctx, conn.Key(), now, next, first)
+	if err != nil {
+		s.log.WarnContext(ctx, "github sync: reserving the retry failed", "vault", conn.VaultID.String(), "error", err)
+		return false
+	}
+	if !ok {
+		return false
+	}
+	h.made, h.key, h.next = true, conn.Key(), next
+	return true
+}
+
+// release takes the hold back when the attempt ended with nothing recorded.
+func (s *Syncer) release(ctx context.Context, h *hold) {
+	if !h.made || h.kept {
+		return
+	}
+	// A shutdown is the usual reason to be here; the write must outlive it.
+	if _, err := s.opts.Store.Release(context.WithoutCancel(ctx), h.key, h.next); err != nil {
+		s.log.WarnContext(ctx, "github sync: releasing the retry failed", "vault", h.key.Vault.String(), "error", err)
+	}
+}
+
 // attempt is one look at a vault. pull says the remote may have moved.
 //
 // A sync is a push, and a pull when one is asked for or the push finds the
@@ -508,7 +578,15 @@ func (s *Syncer) attempt(ctx context.Context, vault uuid.UUID, pull bool) {
 	}
 	now := s.opts.Now()
 	if conn.NextRetryAt != nil && now.Before(*conn.NextRetryAt) {
-		s.wake(vault, conn.NextRetryAt.Sub(now), pull)
+		wait := conn.NextRetryAt.Sub(now)
+		if conn.ReservedAt != nil {
+			// Another replica's attempt is in flight, or died there. Either
+			// way the time is not this look's to wait out whole: the attempt
+			// ends in seconds and takes it back, and one that died keeps it.
+			// Looking again is one row read.
+			wait = min(wait, s.opts.LockedRetry)
+		}
+		s.wake(vault, wait, pull)
 		return
 	}
 	// A connection whose last sync failed is looked at whole: the failure
@@ -521,7 +599,7 @@ func (s *Syncer) attempt(ctx context.Context, vault uuid.UUID, pull bool) {
 		// One small request, outside every lock: most looks end here.
 		moved, out := s.remoteMoved(ctx, conn)
 		if out.result != resultNone {
-			s.record(ctx, out, true)
+			s.record(ctx, out, true, &hold{})
 			return
 		}
 		if !moved {
@@ -533,11 +611,15 @@ func (s *Syncer) attempt(ctx context.Context, vault uuid.UUID, pull bool) {
 		return
 	}
 	asked := pull
-	var out outcome
+	var (
+		out outcome
+		h   hold
+	)
+	defer s.release(ctx, &h)
 	for round := 0; ; round++ {
 		var plan *Plan
 		err := s.locked(ctx, vault, asked, func(repo *vaultgit.Repo) {
-			out, plan = s.sync(ctx, repo, vault, pull)
+			out, plan = s.sync(ctx, repo, vault, pull, &h)
 		})
 		if err != nil {
 			return
@@ -576,7 +658,7 @@ func (s *Syncer) attempt(ctx context.Context, vault uuid.UUID, pull bool) {
 	if asked && (out.result == resultNone || out.result == resultPushed) && out.conn != nil {
 		s.deliveriesDone(ctx, out.conn, started)
 	}
-	s.record(ctx, out, asked)
+	s.record(ctx, out, asked, &h)
 }
 
 // locked runs fn inside the vault's lock, holding a worker slot. An error
@@ -673,7 +755,7 @@ func (s *Syncer) remoteURL(fullName string) string {
 // when one is asked for, and pushes when HEAD is not what GitHub has. A
 // returned plan is a pull to apply and finish before the next look; the
 // outcome beside it only names the connection.
-func (s *Syncer) sync(ctx context.Context, repo *vaultgit.Repo, vault uuid.UUID, pull bool) (outcome, *Plan) {
+func (s *Syncer) sync(ctx context.Context, repo *vaultgit.Repo, vault uuid.UUID, pull bool, h *hold) (outcome, *Plan) {
 	conn, err := s.opts.Store.Get(ctx, vault)
 	if err != nil {
 		s.log.WarnContext(ctx, "github sync: reading the connection failed", "vault", vault.String(), "error", err)
@@ -684,6 +766,11 @@ func (s *Syncer) sync(ctx context.Context, repo *vaultgit.Repo, vault uuid.UUID,
 	}
 	out := outcome{conn: conn}
 	if pull {
+		// The fetch holds its pack in memory as the push does: the retry
+		// time is on the row before it starts.
+		if !s.reserve(ctx, conn, h) {
+			return outcome{}, nil
+		}
 		token, err := s.opts.GitHub.InstallationToken(ctx, conn.InstallationID, conn.RepoID)
 		if err != nil {
 			return out.mint(err, s.opts.Now()), nil
@@ -706,6 +793,9 @@ func (s *Syncer) sync(ctx context.Context, repo *vaultgit.Repo, vault uuid.UUID,
 			}
 		}
 		return outcome{conn: conn}, nil
+	}
+	if !s.reserve(ctx, conn, h) {
+		return outcome{}, nil
 	}
 	return s.push(ctx, repo, out, vault)
 }
@@ -777,6 +867,7 @@ func (s *Syncer) plan(ctx context.Context, repo *vaultgit.Repo, out outcome, tok
 // remote has moved (D6).
 func (s *Syncer) push(ctx context.Context, repo *vaultgit.Repo, out outcome, vault uuid.UUID) (outcome, *Plan) {
 	conn := out.conn
+	timeout := s.pushTimeout(repo)
 	renamed := false
 	for range maxRounds {
 		token, err := s.opts.GitHub.InstallationToken(ctx, conn.InstallationID, conn.RepoID)
@@ -786,12 +877,24 @@ func (s *Syncer) push(ctx context.Context, repo *vaultgit.Repo, out outcome, vau
 		if err := repo.SetRemote(s.remoteURL(conn.RepoFullName)); err != nil {
 			return out.retry("set_remote"), nil
 		}
-		pctx, cancel := context.WithTimeout(ctx, s.opts.PushTimeout)
-		sha, err := repo.Push(pctx, conn.Branch, token)
+		pctx, cancel := context.WithTimeout(ctx, timeout)
+		res, err := repo.PushWith(pctx, conn.Branch, token, vaultgit.PushOptions{MaxPackBytes: s.opts.MaxRepoBytes})
+		timedOut := pctx.Err() != nil
 		cancel()
+		if err != nil && !renamed && (errors.Is(err, vaultgit.ErrRemoteUnauthorized) || errors.Is(err, vaultgit.ErrRemoteForbidden)) {
+			// The repository was renamed and its old name taken by another:
+			// the remote knows the name and refuses the token. The answer
+			// is believed only once the name has been checked by id.
+			if name := s.movedTo(ctx, conn, token); name != "" {
+				conn.RepoFullName, renamed = name, true
+				continue
+			}
+		}
 		switch {
 		case err == nil:
-			if _, err := s.opts.Store.MarkPushed(ctx, conn.Key(), sha, s.opts.Now(), true); err != nil {
+			// Sent is false when GitHub already had the commit: recorded as
+			// in sync, and last_push_at stays.
+			if _, err := s.opts.Store.MarkPushed(ctx, conn.Key(), res.SHA, s.opts.Now(), res.Sent); err != nil {
 				// The push happened; the next look finds the remote at HEAD
 				// (the push answers "already up to date") and records it.
 				s.log.WarnContext(ctx, "github sync: recording the push failed", "vault", vault.String(), "error", err)
@@ -815,27 +918,70 @@ func (s *Syncer) push(ctx context.Context, repo *vaultgit.Repo, out outcome, vau
 				return o, nil
 			}
 			conn.RepoFullName, renamed = name, true
+		case errors.Is(err, vaultgit.ErrPackTooLarge):
+			// Nothing was sent. go-git would have held the whole pack in
+			// memory; the owner's limit on a repository is the limit on it.
+			return out.final(CodeRepoTooLarge, "pack_size"), nil
 		case errors.Is(err, vaultgit.ErrRemoteUnauthorized):
 			// The cached token is no good; the next attempt mints another.
 			_ = s.opts.GitHub.RevokeInstallationToken(ctx, conn.InstallationID, conn.RepoID)
+			s.pushFailed(ctx, vault, "unauthorized", err)
 			return out.retry("push_unauthorized"), nil
 		case errors.Is(err, vaultgit.ErrRemoteForbidden):
+			s.pushFailed(ctx, vault, "forbidden", err)
 			return out.confirm(CodePushRejected, "push_forbidden"), nil
 		case errors.Is(err, vaultgit.ErrPushRejected):
+			s.pushFailed(ctx, vault, "rejected", err)
 			return out.final(CodePushRejected, "push_rejected"), nil
 		default:
-			s.log.WarnContext(ctx, "github sync: push failed", "vault", vault.String(), "kind", pushKind(pctx, err))
+			kind := "transport"
+			if timedOut || errors.Is(err, context.DeadlineExceeded) {
+				kind = "timeout"
+			}
+			s.pushFailed(ctx, vault, kind, err)
 			return out.retry("push"), nil
 		}
 	}
 	return out.retry("rounds"), nil
 }
 
-func pushKind(ctx context.Context, err error) string {
-	if ctx.Err() != nil || errors.Is(err, context.DeadlineExceeded) {
-		return "timeout"
+// pushFailed logs what the remote, or the transport, said. The text is
+// go-git's error: the remote's own words for a refused update, a status for
+// a refused request, the URL and the cause for a failed one. The token is in
+// none of them: it travels in a header and is never part of the URL
+// (vaultgit.SetRemote refuses one that holds credentials). Only the class is
+// stored (record).
+func (s *Syncer) pushFailed(ctx context.Context, vault uuid.UUID, kind string, err error) {
+	s.log.WarnContext(ctx, "github sync: push failed", "vault", vault.String(), "kind", kind, "error", err.Error())
+}
+
+// pushTimeout is one push's deadline: PushTimeout, and a second more for
+// every MiB of objects the repository holds, which is the most a first push
+// sends. Past MaxRepoBytes the push is refused, so the size counts up to it.
+func (s *Syncer) pushTimeout(repo *vaultgit.Repo) time.Duration {
+	size, err := repo.ObjectsSize()
+	if err != nil {
+		return s.opts.PushTimeout
 	}
-	return "transport"
+	if s.opts.MaxRepoBytes > 0 {
+		size = min(size, s.opts.MaxRepoBytes)
+	}
+	return s.opts.PushTimeout + time.Duration(size/pushRate)*time.Second
+}
+
+// movedTo asks for the repository by id after the remote refused the token
+// under the stored name, and returns its name when that is another one, now
+// stored. "" is every other answer: the refusal stands as it was given.
+func (s *Syncer) movedTo(ctx context.Context, conn *Connection, token string) string {
+	info, err := s.opts.GitHub.RepositoryByID(ctx, token, conn.RepoID)
+	if err != nil || info.FullName == "" || info.FullName == conn.RepoFullName {
+		return ""
+	}
+	if _, err := s.opts.Store.SetRepoFullName(ctx, conn.Key(), info.FullName, s.opts.Now()); err != nil {
+		return ""
+	}
+	s.log.InfoContext(ctx, "github sync: repository renamed on GitHub", "vault", conn.VaultID.String(), "repo", conn.RepoID)
+	return info.FullName
 }
 
 // currentName follows a rename (D6): the remote did not know the stored name,
@@ -916,8 +1062,9 @@ func (o outcome) mint(err error, now time.Time) outcome {
 	return o.retry("token")
 }
 
-// record writes what an attempt found to the row it read.
-func (s *Syncer) record(ctx context.Context, out outcome, pull bool) {
+// record writes what an attempt found to the row it read. h is the hold the
+// attempt put on that row, if it did.
+func (s *Syncer) record(ctx context.Context, out outcome, pull bool, h *hold) {
 	if out.conn == nil || out.result == resultNone {
 		return
 	}
@@ -926,6 +1073,9 @@ func (s *Syncer) record(ctx context.Context, out outcome, pull bool) {
 	if s.ctx.Err() != nil {
 		return
 	}
+	// Whatever is written below replaces the hold; when the write fails, the
+	// hold is the only wait there is, and stays.
+	h.kept = true
 	conn, now := out.conn, s.opts.Now()
 	vault := conn.VaultID
 	if out.result == resultPushed {
@@ -933,8 +1083,11 @@ func (s *Syncer) record(ctx context.Context, out outcome, pull bool) {
 		s.log.InfoContext(ctx, "github sync: pushed", "vault", vault.String(), "repo", conn.RepoID)
 		return
 	}
-	if out.result == resultConfirm {
-		repeated := conn.ErrorCode != nil && *conn.ErrorCode == out.code && conn.RetryCount >= confirmAfter-1
+	confirming := out.result == resultConfirm
+	if confirming {
+		// Final only as the answer of confirmAfter attempts running: any
+		// other failure, or a success, in between starts the count again.
+		repeated := conn.ErrorCode != nil && *conn.ErrorCode == out.code && conn.ConfirmCount >= confirmAfter-1
 		if repeated {
 			out.result = resultFinal
 		} else {
@@ -950,17 +1103,24 @@ func (s *Syncer) record(ctx context.Context, out outcome, pull bool) {
 		s.log.WarnContext(ctx, "github sync: needs attention", "vault", vault.String(), "code", out.code, "cause", out.cause)
 		return
 	}
-	next := now.Add(Backoff(conn.RetryCount))
+	// The hold counted this attempt in retry_count already; the wait is the
+	// one for the failures before it.
+	counted := h.made && h.key == conn.Key()
+	failures := conn.RetryCount
+	if counted {
+		failures = h.base
+	}
+	next := now.Add(Backoff(failures))
 	if out.code == CodeRateLimited && out.retryAt.After(now) {
 		next = out.retryAt
 	}
-	if _, err := s.opts.Store.MarkRetry(ctx, conn.Key(), out.code, now, next); err != nil {
+	if _, err := s.opts.Store.MarkRetry(ctx, conn.Key(), out.code, now, next, counted, confirming); err != nil {
 		s.log.WarnContext(ctx, "github sync: recording the failure failed", "vault", vault.String(), "error", err)
 		return
 	}
 	s.wake(vault, next.Sub(now), pull)
 	s.log.WarnContext(ctx, "github sync: failed, will retry", "vault", vault.String(), "code", out.code, "cause", out.cause,
-		"attempt", conn.RetryCount+1, "retry_in", next.Sub(now).String())
+		"attempt", failures+1, "retry_in", next.Sub(now).String())
 }
 
 // Backoff is the wait after the failure that follows failures earlier ones:

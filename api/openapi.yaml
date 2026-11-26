@@ -11463,7 +11463,8 @@ components:
                     the push) are reported with `retrying: true` first and
                     stop retries when GitHub gives the same answer three
                     times running. `repo_too_large` (the repository is over
-                    200 MB, or the vault would hold more than 5,000 files)
+                    200 MB, the vault's own history would be a push of more
+                    than that, or the vault would hold more than 5,000 files)
                     stops at once; "Sync now" tries again. `remote_not_empty`
                     stops at once: the branch has a history of its own and
                     the owner did not agree to merge it (D11); disconnect

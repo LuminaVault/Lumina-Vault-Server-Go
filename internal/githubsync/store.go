@@ -52,19 +52,25 @@ type Report struct {
 
 // Connection is one github_sync_connections row.
 type Connection struct {
-	VaultID              uuid.UUID
-	InstallationID       int64
-	AccountLogin         string
-	AccountType          string
-	RepoID               int64
-	RepoFullName         string
-	RepoPrivate          bool
-	Branch               string
-	State                string
-	ErrorCode            *string
-	ErrorAt              *time.Time
-	RetryCount           int
-	NextRetryAt          *time.Time
+	VaultID        uuid.UUID
+	InstallationID int64
+	AccountLogin   string
+	AccountType    string
+	RepoID         int64
+	RepoFullName   string
+	RepoPrivate    bool
+	Branch         string
+	State          string
+	ErrorCode      *string
+	ErrorAt        *time.Time
+	RetryCount     int
+	// ConfirmCount is how many attempts running ended with ErrorCode as an
+	// answer that is believed only when it repeats (syncer.go, confirmAfter).
+	ConfirmCount int
+	NextRetryAt  *time.Time
+	// ReservedAt is set while NextRetryAt is an attempt's reservation
+	// (Reserve) and not the wait after a failure.
+	ReservedAt           *time.Time
 	RemoteSHA            *string
 	LastPushAt           *time.Time
 	LastPullAt           *time.Time
@@ -88,7 +94,7 @@ func NewStore(pool *pgxpool.Pool) *Store { return &Store{pool: pool} }
 
 const columns = `vault_id, installation_id, account_login, account_type, repo_id, repo_full_name, repo_private,
 	branch, state, error_code, error_at, retry_count, next_retry_at, remote_sha, last_push_at, last_pull_at,
-	report, connected_by_user_id, connected_github_login, merge_existing, created_at, updated_at`
+	report, connected_by_user_id, connected_github_login, merge_existing, confirm_count, reserved_at, created_at, updated_at`
 
 func missingTable(err error) bool {
 	var pgErr *pgconn.PgError
@@ -104,7 +110,7 @@ func (s *Store) Get(ctx context.Context, vault uuid.UUID) (*Connection, error) {
 	err := s.pool.QueryRow(ctx, `SELECT `+columns+` FROM github_sync_connections WHERE vault_id = $1`, vault).Scan(
 		&c.VaultID, &c.InstallationID, &c.AccountLogin, &c.AccountType, &c.RepoID, &c.RepoFullName, &c.RepoPrivate,
 		&c.Branch, &c.State, &c.ErrorCode, &c.ErrorAt, &c.RetryCount, &c.NextRetryAt, &c.RemoteSHA, &c.LastPushAt, &c.LastPullAt,
-		&report, &c.ConnectedByUserID, &c.ConnectedGitHubLogin, &c.MergeExisting, &c.CreatedAt, &c.UpdatedAt)
+		&report, &c.ConnectedByUserID, &c.ConnectedGitHubLogin, &c.MergeExisting, &c.ConfirmCount, &c.ReservedAt, &c.CreatedAt, &c.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) || missingTable(err) {
 		return nil, nil
 	}
@@ -279,22 +285,56 @@ func (s *Store) VaultArchived(ctx context.Context, vault uuid.UUID) (bool, error
 func (s *Store) MarkPushed(ctx context.Context, k Key, sha string, at time.Time, pushed bool) (bool, error) {
 	return s.update(ctx, `UPDATE github_sync_connections SET remote_sha = $4,
 		last_push_at = CASE WHEN $6 THEN $5 ELSE last_push_at END,
-		error_code = NULL, error_at = NULL, retry_count = 0, next_retry_at = NULL, updated_at = $5`+whereKey,
+		error_code = NULL, error_at = NULL, retry_count = 0, confirm_count = 0, next_retry_at = NULL, reserved_at = NULL,
+		updated_at = $5`+whereKey,
 		k.Vault, k.RepoID, k.Branch, sha, at, pushed)
 }
 
+// Reserve writes the retry time of an attempt that is about to push or fetch,
+// before it starts: a process killed in the middle (out of memory on a large
+// pack) records nothing afterwards, and without this the next start's sweep
+// would try again at once, for ever. first is the attempt's first
+// reservation; it counts the attempt in retry_count, so each kill waits
+// longer than the one before. No error is recorded: nothing has failed yet.
+// The attempt's own end replaces the reservation (a push, a recorded
+// failure) or takes it back (Release).
+func (s *Store) Reserve(ctx context.Context, k Key, at, next time.Time, first bool) (bool, error) {
+	bump := 0
+	if first {
+		bump = 1
+	}
+	return s.update(ctx, `UPDATE github_sync_connections SET next_retry_at = $4, reserved_at = $5,
+		retry_count = retry_count + $6`+whereKey+` AND state = $7`, k.Vault, k.RepoID, k.Branch, next, at, bump, StateActive)
+}
+
+// Release takes back a reservation whose attempt ended with nothing to
+// record: nothing to push, or a shutdown. It changes nothing when the row
+// has since been given another retry time. (No retry time at all is "Sync
+// now" having cleared it: the attempt is still taken out of the count.)
+func (s *Store) Release(ctx context.Context, k Key, next time.Time) (bool, error) {
+	return s.update(ctx, `UPDATE github_sync_connections SET next_retry_at = NULL, reserved_at = NULL,
+		retry_count = GREATEST(retry_count - 1, 0)`+whereKey+` AND (next_retry_at IS NULL OR next_retry_at = $4)`,
+		k.Vault, k.RepoID, k.Branch, next)
+}
+
 // MarkRetry records a failure that is retried: the state stays active, the
-// code and time are shown as "last sync failed, retrying".
-func (s *Store) MarkRetry(ctx context.Context, k Key, code string, at, next time.Time) (bool, error) {
-	return s.update(ctx, `UPDATE github_sync_connections SET error_code = $4, error_at = $5,
-		retry_count = retry_count + 1, next_retry_at = $6, updated_at = $5`+whereKey+` AND state = $7`,
-		k.Vault, k.RepoID, k.Branch, code, at, next, StateActive)
+// code and time are shown as "last sync failed, retrying". counted says the
+// attempt is already in retry_count (Reserve). confirming says the code is
+// one that stops retries once it repeats: confirm_count is how many attempts
+// running ended with it, and any other failure starts the count again.
+func (s *Store) MarkRetry(ctx context.Context, k Key, code string, at, next time.Time, counted, confirming bool) (bool, error) {
+	return s.update(ctx, `UPDATE github_sync_connections SET
+		confirm_count = CASE WHEN NOT $9 THEN 0 WHEN error_code IS NOT DISTINCT FROM $4 THEN confirm_count + 1 ELSE 1 END,
+		error_code = $4, error_at = $5,
+		retry_count = retry_count + CASE WHEN $8 THEN 0 ELSE 1 END, next_retry_at = $6, reserved_at = NULL,
+		updated_at = $5`+whereKey+` AND state = $7`,
+		k.Vault, k.RepoID, k.Branch, code, at, next, StateActive, counted, confirming)
 }
 
 // MarkNeedsAttention stops retries: a person has to act (D6's table).
 func (s *Store) MarkNeedsAttention(ctx context.Context, k Key, code string, at time.Time) (bool, error) {
 	return s.update(ctx, `UPDATE github_sync_connections SET state = $4, error_code = $5, error_at = $6,
-		next_retry_at = NULL, updated_at = $6`+whereKey,
+		next_retry_at = NULL, reserved_at = NULL, updated_at = $6`+whereKey,
 		k.Vault, k.RepoID, k.Branch, StateNeedsAttention, code, at)
 }
 
@@ -312,7 +352,8 @@ func (s *Store) SetRepoFullName(ctx context.Context, k Key, fullName string, at 
 func (s *Store) Requeue(ctx context.Context, vault uuid.UUID, retryable []string, holdCode string, at time.Time) (bool, error) {
 	return s.update(ctx, `UPDATE github_sync_connections SET
 		retry_count = CASE WHEN state = $2 THEN 0 ELSE retry_count END,
-		state = $3, next_retry_at = NULL, updated_at = $6
+		confirm_count = CASE WHEN state = $2 THEN 0 ELSE confirm_count END,
+		state = $3, next_retry_at = NULL, reserved_at = NULL, updated_at = $6
 		WHERE vault_id = $1 AND ((state = $2 AND error_code = ANY($4))
 			OR (state = $3 AND next_retry_at IS NOT NULL AND error_code IS DISTINCT FROM $5))`,
 		vault, StateNeedsAttention, StateActive, retryable, holdCode, at)
@@ -386,7 +427,7 @@ func (s *Store) StopInstallation(ctx context.Context, installation int64, code s
 // stopped for another reason stays stopped.
 func (s *Store) ResumeInstallation(ctx context.Context, installation int64, suspendedCode string, at time.Time) ([]uuid.UUID, error) {
 	return s.vaults(ctx, `UPDATE github_sync_connections SET state = $2, error_code = NULL, error_at = NULL,
-		retry_count = 0, next_retry_at = NULL, updated_at = $5
+		retry_count = 0, confirm_count = 0, next_retry_at = NULL, reserved_at = NULL, updated_at = $5
 		WHERE installation_id = $1 AND state = $3 AND error_code = $4 RETURNING vault_id`,
 		installation, StateActive, StateNeedsAttention, suspendedCode, at)
 }

@@ -77,6 +77,7 @@ func TestConfigEnvNamesComeFromSwiftKeys(t *testing.T) {
 		"GITHUB_APP_SLUG":           true,
 		"GITHUB_SYNC_CALLBACK_URL":  true,
 		"GITHUB_SYNC_POLL_INTERVAL": true,
+		"GITHUB_SYNC_PUSH_TIMEOUT":  true,
 		"GITHUB_SYNC_MAX_REPO_MB":   true,
 		"GITHUB_SYNC_MAX_FILES":     true,
 		"GITHUB_API_BASE_URL":       true,
