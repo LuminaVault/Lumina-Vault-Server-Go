@@ -715,6 +715,28 @@ func TestRemoteDeleteOfAFileWithNoRowKeepsIt(t *testing.T) {
 	require.Equal(t, "written straight to raw/", pe.remoteFiles(l)["rowless.md"])
 }
 
+// A pull stopped between a file's bytes and its row (cancelled, crashed, or
+// beaten by another replica) leaves the bytes with no row. The next pull
+// finds the file equal to the remote and completes it.
+func TestPullCompletesAFileLeftWithoutARow(t *testing.T) {
+	pe := newPullEnv(t)
+	l := pe.connect()
+	pe.seed(l, map[string]string{"a.md": "one"})
+	theirs := pe.remote(l, map[string]*githubapptest.Entry{"half.md": text("# Half\n\nwritten, never recorded\n")})
+	pe.write(l.vault, "half.md", "# Half\n\nwritten, never recorded\n")
+	require.Nil(t, pe.fileRow(l.vault, "half.md"))
+
+	pe.pullNow(l)
+	row := pe.fileRow(l.vault, "half.md")
+	require.NotNil(t, row)
+	_, chunks, ok := pe.memory(l.vault, row.ID)
+	require.True(t, ok)
+	require.Positive(t, chunks)
+	merge := pe.synced(l)
+	require.Contains(t, pe.gh.Git.Parents(l.repo, merge), theirs)
+	require.Zero(t, pe.gh.GitForced())
+}
+
 // D10, D17: the plan and the finish hold the vault's lock; the apply does
 // not. While a slow apply is in progress an upload completes and the commit
 // sweep commits. The commit made mid-pull turns the fast-forward into a

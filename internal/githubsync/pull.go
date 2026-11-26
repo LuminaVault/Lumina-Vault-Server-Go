@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // This file is the pull of spec D10: fetch, diff, apply through the vault's
@@ -353,8 +354,13 @@ func (p *Pull) Plan(ctx context.Context, in PullInput) (*Plan, error) {
 		case localGitOnly || (!inL && gitOnly[name]):
 			// Held until now and holdable: each pull re-checks the list (D8).
 			plan.add(op{Kind: opWrite, Path: name, Remote: r.ID})
-		case same(l, inL, r, inR), !remoteChanged:
-			// Both sides agree, or only the vault changed: nothing to take.
+		case !remoteChanged:
+			// Only the vault changed, or nobody did: nothing to take.
+		case same(l, inL, r, inR):
+			// Both sides made the same change. No bytes to take, but the
+			// file may be what a stopped pull left behind, bytes with no
+			// row: the apply looks, and completes it.
+			plan.add(op{Kind: opWrite, Path: name, Remote: r.ID, Local: l.ID})
 		case !inL && !localChanged:
 			adds = append(adds, plan.add(op{Kind: opWrite, Path: name, Remote: r.ID}))
 		case !inL:
@@ -564,6 +570,17 @@ func refusal(err error) bool {
 	return false
 }
 
+// raced reports a write that lost to another writer of the same path: the
+// pipeline's own answer, or the database's when two creates of one path met
+// (another replica applying the same pull). Either way: look again.
+func raced(err error) bool {
+	if errors.Is(err, vault.ErrPreconditionFailed) {
+		return true
+	}
+	var pg *pgconn.PgError
+	return errors.As(err, &pg) && pg.Code == "23505"
+}
+
 func sha256Hex(data []byte) string {
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
@@ -633,10 +650,7 @@ func (a *applier) write(ctx context.Context, name, remote, local string) error {
 		case !exists:
 			in.IfAbsent = true
 		case BlobID(current) == remote:
-			if has, err := a.hasRow(ctx, name); err != nil || has {
-				return err
-			}
-			in.IfMatch = sha256Hex(current) // on disk with no row: give it one
+			return a.ensureRow(ctx, name, current)
 		case local == "" || BlobID(current) != local:
 			return a.conflictCopy(ctx, name, data)
 		default:
@@ -646,7 +660,7 @@ func (a *applier) write(ctx context.Context, name, remote, local string) error {
 		switch {
 		case err == nil:
 			return nil
-		case errors.Is(err, vault.ErrPreconditionFailed):
+		case raced(err):
 			continue // the file moved under us: look again
 		case refusal(err):
 			return a.refuse(name, err)
@@ -655,6 +669,34 @@ func (a *applier) write(ctx context.Context, name, remote, local string) error {
 		}
 	}
 	return fmt.Errorf("%s kept changing", name)
+}
+
+// ensureRow gives the file at name, which has the bytes current, its row if
+// it has none: a writer that was stopped between the bytes and the row (a
+// cancelled pull, a crash) left it so, and nobody else will come back for it.
+func (a *applier) ensureRow(ctx context.Context, name string, current []byte) error {
+	var err error
+	for range 3 {
+		var has bool
+		if has, err = a.hasRow(ctx, name); err != nil || has {
+			return err
+		}
+		in := a.input(name, current)
+		in.IfMatch = sha256Hex(current)
+		if _, err = a.p.opts.Files.Write(ctx, in); err == nil {
+			return nil
+		}
+		if !raced(err) {
+			return err
+		}
+		// Another writer is at it. If the bytes changed, the file is no
+		// longer this pull's to complete.
+		got, ok, derr := a.disk(name)
+		if derr != nil || !ok || BlobID(got) != BlobID(current) {
+			return derr
+		}
+	}
+	return err
 }
 
 // refuse records a remote path the vault would not take. It stays in git
@@ -720,6 +762,11 @@ func (a *applier) existingCopy(name string, data []byte) (string, bool) {
 // replica writes the same file rather than one more.
 func (a *applier) conflictCopy(ctx context.Context, name string, data []byte) error {
 	copyName, found := a.existingCopy(name, data)
+	if found {
+		if err := a.ensureRow(ctx, copyName, data); err != nil {
+			return err
+		}
+	}
 	for n := 1; !found; n++ {
 		if n > 50 {
 			return fmt.Errorf("no free conflict name for %s", name)
@@ -731,8 +778,11 @@ func (a *applier) conflictCopy(ctx context.Context, name string, data []byte) er
 		switch {
 		case err == nil:
 			found = true
-		case errors.Is(err, vault.ErrPreconditionFailed):
+		case raced(err):
 			if got, ok, derr := a.disk(copyName); derr == nil && ok && BlobID(got) == BlobID(data) {
+				if err := a.ensureRow(ctx, copyName, data); err != nil {
+					return err
+				}
 				found = true
 			}
 		case refusal(err):
