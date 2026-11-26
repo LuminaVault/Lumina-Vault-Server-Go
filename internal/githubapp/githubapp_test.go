@@ -359,3 +359,36 @@ func TestTreeTooLargeAndTruncated(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, tree.Truncated)
 }
+
+// E4.9 review item 9: what GitHub says about an installation now. It is
+// asked as the App (a JWT, no installation token, which a suspended or
+// removed installation cannot mint).
+func TestInstallationStatus(t *testing.T) {
+	s := stubWithRepo(t)
+	c := s.Client(t)
+	ctx := context.Background()
+	st, err := c.InstallationStatus(ctx, 7)
+	require.NoError(t, err)
+	require.False(t, st.Suspended)
+	require.Empty(t, s.Mints(), "no installation token was minted for the question")
+
+	s.Lock()
+	s.Suspended[7] = true
+	s.Unlock()
+	st, err = c.InstallationStatus(ctx, 7)
+	require.NoError(t, err)
+	require.True(t, st.Suspended)
+
+	_, err = c.InstallationStatus(ctx, 8)
+	require.ErrorIs(t, err, githubapp.ErrNotFound, "uninstalled, or never installed")
+
+	s.Lock()
+	s.Intercept = func(w http.ResponseWriter, _ *http.Request) bool {
+		w.WriteHeader(http.StatusBadGateway)
+		return true
+	}
+	s.Unlock()
+	_, err = c.InstallationStatus(ctx, 7)
+	require.ErrorIs(t, err, githubapp.ErrUnavailable, "GitHub not answering is not an answer")
+	require.NotErrorIs(t, err, githubapp.ErrNotFound)
+}

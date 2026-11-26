@@ -119,6 +119,10 @@ type Syncer interface {
 	Notify(vault uuid.UUID)
 	// SyncNow makes a waiting or stopped connection due and queues a sync.
 	SyncNow(ctx context.Context, vault uuid.UUID) error
+	// MergeExisting records the owner's consent to merge the branch's files
+	// into the vault and queues the sync; false when the connection is not
+	// waiting for it.
+	MergeExisting(ctx context.Context, vault uuid.UUID) (bool, error)
 	// Syncing reports a sync running or waiting for the vault.
 	Syncing(vault uuid.UUID) bool
 	// Disconnected removes the vault's git remote after its row is gone.
@@ -206,10 +210,13 @@ func (m *Module) Register(r httpserver.Router, authMW echo.MiddlewareFunc) {
 	r.PUT(basePath+"/connection", m.setConnection, heavy...)
 	r.DELETE(basePath+"/connection", m.disconnect, manage...)
 	r.POST(basePath+"/sync", m.syncNow, manage...)
+	r.POST(basePath+"/merge-existing", m.mergeExisting, manage...)
 	r.GET(callbackPath, m.callback, m.coded, ratelimit.Middleware(m.limits, ratelimit.GitHubSyncCallbackByIP, ratelimit.IPOnlyKey))
 	// Public, like the callback: GitHub has no session. The signature is the
-	// authentication; the limit only bounds what an unsigned flood costs.
-	r.POST(webhookPath, m.webhook, ratelimit.Middleware(m.limits, ratelimit.GitHubWebhookByIP, ratelimit.IPOnlyKey))
+	// authentication, and the handler itself counts the deliveries that fail
+	// it (unsigned): a limit in front of the check would let anyone have
+	// GitHub's own deliveries refused.
+	r.POST(webhookPath, m.webhook)
 }
 
 // Drain waits for webhook deliveries still being handled after their
@@ -265,6 +272,7 @@ var (
 	errGitHubUnavailable = newErr(http.StatusBadGateway, "github_unavailable", "GitHub could not be reached. Try again later.")
 	errRepoArchived      = newErr(http.StatusConflict, "repo_archived", "That repository is archived on GitHub, so nothing can be pushed to it. Unarchive it or pick another.")
 	errBadRequest        = newErr(http.StatusBadRequest, "invalid_request", "invalid request")
+	errMergeNotPending   = newErr(http.StatusConflict, "merge_not_pending", "This connection is not waiting for a decision about the files already on GitHub.")
 )
 
 // errGitHubRateLimited is GitHub's rate limit on the App or the user's token:
@@ -499,6 +507,9 @@ type connectionDTO struct {
 	Held             []heldDTO     `json:"held"`
 	Kept             []string      `json:"kept"`
 	ManageURL        string        `json:"manageUrl"`
+	// CanMergeExisting says POST .../merge-existing is the way on: the
+	// connection stopped with remote_not_empty, and the caller is the owner.
+	CanMergeExisting bool `json:"canMergeExisting"`
 }
 
 // status answers any member of the vault; nothing in it is secret.
@@ -539,6 +550,8 @@ func (m *Module) statusOf(ctx context.Context, vault uuid.UUID, canManage bool) 
 		Conflicts:   []conflictDTO{}, Held: []heldDTO{}, HeldCount: conn.Report.HeldCount, Kept: []string{},
 		Syncing:   m.sync != nil && conn.State == githubsync.StateActive && m.sync.Syncing(vault),
 		ManageURL: m.manageURL(conn.AccountType, conn.AccountLogin, conn.InstallationID),
+		CanMergeExisting: canManage && conn.State == githubsync.StateNeedsAttention &&
+			conn.ErrorCode != nil && *conn.ErrorCode == githubsync.CodeRemoteNotEmpty,
 	}
 	if conn.ErrorCode != nil {
 		e := &errorDTO{Code: *conn.ErrorCode, Retrying: conn.State == githubsync.StateActive}
@@ -1218,6 +1231,54 @@ func (m *Module) syncNow(c *echo.Context) error {
 			return err
 		}
 	}
+	out, err := m.statusOf(ctx, vault, true)
+	if err != nil {
+		return err
+	}
+	return wire.JSON(c, http.StatusAccepted, out)
+}
+
+// MARK: POST /v1/vault/github-sync/merge-existing
+
+// mergeExisting is the owner's yes to "this branch already has files: merge
+// them into the vault?", asked of a connection that stopped with
+// remote_not_empty: the files turned up on the branch between the connect
+// route's own check and the first sync (D11; owner decision 2026-11-26). The
+// consent is recorded on the connection as it is, which goes back to work;
+// nothing is disconnected. Any other connection answers 409
+// merge_not_pending and is left alone. Like "Sync now" it is the owner's
+// alone, at most 6 times a minute per vault, and the answer is the status as
+// it is now: the merge runs after the response.
+func (m *Module) mergeExisting(c *echo.Context) error {
+	_, vault, err := m.owner(c)
+	if err != nil {
+		return err
+	}
+	if limited, retry := m.limits.Hit(ratelimit.GitHubSyncNowByVault, vault.String()); limited {
+		c.Response().Header().Set("Retry-After", strconv.Itoa(retry))
+		return ratelimit.ErrLimited
+	}
+	ctx := c.Request().Context()
+	conn, err := m.store.Get(ctx, vault)
+	if err != nil {
+		return err
+	}
+	if conn == nil {
+		return errNotConnected
+	}
+	var ok bool
+	if m.sync != nil {
+		ok, err = m.sync.MergeExisting(ctx, vault)
+	} else {
+		ok, err = m.store.ConsentToMerge(ctx, vault, githubsync.CodeRemoteNotEmpty, m.now())
+	}
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return errMergeNotPending
+	}
+	m.log.InfoContext(ctx, "github sync: the owner agreed to merge the branch's files", "vault", vault.String())
 	out, err := m.statusOf(ctx, vault, true)
 	if err != nil {
 		return err

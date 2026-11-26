@@ -359,6 +359,18 @@ func (s *Store) Requeue(ctx context.Context, vault uuid.UUID, retryable []string
 		vault, StateNeedsAttention, StateActive, retryable, holdCode, at)
 }
 
+// ConsentToMerge records the owner's answer to "this branch already has
+// files: merge them into the vault?" on a connection that stopped for want
+// of it (code), and puts it back to work with a fresh retry count. The error
+// stays on the row until a sync succeeds, as after Requeue. False: the
+// connection is not stopped for that reason.
+func (s *Store) ConsentToMerge(ctx context.Context, vault uuid.UUID, code string, at time.Time) (bool, error) {
+	return s.update(ctx, `UPDATE github_sync_connections SET merge_existing = TRUE, state = $2,
+		retry_count = 0, confirm_count = 0, next_retry_at = NULL, reserved_at = NULL, updated_at = $5
+		WHERE vault_id = $1 AND state = $3 AND error_code = $4`,
+		vault, StateActive, StateNeedsAttention, code, at)
+}
+
 // MARK: the pull worker's writes (D9, D10)
 
 // MarkPulled records a finished pull: the remote tip it merged, when, and
@@ -513,33 +525,78 @@ func (s *Store) DeliveryStatus(ctx context.Context, id string) (string, error) {
 	return status, err
 }
 
-// DeliveriesDone closes the queued push deliveries of a repository's branch
+// DeliveriesDone closes the open push deliveries of a repository's branch
 // that arrived no later than upTo: the pull that just finished started after
 // them, so it saw what they announced.
 func (s *Store) DeliveriesDone(ctx context.Context, repoID int64, ref string, upTo, at time.Time) error {
 	_, err := s.update(ctx, `UPDATE github_webhook_deliveries SET status = $4, processed_at = $5
-		WHERE repo_id = $1 AND ref = $2 AND status = $3 AND event = 'push' AND received_at <= $6`,
-		repoID, ref, DeliveryQueued, DeliveryDone, at, upTo)
+		WHERE repo_id = $1 AND ref = $2 AND status = ANY($3) AND event = 'push' AND received_at <= $6`,
+		repoID, ref, openDeliveries, DeliveryDone, at, upTo)
 	return err
 }
 
-// StaleDeliveries is the sweep's half of the queue (D9): push deliveries
-// still queued that arrived before the given time. Those whose repository
-// and branch an active connection syncs are returned as vaults to pull, each
-// once; the rest have nothing to wait for and are closed as ignored.
+// openDeliveries are the statuses of a delivery nothing has handled yet:
+// queued, or failed on the way (a database error while it was looked up).
+var openDeliveries = []string{DeliveryQueued, DeliveryFailed}
+
+// StaleDeliveries is the sweep's half of the queue for pushes (D9): push
+// deliveries still open that arrived before the given time. Those whose
+// repository and branch an active connection syncs are returned as vaults to
+// pull, each once; the rest have nothing to wait for and are closed as
+// ignored. Deliveries of other events are StaleEvents' to list.
 func (s *Store) StaleDeliveries(ctx context.Context, before, at time.Time) ([]uuid.UUID, error) {
 	out, err := s.vaults(ctx, `SELECT DISTINCT c.vault_id FROM github_webhook_deliveries d
 		JOIN github_sync_connections c ON c.repo_id = d.repo_id AND d.ref = 'refs/heads/' || c.branch
-		WHERE d.status = $1 AND d.received_at < $2 AND c.state = $3`, DeliveryQueued, before, StateActive)
+		WHERE d.event = 'push' AND d.status = ANY($1) AND d.received_at < $2 AND c.state = $3`,
+		openDeliveries, before, StateActive)
 	if err != nil {
 		return nil, err
 	}
 	_, err = s.update(ctx, `UPDATE github_webhook_deliveries d SET status = $3, processed_at = $4
-		WHERE d.status = $1 AND d.received_at < $2 AND NOT EXISTS (
+		WHERE d.event = 'push' AND d.status = ANY($1) AND d.received_at < $2 AND NOT EXISTS (
 			SELECT 1 FROM github_sync_connections c
 			WHERE c.repo_id = d.repo_id AND d.ref = 'refs/heads/' || c.branch AND c.state = $5)`,
-		DeliveryQueued, before, DeliveryIgnored, at, StateActive)
+		openDeliveries, before, DeliveryIgnored, at, StateActive)
 	return out, err
+}
+
+// staleEventsBatch is how many deliveries one sweep handles again.
+const staleEventsBatch = 100
+
+// StaleEvents is the sweep's half of the queue for everything that is not a
+// push (D9): deliveries still open that arrived before the given time,
+// oldest first, a batch at a time. The row holds six fields of the payload
+// (D2), so the repositories an installation_repositories event took away are
+// not among them: Removed is empty, and the sweep asks GitHub instead.
+func (s *Store) StaleEvents(ctx context.Context, before time.Time) ([]Delivery, error) {
+	rows, err := s.pool.Query(ctx, `SELECT delivery_id, event, COALESCE(action, ''), COALESCE(installation_id, 0),
+			COALESCE(repo_id, 0), COALESCE(ref, ''), COALESCE(after_sha, '')
+		FROM github_webhook_deliveries
+		WHERE event <> 'push' AND status = ANY($1) AND received_at < $2
+		ORDER BY received_at, delivery_id LIMIT $3`, openDeliveries, before, staleEventsBatch)
+	if missingTable(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Delivery
+	for rows.Next() {
+		var d Delivery
+		if err := rows.Scan(&d.ID, &d.Event, &d.Action, &d.InstallationID, &d.RepoID, &d.Ref, &d.After); err != nil {
+			return nil, err
+		}
+		out = append(out, d)
+	}
+	return out, rows.Err()
+}
+
+// ByInstallation lists the vaults with an active connection through the
+// installation.
+func (s *Store) ByInstallation(ctx context.Context, installation int64) ([]uuid.UUID, error) {
+	return s.vaults(ctx, `SELECT vault_id FROM github_sync_connections WHERE installation_id = $1 AND state = $2 ORDER BY vault_id`,
+		installation, StateActive)
 }
 
 // PurgeDeliveries deletes deliveries received before the given time

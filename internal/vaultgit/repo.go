@@ -18,11 +18,13 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/filemode"
+	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
 	"github.com/go-git/go-git/v5/plumbing/format/index"
 	"github.com/go-git/go-git/v5/plumbing/object"
 )
@@ -224,54 +226,221 @@ func (m Message) render(paths []string) string {
 	return b.String()
 }
 
+// unignore turns a pattern that ignores a path into one that takes it back.
+type unignore struct{ p gitignore.Pattern }
+
+func (u unignore) Match(path []string, isDir bool) gitignore.MatchResult {
+	if u.p.Match(path, isDir) == gitignore.Exclude {
+		return gitignore.Include
+	}
+	return gitignore.NoMatch
+}
+
+// worktree is the repository's working tree, set up so that only the managed
+// patterns (GitIgnore) decide what a commit leaves out (sync spec D8, owner
+// decision 2026-11-26). A connected repository's .gitignore has the user's
+// own lines, and they stay in the file byte for byte, but they are rules for
+// the user's other git clients: here a line of theirs must neither hide a
+// vault file from sync nor, with a "!", bring the trash into history.
+//
+// go-git reads every .gitignore under the working tree itself and offers no
+// way not to. It does let Excludes have the last word, and the last pattern
+// that matches a path wins: so every pattern it will read is undone here,
+// and the managed ones follow.
+func (r *Repo) worktree() (*git.Worktree, error) {
+	wt, err := r.repo.Worktree()
+	if err != nil {
+		return nil, err
+	}
+	read, err := gitignore.ReadPatterns(wt.Filesystem, nil)
+	if err != nil {
+		return nil, fmt.Errorf("vaultgit: read ignore patterns: %w", err)
+	}
+	excludes := make([]gitignore.Pattern, 0, len(read)+4)
+	for _, p := range read {
+		excludes = append(excludes, unignore{p})
+	}
+	for line := range strings.SplitSeq(strings.TrimSuffix(GitIgnore, "\n"), "\n") {
+		excludes = append(excludes, gitignore.ParsePattern(line, nil))
+	}
+	wt.Excludes = excludes
+	return wt, nil
+}
+
+// status is the working tree's status. A repository can have a file and a
+// folder under one name, a state an earlier release could stage and commit
+// (a file saved inside a path GitHub sync holds). go-git commits such an
+// index again without complaint, and cannot read a status at all once HEAD's
+// own tree has it. So the index of a vault that synced is mended first, and
+// where HEAD has the clash too, a commit of the mended index is made on top
+// of it; then the status is read again. One such path does not stop every
+// later commit of the vault.
+func (r *Repo) status(held *heldPaths) (*git.Worktree, git.Status, error) {
+	wt, err := r.worktree()
+	if err != nil {
+		return nil, nil, err
+	}
+	if held != nil {
+		// Only a vault that synced can be in that state. go-git reads such
+		// an index without complaint and would commit it again.
+		if _, err := r.mendIndex(held); err != nil {
+			return nil, nil, err
+		}
+	}
+	status, err := wt.Status()
+	if err == nil {
+		return wt, status, nil
+	}
+	failed := fmt.Errorf("vaultgit: status: %w", err)
+	clash, cerr := r.headClashes()
+	if cerr != nil || !clash {
+		return nil, nil, failed
+	}
+	sig := Author
+	sig.When = time.Now()
+	msg := Message{Reason: "sweep", Summary: "sweep: mend a path that was both a file and a folder"}
+	if _, err := wt.Commit(msg.render(nil), &git.CommitOptions{Author: &sig, Committer: &sig, AllowEmptyCommits: true}); err != nil {
+		return nil, nil, failed
+	}
+	if status, err = wt.Status(); err != nil {
+		return nil, nil, fmt.Errorf("vaultgit: status: %w", err)
+	}
+	return wt, status, nil
+}
+
+// headClashes reports whether HEAD's tree has a name that is both an entry
+// and the folder of other entries.
+func (r *Repo) headClashes() (bool, error) {
+	ref, err := r.repo.Head()
+	if err != nil {
+		return false, err
+	}
+	c, err := r.repo.CommitObject(ref.Hash())
+	if err != nil {
+		return false, err
+	}
+	names := map[string]bool{}
+	err = r.walk(c, func(name string, _ object.TreeEntry) error {
+		names[name] = true
+		return nil
+	})
+	if err != nil {
+		return false, err
+	}
+	for name := range names {
+		for dir := name; ; {
+			i := strings.LastIndexByte(dir, '/')
+			if i < 0 {
+				break
+			}
+			if dir = dir[:i]; names[dir] {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}
+
+// mendIndex removes from the index one side of every name that is both an
+// entry and the folder of other entries, and reports whether it removed any.
+// The held side stays (GitHub has it, and it must not be committed as a
+// deletion); with no held side, what raw/ has stays. No file is touched: an
+// entry dropped here whose file exists is an ordinary untracked file again.
+func (r *Repo) mendIndex(held *heldPaths) (bool, error) {
+	idx, err := r.repo.Storer.Index()
+	if err != nil {
+		return false, err
+	}
+	names := make(map[string]bool, len(idx.Entries))
+	for _, e := range idx.Entries {
+		names[e.Name] = true
+	}
+	drop := map[string]bool{}
+	for _, e := range idx.Entries {
+		for i := strings.IndexByte(e.Name, '/'); i >= 0; {
+			folder := e.Name[:i]
+			if names[folder] {
+				info, serr := os.Lstat(filepath.Join(r.root, filepath.FromSlash(folder)))
+				isFile := serr == nil && !info.IsDir()
+				switch {
+				case held.has(e.Name) && !held.has(folder):
+					drop[folder] = true
+				case held.has(folder), isFile:
+					drop[e.Name] = true
+				default:
+					drop[folder] = true
+				}
+			}
+			next := strings.IndexByte(e.Name[i+1:], '/')
+			if next < 0 {
+				break
+			}
+			i += 1 + next
+		}
+	}
+	if len(drop) == 0 {
+		return false, nil
+	}
+	kept := idx.Entries[:0]
+	for _, e := range idx.Entries {
+		if !drop[e.Name] {
+			kept = append(kept, e)
+		}
+	}
+	idx.Entries = kept
+	if err := r.repo.Storer.SetIndex(idx); err != nil {
+		return false, fmt.Errorf("vaultgit: write index: %w", err)
+	}
+	return true, nil
+}
+
 // pending lists the changes a commit would take: added or modified files of at
 // most maxFileSize bytes, and deletions. Files over the limit are skipped; a
 // tracked file that grows past it keeps its last committed version. A held
 // path (held.go) is left as the index has it whatever raw/ holds: missing
 // there is never a deletion, and a file that appeared there is never added.
-func (r *Repo) pending(maxFileSize int64) (add, remove []string, err error) {
-	wt, err := r.repo.Worktree()
+// Nor is a file added inside a held path, or at a folder of one (HeldAt):
+// git cannot hold both, and the entry GitHub has stays.
+func (r *Repo) pending(maxFileSize int64) (wt *git.Worktree, add, remove []string, err error) {
+	held, err := r.heldPaths()
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	held, err := r.heldSet()
+	wt, status, err := r.status(held)
 	if err != nil {
-		return nil, nil, err
-	}
-	status, err := wt.Status()
-	if err != nil {
-		return nil, nil, fmt.Errorf("vaultgit: status: %w", err)
+		return nil, nil, nil, err
 	}
 	for p, s := range status {
 		if s.Worktree == git.Unmodified && s.Staging == git.Unmodified {
 			continue
 		}
-		if _, isHeld := held[p]; isHeld {
+		if held.has(p) {
 			continue
 		}
 		info, err := os.Lstat(filepath.Join(r.root, filepath.FromSlash(p)))
 		switch {
-		case errors.Is(err, os.ErrNotExist):
+		case errors.Is(err, os.ErrNotExist), errors.Is(err, syscall.ENOTDIR):
 			if s.Staging != git.Untracked && s.Staging != git.Added {
 				remove = append(remove, p)
 			}
 		case err != nil:
-			return nil, nil, err
+			return nil, nil, nil, err
 		case !info.Mode().IsRegular():
 			// Symlinks and devices never enter history.
 		case maxFileSize > 0 && info.Size() > maxFileSize:
+		case held.at(p) != "":
 		default:
 			add = append(add, p)
 		}
 	}
 	sort.Strings(add)
 	sort.Strings(remove)
-	return add, remove, nil
+	return wt, add, remove, nil
 }
 
 // Dirty reports whether a commit would record anything.
 func (r *Repo) Dirty(maxFileSize int64) (bool, error) {
-	add, remove, err := r.pending(maxFileSize)
+	_, add, remove, err := r.pending(maxFileSize)
 	return len(add)+len(remove) > 0, err
 }
 
@@ -298,11 +467,7 @@ func (r *Repo) Commit(msg Message, maxFileSize int64, when time.Time) (sha strin
 // stage is git add -A, bounded by maxFileSize and the held list: it puts
 // pending's changes in the index and returns their paths, sorted.
 func (r *Repo) stage(maxFileSize int64) (*git.Worktree, []string, error) {
-	add, remove, err := r.pending(maxFileSize)
-	if err != nil {
-		return nil, nil, err
-	}
-	wt, err := r.repo.Worktree()
+	wt, add, remove, err := r.pending(maxFileSize)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -380,6 +545,7 @@ func (r *Repo) Log(path string, limit int, before string) ([]Version, error) {
 	}
 	out := []Version{}
 	skipping := before != ""
+	var foreign map[plumbing.Hash]bool // read when the first commit asks
 	for {
 		c, err := iter.Next()
 		if errors.Is(err, io.EOF) {
@@ -411,7 +577,18 @@ func (r *Repo) Log(path string, limit int, before string) ([]Version, error) {
 		}
 		v := Version{SHA: c.Hash.String(), CommittedAt: c.Committer.When.UTC(), Deleted: !here.ok}
 		v.Message, v.Reason, v.ActorID = parseMessage(c.Message)
-		if c.Committer.Email != Author.Email {
+		mine := c.Committer.Email == Author.Email
+		if mine {
+			// The e-mail is a claim anyone with push access can make: a
+			// commit a pull brought in is not this server's, whatever it says.
+			if foreign == nil {
+				if foreign, err = r.foreign(); err != nil {
+					return nil, err
+				}
+			}
+			mine = !foreign[c.Hash]
+		}
+		if !mine {
 			// Made on GitHub, or by another git client: the subject is the
 			// user's own, and there is no LuminaVault actor.
 			v.Reason, v.ActorID = ReasonGitHub, ""

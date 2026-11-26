@@ -121,8 +121,9 @@ var VaultExportByUser = Policy{Name: "vaultExportByUser", Max: 3, Window: 300 * 
 // the vault (spec D14: 6 per minute per vault, whoever asks).
 // GitHubWebhookByIP is GitHub's webhook route (spec D9). GitHub sends from a
 // handful of addresses and never redelivers, so a refused delivery waits for
-// the poll: the limit is far above what the App's installations can produce
-// and exists to bound what a flood of unsigned requests costs.
+// the poll. The policy therefore counts only deliveries that fail the
+// signature check, in the handler: a signed one is never refused by it, and
+// it bounds what a flood of unsigned requests costs in log lines and answers.
 var (
 	GitHubWebhookByIP      = Policy{Name: "githubWebhookByIP", Max: 600, Window: 60 * time.Second}
 	GitHubSyncNowByVault   = Policy{Name: "githubSyncNowByVault", Max: 6, Window: 60 * time.Second}

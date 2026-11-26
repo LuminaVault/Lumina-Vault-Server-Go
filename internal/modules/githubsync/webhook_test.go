@@ -7,12 +7,14 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"io"
 	"lumina/internal/githubsync"
 	"lumina/internal/ratelimit"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -34,8 +36,11 @@ type parkedSyncer struct {
 
 func (p *parkedSyncer) Notify(uuid.UUID)                         {}
 func (p *parkedSyncer) SyncNow(context.Context, uuid.UUID) error { return nil }
-func (p *parkedSyncer) Syncing(uuid.UUID) bool                   { return false }
-func (p *parkedSyncer) Disconnected(context.Context, uuid.UUID)  {}
+func (p *parkedSyncer) MergeExisting(context.Context, uuid.UUID) (bool, error) {
+	return false, nil
+}
+func (p *parkedSyncer) Syncing(uuid.UUID) bool                  { return false }
+func (p *parkedSyncer) Disconnected(context.Context, uuid.UUID) {}
 func (p *parkedSyncer) Deliver(_ context.Context, d githubsync.Delivery) string {
 	<-p.release
 	p.mu.Lock()
@@ -141,21 +146,59 @@ func TestWebhook(t *testing.T) {
 		require.NotContains(t, v.logs.String(), private)
 	}
 
-	// Public, so limited: 600 a minute per IP, whoever signs. The calls
-	// above count too.
-	limited := 0
+	// A header that is no signature is refused before a byte of the body
+	// is read.
+	for _, header := range []string{"", "sha256=", "sha256=not-hex", "sha1=" + strings.Repeat("0", 40), "sha256=" + strings.Repeat("0", 63), strings.Repeat("0", 64)} {
+		body := &countingBody{}
+		req := httptest.NewRequest(http.MethodPost, "/v1/webhooks/github", body)
+		req.Header.Set("X-GitHub-Delivery", "d-unread")
+		req.Header.Set("X-GitHub-Event", "push")
+		if header != "" {
+			req.Header.Set("X-Hub-Signature-256", header)
+		}
+		rec := httptest.NewRecorder()
+		v.e.ServeHTTP(rec, req)
+		require.Equal(t, http.StatusUnauthorized, rec.Code, header)
+		require.Zero(t, body.read.Load(), "the body of %q was read", header)
+	}
+
+	// Public, so limited, but only what fails its signature counts: GitHub's
+	// own deliveries are never turned away, however many there are, and a
+	// flood of forgeries from an address does not shut GitHub out.
+	for i := range ratelimit.GitHubWebhookByIP.Max + 20 {
+		require.Equal(t, http.StatusOK, v.hook("d-1", "push", sign(webhookSecret, push), push), "signed delivery %d", i)
+	}
+	refused := 0
 	for range ratelimit.GitHubWebhookByIP.Max {
-		if v.hook("x", "push", "", push) == http.StatusTooManyRequests {
+		code := v.hook("x", "push", sign("another secret", push), push)
+		if code == http.StatusTooManyRequests {
 			break
 		}
-		limited++
+		require.Equal(t, http.StatusUnauthorized, code)
+		refused++
 	}
-	require.Greater(t, limited, ratelimit.GitHubWebhookByIP.Max-30)
-	require.Less(t, limited, ratelimit.GitHubWebhookByIP.Max)
-	require.Equal(t, http.StatusTooManyRequests, v.hook("d-3", "push", sign(webhookSecret, push), push))
+	require.Greater(t, refused, ratelimit.GitHubWebhookByIP.Max-30, "the refusals above count too")
+	require.Less(t, refused, ratelimit.GitHubWebhookByIP.Max)
+	require.Equal(t, http.StatusTooManyRequests, v.hook("x", "push", "", push), "a missing signature is a failure like a wrong one")
+	require.Equal(t, http.StatusAccepted, v.hook("d-3", "push", sign(webhookSecret, push), push), "a signed delivery is still taken")
 	v.clock.advance(61 * time.Second)
-	require.Equal(t, http.StatusAccepted, v.hook("d-3", "push", sign(webhookSecret, push), push))
+	require.Equal(t, http.StatusUnauthorized, v.hook("x", "push", "", push), "a new window")
 	v.module.Drain()
+	require.Equal(t, 3, v.deliveries())
+}
+
+// countingBody is a request body that counts what is read of it.
+type countingBody struct{ read atomic.Int64 }
+
+func (b *countingBody) Read(p []byte) (int, error) {
+	for i := range p {
+		p[i] = 'x'
+	}
+	b.read.Add(int64(len(p)))
+	if b.read.Load() > 1<<20 {
+		return len(p), io.EOF
+	}
+	return len(p), nil
 }
 
 // A server with no webhook secret refuses every delivery: it cannot tell

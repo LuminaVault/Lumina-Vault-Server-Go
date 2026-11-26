@@ -26,6 +26,15 @@ import (
 // Files writes, moves and deletes a vault's files the way the /v1/vault/files
 // routes do, for callers that have no HTTP request (the assistant's tools,
 // GitHub sync). The caller owns the access check.
+//
+// Its path locks live in this process. Two replicas that save one path at the
+// same moment are not serialized by them: the If-Match check of each still
+// runs against the file on the shared disk, and the write is an atomic
+// rename, so the result is one whole version and never a mix, but the later
+// rename wins whatever either check saw. GitHub sync's pull relies on the
+// same locks and has the same limit (accepted in the E4.9 review, 2026-11-26):
+// a save on another replica that lands between a pull's look at a file and
+// its write can be replaced by the remote version.
 type Files struct {
 	store      *vaultfiles.Store
 	memories   *memorystore.Repository
@@ -183,6 +192,9 @@ func (f *Files) Write(ctx context.Context, in WriteInput) (*WriteResult, error) 
 	}
 	target, err := vaultfiles.ResolveInside(f.paths.Raw(tenant), safe)
 	if err != nil {
+		return nil, err
+	}
+	if err := f.heldGuard(ctx, tenant, safe); err != nil {
 		return nil, err
 	}
 	// E5.1: the check and the write hold one lock, so two saves made from the
@@ -389,6 +401,9 @@ func (f *Files) MoveIfMatch(ctx context.Context, vault uuid.UUID, path, newPath,
 	}
 	if from == to {
 		return nil, wire.NewError(http.StatusBadRequest, "path and newPath are identical")
+	}
+	if err := f.heldGuard(ctx, vault, to); err != nil {
+		return nil, err
 	}
 	unlock := f.locks.lock2(vault, from, to)
 	defer unlock()

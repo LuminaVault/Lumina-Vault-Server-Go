@@ -6524,6 +6524,7 @@ paths:
             `If-Match` was sent and the file changed since that version, or no
             longer exists; or `If-None-Match: *` was sent and the file already
             exists. Nothing was written.
+        '409': { $ref: '#/components/responses/PathHeld' }
         '507': { $ref: '#/components/responses/InsufficientStorage' }
     get:
       tags: [Vault]
@@ -6585,6 +6586,20 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/VaultFileDTO' }
+        '409':
+          description: |
+            One of two refusals; nothing was moved. The destination path
+            already exists (`ErrorEnvelope`). Or `path_held`
+            (`StructuredAPIErrorEnvelope`, see the `PathHeld` response): the
+            connected GitHub repository has something LuminaVault cannot hold
+            in the way of the new path. Never the second for a vault that has
+            not synced.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - { $ref: '#/components/schemas/ErrorEnvelope' }
+                  - { $ref: '#/components/schemas/StructuredAPIErrorEnvelope' }
 
   /v1/vault/files/{path}:
     get:
@@ -6690,6 +6705,7 @@ paths:
           description: The Content-Type does not fit the file's extension.
         '412':
           description: "`If-Match` was sent and the file changed since that version. Nothing was written."
+        '409': { $ref: '#/components/responses/PathHeld' }
         '507': { $ref: '#/components/responses/InsufficientStorage' }
 
   /v1/vault/export:
@@ -7740,7 +7756,9 @@ paths:
         no client does. The body (at most 5 MiB) is checked against
         `X-Hub-Signature-256`, an HMAC-SHA256 of the raw bytes under the
         App's webhook secret, in constant time; an unsigned or wrongly
-        signed request is refused and leaves no trace. A delivery is
+        signed request is refused and leaves no trace, and one whose header
+        is missing or is not `sha256=` and 64 hex digits is refused before
+        its body is read. A delivery is
         recorded once by `X-GitHub-Delivery`: a replay answers 200 and
         starts nothing. The answer is given before any work: the pull runs
         afterwards, and a delivery whose pull never started is picked up
@@ -7750,11 +7768,15 @@ paths:
         pull), `installation` `deleted` / `suspend` / `unsuspend` and
         `installation_repositories` `removed` (the connection's state).
         Every other event is recorded and ignored. A push of the server's
-        own commits is ignored by ancestry.
+        own commits is ignored by ancestry. An `installation` event is not
+        taken at its word: the server asks GitHub what the installation is
+        now (gone, suspended or neither) and sets the connections to that,
+        so a delivery sent again under a new id changes nothing.
 
-        Mounted only with `GITHUB_SYNC_ENABLED`. Limited to 600 per minute
-        per IP; over that it answers 429 and the polling job finds the
-        change.
+        Mounted only with `GITHUB_SYNC_ENABLED`. Only requests that fail
+        the signature check are counted, 600 per minute per IP; over that
+        they answer 429 instead of 401. A correctly signed delivery is
+        never rate limited.
       security: []
       parameters:
         - { name: X-Hub-Signature-256, in: header, required: true, schema: { type: string } }
@@ -7773,10 +7795,11 @@ paths:
         '400':
           description: No delivery id or event name, or a body that is not JSON.
         '401':
-          description: Missing or wrong signature.
+          description: Missing, malformed or wrong signature.
         '413':
           description: Body over 5 MiB.
-        '429': { $ref: '#/components/responses/GitHubSyncRateLimited' }
+        '429':
+          description: Too many requests with a missing or wrong signature from this address. No body.
         '500':
           description: The server has no webhook secret configured.
 
@@ -7805,7 +7828,8 @@ paths:
         A sync looks at GitHub first: it fetches the branch, applies what
         changed there through the vault's own write pipeline, and then
         pushes (E4.9, D10). `remote_not_empty` is not retried by "Sync
-        now": only a reconnect that confirms the merge clears it.
+        now": the owner's consent clears it
+        (`POST /v1/vault/github-sync/merge-existing`).
 
         Rate limit: 6 per minute per vault, on top of the 30
         per minute per user of the other routes.
@@ -7826,6 +7850,59 @@ paths:
               schema: { $ref: '#/components/schemas/GitHubSyncError' }
         '404':
           description: '`not_connected`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GitHubSyncError' }
+
+  /v1/vault/github-sync/merge-existing:
+    post:
+      tags: [GitHubSync]
+      operationId: githubSyncMergeExisting
+      x-lv-module: githubsync
+      summary: Agree to merge the files already on GitHub
+      description: |
+        Backlog E4.9 (spec 2026-11-19-e4-github-sync D11; owner decision
+        2026-11-26). A connection stops in `needs_attention` with
+        `remote_not_empty` when the branch turned out to have files, and a
+        history the vault shares nothing with, after the connect route's own
+        check. This is the owner's yes to merging them into the vault: the
+        consent is recorded on the connection as it is, the connection goes
+        back to `active`, and a sync is queued that merges the branch
+        (files only one side has are kept, files both have with different
+        bytes are kept twice, as a conflict copy). Nothing is disconnected,
+        and there is no undo: to refuse the merge, disconnect instead.
+
+        The status says when this is the way on: `connection.canMergeExisting`
+        is true exactly while the call would be accepted. Any other
+        connection answers 409 `merge_not_pending` and is not changed. The
+        answer is the status as it is now, and the merge runs after the
+        response; the `error` stays in the status until that sync succeeds.
+
+        Only the vault owner may call it. Rate limit: 6 per minute per
+        vault, shared with "Sync now", on top of the 30 per minute per user
+        of the other routes.
+      security: [{ bearerJWT: [] }]
+      responses:
+        '202':
+          description: Consent recorded; the merge is queued.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GitHubSyncStatus' }
+        '401': { $ref: '#/components/responses/GitHubSyncFailure' }
+        '429': { $ref: '#/components/responses/GitHubSyncRateLimited' }
+        default: { $ref: '#/components/responses/GitHubSyncFailure' }
+        '403':
+          description: '`owner_required`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GitHubSyncError' }
+        '404':
+          description: '`not_connected`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GitHubSyncError' }
+        '409':
+          description: '`merge_not_pending`: the connection is not stopped with `remote_not_empty`.'
           content:
             application/json:
               schema: { $ref: '#/components/schemas/GitHubSyncError' }
@@ -11336,6 +11413,26 @@ components:
                 error:
                   code: insufficient_storage
                   message: LuminaVault is short on storage space right now, so this wasn't saved. Please try again later.
+    PathHeld:
+      description: |
+        `path_held` (GitHub sync, spec 2026-11-19-e4-github-sync D8). The
+        vault is connected to a GitHub repository that has, where this path
+        needs a folder, something LuminaVault cannot hold (a link, a
+        submodule, a file of a type it does not take), or has such entries
+        inside what this path would make a file. Git cannot keep a file and
+        a folder under one name, so the file could never reach GitHub.
+        Nothing was written. The message names the entry; the user picks
+        another name or folder, or changes the repository. Never returned
+        for a vault that has not synced.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/StructuredAPIErrorEnvelope' }
+          examples:
+            pathHeld:
+              value:
+                error:
+                  code: path_held
+                  message: The connected GitHub repository has something at "assets" that LuminaVault cannot hold, so nothing can be saved there. Pick another name or folder.
     PremiumRequired:
       description: >-
         `PremiumGuardMiddleware` — the effective tier (tier override, else
@@ -11371,15 +11468,16 @@ components:
             code:
               type: string
               description: |
-                Stable. The first twelve are D14's. `repo_archived` and
+                Stable. The first twelve are D14's. `repo_archived`,
                 `github_rate_limited` (503, `Retry-After` when GitHub said
-                when) are GitHub sync's too. The rest are errors any route
+                when) and `merge_not_pending` (409 from `merge-existing`)
+                are GitHub sync's too. The rest are errors any route
                 has, coded here so a client reads one shape:
                 `invalid_request`, `unauthenticated`, `forbidden`,
                 `not_found`, `rate_limited`, `internal_error`.
               enum: [owner_required, session_expired, wrong_account, repo_in_use, remote_not_empty, repo_too_large,
                      repo_not_accessible, invalid_branch, invalid_return_to, already_connected, not_connected, github_unavailable,
-                     repo_archived, github_rate_limited,
+                     repo_archived, github_rate_limited, merge_not_pending,
                      invalid_request, unauthenticated, forbidden, not_found, rate_limited, internal_error]
             message: { type: string }
         summary: { $ref: '#/components/schemas/GitHubSyncSummary' }
@@ -11415,7 +11513,7 @@ components:
       type: object
       required: [state, accountLogin, accountType, repoFullName, repoUrl, repoPrivate, branch, connectedAt,
                  connectedByLogin, lastPushAt, lastPullAt, pendingPush, syncing, progress, error, conflicts,
-                 heldCount, held, kept, manageUrl]
+                 heldCount, held, kept, manageUrl, canMergeExisting]
       properties:
         state: { type: string, enum: [connecting, initial_sync, active, needs_attention] }
         accountLogin: { type: string }
@@ -11467,14 +11565,15 @@ components:
                     than that, or the vault would hold more than 5,000 files)
                     stops at once; "Sync now" tries again. `remote_not_empty`
                     stops at once: the branch has a history of its own and
-                    the owner did not agree to merge it (D11); disconnect
-                    and connect again to answer the question.
+                    the owner did not agree to merge it (D11). The owner
+                    agrees with `POST /v1/vault/github-sync/merge-existing`
+                    (`canMergeExisting` is then true), or disconnects.
                   enum: [sync_failed, github_rate_limited, installation_removed, installation_suspended,
                          repo_access_removed, push_rejected, repo_too_large, remote_not_empty]
                 at: { type: string, format: date-time }
                 retrying:
                   type: boolean
-                  description: True while the connection is `active`; false in `needs_attention`, until "Sync now" or a reconnect.
+                  description: True while the connection is `active`; false in `needs_attention`, until "Sync now", `merge-existing` or a reconnect.
             - { type: 'null' }
         conflicts:
           type: array
@@ -11504,6 +11603,13 @@ components:
             has no record of them to put in the trash. They are pushed back.
           items: { type: string }
         manageUrl: { type: string }
+        canMergeExisting:
+          type: boolean
+          description: |
+            True when the connection is stopped with `remote_not_empty` and
+            the caller is the vault owner: `POST
+            /v1/vault/github-sync/merge-existing` will be accepted. False in
+            every other state, and for members.
 
     GitHubSyncConnectRequest:
       type: object
