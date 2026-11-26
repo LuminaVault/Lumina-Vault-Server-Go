@@ -26,7 +26,7 @@ func buildGitHubSync(t *testing.T, cfg config.Config) (httpserver.Module, []jobs
 	paths := vaultpaths.Paths{Root: t.TempDir()}
 	history, _, stopGit := vaultGit(nil, cfg, paths, nil)
 	t.Cleanup(stopGit)
-	m, registered, stop := githubSync(nil, cfg, paths, nil, history)
+	m, registered, stop := githubSync(nil, cfg, paths, nil, history, nil, nil)
 	t.Cleanup(stop)
 	return m, registered
 }
@@ -56,6 +56,7 @@ func githubSyncStatuses(t *testing.T, cfg config.Config) []int {
 		{http.MethodDelete, "/v1/vault/github-sync/connection"},
 		{http.MethodPost, "/v1/vault/github-sync/sync"},
 		{http.MethodGet, "/v1/github-sync/callback"},
+		{http.MethodPost, "/v1/webhooks/github"},
 	} {
 		rec := httptest.NewRecorder()
 		srv.ServeHTTP(rec, httptest.NewRequest(r.method, r.path, nil))
@@ -84,14 +85,15 @@ func TestGitHubSyncFlagOffRegistersNothing(t *testing.T) {
 	cfg := githubSyncConfig(t)
 	for _, flag := range []string{"false", "", "0"} {
 		cfg.GitHubSyncEnabled = flag
-		require.Equal(t, []int{404, 404, 404, 404, 404, 404, 404, 404, 404, 404}, githubSyncStatuses(t, cfg), "flag %q", flag)
+		require.Equal(t, []int{404, 404, 404, 404, 404, 404, 404, 404, 404, 404, 404}, githubSyncStatuses(t, cfg), "flag %q", flag)
 	}
 }
 
 func TestGitHubSyncFlagOnRegistersRoutes(t *testing.T) {
 	// The vault routes sit behind auth; the callback is public and answers a
-	// missing state with its error redirect.
-	require.Equal(t, []int{401, 401, 401, 401, 401, 401, 401, 401, 401, 302}, githubSyncStatuses(t, githubSyncConfig(t)))
+	// missing state with its error redirect; the webhook is public and
+	// refuses a request with no signature.
+	require.Equal(t, []int{401, 401, 401, 401, 401, 401, 401, 401, 401, 302, 401}, githubSyncStatuses(t, githubSyncConfig(t)))
 }
 
 // D6: the sweep is registered with the routes, and only with them. With the
@@ -107,7 +109,7 @@ func TestGitHubSyncSweepJobFollowsTheFlag(t *testing.T) {
 		return out
 	}
 	cfg := githubSyncConfig(t)
-	require.Equal(t, []string{"GitHubSyncSweep"}, names(cfg))
+	require.Equal(t, []string{"GitHubSyncSweep", "GitHubSyncPoll", "GitHubSyncPurge"}, names(cfg))
 
 	off := cfg
 	off.GitHubSyncEnabled = "false"
@@ -116,7 +118,7 @@ func TestGitHubSyncSweepJobFollowsTheFlag(t *testing.T) {
 	paths := vaultpaths.Paths{Root: t.TempDir()}
 	history, _, stopGit := vaultGit(nil, off, paths, nil)
 	defer stopGit()
-	_, _, stop := githubSync(nil, off, paths, nil, history)
+	_, _, stop := githubSync(nil, off, paths, nil, history, nil, nil)
 	defer stop()
 	require.Nil(t, history.hook.Load(), "flag off: commits notify nobody")
 
@@ -139,7 +141,7 @@ func TestGitHubSyncFlagOnWithoutConfigRegistersNothing(t *testing.T) {
 	} {
 		cfg := githubSyncConfig(t)
 		change(&cfg)
-		require.Equal(t, []int{404, 404, 404, 404, 404, 404, 404, 404, 404, 404}, githubSyncStatuses(t, cfg), name)
+		require.Equal(t, []int{404, 404, 404, 404, 404, 404, 404, 404, 404, 404, 404}, githubSyncStatuses(t, cfg), name)
 	}
 }
 

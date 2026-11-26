@@ -237,7 +237,19 @@ func TestHeldPathsAreNeverCommittedAsDeletions(t *testing.T) {
 	held, err = repo.Held()
 	require.NoError(t, err)
 	require.Equal(t, []string{".obsidian/app.json", "My Note.md", "never/in/the/index.bin"}, held)
-	require.Error(t, repo.SetHeld([]string{"a\nb"}))
+	// Git allows a newline in a path: such a path is listed like any other.
+	require.NoError(t, repo.SetHeld([]string{"a\nb", "c"}))
+	held, err = repo.Held()
+	require.NoError(t, err)
+	require.Equal(t, []string{"a\nb", "c"}, held)
+	require.Error(t, repo.SetHeld([]string{"a\x00b"}))
+	require.Error(t, repo.SetHeld([]string{""}))
+	// A list from before (one path per line) still reads.
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".git", "lv-held"), []byte("x y.md\n.obsidian/app.json\n"), 0o600))
+	held, err = repo.Held()
+	require.NoError(t, err)
+	require.Equal(t, []string{".obsidian/app.json", "x y.md"}, held)
+	require.NoError(t, repo.SetHeld([]string{"My Note.md", ".obsidian/app.json", "never/in/the/index.bin"}))
 
 	require.NoError(t, os.RemoveAll(filepath.Join(root, ".obsidian")))
 	require.NoError(t, os.Remove(filepath.Join(root, "My Note.md")))

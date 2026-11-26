@@ -3,10 +3,12 @@ package githubapptest
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"path/filepath"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -16,6 +18,7 @@ import (
 	"github.com/go-git/go-billy/v5/memfs"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/filemode"
 	"github.com/go-git/go-git/v5/plumbing/format/packfile"
 	"github.com/go-git/go-git/v5/plumbing/format/pktline"
 	"github.com/go-git/go-git/v5/plumbing/object"
@@ -398,4 +401,190 @@ func (s *Server) GitForced() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.Git.Forced
+}
+
+// Entry is one tree entry for CommitEntries. Mode "" is a regular file
+// (100644); 120000 is a symlink whose target is Data; 160000 is a submodule
+// link whose commit id is Data, as 40 hex characters. A nil *Entry removes
+// the path.
+type Entry struct {
+	Mode string
+	Data []byte
+}
+
+// CommitEntries adds a commit to a branch the way another git client could,
+// built from objects alone: any path git allows (a space, a dot-folder), a
+// symlink, a submodule link, a file of any size. parents, when given,
+// replace the branch's tip as the commit's parents (none: an unrelated
+// history); the entries always go on top of the branch's current tree. It
+// returns the new tip.
+func (g *GitRemote) CommitEntries(id int64, branch, message string, entries map[string]*Entry, parents ...string) string {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	bare := g.repo(id)
+	name := plumbing.NewBranchReferenceName(branch)
+	type leaf struct {
+		mode filemode.FileMode
+		hash plumbing.Hash
+	}
+	files := map[string]leaf{}
+	var tip []plumbing.Hash
+	if ref, err := bare.Storer.Reference(name); err == nil {
+		tip = []plumbing.Hash{ref.Hash()}
+		c, err := bare.CommitObject(ref.Hash())
+		if err != nil {
+			g.t.Fatalf("githubapptest: tip: %v", err)
+		}
+		g.leaves(bare, c.TreeHash, "", func(p string, e object.TreeEntry) { files[p] = leaf{e.Mode, e.Hash} })
+	}
+	if parents != nil {
+		tip = nil
+		for _, p := range parents {
+			if p != "" {
+				tip = append(tip, plumbing.NewHash(p))
+			}
+		}
+	}
+	for p, e := range entries {
+		if e == nil {
+			delete(files, p)
+			continue
+		}
+		mode := filemode.Regular
+		switch e.Mode {
+		case "", "100644":
+		case "100755":
+			mode = filemode.Executable
+		case "120000":
+			mode = filemode.Symlink
+		case "160000":
+			files[p] = leaf{filemode.Submodule, plumbing.NewHash(string(e.Data))}
+			continue
+		default:
+			g.t.Fatalf("githubapptest: mode %q", e.Mode)
+		}
+		obj := bare.Storer.NewEncodedObject()
+		obj.SetType(plumbing.BlobObject)
+		w, err := obj.Writer()
+		if err != nil {
+			g.t.Fatalf("githubapptest: blob: %v", err)
+		}
+		_, _ = w.Write(e.Data)
+		_ = w.Close()
+		h, err := bare.Storer.SetEncodedObject(obj)
+		if err != nil {
+			g.t.Fatalf("githubapptest: blob: %v", err)
+		}
+		files[p] = leaf{mode, h}
+	}
+	var build func(prefix string) plumbing.Hash
+	build = func(prefix string) plumbing.Hash {
+		var tree object.Tree
+		dirs := map[string]bool{}
+		for p, l := range files {
+			rest, ok := strings.CutPrefix(p, prefix)
+			if !ok {
+				continue
+			}
+			if dir, _, nested := strings.Cut(rest, "/"); nested {
+				dirs[dir] = true
+				continue
+			}
+			tree.Entries = append(tree.Entries, object.TreeEntry{Name: rest, Mode: l.mode, Hash: l.hash})
+		}
+		for dir := range dirs {
+			tree.Entries = append(tree.Entries, object.TreeEntry{Name: dir, Mode: filemode.Dir, Hash: build(prefix + dir + "/")})
+		}
+		sort.Sort(object.TreeEntrySorter(tree.Entries))
+		obj := bare.Storer.NewEncodedObject()
+		if err := tree.Encode(obj); err != nil {
+			g.t.Fatalf("githubapptest: tree: %v", err)
+		}
+		h, err := bare.Storer.SetEncodedObject(obj)
+		if err != nil {
+			g.t.Fatalf("githubapptest: tree: %v", err)
+		}
+		return h
+	}
+	sig := object.Signature{Name: "Obsidian Git", Email: "someone@example.test", When: time.Now()}
+	commit := object.Commit{Author: sig, Committer: sig, Message: message, TreeHash: build(""), ParentHashes: tip}
+	obj := bare.Storer.NewEncodedObject()
+	if err := commit.Encode(obj); err != nil {
+		g.t.Fatalf("githubapptest: commit: %v", err)
+	}
+	h, err := bare.Storer.SetEncodedObject(obj)
+	if err != nil {
+		g.t.Fatalf("githubapptest: commit: %v", err)
+	}
+	if err := bare.Storer.SetReference(plumbing.NewHashReference(name, h)); err != nil {
+		g.t.Fatalf("githubapptest: set %s: %v", name, err)
+	}
+	if err := bare.Storer.SetReference(plumbing.NewSymbolicReference(plumbing.HEAD, name)); err != nil {
+		g.t.Fatalf("githubapptest: set HEAD: %v", err)
+	}
+	return h.String()
+}
+
+// Entries reads a branch's tree: path to mode and bytes (for a submodule
+// link, its commit id).
+func (g *GitRemote) Entries(id int64, branch string) map[string]Entry {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	bare := g.repo(id)
+	out := map[string]Entry{}
+	ref, err := bare.Storer.Reference(plumbing.NewBranchReferenceName(branch))
+	if err != nil {
+		return out
+	}
+	c, err := bare.CommitObject(ref.Hash())
+	if err != nil {
+		g.t.Fatalf("githubapptest: tip: %v", err)
+	}
+	g.leaves(bare, c.TreeHash, "", func(p string, e object.TreeEntry) {
+		if e.Mode == filemode.Submodule {
+			out[p] = Entry{Mode: "160000", Data: []byte(e.Hash.String())}
+			return
+		}
+		blob, err := bare.BlobObject(e.Hash)
+		if err != nil {
+			g.t.Fatalf("githubapptest: blob %s: %v", p, err)
+		}
+		r, _ := blob.Reader()
+		data, _ := io.ReadAll(r)
+		_ = r.Close()
+		out[p] = Entry{Mode: fmt.Sprintf("%06o", uint32(e.Mode)), Data: data}
+	})
+	return out
+}
+
+// leaves calls fn for every entry of a tree that is not a folder. It reads
+// the tree objects itself: go-git's walker refuses names git allows (a
+// control character), and a test has to be able to see them.
+func (g *GitRemote) leaves(repo *git.Repository, id plumbing.Hash, prefix string, fn func(path string, e object.TreeEntry)) {
+	tree, err := repo.TreeObject(id)
+	if err != nil {
+		g.t.Fatalf("githubapptest: tree: %v", err)
+	}
+	for _, e := range tree.Entries {
+		if e.Mode == filemode.Dir {
+			g.leaves(repo, e.Hash, prefix+e.Name+"/", fn)
+			continue
+		}
+		fn(prefix+e.Name, e)
+	}
+}
+
+// Parents is the parent commits of a commit in the repository.
+func (g *GitRemote) Parents(id int64, sha string) []string {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	c, err := g.repo(id).CommitObject(plumbing.NewHash(sha))
+	if err != nil {
+		g.t.Fatalf("githubapptest: commit %s: %v", sha, err)
+	}
+	var out []string
+	for _, p := range c.ParentHashes {
+		out = append(out, p.String())
+	}
+	return out
 }

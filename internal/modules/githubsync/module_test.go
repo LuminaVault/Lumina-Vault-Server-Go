@@ -101,7 +101,7 @@ func (c *clock) advance(d time.Duration) {
 
 func newEnv(t *testing.T) *env { return newEnvWith(t, []string{webOrigin}) }
 
-func newEnvWith(t *testing.T, origins []string) *env {
+func newEnvWith(t *testing.T, origins []string, change ...func(*module.Options)) *env {
 	t.Helper()
 	pool := dbtest.Postgres(t)
 	require.NoError(t, migrations.Up(context.Background(), pool, migrations.SQL()))
@@ -127,12 +127,16 @@ func newEnvWith(t *testing.T, origins []string) *env {
 		syncer.Stop()
 		committer.Close(context.Background())
 	})
-	m := module.New(module.Options{
+	opts := module.Options{
 		Client: client, Store: store, Access: vaultaccess.New(pool),
 		Paths: paths, CallbackURL: "https://api.lumina.test/v1/github-sync/callback",
 		Slug: "luminavault", MaxRepoBytes: 200 << 20, MaxFiles: 5000,
 		WebReturnOrigins: origins, Limits: limits, Sync: syncer, Log: log,
-	})
+	}
+	for _, c := range change {
+		c(&opts)
+	}
+	m := module.New(opts)
 	m.SetClock(clk.now)
 	e := httpserver.New(config.Config{}, httpserver.Deps{
 		Auth:    auth.Middleware(testKeys, auth.PGUsers(pool)),

@@ -52,16 +52,37 @@ func TestInitCommitsExistingFilesOnMain(t *testing.T) {
 	require.Equal(t, root, again.Root())
 }
 
-func TestInitRewritesDriftedIgnore(t *testing.T) {
+// Sync spec D8: the managed patterns are added to a .gitignore that lacks
+// them, in a marked block, and every line that was there stays. A file from
+// before sync, which is the patterns and nothing else, is left byte for byte,
+// so no existing vault gets a commit out of this.
+func TestInitKeepsAUsersIgnoreLines(t *testing.T) {
 	root := t.TempDir()
 	_, _, err := Init(root, DefaultMaxFileSize)
 	require.NoError(t, err)
-	write(t, root, ".gitignore", "nothing\n")
+	read := func() string {
+		b, err := os.ReadFile(filepath.Join(root, ".gitignore"))
+		require.NoError(t, err)
+		return string(b)
+	}
+	require.Equal(t, GitIgnore, read(), "a new vault")
 	_, _, err = Init(root, DefaultMaxFileSize)
 	require.NoError(t, err)
-	b, err := os.ReadFile(filepath.Join(root, ".gitignore"))
+	require.Equal(t, GitIgnore, read(), "left alone")
+
+	write(t, root, ".gitignore", "nothing\n*.log")
+	_, _, err = Init(root, DefaultMaxFileSize)
 	require.NoError(t, err)
-	require.Equal(t, GitIgnore, string(b))
+	want := "nothing\n*.log\n# LuminaVault (managed)\n" + GitIgnore + "# end\n"
+	require.Equal(t, want, read())
+	_, _, err = Init(root, DefaultMaxFileSize)
+	require.NoError(t, err)
+	require.Equal(t, want, read(), "the block is added once")
+
+	require.Equal(t, GitIgnore, WithManagedIgnore(""))
+	require.Equal(t, GitIgnore, WithManagedIgnore(" \n"))
+	mine := "*.log\r\n.lv-*\r\n*.tmp\r\n.DS_Store\r\n_deleted_*\r\n"
+	require.Equal(t, mine, WithManagedIgnore(mine), "all four are there, in any order and with any line ending")
 }
 
 func TestOpenWithoutRepo(t *testing.T) {

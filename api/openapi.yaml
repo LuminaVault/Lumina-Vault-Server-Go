@@ -7729,6 +7729,57 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/GitHubSyncError' }
 
+  /v1/webhooks/github:
+    post:
+      tags: [GitHubSync]
+      operationId: githubWebhook
+      x-lv-module: githubsync
+      summary: GitHub App webhook (public)
+      description: |
+        Backlog E4.9 (spec 2026-11-19-e4-github-sync D9). GitHub calls this;
+        no client does. The body (at most 5 MiB) is checked against
+        `X-Hub-Signature-256`, an HMAC-SHA256 of the raw bytes under the
+        App's webhook secret, in constant time; an unsigned or wrongly
+        signed request is refused and leaves no trace. A delivery is
+        recorded once by `X-GitHub-Delivery`: a replay answers 200 and
+        starts nothing. The answer is given before any work: the pull runs
+        afterwards, and a delivery whose pull never started is picked up
+        again by a job.
+
+        Handled: `push` to a connected repository's connected branch (a
+        pull), `installation` `deleted` / `suspend` / `unsuspend` and
+        `installation_repositories` `removed` (the connection's state).
+        Every other event is recorded and ignored. A push of the server's
+        own commits is ignored by ancestry.
+
+        Mounted only with `GITHUB_SYNC_ENABLED`. Limited to 600 per minute
+        per IP; over that it answers 429 and the polling job finds the
+        change.
+      security: []
+      parameters:
+        - { name: X-Hub-Signature-256, in: header, required: true, schema: { type: string } }
+        - { name: X-GitHub-Delivery, in: header, required: true, schema: { type: string } }
+        - { name: X-GitHub-Event, in: header, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '202':
+          description: Recorded; handled after the response.
+        '200':
+          description: A delivery already recorded. Nothing is done.
+        '400':
+          description: No delivery id or event name, or a body that is not JSON.
+        '401':
+          description: Missing or wrong signature.
+        '413':
+          description: Body over 5 MiB.
+        '429': { $ref: '#/components/responses/GitHubSyncRateLimited' }
+        '500':
+          description: The server has no webhook secret configured.
+
   /v1/vault/github-sync/sync:
     post:
       tags: [GitHubSync]
@@ -7751,7 +7802,10 @@ paths:
         makes a new installation, so disconnect and connect. The `error`
         stays in the status until a sync succeeds.
 
-        Until pull ships (E4.9) a sync is a push only.
+        A sync looks at GitHub first: it fetches the branch, applies what
+        changed there through the vault's own write pipeline, and then
+        pushes (E4.9, D10). `remote_not_empty` is not retried by "Sync
+        now": only a reconnect that confirms the merge clears it.
 
         Rate limit: 6 per minute per vault, on top of the 30
         per minute per user of the other routes.
@@ -11361,7 +11415,7 @@ components:
       type: object
       required: [state, accountLogin, accountType, repoFullName, repoUrl, repoPrivate, branch, connectedAt,
                  connectedByLogin, lastPushAt, lastPullAt, pendingPush, syncing, progress, error, conflicts,
-                 heldCount, held, manageUrl]
+                 heldCount, held, kept, manageUrl]
       properties:
         state: { type: string, enum: [connecting, initial_sync, active, needs_attention] }
         accountLogin: { type: string }
@@ -11382,6 +11436,10 @@ components:
             answered. With more than one API replica another may be the one
             syncing; `pendingPush` is the durable signal.
         progress:
+          description: |
+            A pull being applied by the server that answered: vault files
+            written, moved or deleted so far, of the total. Null when no
+            pull is being applied there.
           oneOf:
             - type: object
               required: [done, total]
@@ -11398,16 +11456,20 @@ components:
                   type: string
                   description: |
                     `sync_failed` (transient: network, GitHub 5xx, a timeout,
-                    or a branch that moved on GitHub while pull is not
-                    available) and `github_rate_limited` are always retried.
+                    a pull that could not finish) and `github_rate_limited` are always retried.
                     `installation_removed` and `push_rejected` (a rejected
                     update) stop retries at once. `installation_suspended`,
                     `repo_access_removed` and `push_rejected` (GitHub forbids
                     the push) are reported with `retrying: true` first and
                     stop retries when GitHub gives the same answer three
-                    times running. `repo_too_large` is set by pull (E4.9).
+                    times running. `repo_too_large` (the repository is over
+                    200 MB, or the vault would hold more than 5,000 files)
+                    stops at once; "Sync now" tries again. `remote_not_empty`
+                    stops at once: the branch has a history of its own and
+                    the owner did not agree to merge it (D11); disconnect
+                    and connect again to answer the question.
                   enum: [sync_failed, github_rate_limited, installation_removed, installation_suspended,
-                         repo_access_removed, push_rejected, repo_too_large]
+                         repo_access_removed, push_rejected, repo_too_large, remote_not_empty]
                 at: { type: string, format: date-time }
                 retrying:
                   type: boolean
@@ -11433,6 +11495,13 @@ components:
             properties:
               path: { type: string }
               reason: { type: string, enum: [unsupported_name, unsupported_type, too_large, hidden, not_a_file] }
+        kept:
+          type: array
+          maxItems: 20
+          description: |
+            Files GitHub deleted that the last pull kept, because the vault
+            has no record of them to put in the trash. They are pushed back.
+          items: { type: string }
         manageUrl: { type: string }
 
     GitHubSyncConnectRequest:

@@ -10,6 +10,7 @@
 package vaultgit
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -21,6 +22,7 @@ import (
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/filemode"
 	"github.com/go-git/go-git/v5/plumbing/format/index"
 	"github.com/go-git/go-git/v5/plumbing/object"
 )
@@ -50,6 +52,9 @@ var (
 type Repo struct {
 	root string
 	repo *git.Repository
+	// alive, set by Committer.WithRepo, asks whether the tenant's lock is
+	// still held (StillLocked).
+	alive func(context.Context) error
 }
 
 // Root is the working tree, the tenant's raw directory.
@@ -96,16 +101,82 @@ func Init(rawRoot string, maxFileSize int64) (r *Repo, created bool, err error) 
 	return r, true, nil
 }
 
-// ensureIgnore rewrites raw/.gitignore when it has drifted from GitIgnore.
+// The managed patterns live in a marked block when a .gitignore has lines of
+// its own (sync spec D8): a connected repository's ignore rules are the
+// user's and are never rewritten.
+const (
+	ignoreBlockOpen  = "# LuminaVault (managed)"
+	ignoreBlockClose = "# end"
+)
+
+// WithManagedIgnore returns a .gitignore text that has every managed pattern.
+// A text that already has them all, in a block or not, is returned as it is:
+// a vault from before sync keeps its file byte for byte. An empty one becomes
+// GitIgnore. Anything else keeps every line and gains the marked block.
+func WithManagedIgnore(existing string) string {
+	if strings.TrimSpace(existing) == "" {
+		return GitIgnore
+	}
+	have := map[string]bool{}
+	for line := range strings.SplitSeq(existing, "\n") {
+		have[strings.TrimRight(line, "\r")] = true
+	}
+	missing := false
+	for pattern := range strings.SplitSeq(strings.TrimSuffix(GitIgnore, "\n"), "\n") {
+		if !have[pattern] {
+			missing = true
+		}
+	}
+	if !missing {
+		return existing
+	}
+	if !strings.HasSuffix(existing, "\n") {
+		existing += "\n"
+	}
+	return existing + ignoreBlockOpen + "\n" + GitIgnore + ignoreBlockClose + "\n"
+}
+
+// ensureIgnore gives raw/.gitignore the managed patterns when it lacks them,
+// and leaves every other line alone.
 func (r *Repo) ensureIgnore() error {
-	p := filepath.Join(r.root, ".gitignore")
-	if b, err := os.ReadFile(p); err == nil && string(b) == GitIgnore { //nolint:gosec // fixed name under the tenant root
-		return nil
+	b, err := os.ReadFile(r.ignorePath())
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("vaultgit: read .gitignore: %w", err)
 	}
-	if err := os.WriteFile(p, []byte(GitIgnore), 0o600); err != nil {
-		return fmt.Errorf("vaultgit: write .gitignore: %w", err)
+	_, err = r.writeIgnore(string(b), string(b), err == nil)
+	return err
+}
+
+func (r *Repo) ignorePath() string { return filepath.Join(r.root, ".gitignore") }
+
+// writeIgnore writes WithManagedIgnore(text) unless the file already is that.
+func (r *Repo) writeIgnore(text, current string, exists bool) (changed bool, err error) {
+	want := WithManagedIgnore(text)
+	if exists && current == want {
+		return false, nil
 	}
-	return nil
+	if err := os.WriteFile(r.ignorePath(), []byte(want), 0o600); err != nil { //nolint:gosec // the path is the vault's own root plus a constant
+		return false, fmt.Errorf("vaultgit: write .gitignore: %w", err)
+	}
+	return true, nil
+}
+
+// TakeIgnore makes raw/.gitignore the remote's file, as it is, plus the
+// managed block when the remote's lacks the managed patterns (sync spec D8).
+// It reports whether the file changed. The file is not a symlink target: a
+// link at that name is replaced.
+func (r *Repo) TakeIgnore(remote []byte) (changed bool, err error) {
+	info, err := os.Lstat(r.ignorePath())
+	if err == nil && !info.Mode().IsRegular() {
+		if err := os.Remove(r.ignorePath()); err != nil {
+			return false, fmt.Errorf("vaultgit: replace .gitignore: %w", err)
+		}
+	}
+	b, err := os.ReadFile(r.ignorePath())
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return false, fmt.Errorf("vaultgit: read .gitignore: %w", err)
+	}
+	return r.writeIgnore(string(remote), string(b), err == nil)
 }
 
 // Message is a commit's reason, paths and trailers (spec D4).
@@ -156,7 +227,8 @@ func (m Message) render(paths []string) string {
 // pending lists the changes a commit would take: added or modified files of at
 // most maxFileSize bytes, and deletions. Files over the limit are skipped; a
 // tracked file that grows past it keeps its last committed version. A held
-// path (held.go) that is missing from the working tree is never a deletion.
+// path (held.go) is left as the index has it whatever raw/ holds: missing
+// there is never a deletion, and a file that appeared there is never added.
 func (r *Repo) pending(maxFileSize int64) (add, remove []string, err error) {
 	wt, err := r.repo.Worktree()
 	if err != nil {
@@ -174,12 +246,12 @@ func (r *Repo) pending(maxFileSize int64) (add, remove []string, err error) {
 		if s.Worktree == git.Unmodified && s.Staging == git.Unmodified {
 			continue
 		}
+		if _, isHeld := held[p]; isHeld {
+			continue
+		}
 		info, err := os.Lstat(filepath.Join(r.root, filepath.FromSlash(p)))
 		switch {
 		case errors.Is(err, os.ErrNotExist):
-			if _, isHeld := held[p]; isHeld {
-				continue
-			}
 			if s.Staging != git.Untracked && s.Staging != git.Added {
 				remove = append(remove, p)
 			}
@@ -207,33 +279,13 @@ func (r *Repo) Dirty(maxFileSize int64) (bool, error) {
 // commits it. It returns the new commit's hash, or changed=false and no commit
 // when there was nothing to record.
 func (r *Repo) Commit(msg Message, maxFileSize int64, when time.Time) (sha string, changed bool, err error) {
-	add, remove, err := r.pending(maxFileSize)
+	wt, paths, err := r.stage(maxFileSize)
 	if err != nil {
 		return "", false, err
 	}
-	if len(add)+len(remove) == 0 {
+	if len(paths) == 0 {
 		return "", false, nil
 	}
-	wt, err := r.repo.Worktree()
-	if err != nil {
-		return "", false, err
-	}
-	for _, p := range add {
-		if _, err := wt.Add(p); err != nil {
-			// A file deleted between status and add is caught by the next commit.
-			if _, statErr := os.Lstat(filepath.Join(r.root, filepath.FromSlash(p))); errors.Is(statErr, os.ErrNotExist) {
-				continue
-			}
-			return "", false, fmt.Errorf("vaultgit: add %s: %w", p, err)
-		}
-	}
-	for _, p := range remove {
-		if _, err := wt.Remove(p); err != nil && !errors.Is(err, os.ErrNotExist) && !errors.Is(err, index.ErrEntryNotFound) {
-			return "", false, fmt.Errorf("vaultgit: remove %s: %w", p, err)
-		}
-	}
-	paths := append(append([]string{}, add...), remove...)
-	sort.Strings(paths)
 	sig := Author
 	sig.When = when
 	h, err := wt.Commit(msg.render(paths), &git.CommitOptions{Author: &sig, Committer: &sig, AllowEmptyCommits: false})
@@ -241,6 +293,36 @@ func (r *Repo) Commit(msg Message, maxFileSize int64, when time.Time) (sha strin
 		return "", false, fmt.Errorf("vaultgit: commit: %w", err)
 	}
 	return h.String(), true, nil
+}
+
+// stage is git add -A, bounded by maxFileSize and the held list: it puts
+// pending's changes in the index and returns their paths, sorted.
+func (r *Repo) stage(maxFileSize int64) (*git.Worktree, []string, error) {
+	add, remove, err := r.pending(maxFileSize)
+	if err != nil {
+		return nil, nil, err
+	}
+	wt, err := r.repo.Worktree()
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, p := range add {
+		if _, err := wt.Add(p); err != nil {
+			// A file deleted between status and add is caught by the next commit.
+			if _, statErr := os.Lstat(filepath.Join(r.root, filepath.FromSlash(p))); errors.Is(statErr, os.ErrNotExist) {
+				continue
+			}
+			return nil, nil, fmt.Errorf("vaultgit: add %s: %w", p, err)
+		}
+	}
+	for _, p := range remove {
+		if _, err := wt.Remove(p); err != nil && !errors.Is(err, os.ErrNotExist) && !errors.Is(err, index.ErrEntryNotFound) {
+			return nil, nil, fmt.Errorf("vaultgit: remove %s: %w", p, err)
+		}
+	}
+	paths := append(append([]string{}, add...), remove...)
+	sort.Strings(paths)
+	return wt, paths, nil
 }
 
 // Version is one commit that changed a path, newest first in Log.
@@ -267,11 +349,35 @@ func (r *Repo) Log(path string, limit int, before string) ([]Version, error) {
 	if err != nil {
 		return nil, err
 	}
-	iter, err := r.repo.Log(&git.LogOptions{From: head.Hash(), FileName: &path})
+	// go-git's own path filter compares each commit with the next one in its
+	// walk, which is its parent only while history is a line. With merges
+	// (GitHub sync) that lists the wrong commits, so the comparison is made
+	// here: a commit is a version of the path when what it has there differs
+	// from what every one of its parents has. For a merge that leaves out a
+	// path it took from either side (sync spec D10).
+	iter, err := r.repo.Log(&git.LogOptions{From: head.Hash(), Order: git.LogOrderCommitterTime})
 	if err != nil {
 		return nil, fmt.Errorf("vaultgit: log: %w", err)
 	}
 	defer iter.Close()
+	type entry struct {
+		hash plumbing.Hash
+		ok   bool
+	}
+	seen := map[plumbing.Hash]entry{}
+	at := func(c *object.Commit) entry {
+		if e, ok := seen[c.Hash]; ok {
+			return e
+		}
+		var e entry
+		if tree, err := c.Tree(); err == nil {
+			if te, err := tree.FindEntry(path); err == nil && te.Mode != filemode.Dir {
+				e = entry{hash: te.Hash, ok: true}
+			}
+		}
+		seen[c.Hash] = e
+		return e
+	}
 	out := []Version{}
 	skipping := before != ""
 	for {
@@ -282,18 +388,38 @@ func (r *Repo) Log(path string, limit int, before string) ([]Version, error) {
 		if err != nil {
 			return nil, fmt.Errorf("vaultgit: log: %w", err)
 		}
+		here := at(c)
+		changed := here.ok || c.NumParents() > 0
+		err = c.Parents().ForEach(func(p *object.Commit) error {
+			if at(p) == here {
+				changed = false
+			}
+			return nil
+		})
+		if err != nil {
+			return nil, fmt.Errorf("vaultgit: log: %w", err)
+		}
+		delete(seen, c.Hash) // its children have all been looked at
+		if !changed {
+			continue
+		}
 		if skipping {
 			if c.Hash.String() == before {
 				skipping = false
 			}
 			continue
 		}
-		v := Version{SHA: c.Hash.String(), CommittedAt: c.Committer.When.UTC()}
+		v := Version{SHA: c.Hash.String(), CommittedAt: c.Committer.When.UTC(), Deleted: !here.ok}
 		v.Message, v.Reason, v.ActorID = parseMessage(c.Message)
-		if f, err := c.File(path); err == nil {
-			v.SizeBytes = f.Size
-		} else {
-			v.Deleted = true
+		if c.Committer.Email != Author.Email {
+			// Made on GitHub, or by another git client: the subject is the
+			// user's own, and there is no LuminaVault actor.
+			v.Reason, v.ActorID = ReasonGitHub, ""
+		}
+		if here.ok {
+			if size, err := r.repo.Storer.EncodedObjectSize(here.hash); err == nil {
+				v.SizeBytes = size
+			}
 		}
 		out = append(out, v)
 		if len(out) == limit {
@@ -301,6 +427,9 @@ func (r *Repo) Log(path string, limit int, before string) ([]Version, error) {
 		}
 	}
 }
+
+// ReasonGitHub is the reason Log gives a commit LuminaVault did not make.
+const ReasonGitHub = "github"
 
 func parseMessage(msg string) (subject, reason, actor string) {
 	lines := strings.Split(msg, "\n")

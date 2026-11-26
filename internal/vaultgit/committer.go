@@ -3,6 +3,7 @@ package vaultgit
 import (
 	"context"
 	"errors"
+	"fmt"
 	"hash/fnv"
 	"log/slog"
 	"strings"
@@ -234,24 +235,39 @@ func (c *Committer) flush(ctx context.Context, tenant uuid.UUID, msg Message) (s
 // lock takes the tenant's in-process mutex and, when configured, its Postgres
 // advisory lock. ErrLocked means another replica holds the latter.
 func (c *Committer) lock(ctx context.Context, tenant uuid.UUID) (unlock func(), err error) {
+	unlock, _, err = c.lockChecked(ctx, tenant)
+	return unlock, err
+}
+
+// lockChecked is lock, plus a way to ask later whether the lock is still
+// held (nil when the Locker cannot say, or there is none).
+func (c *Committer) lockChecked(ctx context.Context, tenant uuid.UUID) (unlock func(), alive func(context.Context) error, err error) {
 	l := c.tenantLock(tenant)
 	l.Lock()
 	if c.opts.Lock == nil {
-		return l.Unlock, nil
+		return l.Unlock, nil, nil
 	}
-	release, ok, err := c.opts.Lock.TryLock(ctx, tenant)
+	var (
+		release func()
+		ok      bool
+	)
+	if checked, can := c.opts.Lock.(CheckedLocker); can {
+		release, alive, ok, err = checked.TryLockChecked(ctx, tenant)
+	} else {
+		release, ok, err = c.opts.Lock.TryLock(ctx, tenant)
+	}
 	if err != nil {
 		l.Unlock()
-		return nil, err
+		return nil, nil, err
 	}
 	if !ok {
 		l.Unlock()
-		return nil, ErrLocked
+		return nil, nil, ErrLocked
 	}
 	return func() {
 		release()
 		l.Unlock()
-	}, nil
+	}, alive, nil
 }
 
 // WithRepo runs fn on tenant's repository under the same in-process mutex and
@@ -261,7 +277,7 @@ func (c *Committer) lock(ctx context.Context, tenant uuid.UUID) (unlock func(), 
 // Flush or WithRepo for the same tenant. A tenant with no repository yet is
 // ErrNoRepo; another replica holding the lock is ErrLocked.
 func (c *Committer) WithRepo(ctx context.Context, tenant uuid.UUID, fn func(*Repo) error) error {
-	unlock, err := c.lock(ctx, tenant)
+	unlock, alive, err := c.lockChecked(ctx, tenant)
 	if err != nil {
 		return err
 	}
@@ -270,7 +286,27 @@ func (c *Committer) WithRepo(ctx context.Context, tenant uuid.UUID, fn func(*Rep
 	if err != nil {
 		return err
 	}
+	repo.alive = alive
 	return fn(repo)
+}
+
+// ErrLockLost means the tenant's lock went away while it was thought held:
+// its database session died. Whatever was about to be written must not be.
+var ErrLockLost = errors.New("vaultgit: the vault lock was lost")
+
+// StillLocked reports, inside WithRepo, whether the tenant's cross-replica
+// lock is still held. A session advisory lock dies silently with its
+// connection, and another replica may then be working on the same
+// repository: a long operation asks before it writes. Outside WithRepo, or
+// with no cross-replica lock, it is nil.
+func (r *Repo) StillLocked(ctx context.Context) error {
+	if r.alive == nil {
+		return nil
+	}
+	if err := r.alive(ctx); err != nil {
+		return fmt.Errorf("%w: %w", ErrLockLost, err)
+	}
+	return nil
 }
 
 // MaxFileSize is tenant's history limit, as Flush reads it.
@@ -343,24 +379,52 @@ func lockKey(tenant uuid.UUID) int64 {
 	return int64(h.Sum64()) //nolint:gosec // a hash; wrapping is fine
 }
 
+// CheckedLocker is a Locker that can say later whether a lock it gave is
+// still held.
+type CheckedLocker interface {
+	Locker
+	TryLockChecked(ctx context.Context, tenant uuid.UUID) (unlock func(), alive func(context.Context) error, ok bool, err error)
+}
+
 // TryLock takes pg_try_advisory_lock on a dedicated connection, held until unlock.
 func (l PGLocker) TryLock(ctx context.Context, tenant uuid.UUID) (func(), bool, error) {
+	unlock, _, ok, err := l.TryLockChecked(ctx, tenant)
+	return unlock, ok, err
+}
+
+// TryLockChecked is TryLock, and alive asks the lock's own session whether it
+// still holds the lock. The lock belongs to that session: when the connection
+// dies the lock is gone without a word, and alive then fails.
+func (l PGLocker) TryLockChecked(ctx context.Context, tenant uuid.UUID) (func(), func(context.Context) error, bool, error) {
 	conn, err := l.Pool.Acquire(ctx)
 	if err != nil {
-		return nil, false, err
+		return nil, nil, false, err
 	}
 	key := lockKey(tenant)
 	var ok bool
 	if err := conn.QueryRow(ctx, "SELECT pg_try_advisory_lock($1)", key).Scan(&ok); err != nil {
 		conn.Release()
-		return nil, false, err
+		return nil, nil, false, err
 	}
 	if !ok {
 		conn.Release()
-		return nil, false, nil
+		return nil, nil, false, nil
+	}
+	alive := func(ctx context.Context) error {
+		var held bool
+		// The key's two halves, as pg_locks shows a bigint advisory lock.
+		err := conn.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM pg_locks WHERE locktype = 'advisory'
+			AND pid = pg_backend_pid() AND classid = ($1::bigint >> 32)::int::oid AND objid = ($1::bigint & 4294967295)::oid AND objsubid = 1)`, key).Scan(&held)
+		if err != nil {
+			return err
+		}
+		if !held {
+			return errors.New("the session no longer holds the advisory lock")
+		}
+		return nil
 	}
 	return func() {
 		_, _ = conn.Exec(context.Background(), "SELECT pg_advisory_unlock($1)", key)
 		conn.Release()
-	}, true, nil
+	}, alive, true, nil
 }

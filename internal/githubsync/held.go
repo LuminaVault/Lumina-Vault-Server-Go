@@ -60,7 +60,10 @@ func Classify(path, mode string, size, maxSize int64) HeldReason {
 		return IgnoreFile
 	}
 	for _, s := range segments {
-		if strings.HasPrefix(s, ".") {
+		// A dot-file, or a name the vault's own .gitignore keeps out of history
+		// (the trash's _deleted_ prefix): written to raw/ it would be ignored by
+		// the next commit, or purged with the trash.
+		if strings.HasPrefix(s, ".") || strings.HasPrefix(s, "_deleted_") {
 			return HeldHidden
 		}
 	}

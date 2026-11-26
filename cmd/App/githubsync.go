@@ -3,10 +3,12 @@ package main
 import (
 	"log/slog"
 	"lumina/internal/config"
+	"lumina/internal/diskguard"
 	"lumina/internal/githubapp"
 	"lumina/internal/githubsync"
 	"lumina/internal/httpserver"
 	"lumina/internal/jobs"
+	"lumina/internal/modules/vault"
 	"lumina/internal/ratelimit"
 	"lumina/internal/ssrfguard"
 	"lumina/internal/vaultaccess"
@@ -14,6 +16,7 @@ import (
 	"lumina/internal/vaultpaths"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	githubsyncmod "lumina/internal/modules/githubsync"
@@ -32,7 +35,11 @@ import (
 //
 // Requests to GitHub, REST and git alike, go through the SSRF guard, HTTPS
 // only outside development, and never follow a redirect.
-func githubSync(pool *pgxpool.Pool, cfg config.Config, paths vaultpaths.Paths, limits *ratelimit.Store, history *vaultHistory) (module httpserver.Module, registered []jobs.Job, stop func()) {
+//
+// files is the vault module's own write pipeline (its path locks are the ones
+// every save takes); a pull changes the vault through it and nothing else.
+// Nil leaves sync push-only.
+func githubSync(pool *pgxpool.Pool, cfg config.Config, paths vaultpaths.Paths, limits *ratelimit.Store, history *vaultHistory, files *vault.Files, disk *diskguard.Guard) (module httpserver.Module, registered []jobs.Job, stop func()) {
 	stop = func() {}
 	if !githubsync.Enabled(cfg) {
 		return nil, nil, stop
@@ -60,18 +67,43 @@ func githubSync(pool *pgxpool.Pool, cfg config.Config, paths vaultpaths.Paths, l
 	// same dial guard, redirects refused by SetHTTPClient.
 	vaultgit.SetHTTPClient(guard.Client(0))
 	store := githubsync.NewStore(pool)
-	syncer := githubsync.NewSyncer(githubsync.SyncerOptions{
+	opts := githubsync.SyncerOptions{
 		Store: store, GitHub: client, Repos: history.committer, RawRoot: paths.Raw,
 		GitBaseURL: settings.GitBaseURL, Concurrency: pushConcurrency(pool), Log: log,
-	})
+		MaxRepoBytes: settings.MaxRepoBytes, PollInterval: settings.PollInterval,
+	}
+	var progress func(uuid.UUID) (int, int, bool)
+	if files != nil {
+		pullOpts := githubsync.PullOptions{
+			Files: files, Store: store, RawRoot: paths.Raw, MaxFileSize: history.committer.MaxFileSize,
+			MaxFiles: settings.MaxFiles, Log: log,
+		}
+		if disk != nil {
+			pullOpts.Space = disk.Check
+		}
+		pull := githubsync.NewPull(pullOpts)
+		opts.Pull = pull
+		progress = func(v uuid.UUID) (int, int, bool) {
+			p, ok := pull.Progress(v)
+			return p.Done, p.Total, ok
+		}
+	}
+	syncer := githubsync.NewSyncer(opts)
 	history.onCommit(syncer.OnCommit)
-	module = githubsyncmod.New(githubsyncmod.Options{
+	mod := githubsyncmod.New(githubsyncmod.Options{
+		WebhookSecret: settings.WebhookSecret, Progress: progress,
 		Client: client, Store: store, Access: vaultaccess.New(pool), Paths: paths,
 		CallbackURL: settings.CallbackURL, Slug: settings.Slug,
 		MaxRepoBytes: settings.MaxRepoBytes, MaxFiles: settings.MaxFiles,
 		WebReturnOrigins: cfg.CORSAllowedOrigins, Limits: limits, Sync: syncer, Log: log,
 	})
-	return module, []jobs.Job{syncer.SweepJob()}, syncer.Stop
+	// Deliveries answered but not yet handed to the syncer finish first; one
+	// that does not make it is queued again by the sweep.
+	stop = func() {
+		mod.Drain()
+		syncer.Stop()
+	}
+	return mod, []jobs.Job{syncer.SweepJob(), syncer.PollJob(), syncer.PurgeJob()}, stop
 }
 
 // pushConcurrency is how many pushes may run at once in this process: a

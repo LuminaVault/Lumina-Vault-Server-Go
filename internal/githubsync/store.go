@@ -45,6 +45,9 @@ type Report struct {
 	Conflicts []Conflict `json:"conflicts,omitempty"`
 	HeldCount int        `json:"heldCount,omitempty"`
 	Held      []Held     `json:"held,omitempty"`
+	// Kept are files GitHub deleted or renamed that the vault kept, because
+	// they have no row to trash or move (D7). They go back to GitHub.
+	Kept []string `json:"kept,omitempty"`
 }
 
 // Connection is one github_sync_connections row.
@@ -313,4 +316,200 @@ func (s *Store) Requeue(ctx context.Context, vault uuid.UUID, retryable []string
 		WHERE vault_id = $1 AND ((state = $2 AND error_code = ANY($4))
 			OR (state = $3 AND next_retry_at IS NOT NULL AND error_code IS DISTINCT FROM $5))`,
 		vault, StateNeedsAttention, StateActive, retryable, holdCode, at)
+}
+
+// MARK: the pull worker's writes (D9, D10)
+
+// MarkPulled records a finished pull: the remote tip it merged, when, and
+// its report. The error, if any, stays for the push that follows to clear.
+func (s *Store) MarkPulled(ctx context.Context, k Key, sha string, at time.Time, report Report) (bool, error) {
+	b, err := json.Marshal(report)
+	if err != nil {
+		return false, err
+	}
+	return s.update(ctx, `UPDATE github_sync_connections SET remote_sha = $4, last_pull_at = $5, report = $6::jsonb,
+		updated_at = $5`+whereKey, k.Vault, k.RepoID, k.Branch, sha, at, string(b))
+}
+
+// ByRepo returns the connection that syncs to the repository, or nil.
+func (s *Store) ByRepo(ctx context.Context, repoID int64) (*Connection, error) {
+	var vault uuid.UUID
+	err := s.pool.QueryRow(ctx, `SELECT vault_id FROM github_sync_connections WHERE repo_id = $1`, repoID).Scan(&vault)
+	if errors.Is(err, pgx.ErrNoRows) || missingTable(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return s.Get(ctx, vault)
+}
+
+func (s *Store) vaults(ctx context.Context, sql string, args ...any) ([]uuid.UUID, error) {
+	rows, err := s.pool.Query(ctx, sql, args...)
+	if missingTable(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	if err := rows.Err(); err != nil {
+		if missingTable(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return out, nil
+}
+
+// StopInstallation puts every connection of an installation that is not
+// already stopped for that reason into needs_attention (D9: the App was
+// uninstalled or suspended). It returns how many changed.
+func (s *Store) StopInstallation(ctx context.Context, installation int64, code string, at time.Time) (int, error) {
+	ids, err := s.vaults(ctx, `UPDATE github_sync_connections SET state = $2, error_code = $3, error_at = $4,
+		next_retry_at = NULL, updated_at = $4
+		WHERE installation_id = $1 AND (state <> $2 OR error_code IS DISTINCT FROM $3) RETURNING vault_id`,
+		installation, StateNeedsAttention, code, at)
+	return len(ids), err
+}
+
+// ResumeInstallation puts the connections an installation's suspension
+// stopped back to work (D9: unsuspend) and returns their vaults. A connection
+// stopped for another reason stays stopped.
+func (s *Store) ResumeInstallation(ctx context.Context, installation int64, suspendedCode string, at time.Time) ([]uuid.UUID, error) {
+	return s.vaults(ctx, `UPDATE github_sync_connections SET state = $2, error_code = NULL, error_at = NULL,
+		retry_count = 0, next_retry_at = NULL, updated_at = $5
+		WHERE installation_id = $1 AND state = $3 AND error_code = $4 RETURNING vault_id`,
+		installation, StateActive, StateNeedsAttention, suspendedCode, at)
+}
+
+// StopRepos puts the connections of an installation to the listed
+// repositories into needs_attention (D9: repositories removed from it).
+func (s *Store) StopRepos(ctx context.Context, installation int64, repos []int64, code string, at time.Time) (int, error) {
+	if len(repos) == 0 {
+		return 0, nil
+	}
+	ids, err := s.vaults(ctx, `UPDATE github_sync_connections SET state = $3, error_code = $4, error_at = $5,
+		next_retry_at = NULL, updated_at = $5
+		WHERE installation_id = $1 AND repo_id = ANY($2) RETURNING vault_id`,
+		installation, repos, StateNeedsAttention, code, at)
+	return len(ids), err
+}
+
+// MARK: webhook deliveries (D9)
+
+// Delivery statuses.
+const (
+	DeliveryQueued  = "queued"
+	DeliveryDone    = "done"
+	DeliveryIgnored = "ignored"
+	DeliveryFailed  = "failed"
+)
+
+// Delivery is one github_webhook_deliveries row: six fields of the payload
+// and nothing else (D2). Removed is not stored; it is the repository ids an
+// installation_repositories event took away.
+type Delivery struct {
+	ID             string
+	Event          string
+	Action         string
+	InstallationID int64
+	RepoID         int64
+	Ref            string
+	After          string
+	Removed        []int64
+}
+
+func nullInt(v int64) *int64 {
+	if v == 0 {
+		return nil
+	}
+	return &v
+}
+
+func nullText(v string) *string {
+	if v == "" {
+		return nil
+	}
+	return &v
+}
+
+// InsertDelivery records a delivery as queued. inserted is false when its id
+// was seen before: GitHub delivered it twice, or it is a replay.
+func (s *Store) InsertDelivery(ctx context.Context, d Delivery, at time.Time) (inserted bool, err error) {
+	tag, err := s.pool.Exec(ctx, `INSERT INTO github_webhook_deliveries
+		(delivery_id, event, action, installation_id, repo_id, ref, after_sha, status, received_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT (delivery_id) DO NOTHING`,
+		d.ID, d.Event, nullText(d.Action), nullInt(d.InstallationID), nullInt(d.RepoID), nullText(d.Ref), nullText(d.After),
+		DeliveryQueued, at)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() > 0, nil
+}
+
+// SetDeliveryStatus closes one delivery.
+func (s *Store) SetDeliveryStatus(ctx context.Context, id, status string, at time.Time) error {
+	_, err := s.update(ctx, `UPDATE github_webhook_deliveries SET status = $2, processed_at = $3 WHERE delivery_id = $1`, id, status, at)
+	return err
+}
+
+// DeliveryStatus is a delivery's status, or "" when it is unknown.
+func (s *Store) DeliveryStatus(ctx context.Context, id string) (string, error) {
+	var status string
+	err := s.pool.QueryRow(ctx, `SELECT status FROM github_webhook_deliveries WHERE delivery_id = $1`, id).Scan(&status)
+	if errors.Is(err, pgx.ErrNoRows) || missingTable(err) {
+		return "", nil
+	}
+	return status, err
+}
+
+// DeliveriesDone closes the queued push deliveries of a repository's branch
+// that arrived no later than upTo: the pull that just finished started after
+// them, so it saw what they announced.
+func (s *Store) DeliveriesDone(ctx context.Context, repoID int64, ref string, upTo, at time.Time) error {
+	_, err := s.update(ctx, `UPDATE github_webhook_deliveries SET status = $4, processed_at = $5
+		WHERE repo_id = $1 AND ref = $2 AND status = $3 AND event = 'push' AND received_at <= $6`,
+		repoID, ref, DeliveryQueued, DeliveryDone, at, upTo)
+	return err
+}
+
+// StaleDeliveries is the sweep's half of the queue (D9): push deliveries
+// still queued that arrived before the given time. Those whose repository
+// and branch an active connection syncs are returned as vaults to pull, each
+// once; the rest have nothing to wait for and are closed as ignored.
+func (s *Store) StaleDeliveries(ctx context.Context, before, at time.Time) ([]uuid.UUID, error) {
+	out, err := s.vaults(ctx, `SELECT DISTINCT c.vault_id FROM github_webhook_deliveries d
+		JOIN github_sync_connections c ON c.repo_id = d.repo_id AND d.ref = 'refs/heads/' || c.branch
+		WHERE d.status = $1 AND d.received_at < $2 AND c.state = $3`, DeliveryQueued, before, StateActive)
+	if err != nil {
+		return nil, err
+	}
+	_, err = s.update(ctx, `UPDATE github_webhook_deliveries d SET status = $3, processed_at = $4
+		WHERE d.status = $1 AND d.received_at < $2 AND NOT EXISTS (
+			SELECT 1 FROM github_sync_connections c
+			WHERE c.repo_id = d.repo_id AND d.ref = 'refs/heads/' || c.branch AND c.state = $5)`,
+		DeliveryQueued, before, DeliveryIgnored, at, StateActive)
+	return out, err
+}
+
+// PurgeDeliveries deletes deliveries received before the given time
+// (GitHubSyncPurge: 7 days).
+func (s *Store) PurgeDeliveries(ctx context.Context, before time.Time) (int64, error) {
+	tag, err := s.pool.Exec(ctx, `DELETE FROM github_webhook_deliveries WHERE received_at < $1`, before)
+	if missingTable(err) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
 }

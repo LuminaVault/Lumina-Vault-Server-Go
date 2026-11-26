@@ -40,6 +40,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -49,6 +50,10 @@ import (
 const (
 	basePath     = "/v1/vault/github-sync"
 	callbackPath = "/v1/github-sync/callback"
+	webhookPath  = "/v1/webhooks/github"
+	// maxWebhookBody is D9's cap: a larger delivery is refused and the poll
+	// catches up.
+	maxWebhookBody = 5 << 20
 	// appCallback is where the callback sends the iOS app.
 	appCallback = "luminavault://github-sync"
 	// webIntegrationsPath is the web app's page for this feature, where the
@@ -96,10 +101,16 @@ type Options struct {
 	WebReturnOrigins []string
 	// Limits is the process's rate-limit store. Nil gives the module its own.
 	Limits *ratelimit.Store
-	// Sync is the push worker (E4.8). Nil leaves the routes working with
-	// nothing behind them: a connection is saved and never pushed.
+	// Sync is the sync worker (E4.8, E4.9). Nil leaves the routes working
+	// with nothing behind them: a connection is saved and never synced.
 	Sync Syncer
-	Log  *slog.Logger
+	// WebhookSecret is GITHUB_APP_WEBHOOK_SECRET, the HMAC key of the webhook
+	// route (D9). Empty: that route answers 500.
+	WebhookSecret string
+	// Progress reports a pull being applied for the vault in this process,
+	// for the status (D14). Nil: none is reported.
+	Progress func(vault uuid.UUID) (done, total int, ok bool)
+	Log      *slog.Logger
 }
 
 // Syncer is what the routes need from githubsync.Syncer.
@@ -112,6 +123,8 @@ type Syncer interface {
 	Syncing(vault uuid.UUID) bool
 	// Disconnected removes the vault's git remote after its row is gone.
 	Disconnected(ctx context.Context, vault uuid.UUID)
+	// Deliver handles a recorded webhook delivery and returns its status.
+	Deliver(ctx context.Context, d githubsync.Delivery) string
 }
 
 type Module struct {
@@ -127,6 +140,9 @@ type Module struct {
 	webReturn    []string
 	limits       *ratelimit.Store
 	sync         Syncer
+	secret       string
+	progress     func(uuid.UUID) (int, int, bool)
+	deliveries   sync.WaitGroup
 	log          *slog.Logger
 	now          func() time.Time
 
@@ -149,7 +165,7 @@ func New(opts Options) *Module {
 		limits = ratelimit.NewStore()
 	}
 	m := &Module{
-		limits: limits, sync: opts.Sync,
+		limits: limits, sync: opts.Sync, secret: opts.WebhookSecret, progress: opts.Progress,
 		client: opts.Client, store: opts.Store, access: opts.Access, paths: opts.Paths,
 		callbackURL: opts.CallbackURL, slug: opts.Slug, maxRepoBytes: opts.MaxRepoBytes, maxFiles: opts.MaxFiles,
 		maxFileSize: maxFile, webReturn: opts.WebReturnOrigins, log: log, now: time.Now,
@@ -191,7 +207,14 @@ func (m *Module) Register(r httpserver.Router, authMW echo.MiddlewareFunc) {
 	r.DELETE(basePath+"/connection", m.disconnect, manage...)
 	r.POST(basePath+"/sync", m.syncNow, manage...)
 	r.GET(callbackPath, m.callback, m.coded, ratelimit.Middleware(m.limits, ratelimit.GitHubSyncCallbackByIP, ratelimit.IPOnlyKey))
+	// Public, like the callback: GitHub has no session. The signature is the
+	// authentication; the limit only bounds what an unsigned flood costs.
+	r.POST(webhookPath, m.webhook, ratelimit.Middleware(m.limits, ratelimit.GitHubWebhookByIP, ratelimit.IPOnlyKey))
 }
+
+// Drain waits for webhook deliveries still being handled after their
+// response, for shutdown and for tests.
+func (m *Module) Drain() { m.deliveries.Wait() }
 
 // MARK: errors
 
@@ -474,6 +497,7 @@ type connectionDTO struct {
 	Conflicts        []conflictDTO `json:"conflicts"`
 	HeldCount        int           `json:"heldCount"`
 	Held             []heldDTO     `json:"held"`
+	Kept             []string      `json:"kept"`
 	ManageURL        string        `json:"manageUrl"`
 }
 
@@ -512,7 +536,7 @@ func (m *Module) statusOf(ctx context.Context, vault uuid.UUID, canManage bool) 
 		ConnectedAt: wire.Time{Time: conn.CreatedAt}, ConnectedByLogin: conn.ConnectedGitHubLogin,
 		LastPushAt: wireTime(conn.LastPushAt), LastPullAt: wireTime(conn.LastPullAt),
 		PendingPush: m.pendingPush(vault, conn.RemoteSHA),
-		Conflicts:   []conflictDTO{}, Held: []heldDTO{}, HeldCount: conn.Report.HeldCount,
+		Conflicts:   []conflictDTO{}, Held: []heldDTO{}, HeldCount: conn.Report.HeldCount, Kept: []string{},
 		Syncing:   m.sync != nil && conn.State == githubsync.StateActive && m.sync.Syncing(vault),
 		ManageURL: m.manageURL(conn.AccountType, conn.AccountLogin, conn.InstallationID),
 	}
@@ -528,6 +552,13 @@ func (m *Module) statusOf(ctx context.Context, vault uuid.UUID, canManage bool) 
 	}
 	for _, h := range conn.Report.Held[:min(len(conn.Report.Held), sampleLimit)] {
 		dto.Held = append(dto.Held, heldDTO{Path: h.Path, Reason: string(h.Reason)})
+	}
+	dto.Kept = append(dto.Kept, conn.Report.Kept[:min(len(conn.Report.Kept), sampleLimit)]...)
+	if m.progress != nil {
+		if done, total, ok := m.progress(vault); ok {
+			dto.Progress = &progressDTO{Done: done, Total: total}
+			dto.Syncing = true
+		}
 	}
 	out.Connection = dto
 	return out, nil
