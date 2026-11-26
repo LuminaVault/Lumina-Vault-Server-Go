@@ -70,7 +70,7 @@ func githubSync(pool *pgxpool.Pool, cfg config.Config, paths vaultpaths.Paths, l
 	opts := githubsync.SyncerOptions{
 		Store: store, GitHub: client, Repos: history.committer, RawRoot: paths.Raw,
 		GitBaseURL: settings.GitBaseURL, Concurrency: pushConcurrency(pool), Log: log,
-		MaxRepoBytes: settings.MaxRepoBytes, PollInterval: settings.PollInterval,
+		MaxRepoBytes: settings.MaxRepoBytes, PollInterval: settings.PollInterval, PushTimeout: settings.PushTimeout,
 	}
 	var progress func(uuid.UUID) (int, int, bool)
 	if files != nil {

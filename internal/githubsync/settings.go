@@ -26,6 +26,7 @@ type Settings struct {
 	Slug          string
 	CallbackURL   string
 	PollInterval  time.Duration
+	PushTimeout   time.Duration
 	MaxRepoBytes  int64
 	MaxFiles      int
 	APIBaseURL    string
@@ -77,6 +78,13 @@ func SettingsFrom(cfg config.Config) (Settings, error) {
 	if err != nil || poll < time.Minute {
 		return Settings{}, errors.New("githubsync: GITHUB_SYNC_POLL_INTERVAL must be a duration of at least 1m")
 	}
+	// Unset (a Config built by hand) is the syncer's default.
+	var push time.Duration
+	if v := strings.TrimSpace(cfg.GitHubSyncPushTimeout); v != "" {
+		if push, err = time.ParseDuration(v); err != nil || push < time.Second {
+			return Settings{}, errors.New("githubsync: GITHUB_SYNC_PUSH_TIMEOUT must be a duration of at least 1s")
+		}
+	}
 	if cfg.GitHubSyncMaxRepoMB <= 0 || cfg.GitHubSyncMaxFiles <= 0 {
 		return Settings{}, errors.New("githubsync: GITHUB_SYNC_MAX_REPO_MB and GITHUB_SYNC_MAX_FILES must be positive")
 	}
@@ -100,7 +108,7 @@ func SettingsFrom(cfg config.Config) (Settings, error) {
 	return Settings{
 		AppID: appID, ClientID: strings.TrimSpace(cfg.GitHubAppClientID), ClientSecret: strings.TrimSpace(cfg.GitHubAppClientSecret),
 		PrivateKey: key, WebhookSecret: strings.TrimSpace(cfg.GitHubAppWebhookSecret), Slug: strings.TrimSpace(cfg.GitHubAppSlug),
-		CallbackURL: strings.TrimSpace(cfg.GitHubSyncCallbackURL), PollInterval: poll,
+		CallbackURL: strings.TrimSpace(cfg.GitHubSyncCallbackURL), PollInterval: poll, PushTimeout: push,
 		MaxRepoBytes: int64(cfg.GitHubSyncMaxRepoMB) << 20, MaxFiles: cfg.GitHubSyncMaxFiles,
 		APIBaseURL: strings.TrimSpace(cfg.GitHubAPIBaseURL), GitBaseURL: strings.TrimSpace(cfg.GitHubGitBaseURL),
 	}, nil

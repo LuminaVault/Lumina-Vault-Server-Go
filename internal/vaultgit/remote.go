@@ -4,13 +4,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"io/fs"
 	"net/http"
 	neturl "net/url"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/protocol/packp"
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	"github.com/go-git/go-git/v5/plumbing/transport/client"
 	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
@@ -43,6 +48,9 @@ var (
 	ErrRemoteForbidden = errors.New("vaultgit: remote forbids the push")
 	// ErrNoRemote: SetRemote was never called.
 	ErrNoRemote = errors.New("vaultgit: no remote")
+	// ErrPackTooLarge: the pack a push would send is larger than the caller
+	// allows (PushOptions.MaxPackBytes). The request was never sent.
+	ErrPackTooLarge = errors.New("vaultgit: pack is larger than the limit")
 )
 
 // Git over http(s) never follows a redirect in this process, whoever set the
@@ -58,9 +66,116 @@ func init() { SetHTTPClient(&http.Client{}) }
 func SetHTTPClient(c *http.Client) {
 	guarded := *c
 	guarded.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	t := githttp.NewClient(&guarded)
+	t := guardedTransport{githttp.NewClient(&guarded)}
 	client.InstallProtocol("https", t)
 	client.InstallProtocol("http", t)
+}
+
+// go-git's http transport copies the whole pack of a push into memory before
+// it sends the request, and reads it from the encoder without looking at the
+// context (transport/http/receive_pack.go, packp/updreq_encode.go). So a
+// deadline or a cancellation did nothing until the request itself started,
+// and nothing bounded the copy. guardedTransport puts a reader between the
+// two that fails once the context is done or the pack passes the limit Push
+// was given: the copy stops, the encoder is unblocked, and the request is
+// never made. What it cannot shorten is the walk that decides which objects
+// to send, which runs before the first byte and reads no context either.
+type guardedTransport struct{ transport.Transport }
+
+func (t guardedTransport) NewReceivePackSession(ep *transport.Endpoint, auth transport.AuthMethod) (transport.ReceivePackSession, error) {
+	s, err := t.Transport.NewReceivePackSession(ep, auth)
+	if err != nil {
+		return nil, err
+	}
+	return guardedSession{s}, nil
+}
+
+type guardedSession struct{ transport.ReceivePackSession }
+
+func (s guardedSession) ReceivePack(ctx context.Context, req *packp.ReferenceUpdateRequest) (*packp.ReportStatus, error) {
+	if req.Packfile != nil {
+		limit, _ := ctx.Value(packLimitKey{}).(int64)
+		req.Packfile = &packGuard{ReadCloser: req.Packfile, ctx: ctx, limit: limit}
+	}
+	return s.ReceivePackSession.ReceivePack(ctx, req)
+}
+
+type packLimitKey struct{}
+
+// packGuard is the pack of a push on its way into go-git's buffer.
+type packGuard struct {
+	io.ReadCloser
+	ctx   context.Context
+	limit int64 // 0: none
+	n     int64
+}
+
+func (g *packGuard) Read(p []byte) (int, error) {
+	if err := g.ctx.Err(); err != nil {
+		return 0, err
+	}
+	n, err := g.ReadCloser.Read(p)
+	g.n += int64(n)
+	if g.limit > 0 && g.n > g.limit {
+		return 0, ErrPackTooLarge
+	}
+	return n, err
+}
+
+// ObjectsSize is the size on disk of .git/objects: every object the
+// repository has, compressed. It is an upper bound on a first push's pack,
+// and a loose one: right after a repack the old packs are still there.
+func (r *Repo) ObjectsSize() (int64, error) {
+	var total int64
+	err := filepath.WalkDir(filepath.Join(r.root, git.GitDirName, "objects"), func(_ string, d fs.DirEntry, err error) error {
+		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) { // repacked or pruned mid-walk
+				return nil
+			}
+			return err
+		}
+		if d.Type().IsRegular() {
+			if info, err := d.Info(); err == nil {
+				total += info.Size()
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, fmt.Errorf("vaultgit: objects size: %w", err)
+	}
+	return total, nil
+}
+
+// writeConfig replaces .git/config in one step: a temp file beside it, synced,
+// then renamed over it. go-git's own SetConfig truncates the file and writes
+// it in place, so a crash between the two left a repository with no config.
+func (r *Repo) writeConfig(cfg *config.Config) error {
+	if err := cfg.Validate(); err != nil {
+		return err
+	}
+	b, err := cfg.Marshal()
+	if err != nil {
+		return err
+	}
+	dir := filepath.Join(r.root, git.GitDirName)
+	tmp, err := os.CreateTemp(dir, "config.lv-*.tmp")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.Remove(tmp.Name()) }() // a no-op once renamed
+	if _, err := tmp.Write(b); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), filepath.Join(dir, "config"))
 }
 
 // SetRemote points origin at url, creating or replacing it. The URL must not
@@ -87,7 +202,7 @@ func (r *Repo) SetRemote(url string) error {
 		URLs:  []string{url},
 		Fetch: []config.RefSpec{config.RefSpec("+refs/heads/*:refs/remotes/" + RemoteName + "/*")},
 	}
-	if err := r.repo.Storer.SetConfig(cfg); err != nil {
+	if err := r.writeConfig(cfg); err != nil {
 		return fmt.Errorf("vaultgit: write config: %w", err)
 	}
 	return nil
@@ -115,7 +230,7 @@ func (r *Repo) RemoveRemote() error {
 	}
 	if _, ok := cfg.Remotes[RemoteName]; ok {
 		delete(cfg.Remotes, RemoteName)
-		if err := r.repo.Storer.SetConfig(cfg); err != nil {
+		if err := r.writeConfig(cfg); err != nil {
 			return fmt.Errorf("vaultgit: write config: %w", err)
 		}
 	}
@@ -162,28 +277,53 @@ func (r *Repo) RemoteRefs() ([]string, error) {
 	return out, err
 }
 
-// Push sends the local branch to origin's branch with an installation token
-// and returns the commit pushed. It is never forced: when the remote has
-// commits the local history lacks, it fails with ErrNonFastForward and sends
-// nothing. A remote already at the local tip is success. ctx bounds the
-// transport. The token is used for this call only and written nowhere.
+// PushOptions bound one push.
+type PushOptions struct {
+	// MaxPackBytes refuses, with ErrPackTooLarge and before anything is sent,
+	// a push whose pack is larger. Zero is no limit.
+	MaxPackBytes int64
+}
+
+// PushResult is what a push did.
+type PushResult struct {
+	// SHA is the commit the remote branch is at: the local tip.
+	SHA string
+	// Sent is false when the remote already had it and nothing was sent.
+	Sent bool
+}
+
+// Push is PushWith without limits, for callers that only want the commit.
 func (r *Repo) Push(ctx context.Context, branch, token string) (sha string, err error) {
+	res, err := r.PushWith(ctx, branch, token, PushOptions{})
+	return res.SHA, err
+}
+
+// PushWith sends the local branch to origin's branch with an installation
+// token. It is never forced: when the remote has commits the local history
+// lacks, it fails with ErrNonFastForward and sends nothing. A remote already
+// at the local tip is success, with Sent false. ctx bounds the transport and
+// the building of the pack (guardedTransport). The token is used for this
+// call only and written nowhere.
+func (r *Repo) PushWith(ctx context.Context, branch, token string, opts PushOptions) (PushResult, error) {
 	if !ValidBranchName(branch) {
-		return "", fmt.Errorf("vaultgit: invalid branch %q", branch)
+		return PushResult{}, fmt.Errorf("vaultgit: invalid branch %q", branch)
 	}
 	head, err := r.Head()
 	if err != nil {
-		return "", err
+		return PushResult{}, err
 	}
 	if head == "" {
-		return "", errors.New("vaultgit: nothing to push")
+		return PushResult{}, errors.New("vaultgit: nothing to push")
 	}
 	remote, err := r.repo.Remote(RemoteName)
 	if errors.Is(err, git.ErrRemoteNotFound) {
-		return "", ErrNoRemote
+		return PushResult{}, ErrNoRemote
 	}
 	if err != nil {
-		return "", fmt.Errorf("vaultgit: remote: %w", err)
+		return PushResult{}, fmt.Errorf("vaultgit: remote: %w", err)
+	}
+	if opts.MaxPackBytes > 0 {
+		ctx = context.WithValue(ctx, packLimitKey{}, opts.MaxPackBytes)
 	}
 	spec := config.RefSpec(plumbing.NewBranchReferenceName(localBranch).String() + ":" + plumbing.NewBranchReferenceName(branch).String())
 	err = remote.PushContext(ctx, &git.PushOptions{
@@ -192,10 +332,13 @@ func (r *Repo) Push(ctx context.Context, branch, token string) (sha string, err 
 		Auth:       basicAuth(token),
 		Force:      false,
 	})
-	if err == nil || errors.Is(err, git.NoErrAlreadyUpToDate) {
-		return head, nil
+	switch {
+	case err == nil:
+		return PushResult{SHA: head, Sent: true}, nil
+	case errors.Is(err, git.NoErrAlreadyUpToDate):
+		return PushResult{SHA: head}, nil
 	}
-	return "", pushError(err)
+	return PushResult{}, pushError(err)
 }
 
 func basicAuth(token string) *githttp.BasicAuth {

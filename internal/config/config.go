@@ -363,10 +363,13 @@ type Config struct {
 	GitHubAppSlug          string `env:"GITHUB_APP_SLUG"`
 	GitHubSyncCallbackURL  string `env:"GITHUB_SYNC_CALLBACK_URL"`
 	GitHubSyncPollInterval string `env:"GITHUB_SYNC_POLL_INTERVAL" envDefault:"15m"`
-	GitHubSyncMaxRepoMB    int    `env:"GITHUB_SYNC_MAX_REPO_MB" envDefault:"200"`
-	GitHubSyncMaxFiles     int    `env:"GITHUB_SYNC_MAX_FILES" envDefault:"5000"`
-	GitHubAPIBaseURL       string `env:"GITHUB_API_BASE_URL" envDefault:"https://api.github.com"`
-	GitHubGitBaseURL       string `env:"GITHUB_GIT_BASE_URL" envDefault:"https://github.com"`
+	// GITHUB_SYNC_PUSH_TIMEOUT is what one push may take before its size is
+	// counted: a second is added for every MiB the repository holds.
+	GitHubSyncPushTimeout string `env:"GITHUB_SYNC_PUSH_TIMEOUT" envDefault:"60s"`
+	GitHubSyncMaxRepoMB   int    `env:"GITHUB_SYNC_MAX_REPO_MB" envDefault:"200"`
+	GitHubSyncMaxFiles    int    `env:"GITHUB_SYNC_MAX_FILES" envDefault:"5000"`
+	GitHubAPIBaseURL      string `env:"GITHUB_API_BASE_URL" envDefault:"https://api.github.com"`
+	GitHubGitBaseURL      string `env:"GITHUB_GIT_BASE_URL" envDefault:"https://github.com"`
 	// VaultPropertiesEnabled indexes Markdown frontmatter into
 	// vault_files.properties and turns on the properties API (backlog E8.2).
 	VaultPropertiesEnabled string `env:"VAULT_PROPERTIES_ENABLED" envDefault:"false"`
