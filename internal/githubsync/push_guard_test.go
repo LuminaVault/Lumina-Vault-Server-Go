@@ -32,7 +32,12 @@ func withMaxRepoBytes(n int64) envOption {
 // counts the pushes that arrive as requests and, while shut, keeps each one
 // waiting, as a remote that has stopped answering does.
 type gate struct {
-	posts   atomic.Int32
+	posts atomic.Int32
+	// drop: a request that waited is cut off when the gate opens, never
+	// handed on. Its client gave up long before (Go's server does not see
+	// that while the request's body is unread), and a dead push applied late
+	// would be a push nobody made.
+	drop    atomic.Bool
 	mu      sync.Mutex
 	shut    chan struct{} // nil: open
 	arrived chan struct{}
@@ -41,7 +46,7 @@ type gate struct {
 func (v *syncEnv) gate(name string) *gate {
 	g := &gate{arrived: make(chan struct{}, 64)}
 	v.gh.Lock()
-	v.gh.Intercept = func(_ http.ResponseWriter, r *http.Request) bool {
+	v.gh.Intercept = func(w http.ResponseWriter, r *http.Request) bool {
 		if r.URL.Path != "/"+name+".git/git-receive-pack" {
 			return false
 		}
@@ -50,13 +55,20 @@ func (v *syncEnv) gate(name string) *gate {
 		shut := g.shut
 		g.mu.Unlock()
 		g.arrived <- struct{}{}
-		if shut != nil {
-			select {
-			case <-shut:
-			case <-r.Context().Done():
-			}
+		if shut == nil {
+			return false
 		}
-		return false
+		select {
+		case <-shut:
+		case <-r.Context().Done():
+		}
+		if !g.drop.Load() {
+			return false
+		}
+		if conn, _, err := w.(http.Hijacker).Hijack(); err == nil {
+			_ = conn.Close()
+		}
+		return true
 	}
 	v.gh.Unlock()
 	// A request still waiting would keep the stub's server from closing.
@@ -113,6 +125,7 @@ func TestPushTimeoutExpires(t *testing.T) {
 	v := newSyncEnv(t, withPushTimeout(300*time.Millisecond))
 	l := v.connect()
 	g := v.gate(l.name)
+	g.drop.Store(true)
 	g.close()
 
 	v.commit(l.vault, "a.md", "one")
@@ -138,6 +151,8 @@ func TestPushTimeoutExpires(t *testing.T) {
 	require.Nil(t, c.NextRetryAt)
 	require.Zero(t, c.RetryCount)
 	require.Equal(t, head, *c.RemoteSHA)
+	require.Equal(t, v.clock.now(), c.LastPushAt.UTC(), "the retry sent it, not the request that timed out")
+	require.Len(t, v.pushes(l), 1)
 	v.noTokenInLogs()
 }
 
@@ -149,6 +164,7 @@ func TestStopDuringAPushInFlight(t *testing.T) {
 	v := newSyncEnv(t)
 	l := v.connect()
 	g := v.gate(l.name)
+	g.drop.Store(true)
 	g.close()
 
 	head := v.commit(l.vault, "a.md", "one")
@@ -193,7 +209,10 @@ func TestStopDuringAPushInFlight(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, looked)
 	require.Equal(t, head, v.tip(l))
-	require.Equal(t, head, *v.row(l.vault).RemoteSHA)
+	c = v.row(l.vault)
+	require.Equal(t, head, *c.RemoteSHA)
+	require.Equal(t, v.clock.now(), c.LastPushAt.UTC(), "this push sent it, not the one that was stopped")
+	require.Len(t, v.pushes(l), 1)
 	v.noTokenInLogs()
 }
 
@@ -237,6 +256,41 @@ func TestAKilledPushWaitsLongerEachTime(t *testing.T) {
 	require.Nil(t, c.NextRetryAt)
 	require.Nil(t, c.ReservedAt)
 	require.Zero(t, c.RetryCount)
+}
+
+// A pull's fetch holds its pack in memory as a push does, so the same
+// reservation is on the row before it starts, and is taken back when the
+// pull found nothing to do.
+func TestAPullReservesItsRetryToo(t *testing.T) {
+	var (
+		v    *syncEnv
+		seen []githubsync.Connection
+	)
+	v = newSyncEnv(t, withPull(func(_ context.Context, in githubsync.PullInput) error {
+		seen = append(seen, *v.row(in.Connection.VaultID)) // inside the lock, where the fetch runs
+		return nil
+	}))
+	l := v.connect()
+	v.commit(l.vault, "a.md", "one")
+	v.synced(l)
+	require.Empty(t, seen)
+
+	// Somebody else pushed: the webhook's nudge finds the remote moved.
+	body := "theirs"
+	v.gh.Git.Commit(l.repo, l.branch, "from another clone", map[string]*string{"b.md": &body})
+	v.syncer.NotifyPull(l.vault)
+	v.idle(l.vault)
+	require.Len(t, seen, 1)
+	require.NotNil(t, seen[0].ReservedAt)
+	require.Equal(t, v.clock.now().Add(30*time.Second), seen[0].NextRetryAt.UTC())
+	require.Equal(t, 1, seen[0].RetryCount)
+	require.Nil(t, seen[0].ErrorCode)
+
+	c := v.row(l.vault)
+	require.Nil(t, c.NextRetryAt, "nothing failed: the next look is not kept waiting")
+	require.Nil(t, c.ReservedAt)
+	require.Zero(t, c.RetryCount)
+	require.Nil(t, c.ErrorCode)
 }
 
 // go-git holds a push's pack in memory, so a pack over GITHUB_SYNC_MAX_REPO_MB
