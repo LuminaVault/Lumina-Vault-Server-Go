@@ -467,7 +467,7 @@ func (r *Repo) Contains(sha string) (bool, error) {
 	if !plumbing.IsHash(sha) {
 		return false, nil
 	}
-	headRef, err := r.repo.Head()
+	headRef, err := r.headRef()
 	if errors.Is(err, plumbing.ErrReferenceNotFound) {
 		return false, nil
 	}

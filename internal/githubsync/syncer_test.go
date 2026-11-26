@@ -302,11 +302,18 @@ func (v *syncEnv) sweep() {
 	}
 }
 
+// commits counts the vault's history from HEAD as vaultgit reads it. go-git's
+// own read of HEAD, made while a commit moves the branch, can find the ref
+// file empty and fail with "reference not found".
 func (v *syncEnv) commits(vault uuid.UUID) int {
 	v.t.Helper()
+	head := v.head(vault)
+	if head == "" {
+		return 0
+	}
 	repo, err := git.PlainOpen(v.raw(vault))
 	require.NoError(v.t, err)
-	return countCommits(v.t, repo, "")
+	return countCommits(v.t, repo, head)
 }
 
 func countCommits(t *testing.T, repo *git.Repository, from string) int {

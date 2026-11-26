@@ -360,7 +360,7 @@ func (r *Repo) FastForward(sha string) error {
 // that changes no file is still a commit: it is what makes the next push a
 // fast-forward for the remote.
 func (r *Repo) MergeCommit(theirs string, carry []string, msg Message, maxFileSize int64, when time.Time) (sha string, err error) {
-	headRef, err := r.repo.Head()
+	headRef, err := r.headRef()
 	if err != nil {
 		return "", fmt.Errorf("vaultgit: merge: %w", err)
 	}
