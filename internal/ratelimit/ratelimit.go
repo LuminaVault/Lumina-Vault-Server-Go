@@ -119,7 +119,12 @@ var VaultExportByUser = Policy{Name: "vaultExportByUser", Max: 3, Window: 300 * 
 // calls and a walk of the vault (branches, connect). GitHubSyncCallbackByIP is
 // the public sign-in callback. GitHubSyncNowByVault is "Sync now", keyed by
 // the vault (spec D14: 6 per minute per vault, whoever asks).
+// GitHubWebhookByIP is GitHub's webhook route (spec D9). GitHub sends from a
+// handful of addresses and never redelivers, so a refused delivery waits for
+// the poll: the limit is far above what the App's installations can produce
+// and exists to bound what a flood of unsigned requests costs.
 var (
+	GitHubWebhookByIP      = Policy{Name: "githubWebhookByIP", Max: 600, Window: 60 * time.Second}
 	GitHubSyncNowByVault   = Policy{Name: "githubSyncNowByVault", Max: 6, Window: 60 * time.Second}
 	GitHubSyncStatusByUser = Policy{Name: "githubSyncStatusByUser", Max: 120, Window: 60 * time.Second}
 	GitHubSyncByUser       = Policy{Name: "githubSyncByUser", Max: 30, Window: 60 * time.Second}

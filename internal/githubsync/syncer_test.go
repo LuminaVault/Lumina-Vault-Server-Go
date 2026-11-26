@@ -1,14 +1,17 @@
 package githubsync_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"lumina/internal/githubapp"
 	"lumina/internal/githubapp/githubapptest"
 	"lumina/internal/githubsync"
 	"lumina/internal/vaultgit"
+	"lumina/internal/vaultpaths"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -67,12 +70,35 @@ type syncEnv struct {
 	nextID  int64
 	nextIDm sync.Mutex
 	vaults  []uuid.UUID
+	logs    logBuffer
 }
 
-type envOption func(*githubsync.SyncerOptions)
+// logBuffer collects what the workers log, for a failed test to print.
+type logBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (l *logBuffer) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.Write(p)
+}
+
+func (l *logBuffer) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.String()
+}
+
+func (v *syncEnv) logger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(&v.logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+}
+
+type envOption func(v *syncEnv, o *githubsync.SyncerOptions)
 
 func withPull(p githubsync.PullFunc) envOption {
-	return func(o *githubsync.SyncerOptions) { o.Pull = p }
+	return func(_ *syncEnv, o *githubsync.SyncerOptions) { o.Pull = p }
 }
 
 func newSyncEnv(t *testing.T, opts ...envOption) *syncEnv {
@@ -90,7 +116,8 @@ func newSyncEnv(t *testing.T, opts ...envOption) *syncEnv {
 	return v
 }
 
-func (v *syncEnv) raw(vault uuid.UUID) string { return filepath.Join(v.root, vault.String(), "raw") }
+// raw is the vault's raw directory, where the server's own paths put it.
+func (v *syncEnv) raw(vault uuid.UUID) string { return vaultpaths.Paths{Root: v.root}.Raw(vault) }
 
 func (v *syncEnv) listen(fn func(uuid.UUID, string)) {
 	if fn == nil {
@@ -120,10 +147,10 @@ func (v *syncEnv) newCommitter() *vaultgit.Committer {
 func (v *syncEnv) newSyncer(repos githubsync.Repos, opts ...envOption) *githubsync.Syncer {
 	o := githubsync.SyncerOptions{
 		Store: v.store, GitHub: v.client, Repos: repos, RawRoot: v.raw, GitBaseURL: v.gh.URL,
-		Now: v.clock.now, LockedRetry: 50 * time.Millisecond, PushTimeout: 20 * time.Second,
+		Now: v.clock.now, LockedRetry: 50 * time.Millisecond, PushTimeout: 20 * time.Second, Log: v.logger(),
 	}
 	for _, opt := range opts {
-		opt(&o)
+		opt(v, &o)
 	}
 	s := githubsync.NewSyncer(o)
 	v.t.Cleanup(s.Stop)
@@ -1070,7 +1097,7 @@ func TestHeldFilesSurviveAPush(t *testing.T) {
 	}
 	// A sweep commit (the committer's own, every 10 minutes) does not delete
 	// them either.
-	_, _, err := v.committer.Sweep(context.Background(), v.root)
+	_, _, err := v.committer.Sweep(context.Background(), filepath.Join(v.root, "tenants"))
 	require.NoError(t, err)
 	for path := range held {
 		_, err := os.Stat(filepath.Join(v.raw(l.vault), filepath.FromSlash(path)))

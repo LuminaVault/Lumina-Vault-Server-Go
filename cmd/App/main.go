@@ -355,17 +355,18 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		}
 		defer stopAgent()
 		links, enrichment := linkCaptureService(pool, cfg, paths, embeddings, memories, disk, sink)
+		vaultMod := vault.New(pool, vault.Options{
+			Paths: paths, HermesDataRoot: cfg.HermesDataRoot, Identify: identify, Limits: limits,
+			Spaces: spaces.New(pool, paths, identify), Embeddings: embeddings,
+			Guard:   disk,
+			Sink:    sink,
+			Latches: onboardlatch.New(pool), Analytics: analytics,
+			CaptureFiling: agent.captureFiling(),
+			Indexer: chunkindex.NewIndexer(chunkindex.NewChunkRepository(pool), embeddings,
+				chunkindex.NewLinkRepository(pool)),
+		})
 		deps.Modules = append(deps.Modules,
-			vault.New(pool, vault.Options{
-				Paths: paths, HermesDataRoot: cfg.HermesDataRoot, Identify: identify, Limits: limits,
-				Spaces: spaces.New(pool, paths, identify), Embeddings: embeddings,
-				Guard:   disk,
-				Sink:    sink,
-				Latches: onboardlatch.New(pool), Analytics: analytics,
-				CaptureFiling: agent.captureFiling(),
-				Indexer: chunkindex.NewIndexer(chunkindex.NewChunkRepository(pool), embeddings,
-					chunkindex.NewLinkRepository(pool)),
-			}),
+			vaultMod,
 			todos.New(pool, paths, todos.Options{Disk: disk, Memories: memories, Embeddings: embeddings}),
 			captureModule(pool, cfg, box, limits, links, analytics),
 		)
@@ -404,7 +405,7 @@ func serve(ctx context.Context, cfg config.Config, cmd Command) error {
 		// GitHub sync (backlog E4.6-E4.10): unmounted unless GITHUB_SYNC_ENABLED.
 		// Its stop runs before the committer's (defers are last in, first
 		// out): a commit flushed at shutdown is pushed by the next start.
-		syncMod, syncJobs, stopGitHubSync := githubSync(pool, cfg, paths, limits, history)
+		syncMod, syncJobs, stopGitHubSync := githubSync(pool, cfg, paths, limits, history, vaultMod.Files(), disk)
 		defer stopGitHubSync()
 		registered = append(registered, syncJobs...)
 		if syncMod != nil {

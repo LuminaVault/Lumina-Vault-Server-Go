@@ -65,6 +65,9 @@ func SetHTTPClient(c *http.Client) {
 
 // SetRemote points origin at url, creating or replacing it. The URL must not
 // hold credentials: they are passed per call and never written to .git/config.
+// When origin pointed somewhere else, its refs/remotes/origin/* refs go too:
+// they describe the other repository (a disconnect whose clean-up lost the
+// race with a reconnect leaves them), and nothing may read them as this one's.
 func (r *Repo) SetRemote(url string) error {
 	if u, err := neturl.Parse(url); err != nil || u.User != nil {
 		return errors.New("vaultgit: remote URL is malformed or holds credentials")
@@ -75,6 +78,9 @@ func (r *Repo) SetRemote(url string) error {
 	}
 	if rc, ok := cfg.Remotes[RemoteName]; ok && len(rc.URLs) == 1 && rc.URLs[0] == url {
 		return nil
+	}
+	if err := r.removeTrackingRefs(); err != nil {
+		return err
 	}
 	cfg.Remotes[RemoteName] = &config.RemoteConfig{
 		Name:  RemoteName,
@@ -113,6 +119,10 @@ func (r *Repo) RemoveRemote() error {
 			return fmt.Errorf("vaultgit: write config: %w", err)
 		}
 	}
+	return r.removeTrackingRefs()
+}
+
+func (r *Repo) removeTrackingRefs() error {
 	refs, err := r.repo.References()
 	if err != nil {
 		return fmt.Errorf("vaultgit: list refs: %w", err)
@@ -203,11 +213,10 @@ const nonFastForward = "non-fast-forward update"
 // pull, like any other non-fast-forward.
 var movedStatuses = []string{"non-fast-forward", "fetch first", "failed to update ref", "cannot lock ref", "stale info"}
 
-// pushError sorts a failed push into the errors above. Anything else is
-// returned wrapped and is transient to the caller. The remote's own text is
-// kept in the chain for the log; callers store only the class.
-func pushError(err error) error {
-	text := err.Error()
+// remoteError sorts a failed request to the remote (a fetch, a listing, the
+// start of a push) into the errors above. Anything else is returned wrapped
+// and is transient to the caller.
+func remoteError(op string, err error) error {
 	switch {
 	case errors.Is(err, transport.ErrRepositoryNotFound):
 		return fmt.Errorf("%w: %w", ErrRemoteNotFound, err)
@@ -217,6 +226,19 @@ func pushError(err error) error {
 		return fmt.Errorf("%w: %w", ErrRemoteUnauthorized, err)
 	case errors.Is(err, transport.ErrAuthorizationFailed):
 		return fmt.Errorf("%w: %w", ErrRemoteForbidden, err)
+	}
+	return fmt.Errorf("vaultgit: %s: %w", op, err)
+}
+
+// pushError sorts a failed push into the errors above. Anything else is
+// returned wrapped and is transient to the caller. The remote's own text is
+// kept in the chain for the log; callers store only the class.
+func pushError(err error) error {
+	text := err.Error()
+	switch {
+	case errors.Is(err, transport.ErrRepositoryNotFound), redirected(err),
+		errors.Is(err, transport.ErrAuthenticationRequired), errors.Is(err, transport.ErrAuthorizationFailed):
+		return remoteError("push", err)
 	case strings.Contains(text, nonFastForward):
 		return fmt.Errorf("%w: %w", ErrNonFastForward, err)
 	case strings.HasPrefix(text, "command error on "):

@@ -274,6 +274,14 @@ func (f *Files) Write(ctx context.Context, in WriteInput) (*WriteResult, error) 
 	}, nil
 }
 
+// ReresolvePending re-resolves the vault's pending [[wikilinks]]: what a
+// caller that wrote a batch with DeferReresolve runs once at its end.
+func (f *Files) ReresolvePending(ctx context.Context, vault uuid.UUID) {
+	if f.indexer != nil {
+		f.indexer.ReresolvePendingBestEffort(ctx, vault)
+	}
+}
+
 // spaceFor is WriteInput.SpaceID's rule: a given Space wins, else (unless
 // keepNil) the row's, else the path's first folder.
 func (f *Files) spaceFor(ctx context.Context, tenant uuid.UUID, path string, given *uuid.UUID, keepNil bool) (*uuid.UUID, error) {
