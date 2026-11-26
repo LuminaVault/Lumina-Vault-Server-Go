@@ -60,6 +60,9 @@ type Server struct {
 	// InstallationRepos maps an installation id to the repository ids the App
 	// is installed on.
 	InstallationRepos map[int64][]int64
+	// Suspended is the installations GitHub reports as suspended. An
+	// installation exists while InstallationRepos has its id.
+	Suspended map[int64]bool
 	// Repos is every repository by id.
 	Repos map[int64]githubapp.Repository
 	// Branches maps a repository full name to its branches.
@@ -95,7 +98,7 @@ func New(t testing.TB) *Server {
 		Codes: map[string]string{}, Users: map[string]string{},
 		UserInstallations: map[string][]githubapp.Installation{},
 		UserRepos:         map[string]map[int64][]githubapp.Repository{},
-		InstallationRepos: map[int64][]int64{}, Repos: map[int64]githubapp.Repository{},
+		InstallationRepos: map[int64][]int64{}, Repos: map[int64]githubapp.Repository{}, Suspended: map[int64]bool{},
 		Branches: map[string][]githubapp.Branch{}, Trees: map[string]githubapp.Tree{},
 		Renamed:       map[string]int64{},
 		installTokens: map[string]Mint{},
@@ -105,6 +108,7 @@ func New(t testing.TB) *Server {
 	mux.HandleFunc("POST /login/oauth/access_token", s.exchange)
 	mux.HandleFunc("DELETE /applications/{clientID}/token", s.revokeUser)
 	mux.HandleFunc("POST /app/installations/{id}/access_tokens", s.mint)
+	mux.HandleFunc("GET /app/installations/{id}", s.installation)
 	mux.HandleFunc("DELETE /installation/token", s.revokeInstallation)
 	mux.HandleFunc("GET /user", s.user)
 	mux.HandleFunc("GET /user/installations", s.installations)
@@ -247,6 +251,27 @@ func (s *Server) appJWT(r *http.Request) bool {
 	}
 	claims := tok.Claims.(*jwt.RegisteredClaims)
 	return claims.ExpiresAt != nil && claims.IssuedAt != nil && claims.ExpiresAt.Sub(claims.IssuedAt.Time) <= 10*time.Minute
+}
+
+// installation answers the App's question about one installation: 404 once
+// the App is uninstalled, suspended_at while it is suspended.
+func (s *Server) installation(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.appJWT(r) {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if _, ok := s.InstallationRepos[id]; !ok {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	out := map[string]any{"id": id, "suspended_at": nil}
+	if s.Suspended[id] {
+		out["suspended_at"] = s.Now().UTC().Format(time.RFC3339)
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (s *Server) mint(w http.ResponseWriter, r *http.Request) {

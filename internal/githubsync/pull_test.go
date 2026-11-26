@@ -465,7 +465,8 @@ func TestFirstConnectWithUnrelatedHistories(t *testing.T) {
 	require.NotContains(t, pe.disk(refused.vault), "theirs.md", "and so is the vault")
 	require.Equal(t, "our words", pe.disk(refused.vault)["shared.md"])
 	require.Zero(t, pe.gh.GitForced())
-	// "Sync now" does not talk it round: only a reconnect asks the question.
+	// "Sync now" does not talk it round: only the owner's consent does
+	// (POST …/merge-existing, TestMergeConsentOnAnExistingConnection).
 	require.NoError(t, pe.syncer.SyncNow(context.Background(), refused.vault))
 	pe.idle(refused.vault)
 	require.Equal(t, githubsync.StateNeedsAttention, pe.row(refused.vault).State)
@@ -925,6 +926,14 @@ func TestInstallationEvents(t *testing.T) {
 		return c.State, *c.ErrorCode
 	}
 
+	// An event is settled against what GitHub says now (a signed delivery
+	// can be replayed), so GitHub's side changes first, as it does.
+	github := func(change func(gh *githubapptest.Server)) {
+		pe.gh.Lock()
+		defer pe.gh.Unlock()
+		change(pe.gh)
+	}
+	github(func(gh *githubapptest.Server) { gh.Suspended[a.installation] = true })
 	send(githubsync.Delivery{Event: "installation", Action: "suspend", InstallationID: a.installation})
 	st, code := state(a)
 	require.Equal(t, githubsync.StateNeedsAttention, st)
@@ -937,6 +946,7 @@ func TestInstallationEvents(t *testing.T) {
 	pe.remote(a, map[string]*githubapptest.Entry{"while-suspended.md": text("x")})
 	pe.pullNow(a)
 	require.NotContains(t, pe.disk(a.vault), "while-suspended.md")
+	github(func(gh *githubapptest.Server) { gh.Suspended[a.installation] = false })
 	send(githubsync.Delivery{Event: "installation", Action: "unsuspend", InstallationID: a.installation})
 	pe.idle(a.vault)
 	st, code = state(a)
@@ -953,6 +963,7 @@ func TestInstallationEvents(t *testing.T) {
 	st, _ = state(b)
 	require.Equal(t, githubsync.StateNeedsAttention, st)
 
+	github(func(gh *githubapptest.Server) { delete(gh.InstallationRepos, a.installation) })
 	send(githubsync.Delivery{Event: "installation", Action: "deleted", InstallationID: a.installation})
 	st, code = state(a)
 	require.Equal(t, githubsync.StateNeedsAttention, st)

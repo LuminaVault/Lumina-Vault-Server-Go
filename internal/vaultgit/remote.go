@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
@@ -66,6 +67,11 @@ func init() { SetHTTPClient(&http.Client{}) }
 func SetHTTPClient(c *http.Client) {
 	guarded := *c
 	guarded.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	base := guarded.Transport
+	if base == nil {
+		base = http.DefaultTransport
+	}
+	guarded.Transport = budgetTransport{base}
 	t := guardedTransport{githttp.NewClient(&guarded)}
 	client.InstallProtocol("https", t)
 	client.InstallProtocol("http", t)
@@ -101,6 +107,49 @@ func (s guardedSession) ReceivePack(ctx context.Context, req *packp.ReferenceUpd
 }
 
 type packLimitKey struct{}
+
+// A fetch has no pack of its own to guard: go-git writes what the remote
+// sends straight to the object store, however much that is. fetchBudget is
+// the most a fetch may read, over all of its requests; budgetTransport
+// counts the answers of every request whose context carries one, and fails
+// the read that goes past it.
+type fetchBudget struct {
+	limit int64
+	read  atomic.Int64
+	spent atomic.Bool
+}
+
+type fetchBudgetKey struct{}
+
+type budgetTransport struct{ base http.RoundTripper }
+
+func (t budgetTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	res, err := t.base.RoundTrip(req)
+	if err != nil || res == nil || res.Body == nil {
+		return res, err
+	}
+	if b, ok := req.Context().Value(fetchBudgetKey{}).(*fetchBudget); ok {
+		res.Body = &budgetBody{ReadCloser: res.Body, budget: b}
+	}
+	return res, nil
+}
+
+type budgetBody struct {
+	io.ReadCloser
+	budget *fetchBudget
+}
+
+func (b *budgetBody) Read(p []byte) (int, error) {
+	if b.budget.spent.Load() {
+		return 0, ErrPackTooLarge
+	}
+	n, err := b.ReadCloser.Read(p)
+	if b.budget.read.Add(int64(n)) > b.budget.limit {
+		b.budget.spent.Store(true)
+		return 0, ErrPackTooLarge
+	}
+	return n, err
+}
 
 // packGuard is the pack of a push on its way into go-git's buffer.
 type packGuard struct {

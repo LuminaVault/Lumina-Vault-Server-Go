@@ -550,6 +550,7 @@ func TestOnlyTheOwnerManages(t *testing.T) {
 		{http.MethodGet, "/v1/vault/github-sync/branches?session=x&installationId=7&repositoryId=456"},
 		{http.MethodPut, "/v1/vault/github-sync/connection"},
 		{http.MethodDelete, "/v1/vault/github-sync/connection"},
+		{http.MethodPost, "/v1/vault/github-sync/merge-existing"},
 	}
 	for _, who := range []uuid.UUID{bob, carol} {
 		for _, rt := range managing {
@@ -826,9 +827,20 @@ func TestSpecConformance(t *testing.T) {
 	r = call(alice, http.MethodPost, "/v1/vault/github-sync/sync", nil)
 	require.Equal(t, http.StatusAccepted, r.code, r.String())
 	require.Contains(t, r.String(), `"retrying":true`, "Sync now put the stopped connection back to work")
+	// Owner decision 2026-11-26: consent to merge on the connection there is.
+	r = call(alice, http.MethodPost, "/v1/vault/github-sync/merge-existing", nil)
+	require.Equal(t, http.StatusConflict, r.code, r.String())
+	require.Equal(t, "merge_not_pending", r.errCode())
+	v.exec(`UPDATE github_sync_connections SET error_code = 'remote_not_empty', error_at = now(), state = 'needs_attention' WHERE vault_id = $1`, alice)
+	r = call(alice, http.MethodGet, "/v1/vault/github-sync", nil)
+	require.Contains(t, r.String(), `"canMergeExisting":true`)
+	r = call(alice, http.MethodPost, "/v1/vault/github-sync/merge-existing", nil)
+	require.Equal(t, http.StatusAccepted, r.code, r.String())
+	require.Contains(t, r.String(), `"canMergeExisting":false`)
 	call(alice, http.MethodDelete, "/v1/vault/github-sync/connection", nil)
 	r = call(alice, http.MethodPost, "/v1/vault/github-sync/sync", nil)
 	require.Equal(t, "not_connected", r.errCode())
+
 	cb := v.do(uuid.Nil, nil, http.MethodGet, "/v1/github-sync/callback?state=x", nil)
 	check(http.MethodGet, "/v1/github-sync/callback", cb)
 
@@ -1265,6 +1277,77 @@ func TestSyncNow(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, v.do(alice, nil, http.MethodPost, route, nil).code)
 	v.clock.advance(61 * time.Second)
 	require.Equal(t, http.StatusAccepted, v.do(alice, &vault, http.MethodPost, route, nil).code, "a new window")
+}
+
+// Owner decision 2026-11-26: POST …/merge-existing. A connection stopped at
+// remote_not_empty is put back to work by its owner's consent, without a
+// disconnect; the status says when that is the way on; nobody else may, and
+// there is nothing to consent to in any other state.
+func TestMergeExisting(t *testing.T) {
+	v := newEnv(t)
+	alice, bob := v.user(), v.user()
+	_, vault := v.teamVault(alice, map[uuid.UUID]string{bob: "admin"})
+	const route = "/v1/vault/github-sync/merge-existing"
+	can := func(user uuid.UUID) bool {
+		t.Helper()
+		r := v.do(user, &vault, http.MethodGet, "/v1/vault/github-sync", nil)
+		require.Equal(t, http.StatusOK, r.code, r.String())
+		var out struct {
+			Connection struct {
+				CanMergeExisting *bool `json:"canMergeExisting"`
+			} `json:"connection"`
+		}
+		require.NoError(t, json.Unmarshal(r.body, &out))
+		require.NotNil(t, out.Connection.CanMergeExisting, "always present")
+		return *out.Connection.CanMergeExisting
+	}
+
+	require.Equal(t, http.StatusUnauthorized, v.do(uuid.Nil, &vault, http.MethodPost, route, nil).code)
+	r := v.do(alice, &vault, http.MethodPost, route, nil)
+	require.Equal(t, http.StatusNotFound, r.code, r.String())
+	require.Equal(t, "not_connected", r.errCode())
+
+	v.connectVault(alice, &vault)
+	head := v.commit(vault, "note.md", "hello")
+	v.settled(vault, func(c *githubsync.Connection) bool { return c.RemoteSHA != nil && *c.RemoteSHA == head })
+	require.False(t, can(alice), "a connection at work has nothing to consent to")
+	r = v.do(alice, &vault, http.MethodPost, route, nil)
+	require.Equal(t, http.StatusConflict, r.code, r.String())
+	require.Equal(t, "merge_not_pending", r.errCode())
+	require.False(t, v.connection(vault).MergeExisting)
+
+	// The branch turned out to have files of its own.
+	v.exec(`UPDATE github_sync_connections SET state = 'needs_attention', error_code = 'remote_not_empty', error_at = now(), remote_sha = NULL WHERE vault_id = $1`, vault)
+	require.True(t, can(alice))
+	require.False(t, can(bob), "only the owner is offered it")
+	r = v.do(bob, &vault, http.MethodPost, route, nil)
+	require.Equal(t, http.StatusForbidden, r.code, r.String())
+	require.Equal(t, "owner_required", r.errCode())
+	c := v.connection(vault)
+	require.Equal(t, githubsync.StateNeedsAttention, c.State, "a refused request changed nothing")
+	require.False(t, c.MergeExisting)
+
+	r = v.do(alice, &vault, http.MethodPost, route, nil)
+	require.Equal(t, http.StatusAccepted, r.code, r.String())
+	require.Contains(t, r.String(), `"canManage":true`)
+	require.Contains(t, r.String(), `"canMergeExisting":false`)
+	v.settled(vault, func(c *githubsync.Connection) bool {
+		return c.State == githubsync.StateActive && c.ErrorCode == nil && c.RemoteSHA != nil && *c.RemoteSHA == head
+	})
+	require.True(t, v.connection(vault).MergeExisting, "the consent is on the connection")
+	require.False(t, can(alice))
+	r = v.do(alice, &vault, http.MethodPost, route, nil)
+	require.Equal(t, http.StatusConflict, r.code, "given once")
+
+	// It shares "Sync now"'s budget of 6 a minute per vault: that was 4.
+	codes := map[int]int{}
+	for range 4 {
+		codes[v.do(alice, &vault, http.MethodPost, route, nil).code]++
+	}
+	require.Equal(t, map[int]int{http.StatusConflict: 2, http.StatusTooManyRequests: 2}, codes)
+	over := v.do(alice, &vault, http.MethodPost, "/v1/vault/github-sync/sync", nil)
+	require.Equal(t, "rate_limited", over.errCode())
+	require.NotEmpty(t, over.header.Get("Retry-After"))
 }
 
 // D13: disconnect removes the origin remote from the vault's repository,

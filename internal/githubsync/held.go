@@ -37,13 +37,30 @@ const (
 	modeExecutable = "100755"
 )
 
+// MaxSegmentBytes is the longest file or folder name of a remote path the
+// vault takes. A file system holds 255 bytes in a name, and the vault needs
+// room in it: a conflict copy adds up to 29 (".conflict-20261126-150405-50"),
+// and a write goes through a hidden file beside its target that adds 27
+// ("." in front, ".tmp-<8>" and ".aux-<8>" behind): 255 - 29 - 27 = 199. The
+// trash needs none: it cuts the name it keeps. A longer name stays on GitHub
+// only (HeldBadName).
+const MaxSegmentBytes = 199
+
 // Classify applies D8's rule to one entry of a remote tree: a path is
 // materialized only when it is a regular file, no segment starts with ".",
-// SanitizePath returns it unchanged and it is at most maxSize bytes. A path
-// with a ".git" segment is hidden before anything else is looked at. The
-// root .gitignore, when it is a regular file within the limit, is IgnoreFile;
-// a .gitignore in a folder is hidden like any other dot-file.
+// no segment is longer than MaxSegmentBytes, SanitizePath returns it
+// unchanged and it is at most maxSize bytes. A path with a ".git" segment is
+// hidden before anything else is looked at. The root .gitignore, when it is a
+// regular file within the limit, is IgnoreFile; a .gitignore in a folder is
+// hidden like any other dot-file.
 func Classify(path, mode string, size, maxSize int64) HeldReason {
+	return classifyEntry(path, mode, size, maxSize, true)
+}
+
+// classifyEntry is Classify; capNames false leaves out the limit on a name's
+// length, for a path the vault already holds as a file: that one is not
+// taken away because its name is long.
+func classifyEntry(path, mode string, size, maxSize int64, capNames bool) HeldReason {
 	segments := strings.Split(path, "/")
 	for _, s := range segments {
 		if strings.EqualFold(s, ".git") {
@@ -74,6 +91,13 @@ func Classify(path, mode string, size, maxSize int64) HeldReason {
 			return HeldUnsupported
 		}
 		return HeldBadName
+	}
+	if capNames {
+		for _, s := range segments {
+			if len(s) > MaxSegmentBytes {
+				return HeldBadName
+			}
+		}
 	}
 	if size > maxSize {
 		return HeldTooLarge

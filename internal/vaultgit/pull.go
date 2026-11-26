@@ -5,7 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
+	"os"
+	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/go-git/go-git/v5"
@@ -24,13 +28,26 @@ import (
 // gets objects (Fetch), is read (Tree, BlobByID, MergeBase), and has its
 // index and branch moved (FastForward, MergeCommit).
 
-// Fetch brings origin's branch into refs/remotes/origin/<branch>, with its
-// whole history and no tags, and returns its tip. A repository with no such
-// branch, or with no commits at all, is "" and no error. The tracking ref is
-// set to whatever the remote has, a rewritten history included: it is a copy
-// of the remote, not the vault's branch. ctx bounds the transport; the token
-// is used for this call only.
+// FetchOptions bound one fetch.
+type FetchOptions struct {
+	// MaxBytes refuses, with ErrPackTooLarge, a fetch whose answers are
+	// larger: the remote grew past what its owner's limit allows between the
+	// question about its size and the fetch. Zero is no limit.
+	MaxBytes int64
+}
+
+// Fetch is FetchWith without limits.
 func (r *Repo) Fetch(ctx context.Context, branch, token string) (tip string, err error) {
+	return r.FetchWith(ctx, branch, token, FetchOptions{})
+}
+
+// FetchWith brings origin's branch into refs/remotes/origin/<branch>, with
+// its whole history and no tags, and returns its tip. A repository with no
+// such branch, or with no commits at all, is "" and no error. The tracking
+// ref is set to whatever the remote has, a rewritten history included: it is
+// a copy of the remote, not the vault's branch. ctx bounds the transport; the
+// token is used for this call only.
+func (r *Repo) FetchWith(ctx context.Context, branch, token string, opts FetchOptions) (tip string, err error) {
 	if !ValidBranchName(branch) {
 		return "", fmt.Errorf("vaultgit: invalid branch %q", branch)
 	}
@@ -41,6 +58,11 @@ func (r *Repo) Fetch(ctx context.Context, branch, token string) (tip string, err
 	if err != nil {
 		return "", fmt.Errorf("vaultgit: remote: %w", err)
 	}
+	var budget *fetchBudget
+	if opts.MaxBytes > 0 {
+		budget = &fetchBudget{limit: opts.MaxBytes}
+		ctx = context.WithValue(ctx, fetchBudgetKey{}, budget)
+	}
 	tracking := plumbing.NewRemoteReferenceName(RemoteName, branch)
 	spec := config.RefSpec("+" + plumbing.NewBranchReferenceName(branch).String() + ":" + tracking.String())
 	err = remote.FetchContext(ctx, &git.FetchOptions{
@@ -50,6 +72,9 @@ func (r *Repo) Fetch(ctx context.Context, branch, token string) (tip string, err
 		Tags:       git.NoTags,
 	})
 	switch {
+	case budget != nil && budget.spent.Load():
+		// Whatever go-git made of the read that failed, this is why.
+		return "", fmt.Errorf("%w: fetch", ErrPackTooLarge)
 	case err == nil, errors.Is(err, git.NoErrAlreadyUpToDate):
 	case errors.Is(err, transport.ErrEmptyRemoteRepository), errors.Is(err, git.NoMatchingRefSpecError{}):
 		return "", nil
@@ -114,14 +139,28 @@ func (r *Repo) commit(sha string) (*object.Commit, error) {
 // Tree lists every entry of commit sha's tree by path. "" is the empty tree.
 func (r *Repo) Tree(sha string) (map[string]TreeEntry, error) {
 	out := map[string]TreeEntry{}
-	if sha == "" {
-		return out, nil
-	}
-	c, err := r.commit(sha)
+	err := r.TreeEach(sha, func(e TreeEntry) error {
+		out[e.Path] = e
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	err = r.walk(c, func(name string, e object.TreeEntry) error {
+	return out, nil
+}
+
+// TreeEach calls fn for every entry of commit sha's tree, and stops at the
+// first error fn returns: a caller that will not take a tree past some size
+// says so while it is being read, not after. "" is the empty tree.
+func (r *Repo) TreeEach(sha string, fn func(TreeEntry) error) error {
+	if sha == "" {
+		return nil
+	}
+	c, err := r.commit(sha)
+	if err != nil {
+		return err
+	}
+	return r.walk(c, func(name string, e object.TreeEntry) error {
 		entry := TreeEntry{Path: name, Mode: fmt.Sprintf("%06o", uint32(e.Mode)), ID: e.Hash.String()}
 		if e.Mode != filemode.Submodule {
 			size, err := r.repo.Storer.EncodedObjectSize(e.Hash)
@@ -130,13 +169,8 @@ func (r *Repo) Tree(sha string) (map[string]TreeEntry, error) {
 			}
 			entry.Size = size
 		}
-		out[name] = entry
-		return nil
+		return fn(entry)
 	})
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
 }
 
 // maxTreeDepth bounds walk: a tree nested deeper than any real repository is
@@ -351,4 +385,90 @@ func (r *Repo) MergeCommit(theirs string, carry []string, msg Message, maxFileSi
 		return "", fmt.Errorf("vaultgit: merge commit: %w", err)
 	}
 	return h.String(), nil
+}
+
+// foreignFile lists the commits a pull brought into the repository: commits
+// made somewhere else. It lives inside .git, like the held list.
+const foreignFile = "lv-foreign"
+
+func (r *Repo) foreignPath() string { return filepath.Join(r.root, ".git", foreignFile) }
+
+// MarkForeign records every commit that theirs has and head ("" = no
+// history) has not as made elsewhere, before a pull makes them part of the
+// branch (sync spec D10 step 9). Log reads the record: who a commit says made
+// a change (the LV-Actor trailer) is believed only for commits this server
+// made, and the committer's e-mail cannot say which those are, since anyone
+// who can push to the repository can set it.
+func (r *Repo) MarkForeign(theirs, head string) error {
+	ours := map[plumbing.Hash]bool{}
+	if head != "" {
+		hc, err := r.commit(head)
+		if err != nil {
+			return err
+		}
+		err = object.NewCommitPreorderIter(hc, nil, nil).ForEach(func(c *object.Commit) error {
+			ours[c.Hash] = true
+			return nil
+		})
+		if err != nil {
+			return fmt.Errorf("vaultgit: history: %w", err)
+		}
+	}
+	tc, err := r.commit(theirs)
+	if err != nil {
+		return err
+	}
+	known, err := r.foreign()
+	if err != nil {
+		return err
+	}
+	var add []string
+	if !ours[tc.Hash] {
+		err = object.NewCommitPreorderIter(tc, ours, nil).ForEach(func(c *object.Commit) error {
+			if !known[c.Hash] {
+				add = append(add, c.Hash.String())
+			}
+			return nil
+		})
+		if err != nil {
+			return fmt.Errorf("vaultgit: history: %w", err)
+		}
+	}
+	if len(add) == 0 {
+		return nil
+	}
+	f, err := os.OpenFile(r.foreignPath(), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return fmt.Errorf("vaultgit: record remote commits: %w", err)
+	}
+	_, err = f.WriteString(strings.Join(add, "\n") + "\n")
+	if err == nil {
+		err = f.Sync()
+	}
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		return fmt.Errorf("vaultgit: record remote commits: %w", err)
+	}
+	return nil
+}
+
+// foreign is the recorded set. No file is none. A line that is not a commit
+// id (a write cut short) is skipped.
+func (r *Repo) foreign() (map[plumbing.Hash]bool, error) {
+	b, err := os.ReadFile(r.foreignPath())
+	if errors.Is(err, fs.ErrNotExist) {
+		return map[plumbing.Hash]bool{}, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("vaultgit: read remote commits: %w", err)
+	}
+	out := map[plumbing.Hash]bool{}
+	for line := range strings.SplitSeq(string(b), "\n") {
+		if plumbing.IsHash(line) {
+			out[plumbing.NewHash(line)] = true
+		}
+	}
+	return out, nil
 }

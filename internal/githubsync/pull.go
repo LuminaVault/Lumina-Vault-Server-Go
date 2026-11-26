@@ -19,6 +19,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/google/uuid"
@@ -53,7 +55,18 @@ var (
 	// on a case-insensitive disk it names the repository's own directory.
 	// Nothing of that commit is merged.
 	ErrUnsafeTree = errors.New("githubsync: the remote tree has a .git path")
+	// ErrConnectionChanged: while a pull applied, with no lock held, the
+	// vault was disconnected, connected again (to this repository or another),
+	// stopped or deleted. The pull ends there: nothing more is written, the
+	// held list and the branch stay as they are, and nothing is recorded on
+	// a row that is no longer the one the pull was planned for.
+	ErrConnectionChanged = errors.New("githubsync: the connection changed during the pull")
 )
+
+// maxTreeEntries is the most entries of any kind a remote tree may have. It
+// is where GitHub's own listing of a tree stops (100,000 entries), which is
+// what refuses such a repository at connect.
+const maxTreeEntries = 100_000
 
 // Files is what a pull needs from the vault's write pipeline: vault.Files,
 // the module's own instance, so its path locks are the ones every save takes.
@@ -82,6 +95,9 @@ const (
 	defaultApplyTimeout = 30 * time.Minute
 	defaultParallel     = 4
 	reportSample        = 20
+	// aliveEvery is how many operations an apply runs between two looks at
+	// the connection's row.
+	aliveEvery = 50
 )
 
 // PullOptions configure a Pull. Files, Store and RawRoot are required.
@@ -94,7 +110,8 @@ type PullOptions struct {
 	MaxFileSize func(vault uuid.UUID) int64
 	// MaxFiles is GITHUB_SYNC_MAX_FILES (D11). Zero is no limit.
 	MaxFiles int
-	// Space is the disk guard, checked before a fetch (D11). Nil: no check.
+	// Space is the disk guard, asked before a fetch whether the bytes it may
+	// bring (PullInput.Expect) fit (D11). Nil: no check.
 	Space func(incoming int64) error
 	// FetchTimeout bounds the fetch (default 120 s); ApplyTimeout the whole
 	// apply phase (default 30 min). Parallel is how many files of one vault
@@ -166,9 +183,11 @@ const (
 	// opConflict keeps both: the local file stays, the remote version goes
 	// beside it as a conflict copy.
 	opConflict
-	// opStepAside clears Path for a remote entry the vault cannot hold (D8):
-	// an unchanged local file goes to the trash, an edited one becomes a
-	// conflict copy first.
+	// opStepAside clears Path for a remote entry the vault cannot hold (D8),
+	// or for one that needs Path, or a folder of it, as the other kind of
+	// thing (a file where the vault has a folder, a folder where it has a
+	// file): an unchanged local file goes to the trash, an edited one becomes
+	// a conflict copy first.
 	opStepAside
 )
 
@@ -179,6 +198,10 @@ type op struct {
 	Remote string // blob id of the remote version
 	Local  string // blob id the plan saw in the local tree, "" = none
 	Edited bool   // opStepAside: the local file changed since the base
+	// Under, for opStepAside, is the folder of Path the remote has an entry
+	// at: the file moves to the same place inside a conflict copy of that
+	// folder. "" is a conflict copy of Path itself.
+	Under string
 }
 
 // Plan is one pull between its phases.
@@ -217,7 +240,7 @@ func (p *Pull) Plan(ctx context.Context, in PullInput) (*Plan, error) {
 	conn, repo, vaultID := in.Connection, in.Repo, in.Connection.VaultID
 	maxSize := p.opts.MaxFileSize(vaultID)
 	if p.opts.Space != nil {
-		if err := p.opts.Space(0); err != nil {
+		if err := p.opts.Space(in.Expect); err != nil {
 			return nil, fmt.Errorf("githubsync: disk guard: %w", err)
 		}
 	}
@@ -231,7 +254,7 @@ func (p *Pull) Plan(ctx context.Context, in PullInput) (*Plan, error) {
 		return nil, err
 	}
 	fctx, cancel := context.WithTimeout(ctx, p.opts.FetchTimeout)
-	remote, err := repo.Fetch(fctx, conn.Branch, in.Token)
+	remote, err := repo.FetchWith(fctx, conn.Branch, in.Token, vaultgit.FetchOptions{MaxBytes: in.MaxBytes})
 	cancel()
 	if err != nil {
 		return nil, err
@@ -259,7 +282,22 @@ func (p *Pull) Plan(ctx context.Context, in PullInput) (*Plan, error) {
 	if err != nil {
 		return nil, err
 	}
-	tr, err := repo.Tree(remote)
+	// The remote tree is counted while it is read (D11): one past either
+	// limit ends the walk, however much more of it there is.
+	tr := map[string]vaultgit.TreeEntry{}
+	holdable := 0
+	err = repo.TreeEach(remote, func(e vaultgit.TreeEntry) error {
+		if len(tr) == maxTreeEntries {
+			return ErrRepoTooLarge
+		}
+		if e.Path != IgnorePath && Classify(e.Path, e.Mode, e.Size, maxSize) == Materialized {
+			if holdable++; p.opts.MaxFiles > 0 && holdable > p.opts.MaxFiles {
+				return ErrRepoTooLarge
+			}
+		}
+		tr[e.Path] = e
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -287,6 +325,29 @@ func (p *Pull) Plan(ctx context.Context, in PullInput) (*Plan, error) {
 	}
 	plan := &Plan{conn: conn, local: local, remote: remote, stamp: stamp, written: map[string]bool{}}
 	classify := func(e vaultgit.TreeEntry) HeldReason { return Classify(e.Path, e.Mode, e.Size, maxSize) }
+	// has is the rule for an entry the vault already has as a file: its name
+	// is not measured again.
+	has := func(e vaultgit.TreeEntry) HeldReason { return classifyEntry(e.Path, e.Mode, e.Size, maxSize, false) }
+	// remoteFolders is every folder the remote tree has.
+	remoteFolders := map[string]bool{}
+	for name := range tr {
+		for dir := path.Dir(name); dir != "."; dir = path.Dir(dir) {
+			if remoteFolders[dir] {
+				break
+			}
+			remoteFolders[dir] = true
+		}
+	}
+	// clash reports a path that cannot be beside the remote tree: the tree
+	// has an entry at one of its folders (returned), or entries inside it.
+	clash := func(name string) (under string, clashes bool) {
+		for dir := path.Dir(name); dir != "."; dir = path.Dir(dir) {
+			if _, ok := tr[dir]; ok {
+				return dir, true
+			}
+		}
+		return "", remoteFolders[name]
+	}
 
 	paths := map[string]struct{}{}
 	for _, t := range []map[string]vaultgit.TreeEntry{tb, tl, tr} {
@@ -300,7 +361,6 @@ func (p *Pull) Plan(ctx context.Context, in PullInput) (*Plan, error) {
 	}
 	sort.Strings(sorted)
 
-	materialized := 0
 	var deletes, adds []int // indexes into plan.ops, for rename detection
 	for _, name := range sorted {
 		r, inR := tr[name]
@@ -310,7 +370,7 @@ func (p *Pull) Plan(ctx context.Context, in PullInput) (*Plan, error) {
 		localChanged := !same(l, inL, b, inB)
 		// A local entry the vault does not hold as a file: listed as held, or
 		// of a kind it cannot hold.
-		localGitOnly := inL && (gitOnly[name] || classify(l) != Materialized)
+		localGitOnly := inL && (gitOnly[name] || has(l) != Materialized)
 
 		if name == IgnorePath {
 			if inR && classify(r) == IgnoreFile {
@@ -327,8 +387,17 @@ func (p *Pull) Plan(ctx context.Context, in PullInput) (*Plan, error) {
 			case localGitOnly && gitOnly[name] && classify(l) == Materialized:
 				// Held once, holdable now, and the remote never had it: it
 				// becomes a vault file.
-				plan.add(op{Kind: opWrite, Path: name, Remote: l.ID})
+				if _, clashes := clash(name); !clashes {
+					plan.add(op{Kind: opWrite, Path: name, Remote: l.ID})
+				}
 			case localGitOnly:
+				// An entry only this history has. It is carried into the
+				// merge, unless the remote tree now needs its place as the
+				// other kind of thing: git cannot hold both, and the remote's
+				// is the one GitHub has.
+				if _, clashes := clash(name); clashes {
+					break
+				}
 				reason := classify(l)
 				if reason == Materialized || reason == IgnoreFile {
 					reason = HeldHidden
@@ -337,10 +406,23 @@ func (p *Pull) Plan(ctx context.Context, in PullInput) (*Plan, error) {
 				plan.carry = append(plan.carry, name)
 			case remoteChanged && !localChanged:
 				deletes = append(deletes, plan.add(op{Kind: opDelete, Path: name, Local: l.ID}))
+			default:
+				// The file stays (the vault changed it, or the remote never
+				// had it), and goes back to GitHub with the next commit. Where
+				// the remote tree has a file at one of its folders, or files
+				// inside it, it cannot stay at this path: it steps aside under
+				// a conflict name, so both sides are kept and both reach GitHub.
+				if under, clashes := clash(name); clashes {
+					plan.add(op{Kind: opStepAside, Path: name, Local: l.ID, Edited: true, Under: under})
+				}
 			}
 			continue
 		}
-		if reason := classify(r); reason != Materialized {
+		reason := classify(r)
+		if reason == HeldBadName && inL && !localGitOnly && has(r) == Materialized {
+			reason = Materialized // only its name is long, and the vault has it
+		}
+		if reason != Materialized {
 			plan.held = append(plan.held, Held{Path: name, Reason: reason})
 			if inL && !localGitOnly {
 				// The path is a vault file and is held on the remote now: the
@@ -349,7 +431,6 @@ func (p *Pull) Plan(ctx context.Context, in PullInput) (*Plan, error) {
 			}
 			continue
 		}
-		materialized++
 		switch {
 		case localGitOnly || (!inL && gitOnly[name]):
 			// Held until now and holdable: each pull re-checks the list (D8).
@@ -371,9 +452,6 @@ func (p *Pull) Plan(ctx context.Context, in PullInput) (*Plan, error) {
 		default:
 			plan.add(op{Kind: opConflict, Path: name, Remote: r.ID, Local: l.ID})
 		}
-	}
-	if p.opts.MaxFiles > 0 && materialized > p.opts.MaxFiles {
-		return nil, ErrRepoTooLarge
 	}
 	plan.renames(deletes, adds)
 	for _, o := range plan.ops {
@@ -488,11 +566,107 @@ func (p *Pull) Apply(ctx context.Context, plan *Plan) error {
 		p.mu.Unlock()
 	}()
 
+	// The pull's own writes are not measured against the held list of the
+	// tree before this one (vault.SyncContext).
+	ctx = vault.SyncContext(ctx)
+	// Order matters where the remote turned a file into a folder, or a
+	// folder's file into something else: what leaves a path (deletes,
+	// step-asides) goes first, then renames, then everything that writes.
+	var clear, moves, writes []op
+	for _, o := range plan.ops {
+		switch o.Kind {
+		case opDelete, opStepAside:
+			clear = append(clear, o)
+		case opMove:
+			moves = append(moves, o)
+		case opWrite, opConflict:
+			writes = append(writes, o)
+		}
+	}
+	for _, batch := range [][]op{clear, moves, writes} {
+		// A folder whose files all left is still a folder, and stands where
+		// the remote now has a file.
+		a.vacate(batch)
+		if err := a.all(ctx, batch, pr); err != nil {
+			return err
+		}
+	}
+	if len(plan.ops) > 0 {
+		p.opts.Files.ReresolvePending(ctx, vaultID)
+	}
+	return nil
+}
+
+// vacate removes the empty folders that stand where the operations are about
+// to put a file: the remote turned a folder into a file, and the folder's
+// files have gone to the trash, aside or elsewhere. Only folders with nothing
+// in them but empty folders go; one that still holds a file is left, and the
+// write then finds it (the entry is held, D8).
+func (a *applier) vacate(ops []op) {
+	for _, o := range ops {
+		target := o.Path
+		switch o.Kind {
+		case opMove:
+			target = o.To
+		case opWrite, opConflict:
+		default:
+			continue
+		}
+		removeEmptyFolders(filepath.Join(a.root, filepath.FromSlash(target)))
+	}
+}
+
+func removeEmptyFolders(dir string) {
+	info, err := os.Lstat(dir)
+	if err != nil || !info.IsDir() {
+		return
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			removeEmptyFolders(filepath.Join(dir, e.Name()))
+		}
+	}
+	_ = os.Remove(dir) // fails, as it should, when anything is left in it
+}
+
+// current reports whether the plan's connection is still the vault's, and
+// still at work: the same row (a reconnect to the same repository and branch
+// is another row), in the active state.
+func (p *Pull) current(ctx context.Context, plan *Plan) error {
+	conn, err := p.opts.Store.Get(ctx, plan.conn.VaultID)
+	if err != nil {
+		return err
+	}
+	if conn == nil || conn.Key() != plan.conn.Key() || !conn.CreatedAt.Equal(plan.conn.CreatedAt) || conn.State != StateActive {
+		return ErrConnectionChanged
+	}
+	return nil
+}
+
+// all runs one batch of operations, a few at a time, and stops at the first
+// failure. Before the batch, and after every aliveEvery operations, it looks
+// at the connection: an apply holds no lock, so a disconnect does not wait
+// for it, and it must not go on writing a repository's files into a vault
+// that is no longer connected to it.
+func (a *applier) all(ctx context.Context, ops []op, pr *Progress) error {
+	if len(ops) == 0 {
+		return ctx.Err()
+	}
+	if err := a.p.current(ctx, a.plan); err != nil {
+		return err
+	}
 	ctx, stop := context.WithCancelCause(ctx)
 	defer stop(nil)
 	work := make(chan op)
-	var wg sync.WaitGroup
-	for range min(p.opts.Parallel, max(len(plan.ops), 1)) {
+	var (
+		wg   sync.WaitGroup
+		done atomic.Int64
+	)
+	for range min(a.p.opts.Parallel, len(ops)) {
 		wg.Go(func() {
 			for o := range work {
 				if ctx.Err() != nil {
@@ -502,35 +676,43 @@ func (p *Pull) Apply(ctx context.Context, plan *Plan) error {
 					stop(fmt.Errorf("githubsync: pull %s: %w", o.Path, err))
 					continue
 				}
-				p.mu.Lock()
+				a.p.mu.Lock()
 				pr.Done++
-				p.mu.Unlock()
+				a.p.mu.Unlock()
+				if done.Add(1)%aliveEvery == 0 {
+					if err := a.p.current(ctx, a.plan); err != nil {
+						stop(err)
+					}
+				}
 			}
 		})
 	}
-	for _, o := range plan.ops {
+	for _, o := range ops {
 		work <- o
 	}
 	close(work)
 	wg.Wait()
-	if err := context.Cause(ctx); err != nil {
-		return err
-	}
-	if len(plan.ops) > 0 {
-		p.opts.Files.ReresolvePending(ctx, vaultID)
-	}
-	return nil
+	return context.Cause(ctx)
 }
 
-// run does one operation. Something that is not a file sitting where one
-// would go (a folder named like the note) is a path the vault cannot take:
-// it is held, not a failure.
+// run does one operation. A path the vault cannot take (something that is
+// not a file sits where one would go, one of its folders is a file, a name
+// is too long for the disk) is not a failure: failing would stop every pull
+// of the vault for ever. Where the operation was to write, the path is held;
+// where it was to take a file away, there is no such file.
 func (a *applier) run(ctx context.Context, o op) error {
 	err := a.do(ctx, o)
-	if errors.Is(err, errNotAFile) {
-		return a.refuse(o.Path, err)
+	if !unholdable(err) {
+		return err
 	}
-	return err
+	switch o.Kind {
+	case opDelete, opStepAside:
+		return nil
+	case opMove:
+		return a.refuse(o.To, err)
+	case opWrite, opConflict:
+	}
+	return a.refuse(o.Path, err)
 }
 
 func (a *applier) do(ctx context.Context, o op) error {
@@ -560,14 +742,21 @@ func status(err error) int {
 }
 
 // refusal reports an error that says the vault will not hold this file at
-// all (a name, a type or a size it rejects), as opposed to one that says the
-// server could not do it now.
+// all (a name, a type or a size it rejects, a path the disk cannot make), as
+// opposed to one that says the server could not do it now.
 func refusal(err error) bool {
 	switch status(err) {
 	case http.StatusBadRequest, http.StatusRequestEntityTooLarge, http.StatusUnsupportedMediaType, http.StatusUnprocessableEntity:
 		return true
 	}
-	return false
+	return unholdable(err)
+}
+
+// unholdable reports an error of the path itself, which no retry mends:
+// something other than a file is there (errNotAFile), one of its folders is a
+// file (ENOTDIR), or a name is longer than the disk takes (ENAMETOOLONG).
+func unholdable(err error) bool {
+	return errors.Is(err, errNotAFile) || errors.Is(err, syscall.ENOTDIR) || errors.Is(err, syscall.ENAMETOOLONG)
 }
 
 // raced reports a write that lost to another writer of the same path: the
@@ -600,7 +789,7 @@ func (a *applier) disk(name string) (data []byte, ok bool, err error) {
 		return nil, false, nil
 	}
 	if err != nil {
-		return nil, false, err
+		return nil, false, err // ENOTDIR and ENAMETOOLONG among them: unholdable
 	}
 	if !info.Mode().IsRegular() {
 		return nil, false, errNotAFile
@@ -703,7 +892,7 @@ func (a *applier) ensureRow(ctx context.Context, name string, current []byte) er
 // only, like any held path: skipping it silently would delete it on GitHub
 // with the next commit, and failing would stop every pull for ever.
 func (a *applier) refuse(name string, cause error) error {
-	if !refusal(cause) && !errors.Is(cause, errNotAFile) {
+	if !refusal(cause) {
 		return cause
 	}
 	a.p.log.WarnContext(context.Background(), "github sync: the vault refused a remote file; it stays on GitHub only",
@@ -837,10 +1026,12 @@ func (a *applier) remove(ctx context.Context, name, local string) error {
 	}
 	err = a.p.opts.Files.DeleteIfMatch(ctx, a.vault, a.actor, name, sha256Hex(current))
 	switch {
-	case err == nil, errors.Is(err, vault.ErrPreconditionFailed):
+	case errors.Is(err, vault.ErrPreconditionFailed):
 		return nil
-	case status(err) == http.StatusNotFound:
-		if _, still, _ := a.disk(name); still {
+	case err == nil, status(err) == http.StatusNotFound:
+		// No row to trash, or a file the trash could not take (its name
+		// there would be too long): it is still in raw/, and is reported.
+		if left, still, _ := a.disk(name); still && BlobID(left) == local {
 			a.keep(name)
 		}
 		return nil
@@ -853,6 +1044,9 @@ func (a *applier) remove(ctx context.Context, name, local string) error {
 // is an add of the new path, and the old one is deleted if it still can be.
 func (a *applier) move(ctx context.Context, o op) error {
 	current, exists, err := a.disk(o.Path)
+	if unholdable(err) {
+		exists, err = false, nil // nothing of the vault's is at the old path
+	}
 	if err != nil {
 		return err
 	}
@@ -874,6 +1068,9 @@ func (a *applier) move(ctx context.Context, o op) error {
 	}
 	if err := a.write(ctx, o.To, o.Remote, ""); err != nil {
 		return err
+	}
+	if !exists {
+		return nil
 	}
 	return a.remove(ctx, o.Path, o.Local)
 }
@@ -900,8 +1097,14 @@ func (a *applier) stepAside(ctx context.Context, o op) error {
 	}
 	for n := 1; n <= 50; n++ {
 		copyName := ConflictName(o.Path, a.plan.stamp, n)
+		if o.Under != "" {
+			copyName = ConflictName(o.Under, a.plan.stamp, n) + strings.TrimPrefix(o.Path, o.Under)
+		}
 		if _, taken, err := a.disk(copyName); err != nil || taken {
-			if err != nil {
+			// A name that is taken, also by a file where the copy needs a
+			// folder (the conflict copy of an earlier pull in the same
+			// second): the next one.
+			if err != nil && !unholdable(err) {
 				return err
 			}
 			continue
@@ -915,6 +1118,8 @@ func (a *applier) stepAside(ctx context.Context, o op) error {
 			return nil
 		case status(err) == http.StatusNotFound:
 			return nil // no row: the file stays, and the held entry is not shadowed (the held list wins)
+		case refusal(err):
+			return nil // no name to give it: it stays where it is, as above
 		case errors.Is(err, vault.ErrPreconditionFailed), status(err) == http.StatusConflict:
 			if current, exists, err = a.disk(o.Path); err != nil || !exists {
 				return err
@@ -932,6 +1137,13 @@ func (a *applier) stepAside(ctx context.Context, o op) error {
 func (p *Pull) Finish(ctx context.Context, in PullInput, plan *Plan) error {
 	repo, conn, vaultID := in.Repo, plan.conn, plan.conn.VaultID
 	now := p.opts.Now()
+	// The row is read again, under the lock: the apply ran without it, for as
+	// long as half an hour, and the vault may have been disconnected or
+	// connected to another repository since. Nothing of this plan is written
+	// then: not the held list, not the merge.
+	if err := p.current(ctx, plan); err != nil {
+		return err
+	}
 	// Another replica finished the same pull while this one applied.
 	if merged, err := repo.Contains(plan.remote); err != nil || merged {
 		return err
@@ -984,6 +1196,12 @@ func (p *Pull) Finish(ctx context.Context, in PullInput, plan *Plan) error {
 		if _, err := repo.TakeIgnore(data); err != nil {
 			return err
 		}
+	}
+	// Which commits come from the remote is written down before they join
+	// the branch: history believes a commit's actor only when the commit is
+	// this server's (vaultgit.MarkForeign).
+	if err := repo.MarkForeign(plan.remote, head); err != nil {
+		return err
 	}
 	// Step 9: move the ref, without touching a file.
 	forward := head == ""

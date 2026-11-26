@@ -233,6 +233,30 @@ func (c *Client) RevokeInstallationToken(ctx context.Context, installation, repo
 	return c.do(ctx, http.MethodDelete, c.api+"/installation/token", "Bearer "+t.token, nil, http.StatusNoContent, nil)
 }
 
+// InstallationStatus is what GitHub says of one installation of the App now.
+type InstallationStatus struct {
+	// Suspended: the installation exists and its owner, or GitHub, suspended it.
+	Suspended bool
+}
+
+// InstallationStatus asks GitHub, as the App, for one of its installations.
+// ErrNotFound: there is no such installation (the App was uninstalled). A
+// webhook says what happened once; this says what is true now, and a
+// delivery sent again under a new id cannot change it.
+func (c *Client) InstallationStatus(ctx context.Context, installation int64) (InstallationStatus, error) {
+	signed, err := c.appJWT()
+	if err != nil {
+		return InstallationStatus{}, err
+	}
+	var out struct {
+		SuspendedAt *string `json:"suspended_at"`
+	}
+	if err := c.get(ctx, "/app/installations/"+strconv.FormatInt(installation, 10), "Bearer "+signed, &out); err != nil {
+		return InstallationStatus{}, err
+	}
+	return InstallationStatus{Suspended: out.SuspendedAt != nil && *out.SuspendedAt != ""}, nil
+}
+
 // UserToken is a GitHub user's token from the sign-in. It is held in memory
 // for the repository picker only (D3, D4).
 type UserToken struct {

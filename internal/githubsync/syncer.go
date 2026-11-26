@@ -31,8 +31,9 @@ const (
 	// CodeRemoteNotEmpty: the branch has files and a history the vault shares
 	// nothing with, and the owner did not agree to merge them (D11). It is
 	// the code the connect route refuses such a branch with; here the files
-	// turned up between that check and the first sync. Only a reconnect,
-	// which asks the question, clears it.
+	// turned up between that check and the first sync. The owner's consent
+	// clears it, given on the connection as it is (MergeExisting; owner
+	// decision 2026-11-26): no disconnect is needed to answer the question.
 	CodeRemoteNotEmpty = "remote_not_empty"
 )
 
@@ -82,6 +83,7 @@ type GitHub interface {
 	InstallationToken(ctx context.Context, installation, repo int64) (string, error)
 	RevokeInstallationToken(ctx context.Context, installation, repo int64) error
 	RepositoryByID(ctx context.Context, token string, id int64) (githubapp.Repository, error)
+	InstallationStatus(ctx context.Context, installation int64) (githubapp.InstallationStatus, error)
 }
 
 // Repos is (*vaultgit.Committer).WithRepo: the only way sync touches a
@@ -96,6 +98,12 @@ type PullInput struct {
 	Repo       *vaultgit.Repo
 	Connection Connection
 	Token      string
+	// Expect is the size GitHub reports for the repository, in bytes: the
+	// most a fetch may add to the disk, which the disk guard is asked for
+	// before it starts. Zero: not known.
+	Expect int64
+	// MaxBytes ends a fetch that reads more (MaxRepoBytes). Zero: no limit.
+	MaxBytes int64
 }
 
 // PullFunc is a Puller that does all its work in one call inside the vault's
@@ -123,8 +131,9 @@ type SyncerOptions struct {
 	// is ever pulled, and nothing is forced.
 	Pull Puller
 	// MaxRepoBytes is GITHUB_SYNC_MAX_REPO_MB (D11), checked before every
-	// fetch against the size GitHub reports, and against the pack of every
-	// push before it is sent: go-git holds that pack in memory. Zero: no check.
+	// fetch against the size GitHub reports, against what the fetch then
+	// reads, and against the pack of every push before it is sent: go-git
+	// holds that pack in memory. Zero: no check.
 	MaxRepoBytes int64
 	// PollInterval is how often PollJob asks every remote for its tip (D9).
 	PollInterval time.Duration
@@ -266,6 +275,19 @@ func (s *Syncer) Syncing(vault uuid.UUID) bool {
 	return s.slots[vault] != nil
 }
 
+// MergeExisting records the owner's consent to merge a branch that already
+// has files into the vault, on a connection that stopped for want of it
+// (CodeRemoteNotEmpty), and queues the sync that does it. False: the
+// connection is not waiting for that answer, and nothing changed.
+func (s *Syncer) MergeExisting(ctx context.Context, vault uuid.UUID) (bool, error) {
+	ok, err := s.opts.Store.ConsentToMerge(ctx, vault, CodeRemoteNotEmpty, s.opts.Now())
+	if err != nil || !ok {
+		return false, err
+	}
+	s.NotifyPull(vault)
+	return true, nil
+}
+
 // SyncNow is "Sync now" (D14): it makes a waiting or stopped connection due
 // and queues a pull, then a push.
 func (s *Syncer) SyncNow(ctx context.Context, vault uuid.UUID) error {
@@ -339,8 +361,12 @@ func (s *Syncer) Sweep(ctx context.Context) (looked int, err error) {
 		return 0, err
 	}
 	// D9: a delivery still queued a minute after it arrived lost its
-	// in-memory nudge (a restart, another replica's crash). Its vault is
-	// looked at with a pull.
+	// in-memory nudge (a restart, another replica's crash), and one that
+	// failed was never handled. An installation's is handled again here; a
+	// push's vault is looked at with a pull.
+	if err := s.redeliver(ctx, now.Add(-requeueAfter)); err != nil {
+		return 0, err
+	}
 	stale := map[uuid.UUID]bool{}
 	if s.opts.Pull != nil {
 		waiting, err := s.opts.Store.StaleDeliveries(ctx, now.Add(-requeueAfter), now)
@@ -632,20 +658,31 @@ func (s *Syncer) attempt(ctx context.Context, vault uuid.UUID, pull bool) {
 			break
 		}
 		if err := s.opts.Pull.Apply(ctx, plan); err != nil {
+			if errors.Is(err, ErrConnectionChanged) {
+				s.log.InfoContext(ctx, "github sync: the connection changed during a pull; the pull is dropped", "vault", vault.String())
+				return // nothing is recorded: the row is not the one this attempt read
+			}
 			s.log.WarnContext(ctx, "github sync: applying a pull failed", "vault", vault.String(), "error", err)
 			out = outcome{conn: out.conn}.retry("pull_apply")
 			break
 		}
+		changed := false
 		err = s.locked(ctx, vault, true, func(repo *vaultgit.Repo) {
 			fctx, cancel := context.WithTimeout(ctx, s.opts.LockTimeout)
 			defer cancel()
-			if err := s.opts.Pull.Finish(fctx, PullInput{Repo: repo, Connection: *out.conn}, plan); err != nil {
+			err := s.opts.Pull.Finish(fctx, PullInput{Repo: repo, Connection: *out.conn}, plan)
+			switch {
+			case err == nil:
+			case errors.Is(err, ErrConnectionChanged):
+				s.log.InfoContext(ctx, "github sync: the connection changed during a pull; the pull is dropped", "vault", vault.String())
+				changed = true
+			default:
 				s.log.WarnContext(ctx, "github sync: finishing a pull failed", "vault", vault.String(), "error", err)
 				out = outcome{conn: out.conn}.retry("pull_finish")
 				plan = nil
 			}
 		})
-		if err != nil {
+		if err != nil || changed {
 			return
 		}
 		if plan == nil {
@@ -806,6 +843,7 @@ func (s *Syncer) plan(ctx context.Context, repo *vaultgit.Repo, out outcome, tok
 	conn := out.conn
 	ctx, cancel := context.WithTimeout(ctx, s.opts.LockTimeout)
 	defer cancel()
+	var expect int64 // what the fetch may bring, for the disk guard
 	if s.opts.MaxRepoBytes > 0 {
 		// D11: the size limit holds on every fetch. The same answer carries
 		// the repository's current name, so a rename is learned here too.
@@ -831,18 +869,25 @@ func (s *Syncer) plan(ctx context.Context, repo *vaultgit.Repo, out outcome, tok
 			}
 			conn.RepoFullName = info.FullName
 		}
+		expect = info.Size * 1024
 	}
 	renamed := false
 	for {
 		if err := repo.SetRemote(s.remoteURL(conn.RepoFullName)); err != nil {
 			return out.retry("set_remote"), nil
 		}
-		plan, err := s.opts.Pull.Plan(ctx, PullInput{Repo: repo, Connection: *conn, Token: token})
+		plan, err := s.opts.Pull.Plan(ctx, PullInput{
+			Repo: repo, Connection: *conn, Token: token, Expect: expect, MaxBytes: s.opts.MaxRepoBytes,
+		})
 		switch {
 		case err == nil:
 			return outcome{conn: conn}, plan
 		case errors.Is(err, ErrRepoTooLarge):
 			return out.final(CodeRepoTooLarge, "remote_files"), nil
+		case errors.Is(err, vaultgit.ErrPackTooLarge):
+			// The remote sent more than the size GitHub reported allows: it
+			// grew past the limit after the question, or the report was stale.
+			return out.final(CodeRepoTooLarge, "fetch_size"), nil
 		case errors.Is(err, ErrMergeConsent):
 			return out.final(CodeRemoteNotEmpty, "no_merge_consent"), nil
 		case errors.Is(err, vaultgit.ErrRemoteNotFound) && !renamed:
